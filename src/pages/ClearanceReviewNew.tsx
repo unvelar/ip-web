@@ -109,7 +109,7 @@ export default function ClearanceReviewNew() {
         product_categories: categories.length > 0 ? categories : undefined,
       };
       const { id } = await createIpReview(assetFile, ctx, inspiration);
-      navigate(`/ip-reviews/${id}`);
+      navigate(`/clearance/tasks/${id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Submission failed");
       setSubmitting(false);

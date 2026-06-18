@@ -224,6 +224,8 @@ export function MonitoringBoard({
   onRefresh,
   onDismiss,
   showIpColumn,
+  activeFindingId,
+  onActiveFindingChange,
 }: {
   findings: IpReviewFinding[];
   facets: MonitoringFacets;
@@ -245,6 +247,10 @@ export function MonitoringBoard({
   onDismiss?: (resultId: string) => void;
   /** Render the IP-name chip + IP filter dropdown. */
   showIpColumn?: boolean;
+  /** Finding opened by a route such as /monitoring/tasks/:taskId. */
+  activeFindingId?: string | null;
+  /** Notifies the route owner when the reviewer opens/collapses a finding. */
+  onActiveFindingChange?: (resultId: string | null) => void;
 }) {
   const ipAware = showIpColumn ?? findings.some((f) => !!f.ip_id);
   const { user } = useAuth();
@@ -253,10 +259,20 @@ export function MonitoringBoard({
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
   // Inline-expanded finding (Gmail-row accordion). null = all collapsed.
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveIdState] = useState<string | null>(activeFindingId ?? null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [lastAction, setLastAction] = useState<LastReviewAction | null>(null);
   const [undoing, setUndoing] = useState(false);
+
+  useEffect(() => {
+    setActiveIdState(activeFindingId ?? null);
+    if (activeFindingId) setViewMode("table");
+  }, [activeFindingId]);
+
+  const setActiveFinding = useCallback((resultId: string | null) => {
+    setActiveIdState(resultId);
+    onActiveFindingChange?.(resultId);
+  }, [onActiveFindingChange]);
 
   // Stale entries in `dismissing` for findings that have since been removed
   // from the page are harmless — they're never queried after the row goes
@@ -264,7 +280,7 @@ export function MonitoringBoard({
 
   const counts = facets.priorities;
   const total = facets.total;
-  const displayFindings = useMemo(
+  const filteredFindings = useMemo(
     () =>
       filters.status === "pending"
         ? findings.filter(
@@ -277,6 +293,18 @@ export function MonitoringBoard({
         : findings,
     [filters.status, findings],
   );
+  const displayFindings = useMemo(() => {
+    const activeFinding = activeId
+      ? findings.find((f) => f.result_id === activeId)
+      : null;
+    if (
+      activeFinding &&
+      !filteredFindings.some((f) => f.result_id === activeFinding.result_id)
+    ) {
+      return [activeFinding, ...filteredFindings];
+    }
+    return filteredFindings;
+  }, [activeId, filteredFindings, findings]);
 
   // Collapse the expanded row when filters drop it from the visible set —
   // derived during render rather than synced via effect so we don't trigger
@@ -306,8 +334,8 @@ export function MonitoringBoard({
             .slice(0, currentIndex)
             .find((f) => f.result_id !== resultId)
         : visibleActionableFindings.find((f) => f.result_id !== resultId);
-    setActiveId(next?.result_id ?? null);
-  }, [visibleActionableFindings]);
+    setActiveFinding(next?.result_id ?? null);
+  }, [setActiveFinding, visibleActionableFindings]);
 
   const handleDismiss = useCallback(async (
     f: IpReviewFinding,
@@ -615,6 +643,9 @@ export function MonitoringBoard({
   const activeCandidateLabel = filters.candidate_outcome
     ? CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]
     : "All candidates";
+  const resortSelectedTooltip = filters.candidate_outcome
+    ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
+    : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
 
   return (
     <>
@@ -865,20 +896,25 @@ export function MonitoringBoard({
                   >
                     <ButtonWithShortcut label="Resale" shortcut="3" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void runResort()}
-                    disabled={!filters.candidate_outcome}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
-                    title={
-                      filters.candidate_outcome
-                        ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
-                        : "Choose a candidate bucket before resorting"
-                    }
+                  <span
+                    className={`relative inline-flex group ${!filters.candidate_outcome ? "cursor-not-allowed" : ""}`}
+                    title={resortSelectedTooltip}
                   >
-                    <Shuffle size={13} aria-hidden="true" />
-                    <span>Resort selected</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => void runResort()}
+                      disabled={!filters.candidate_outcome}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 disabled:pointer-events-none disabled:hover:bg-white"
+                    >
+                      <Shuffle size={13} aria-hidden="true" />
+                      <span>Resort selected</span>
+                    </button>
+                    {!filters.candidate_outcome && (
+                      <span className="pointer-events-none absolute right-0 top-full z-20 mt-1 w-60 rounded-md bg-stone-900 px-2 py-1.5 text-[11px] font-medium leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                        {resortSelectedTooltip}
+                      </span>
+                    )}
+                  </span>
                   <button
                     type="button"
                     onClick={() => setSelected(new Set())}
@@ -928,9 +964,9 @@ export function MonitoringBoard({
                   isDismissed={rowDismissed}
                   isDismissing={dismissing.has(f.result_id) && !f.dismissed_at}
                   onSelect={() => toggleSelect(f.result_id)}
-                  onActivate={() => setActiveId(f.result_id)}
+                  onActivate={() => setActiveFinding(f.result_id)}
                   onOpen={() => {
-                    setActiveId(f.result_id);
+                    setActiveFinding(f.result_id);
                     setViewMode("table");
                   }}
                   onDismiss={(reason) => handleDismiss(f, reason)}
@@ -980,9 +1016,7 @@ export function MonitoringBoard({
                   return (
                     <Fragment key={f.result_id}>
                       <tr
-                        onClick={() =>
-                          setActiveId((prev) => (prev === f.result_id ? null : f.result_id))
-                        }
+                        onClick={() => setActiveFinding(expanded ? null : f.result_id)}
                         className={`cursor-pointer transition-colors ${
                           expanded ? "bg-stone-50" : "hover:bg-stone-50"
                         } ${rowDismissed ? "opacity-50" : ""}`}

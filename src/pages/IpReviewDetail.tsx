@@ -73,7 +73,7 @@ export default function IpReviewDetail() {
   async function handleDelete() {
     if (!confirm("Delete this review?")) return;
     await deleteIpReview(id);
-    navigate("/clearance");
+    navigate("/clearance/tasks");
   }
 
   // Clearance-only page. Monitoring now lives IP-scoped under /ips/:id.

@@ -38,6 +38,11 @@ function RegistryAuditRedirect() {
   return <Navigate to={`/ips/${id}/audit`} replace />;
 }
 
+function IpReviewRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/clearance/tasks/${id}`} replace />;
+}
+
 /** `/inbox` → `/monitoring/tasks` (or `/clearance/tasks` if `?tab=clearance`).
  *  The old unified inbox is gone; preserve any non-tab params on the way. */
 function InboxRedirect() {
@@ -131,9 +136,11 @@ export default function App() {
         <Route path="/ips/:id/audit" element={<RegistryAudit />} />
         {/* Canonical task/admin entrypoints for each pipeline. */}
         <Route path="/monitoring/tasks" element={<MonitoringTasks />} />
+        <Route path="/monitoring/tasks/:taskId" element={<MonitoringTasks />} />
         <Route path="/monitoring/new" element={<MonitoringNew />} />
         <Route path="/monitoring/settings" element={<Monitors />} />
         <Route path="/clearance/tasks" element={<ClearanceTasks />} />
+        <Route path="/clearance/tasks/:id" element={<IpReviewDetail />} />
         <Route path="/clearance/new" element={<ClearanceReviewNew />} />
         {/* Legacy routes — kept so dashboard KPI deep links + bookmarks keep
             landing somewhere; the components redirect to the canonical paths. */}
@@ -141,7 +148,7 @@ export default function App() {
         <Route path="/monitors" element={<Navigate to="/monitoring/settings" replace />} />
         <Route path="/clearance" element={<Navigate to="/clearance/tasks" replace />} />
         <Route path="/ip-reviews/new" element={<Navigate to="/clearance/new" replace />} />
-        <Route path="/ip-reviews/:id" element={<IpReviewDetail />} />
+        <Route path="/ip-reviews/:id" element={<IpReviewRedirect />} />
         <Route path="/clearance/brands/catalog" element={<BrandsCatalog />} />
         <Route path="/clearance/designs/catalog" element={<DesignsCatalog />} />
         <Route path="/clearance/pop/catalog" element={<PopCultureCatalog />} />

@@ -1559,6 +1559,12 @@ export function listMonitoringFindingsGlobal(
   );
 }
 
+export function getMonitoringFinding(resultId: string) {
+  return request<{ finding: IpReviewFinding }>(
+    `/api/monitoring/findings/${encodeURIComponent(resultId)}`,
+  );
+}
+
 export function resortMonitoringFindings(
   resultIds: string[],
   rejectedCandidateOutcome: MonitoringCandidateOutcome,

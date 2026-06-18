@@ -15,7 +15,7 @@ export function TaskRow({ review, muted = false }: { review: IpReview; muted?: b
   const when = relativeDate(review.created_at);
   return (
     <Link
-      to={`/ip-reviews/${review.id}`}
+      to={`/clearance/tasks/${review.id}`}
       className={`group flex items-center gap-3 px-2 py-1.5 hover:bg-stone-50 transition-colors ${
         muted ? "opacity-70" : ""
       }`}

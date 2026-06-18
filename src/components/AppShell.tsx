@@ -86,7 +86,7 @@ export default function AppShell() {
     pathname.startsWith("/findings/");
   const clePathActive =
     pathname.startsWith("/clearance") ||
-    pathname.startsWith("/ip-reviews/new");
+    pathname.startsWith("/ip-reviews/");
 
   const [monOpen, setMonOpen] = useState<boolean>(() => loadOpen(MON_OPEN_KEY));
   const [cleOpen, setCleOpen] = useState<boolean>(() => loadOpen(CLE_OPEN_KEY));

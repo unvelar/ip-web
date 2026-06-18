@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  getMonitoringFinding,
   listMonitoringFindingsGlobal,
   type IpReviewFinding,
   type MonitoringCandidateOutcome,
@@ -115,19 +116,25 @@ function writeFilters(base: URLSearchParams, f: InboxFilters): URLSearchParams {
  */
 export function MonitoringInboxView() {
   const [params, setParams] = useSearchParams();
+  const { taskId } = useParams<{ taskId?: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
   const filters = parseFilters(params);
 
   const [findings, setFindings] = useState<IpReviewFinding[]>([]);
+  const [linkedFinding, setLinkedFinding] = useState<IpReviewFinding | null>(null);
   const [facets, setFacets] = useState<MonitoringFacets | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState("");
+  const [linkedErr, setLinkedErr] = useState("");
 
   // The request currently in flight for the first page (filter changes); we
   // ignore stale responses so a quick filter toggle can't flicker an older
   // payload back on screen.
   const reqSeq = useRef(0);
+  const linkedReqSeq = useRef(0);
 
   // Filter-aware first-page fetch. Triggered on any filter/sort change.
   const loadFirstPage = useCallback(
@@ -150,6 +157,20 @@ export function MonitoringInboxView() {
     [],
   );
 
+  const loadLinkedFinding = useCallback(async (id: string) => {
+    const seq = ++linkedReqSeq.current;
+    setLinkedErr("");
+    try {
+      const { finding } = await getMonitoringFinding(id);
+      if (linkedReqSeq.current !== seq) return;
+      setLinkedFinding(finding);
+    } catch (e) {
+      if (linkedReqSeq.current !== seq) return;
+      setLinkedFinding(null);
+      setLinkedErr(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
   // Refetch on any filter/sort change. URL params are the dependency — they
   // change synchronously via setParams, so this fires exactly when needed.
   // Stringify the filters as the dep to avoid re-running on object identity.
@@ -159,6 +180,16 @@ export function MonitoringInboxView() {
     // filterKey is enough; parseFilters is pure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey, loadFirstPage]);
+
+  useEffect(() => {
+    if (!taskId) {
+      linkedReqSeq.current++;
+      setLinkedFinding(null);
+      setLinkedErr("");
+      return;
+    }
+    void loadLinkedFinding(taskId);
+  }, [loadLinkedFinding, taskId]);
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
@@ -181,7 +212,8 @@ export function MonitoringInboxView() {
   // the current scroll position: re-fetch the first page only.
   const refresh = useCallback(() => {
     void loadFirstPage(filters);
-  }, [loadFirstPage, filters]);
+    if (taskId) void loadLinkedFinding(taskId);
+  }, [loadFirstPage, loadLinkedFinding, filters, taskId]);
 
   const onFiltersChange = useCallback(
     (next: Partial<InboxFilters>) => {
@@ -191,6 +223,20 @@ export function MonitoringInboxView() {
     },
     [filters, setParams],
   );
+
+  const onActiveFindingChange = useCallback((resultId: string | null) => {
+    navigate({
+      pathname: resultId ? `/monitoring/tasks/${resultId}` : "/monitoring/tasks",
+      search: location.search,
+    });
+  }, [location.search, navigate]);
+
+  const boardFindings = useMemo(() => {
+    if (!linkedFinding || findings.some((f) => f.result_id === linkedFinding.result_id)) {
+      return findings;
+    }
+    return [linkedFinding, ...findings];
+  }, [findings, linkedFinding]);
 
   return (
     <div className="space-y-4">
@@ -203,10 +249,15 @@ export function MonitoringInboxView() {
       </div>
 
       {err && <div className="text-sm text-red-600">{err}</div>}
+      {linkedErr && (
+        <div className="text-sm text-red-600">
+          Unable to open linked task: {linkedErr}
+        </div>
+      )}
 
       {!loaded ? (
         <div className="text-sm text-stone-400 py-8 text-center">Loading…</div>
-      ) : !facets || (facets.total === 0 && findings.length === 0) ? (
+      ) : !facets || (facets.total === 0 && boardFindings.length === 0) ? (
         <div className="rounded-2xl border border-stone-200 bg-white px-5 py-12 text-center">
           <p className="text-sm text-stone-600">No findings yet</p>
           <p className="text-xs text-stone-400 mt-1">
@@ -215,7 +266,7 @@ export function MonitoringInboxView() {
         </div>
       ) : (
         <MonitoringBoard
-          findings={findings}
+          findings={boardFindings}
           facets={facets}
           filters={filters}
           onFiltersChange={onFiltersChange}
@@ -225,6 +276,8 @@ export function MonitoringInboxView() {
           runInProgress={false}
           onRefresh={refresh}
           showIpColumn
+          activeFindingId={taskId ?? null}
+          onActiveFindingChange={onActiveFindingChange}
         />
       )}
     </div>
