@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Unvelar — Automated Visual Copyright Compliance</title>
+    <script>
+      // Restore SPA route from 404.html redirect
+      (function(){
+        var q = new URLSearchParams(window.location.search);
+        var p = q.get('p');
+        if (p) {
+          // Strip legacy /ip-detection-web/ prefix from old cached URLs
+          p = p.replace(/^\/ip-detection-web/, '');
+          window.history.replaceState(null, '', p);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
