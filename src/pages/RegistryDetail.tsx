@@ -17,6 +17,7 @@ import { useJobPoller } from "../hooks/useJobPoller";
 import ImageUploader from "../components/ImageUploader";
 import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
 import IpTakedownSigner from "../components/IpTakedownSigner";
+import { mergeKeywords } from "../lib/keywords";
 
 export default function RegistryDetail() {
   const { id } = useParams<{ id: string }>();
@@ -36,15 +37,15 @@ export default function RegistryDetail() {
 
   async function addKeyword() {
     if (!ip || !keywordDraft.trim()) return;
-    const k = keywordDraft.trim();
     const existing = ip.keywords ?? [];
-    if (existing.some((e) => e.toLowerCase() === k.toLowerCase())) {
+    const next = mergeKeywords(existing, keywordDraft);
+    if (next.length === existing.length) {
       setKeywordDraft("");
       return;
     }
     try {
       const { trademark } = await updateTrademark(ip.id, {
-        keywords: [...existing, k],
+        keywords: next,
       });
       setIp(trademark);
       setKeywordDraft("");
@@ -256,7 +257,7 @@ export default function RegistryDetail() {
                 void addKeyword();
               }
             }}
-            placeholder="Add a keyword"
+            placeholder="pikachu plush, mario hat"
             className="flex-1 px-3 py-1.5 rounded-lg border border-stone-200 text-xs"
           />
           <button

@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { useJobPoller } from "../hooks/useJobPoller";
 import ImageUploader from "../components/ImageUploader";
+import { mergeKeywords } from "../lib/keywords";
 
 /**
  * Four-step IP-creation wizard at /ips/new.
@@ -109,13 +110,12 @@ export default function RegistryWizard() {
   }
 
   function addKeyword() {
-    const k = keywordDraft.trim();
-    if (!k) return;
-    if (keywords.some((existing) => existing.toLowerCase() === k.toLowerCase())) {
+    const next = mergeKeywords(keywords, keywordDraft);
+    if (next.length === keywords.length) {
       setKeywordDraft("");
       return;
     }
-    setKeywords([...keywords, k]);
+    setKeywords(next);
     setKeywordDraft("");
   }
 
@@ -304,7 +304,7 @@ export default function RegistryWizard() {
                       addKeyword();
                     }
                   }}
-                  placeholder="Type a keyword and press Enter"
+                  placeholder="pikachu plush, mario hat"
                   className="flex-1 px-3 py-2 rounded-lg border border-stone-200 text-sm"
                 />
                 <button
@@ -408,4 +408,3 @@ function ImageGrid({
     </div>
   );
 }
-
