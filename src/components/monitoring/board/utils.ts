@@ -209,7 +209,7 @@ export function suggestionMeta(outcome: IpReviewFinding["suggested_review_outcom
     case "takedown":
       return { label: "Takedown", shortcut: "2", cls: "bg-blue-700 text-white" };
     case "second_hand":
-      return { label: "Resale", shortcut: "3", cls: "bg-purple-700 text-white" };
+      return { label: "Second hand", shortcut: "3", cls: "bg-purple-700 text-white" };
     default:
       return null;
   }

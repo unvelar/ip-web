@@ -55,28 +55,31 @@ function FindingTableThumbnail({
 }
 
 /** Table cells (columns 2-9) for one finding — a single dense line. The
- *  enclosing <tr> owns click-to-expand + selection styling. */
+ *  enclosing <tr> owns row selection and inspector activation. */
 export function FindingRow({
   f,
-  expanded,
+  active,
   showIp,
   actionable = false,
   quickBusy = false,
   onQuickSend,
   onQuickDismiss,
+  onOpen,
 }: {
   f: IpReviewFinding;
-  expanded: boolean;
+  active: boolean;
   showIp?: boolean;
   actionable?: boolean;
   quickBusy?: boolean;
   onQuickSend?: () => void;
   onQuickDismiss?: () => void;
+  onOpen?: () => void;
 }) {
-  const priorityBg =
-    f.enforcement_priority >= 0.75
+  const similarity = f.similarity_score ?? f.enforcement_priority;
+  const scoreBg =
+    similarity >= 0.75
       ? "bg-red-100 text-red-700"
-      : f.enforcement_priority >= 0.5
+      : similarity >= 0.5
         ? "bg-amber-100 text-amber-700"
         : "bg-stone-100 text-stone-600";
   const thumbUrls = tableImageUrls(f);
@@ -97,20 +100,20 @@ export function FindingRow({
 
   return (
     <>
-      {/* Rate — caret + colored priority pill. */}
+      {/* Similarity — active marker + colored visual/text match pill. */}
       <td className="py-1 px-2 align-middle whitespace-nowrap">
         <span className="inline-flex items-center gap-1.5">
           <span
-            className={`text-stone-400 text-[10px] transition-transform ${expanded ? "rotate-90" : ""}`}
+            className={`text-[10px] ${active ? "text-blue-600" : "text-stone-300"}`}
             aria-hidden
           >
             ▸
           </span>
           <span
-            className={`text-[10px] font-bold tabular-nums rounded px-1 py-0.5 ${priorityBg}`}
-            title="Enforcement priority"
+            className={`text-[10px] font-bold tabular-nums rounded px-1 py-0.5 ${scoreBg}`}
+            title="Visual/text similarity"
           >
-            {f.enforcement_priority.toFixed(2)}
+            {Number.isFinite(similarity) ? `${Math.round(similarity * 100)}%` : "—"}
           </span>
         </span>
       </td>
@@ -197,11 +200,25 @@ export function FindingRow({
         title={updatedAgo ? `Updated ${updatedAgo}` : undefined}
       >
         {foundAgo}
-        {actionable && (
-          <span
-            className="absolute right-2 top-1/2 -translate-y-1/2 hidden items-center gap-1 pl-8 bg-gradient-to-l from-stone-50 via-stone-50 to-transparent group-hover:flex group-focus-within:flex"
-            onClick={(e) => e.stopPropagation()}
+        <span
+          className={`absolute right-2 top-1/2 -translate-y-1/2 hidden items-center gap-1 pl-8 bg-gradient-to-l to-transparent group-hover:flex group-focus-within:flex ${
+            active ? "from-blue-50 via-blue-50" : "from-stone-50 via-stone-50"
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            title="Open finding details"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen?.();
+            }}
+            className="h-[22px] px-2 rounded text-[10px] font-semibold leading-none border border-stone-300 bg-white text-stone-700 hover:bg-stone-100"
           >
+            Open
+          </button>
+          {actionable && (
+            <>
             <button
               type="button"
               disabled={quickBusy}
@@ -226,8 +243,9 @@ export function FindingRow({
             >
               Dismiss
             </button>
-          </span>
-        )}
+            </>
+          )}
+        </span>
       </td>
     </>
   );

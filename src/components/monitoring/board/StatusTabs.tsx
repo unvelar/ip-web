@@ -1,7 +1,7 @@
 // Slim status pipeline pills. `null` is rendered as "pending".
 const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: "pending", label: "To triage" },
-  { key: "takedown_sent", label: "Sent" },
+  { key: "takedown_sent", label: "Takedown sent" },
   { key: "enforced", label: "Enforced" },
   { key: "dismissed", label: "Dismissed" },
 ];
@@ -16,7 +16,7 @@ export function StatusTabs({
   active: string | null;
   onSelect: (s: string | null) => void;
 }) {
-  const total = counts.pending + counts.takedown_sent + counts.enforced;
+  const total = (counts.pending ?? 0) + (counts.takedown_sent ?? 0) + (counts.enforced ?? 0);
   const tab = (key: string | null, label: string, n: number) => {
     const isActive = active === key;
     return (
@@ -44,7 +44,7 @@ export function StatusTabs({
   };
   return (
     <div className="flex items-center gap-0.5 flex-wrap">
-      {tab(null, "All", total)}
+      {tab(null, "All open", total)}
       {STATUS_FILTERS.map((s) => tab(s.key, s.label, counts[s.key] ?? 0))}
     </div>
   );

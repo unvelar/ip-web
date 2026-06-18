@@ -38,7 +38,6 @@ const MONITORING_PAGE_SIZE = 50;
 
 function parseFilters(params: URLSearchParams): InboxFilters {
   const status = params.get("status");
-  const priority = params.get("priority");
   const sort = params.get("sort");
   const dismissalReason = params.get("dismissal_reason");
   const candidateOutcome = params.get("candidate_outcome");
@@ -53,10 +52,10 @@ function parseFilters(params: URLSearchParams): InboxFilters {
           : status === null
             ? "pending"
             : null,
-    priority: priority === "high" || priority === "med" || priority === "low" ? priority : null,
+    priority: null,
     ip_id: params.get("ip_id"),
     platform: params.get("platform"),
-    seller: params.get("seller"),
+    seller: null,
     dismissal_reason:
       dismissalReason === "false_positive" ||
       dismissalReason === "do_not_pursue" ||
@@ -252,13 +251,31 @@ export function MonitoringInboxView() {
     return [linkedFinding, ...findings];
   }, [findings, linkedFinding]);
 
+  const queueSummary = useMemo(() => {
+    if (!facets) return "Loading…";
+    const count = facets.total;
+    const statusLabel =
+      filters.status === "pending"
+        ? "to triage"
+        : filters.status === "takedown_sent"
+          ? "with takedowns sent"
+          : filters.status === "enforced"
+            ? "enforced"
+            : filters.status === "dismissed"
+              ? "dismissed"
+              : "open";
+    const ipName =
+      filters.ip_id
+        ? facets.ips.find((ip) => ip.ip_id === filters.ip_id)?.name ?? "selected IP"
+        : "all monitored IPs";
+    return `${count} finding${count === 1 ? "" : "s"} ${statusLabel} · ${ipName}.`;
+  }, [facets, filters.ip_id, filters.status]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-stone-500">
-          {facets
-            ? `${facets.total} open finding${facets.total === 1 ? "" : "s"} across all monitored IPs.`
-            : "Loading…"}
+          {queueSummary}
         </p>
       </div>
 

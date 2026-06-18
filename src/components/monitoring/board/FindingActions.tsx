@@ -23,6 +23,8 @@ export function FindingActions({
   onDismiss,
   onActionComplete,
   onTakedownSent,
+  onEnforced,
+  onLicensed,
   onUpdated,
   compact = false,
 }: {
@@ -34,6 +36,8 @@ export function FindingActions({
   onDismiss: (reason: MonitoringReviewOutcome) => void;
   onActionComplete: () => void;
   onTakedownSent: () => void;
+  onEnforced: () => void;
+  onLicensed: (dismissedCount: number) => void;
   onUpdated: () => void;
   compact?: boolean;
 }) {
@@ -91,11 +95,16 @@ export function FindingActions({
     }
   }
 
-  async function run(label: string, fn: () => Promise<unknown>) {
+  async function run(
+    label: string,
+    fn: () => Promise<unknown>,
+    opts: { completeCurrent?: boolean } = {},
+  ) {
     if (busy) return;
     setBusy(label);
     try {
       await fn();
+      if (opts.completeCurrent) onActionComplete();
       onUpdated();
     } catch (e) {
       alert(e instanceof Error ? e.message : `Failed: ${label}`);
@@ -108,11 +117,13 @@ export function FindingActions({
     if (licensing || !ipId) return;
     setLicensing(true);
     try {
-      await addIpLicense(ipId, {
+      const result = await addIpLicense(ipId, {
         domain: f.domain,
         seller_name: f.seller_name,
         seller_url: f.seller_url,
       });
+      onLicensed(result.dismissed);
+      onActionComplete();
       onUpdated(); // backfill dismisses this + any sibling finding from the seller
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to add license");
@@ -169,7 +180,7 @@ export function FindingActions({
   );
   const secondHandBtn = outcomeButton(
     "second-hand",
-    "Resale",
+    "Second hand",
     "second_hand",
     "Shortcut 2: resale or second-hand item",
     "2",
@@ -276,7 +287,14 @@ export function FindingActions({
           disabled={!ipId || busy === "enforce"}
           onClick={() =>
             ipId &&
-            run("enforce", () => markIpFindingEnforced(ipId, f.result_id))
+            run(
+              "enforce",
+              async () => {
+                await markIpFindingEnforced(ipId, f.result_id);
+                onEnforced();
+              },
+              { completeCurrent: true },
+            )
           }
           className={emerald}
         >

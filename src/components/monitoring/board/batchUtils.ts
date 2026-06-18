@@ -14,7 +14,7 @@ export const BATCH_META: Record<
   send: { label: "Send takedowns", verb: "Sent", gerund: "Send takedowns for" },
   false_positive: { label: "False positive", verb: "Cleared", gerund: "Mark false positive for" },
   do_not_pursue: { label: "Don't pursue", verb: "Cleared", gerund: "Don't pursue" },
-  second_hand: { label: "Resale / second hand", verb: "Marked resale", gerund: "Mark resale / second hand for" },
+  second_hand: { label: "Second hand / allowed", verb: "Marked second hand", gerund: "Mark second hand / allowed for" },
   enforce: { label: "Mark enforced", verb: "Marked enforced", gerund: "Mark enforced" },
 };
 

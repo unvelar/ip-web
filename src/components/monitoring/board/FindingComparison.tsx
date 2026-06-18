@@ -23,6 +23,8 @@ export function FindingComparison({
   onDismiss,
   onActionComplete,
   onTakedownSent,
+  onEnforced,
+  onLicensed,
   onUpdated,
 }: {
   f: IpReviewFinding;
@@ -35,12 +37,15 @@ export function FindingComparison({
   onDismiss: (reason: MonitoringReviewOutcome) => void;
   onActionComplete: () => void;
   onTakedownSent: () => void;
+  onEnforced: () => void;
+  onLicensed: (dismissedCount: number) => void;
   onUpdated: () => void;
 }) {
-  const priorityCls =
-    f.enforcement_priority >= 0.75
+  const similarity = f.similarity_score ?? f.enforcement_priority;
+  const similarityCls =
+    similarity >= 0.75
       ? "text-red-700"
-      : f.enforcement_priority >= 0.5
+      : similarity >= 0.5
         ? "text-amber-700"
         : "text-stone-700";
   const canLicense = !!ipId && (!!f.seller_name || !!f.seller_url);
@@ -55,13 +60,13 @@ export function FindingComparison({
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
     // monitors (which left short text lines + the comment box floating in white).
     <div className="space-y-2.5 max-w-6xl mx-auto">
-      {/* Top meta strip — priority · status · IP · source · key flags on the
+      {/* Top meta strip — similarity · status · IP · source · key flags on the
           left; the state-driven action group pinned right. Merges what used to
-          be a header row + a separate priority/method chip strip. */}
+          be a header row + a separate score/method chip strip. */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex items-center gap-x-2 gap-y-1 flex-wrap">
-          <span className={`text-base font-bold ${priorityCls}`}>{f.enforcement_priority.toFixed(2)}</span>
-          <span className="text-[9px] uppercase tracking-wider text-stone-400">priority</span>
+          <span className={`text-base font-bold ${similarityCls}`}>{Math.round(similarity * 100)}%</span>
+          <span className="text-[9px] uppercase tracking-wider text-stone-400">similarity</span>
           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sb.cls}`}>
             {sb.label}
           </span>
@@ -118,6 +123,8 @@ export function FindingComparison({
           onDismiss={onDismiss}
           onActionComplete={onActionComplete}
           onTakedownSent={onTakedownSent}
+          onEnforced={onEnforced}
+          onLicensed={onLicensed}
           onUpdated={onUpdated}
         />
       </div>

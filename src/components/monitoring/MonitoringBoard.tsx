@@ -1,5 +1,5 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Shuffle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CircleCheck, Shuffle, X } from "lucide-react";
 import {
   dismissIpFinding,
   markIpFindingEnforced,
@@ -34,7 +34,7 @@ import { GridFindingCard } from "./board/GridFindingCard";
 import { FindingRow } from "./board/FindingRow";
 import { SortHeader } from "./board/SortHeader";
 import { StatusTabs } from "./board/StatusTabs";
-import { hasReviewAnalysis } from "./board/utils";
+import { compactListingTitle, hasReviewAnalysis } from "./board/utils";
 
 /** Shape pushed up to the parent — must match Findings.tsx::InboxFilters. */
 export interface BoardFilters {
@@ -49,9 +49,75 @@ export interface BoardFilters {
   sort: MonitoringSortMode;
 }
 
-type LastReviewAction =
-  | { kind: "dismiss"; ipId: string; resultId: string; label: string }
-  | { kind: "takedown"; ipId: string; resultId: string; label: string };
+type LastReviewAction = {
+  id: number;
+  label: string;
+  detail?: string;
+  undo?: {
+    kind: "undismiss" | "reopen";
+    ipId: string;
+    resultId: string;
+  };
+};
+
+function dismissalDecisionLabel(reason: MonitoringReviewOutcome) {
+  switch (reason) {
+    case "resale":
+      return DISMISSAL_REASON_LABELS.second_hand;
+    case "false_positive":
+    case "do_not_pursue":
+    case "second_hand":
+    case "manual_cleared":
+    case "licensed":
+    case "allowed_product":
+      return DISMISSAL_REASON_LABELS[reason];
+    default:
+      return "Review action";
+  }
+}
+
+function findingSimilarity(f: IpReviewFinding) {
+  return f.similarity_score ?? f.enforcement_priority;
+}
+
+function formatSimilarity(score: number) {
+  return `${Math.round(score * 100)}%`;
+}
+
+function uniqueDefined(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter(Boolean) as string[]));
+}
+
+function selectedFindingSummary(findings: IpReviewFinding[]) {
+  if (findings.length === 0) return [];
+  const parts: string[] = [];
+  const takedownCount = findings.filter((f) => f.suggested_review_outcome === "takedown").length;
+  if (takedownCount === findings.length) parts.push("AI recommends takedown");
+  else if (takedownCount > 0) parts.push(`${takedownCount} AI takedown recs`);
+
+  const similarities = findings
+    .map(findingSimilarity)
+    .filter((score) => Number.isFinite(score));
+  if (similarities.length > 0) {
+    const min = Math.min(...similarities);
+    const max = Math.max(...similarities);
+    parts.push(
+      min === max
+        ? `Similarity ${formatSimilarity(min)}`
+        : `Similarity ${formatSimilarity(min)}-${formatSimilarity(max)}`,
+    );
+  }
+
+  const ips = uniqueDefined(findings.map((f) => f.ip_name));
+  if (ips.length === 1) parts.push(ips[0]);
+  else if (ips.length > 1) parts.push(`${ips.length} IPs`);
+
+  const platforms = uniqueDefined(findings.map((f) => f.domain));
+  if (platforms.length === 1) parts.push(platforms[0]);
+  else if (platforms.length > 1) parts.push(`${platforms.length} platforms`);
+
+  return parts.slice(0, 4);
+}
 
 /**
  * Tenant-wide findings board. Filter state lives in the URL (managed by
@@ -107,11 +173,15 @@ export function MonitoringBoard({
   // Optimistically-dismissed result_ids — the next refetch replaces these
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
-  // Inline-expanded finding (Gmail-row accordion). null = all collapsed.
+  // Active finding shown in the side inspector. null = inspector closed.
   const [activeId, setActiveIdState] = useState<string | null>(activeFindingId ?? null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [lastAction, setLastAction] = useState<LastReviewAction | null>(null);
   const [undoing, setUndoing] = useState(false);
+
+  const recordLastAction = useCallback((action: Omit<LastReviewAction, "id">) => {
+    setLastAction({ ...action, id: Date.now() });
+  }, []);
 
   useEffect(() => {
     setActiveIdState(activeFindingId ?? null);
@@ -127,8 +197,6 @@ export function MonitoringBoard({
   // from the page are harmless — they're never queried after the row goes
   // away — so we don't bother clearing them on each refetch.
 
-  const counts = facets.priorities;
-  const total = facets.total;
   const filteredFindings = useMemo(
     () =>
       filters.status === "pending"
@@ -155,11 +223,12 @@ export function MonitoringBoard({
     return filteredFindings;
   }, [activeId, filteredFindings, findings]);
 
-  // Collapse the expanded row when filters drop it from the visible set —
-  // derived during render rather than synced via effect so we don't trigger
-  // a cascading re-render.
-  const effectiveActiveId =
-    activeId && displayFindings.some((f) => f.result_id === activeId) ? activeId : null;
+  // If filters/refetches remove the active row, the inspector naturally closes
+  // until the user selects another visible row.
+  const activeIndex = activeId
+    ? displayFindings.findIndex((f) => f.result_id === activeId)
+    : -1;
+  const activeFinding = activeIndex >= 0 ? displayFindings[activeIndex] : null;
 
   const visibleActionableFindings = useMemo(
     () =>
@@ -186,6 +255,16 @@ export function MonitoringBoard({
     setActiveFinding(next?.result_id ?? null);
   }, [setActiveFinding, visibleActionableFindings]);
 
+  const moveActive = useCallback((delta: -1 | 1) => {
+    if (displayFindings.length === 0) return;
+    const current = activeId
+      ? displayFindings.findIndex((f) => f.result_id === activeId)
+      : -1;
+    const base = current >= 0 ? current : delta > 0 ? -1 : displayFindings.length;
+    const next = Math.max(0, Math.min(displayFindings.length - 1, base + delta));
+    setActiveFinding(displayFindings[next].result_id);
+  }, [activeId, displayFindings, setActiveFinding]);
+
   const handleDismiss = useCallback(async (
     f: IpReviewFinding,
     reason: MonitoringReviewOutcome = "false_positive",
@@ -200,11 +279,10 @@ export function MonitoringBoard({
     try {
       await dismissIpFinding(fipId, f.result_id, { reason });
       onDismiss?.(f.result_id);
-      setLastAction({
-        kind: "dismiss",
-        ipId: fipId,
-        resultId: f.result_id,
-        label: DISMISSAL_REASON_LABELS[(reason === "resale" ? "second_hand" : reason === "manual_cleared" || reason === "licensed" ? reason : reason) as MonitoringDismissalReasonFilter] ?? "Review action",
+      recordLastAction({
+        label: `${dismissalDecisionLabel(reason)} applied`,
+        detail: compactListingTitle(f),
+        undo: { kind: "undismiss", ipId: fipId, resultId: f.result_id },
       });
       advanceAfterAction(f.result_id);
       onRefresh();
@@ -216,27 +294,46 @@ export function MonitoringBoard({
       });
       alert(e instanceof Error ? e.message : "Failed to update finding");
     }
-  }, [advanceAfterAction, dismissing, ipId, onDismiss, onRefresh]);
+  }, [advanceAfterAction, dismissing, ipId, onDismiss, onRefresh, recordLastAction]);
 
   const rememberTakedownAction = useCallback((f: IpReviewFinding) => {
     const fipId = f.ip_id ?? ipId;
     if (!fipId) return;
-    setLastAction({
-      kind: "takedown",
-      ipId: fipId,
-      resultId: f.result_id,
-      label: "Takedown",
+    recordLastAction({
+      label: "Takedown sent",
+      detail: compactListingTitle(f),
+      undo: { kind: "reopen", ipId: fipId, resultId: f.result_id },
     });
-  }, [ipId]);
+  }, [ipId, recordLastAction]);
+
+  const rememberEnforcedAction = useCallback((f: IpReviewFinding) => {
+    const fipId = f.ip_id ?? ipId;
+    if (!fipId) return;
+    recordLastAction({
+      label: "Marked enforced",
+      detail: compactListingTitle(f),
+      undo: { kind: "reopen", ipId: fipId, resultId: f.result_id },
+    });
+  }, [ipId, recordLastAction]);
+
+  const rememberLicensedAction = useCallback((f: IpReviewFinding, dismissedCount: number) => {
+    recordLastAction({
+      label: "Seller licensed",
+      detail:
+        dismissedCount > 1
+          ? `${dismissedCount} findings dismissed`
+          : f.seller_name || compactListingTitle(f),
+    });
+  }, [recordLastAction]);
 
   async function undoLastAction() {
-    if (!lastAction || undoing) return;
+    if (!lastAction?.undo || undoing) return;
     setUndoing(true);
     try {
-      if (lastAction.kind === "dismiss") {
-        await undismissIpFinding(lastAction.ipId, lastAction.resultId);
+      if (lastAction.undo.kind === "undismiss") {
+        await undismissIpFinding(lastAction.undo.ipId, lastAction.undo.resultId);
       } else {
-        await reopenIpFinding(lastAction.ipId, lastAction.resultId);
+        await reopenIpFinding(lastAction.undo.ipId, lastAction.undo.resultId);
       }
       setLastAction(null);
       onRefresh();
@@ -246,6 +343,12 @@ export function MonitoringBoard({
       setUndoing(false);
     }
   }
+
+  useEffect(() => {
+    if (!lastAction || undoing) return;
+    const timer = window.setTimeout(() => setLastAction(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [lastAction, undoing]);
 
   // --- Multi-select + batch operations -------------------------------------
   // Selection is keyed by result_id and page-local (covers loaded rows only).
@@ -408,41 +511,41 @@ export function MonitoringBoard({
       setConfirmAction(action);
       return;
     }
-    const activeFinding =
-      (effectiveActiveId && displayFindings.find((f) => f.result_id === effectiveActiveId)) ||
+    const targetFinding =
+      activeFinding ||
       visibleActionableFindings[0];
-    if (!activeFinding) return;
+    if (!targetFinding) return;
 
-    const state: CaseReviewStatus = activeFinding.dismissed_at
+    const state: CaseReviewStatus = targetFinding.dismissed_at
       ? "dismissed"
-      : (activeFinding.review_status ?? "pending");
+      : (targetFinding.review_status ?? "pending");
     if (state !== "pending") return;
 
     setShortcutBusy(true);
     try {
       if (action === "send") {
-        if (!activeFinding.case_id) throw new Error("Finding is still preparing.");
-        const r = await autoSendTakedown(activeFinding.case_id);
+        if (!targetFinding.case_id) throw new Error("Finding is still preparing.");
+        const r = await autoSendTakedown(targetFinding.case_id);
         if (r.status === "sent") {
-          rememberTakedownAction(activeFinding);
-          advanceAfterAction(activeFinding.result_id);
+          rememberTakedownAction(targetFinding);
+          advanceAfterAction(targetFinding.result_id);
           onRefresh();
           return;
         }
         if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(activeFinding.case_id);
-          rememberTakedownAction(activeFinding);
-          advanceAfterAction(activeFinding.result_id);
+          await markTakedownSentWithoutEmail(targetFinding.case_id);
+          rememberTakedownAction(targetFinding);
+          advanceAfterAction(targetFinding.result_id);
           onRefresh();
           return;
         }
         throw new Error(
           r.status === "needs_compose"
             ? "This takedown needs manual compose."
-            : "Email is not configured.",
+          : "Email is not configured.",
         );
       }
-      await handleDismiss(activeFinding, action);
+      await handleDismiss(targetFinding, action);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to update finding");
     } finally {
@@ -451,8 +554,7 @@ export function MonitoringBoard({
   }, [
     advanceAfterAction,
     canMarkSentWithoutEmail,
-    effectiveActiveId,
-    displayFindings,
+    activeFinding,
     handleDismiss,
     onRefresh,
     rememberTakedownAction,
@@ -463,7 +565,7 @@ export function MonitoringBoard({
 
   // Hover/focus row quick-action: send the takedown for one specific finding
   // rather than whichever row is active/first. The full action set stays in
-  // the expanded comparison panel.
+  // the inspector.
   const handleQuickSend = useCallback(async (f: IpReviewFinding) => {
     if (shortcutBusy) return;
     const state: CaseReviewStatus = f.dismissed_at
@@ -511,6 +613,16 @@ export function MonitoringBoard({
     function onKeyDown(e: KeyboardEvent) {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (editableTarget(e.target)) return;
+      if (e.key === "Escape" && activeFinding) {
+        e.preventDefault();
+        setActiveFinding(null);
+        return;
+      }
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && activeFinding) {
+        e.preventDefault();
+        moveActive(e.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
       const action =
         e.key === "1" ? "false_positive" :
         e.key === "2" ? "second_hand" :
@@ -523,23 +635,49 @@ export function MonitoringBoard({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [runShortcutAction]);
+  }, [activeFinding, moveActive, runShortcutAction]);
 
   const allSelected = displayFindings.length > 0 && selected.size === displayFindings.length;
   const someSelected = selected.size > 0 && !allSelected;
+  const selectedFindings = useMemo(
+    () => displayFindings.filter((f) => selected.has(f.result_id)),
+    [displayFindings, selected],
+  );
+  const selectedSummary = useMemo(
+    () => selectedFindingSummary(selectedFindings),
+    [selectedFindings],
+  );
   const activeCandidateLabel = filters.candidate_outcome
     ? CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]
-    : "All candidates";
+    : "All AI recommendations";
   const resortSelectedTooltip = filters.candidate_outcome
     ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
     : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
+  const showAiRecommendationTabs =
+    filters.status === null || filters.status === "pending" || !!filters.candidate_outcome;
+  const scopeResetChip =
+    "h-5 shrink-0 px-1.5 rounded text-[10px] font-medium border border-transparent " +
+    "bg-transparent text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors";
+  const inactiveChip =
+    "bg-stone-100 text-stone-600 border-transparent hover:bg-stone-200 hover:text-stone-800";
+  const activeChip = "bg-stone-900 text-white border-stone-900";
   const bulkSelectionBar = selected.size > 0 ? (
     <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 sm:px-6 lg:left-64 pointer-events-none">
       <div className="mx-auto max-w-7xl pointer-events-auto max-h-[45vh] overflow-y-auto rounded-lg border border-stone-200 bg-white/95 px-4 py-3 shadow-[0_16px_48px_-20px_rgba(28,25,23,0.45)] backdrop-blur">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-xs font-semibold text-stone-700 shrink-0">
-            {selected.size} selected
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-semibold text-stone-700 shrink-0">
+              {selected.size} selected
+            </span>
+            {selectedSummary.map((part) => (
+              <span
+                key={part}
+                className="h-5 px-1.5 inline-flex items-center rounded-[5px] bg-white border border-stone-200 text-[10px] font-medium text-stone-500"
+              >
+                {part}
+              </span>
+            ))}
+          </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {batchProgress ? (
               <span className="text-xs text-stone-500">
@@ -552,7 +690,7 @@ export function MonitoringBoard({
                   onClick={() => setConfirmAction("send")}
                   className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-500"
                 >
-                  <ButtonWithShortcut label="Send takedowns" shortcut="2" dark />
+                  <ButtonWithShortcut label="Send takedowns" shortcut="T" dark />
                 </button>
                 <button
                   type="button"
@@ -566,21 +704,21 @@ export function MonitoringBoard({
                   onClick={() => setConfirmAction("false_positive")}
                   className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
                 >
-                  <ButtonWithShortcut label="False positive" shortcut="0" />
+                  <ButtonWithShortcut label="False positive" shortcut="1" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmAction("do_not_pursue")}
                   className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
                 >
-                  <ButtonWithShortcut label="Don't pursue" shortcut="1" />
+                  <ButtonWithShortcut label="Don't pursue" shortcut="3" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmAction("second_hand")}
                   className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
                 >
-                  <ButtonWithShortcut label="Second hand" shortcut="3" />
+                  <ButtonWithShortcut label="Second hand" shortcut="2" />
                 </button>
                 <span
                   className={`relative inline-flex group ${!filters.candidate_outcome ? "cursor-not-allowed" : ""}`}
@@ -618,110 +756,102 @@ export function MonitoringBoard({
 
   return (
     <>
-      {/* Compact triage toolbar — status pills + facet filters in one dense row.
-          Sorting stays on the table's sortable column headers. */}
-      <div className="flex items-center gap-2 flex-wrap rounded-lg border border-stone-200 bg-white px-2 py-1.5 mb-2">
-        <StatusTabs
-          counts={facets.statuses}
-          active={filters.status}
-          onSelect={(s) =>
-            onFiltersChange({
-              status: s as MonitoringStatusFilter | null,
-              dismissal_reason: s === "dismissed" ? filters.dismissal_reason : null,
-              show_dismissed: s === "dismissed" ? true : filters.show_dismissed,
-            })
-          }
-        />
-        <span className="self-stretch w-px bg-stone-200 mx-0.5" aria-hidden />
-        <div className="relative">
-          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-stone-400">
-            <svg viewBox="0 0 12 12" width="12" height="12" fill="currentColor" aria-hidden>
-              <rect x="0.5" y="5" width="2.5" height="6" rx="0.5" />
-              <rect x="4.75" y="3" width="2.5" height="8" rx="0.5" />
-              <rect x="9" y="1" width="2.5" height="10" rx="0.5" />
-            </svg>
+      <div className="rounded-lg border border-stone-200 bg-white overflow-hidden mb-2">
+        <div className="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-stone-100">
+          <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+            Workflow
           </span>
-          <select
-            value={filters.priority ?? "all"}
-            onChange={(e) =>
+          <StatusTabs
+            counts={facets.statuses}
+            active={filters.status}
+            onSelect={(s) =>
               onFiltersChange({
-                priority:
-                  e.target.value === "all"
-                    ? null
-                    : (e.target.value as MonitoringPriorityBand),
+                status: s as MonitoringStatusFilter | null,
+                dismissal_reason: s === "dismissed" ? filters.dismissal_reason : null,
+                show_dismissed: s === "dismissed" ? true : filters.show_dismissed,
               })
             }
-            title="Filter by priority"
-            className={`${FILTER_SELECT} pl-7`}
-          >
-            <option value="all">All priorities ({total})</option>
-            <option value="high">High ({counts.high})</option>
-            <option value="med">Medium ({counts.med})</option>
-            <option value="low">Low ({counts.low})</option>
-          </select>
+          />
+          <span className="flex-1 min-w-[8px]" aria-hidden />
+          <span className="text-[11px] font-semibold text-stone-500 whitespace-nowrap">
+            {facets.total} in view
+          </span>
         </div>
-        {ipAware && facets.ips.length > 1 && (
-            <select
-              value={filters.ip_id ?? "all"}
-              onChange={(e) =>
-                onFiltersChange({
-                  ip_id: e.target.value === "all" ? null : e.target.value,
-                })
-              }
-              title="Filter by IP"
-              className={FILTER_SELECT}
+
+        <div className="flex items-center gap-x-2 gap-y-1 flex-wrap px-3 py-1.5">
+          {ipAware && facets.ips.length > 1 && (
+            <div
+              className="flex items-center gap-0.5 min-w-0 max-w-full overflow-x-auto whitespace-nowrap pb-0.5"
+              role="group"
+              aria-label="Filter by IP"
             >
-              <option value="all">All IPs ({facets.ips.reduce((s, ip) => s + ip.n, 0)})</option>
+              <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+                IP
+              </span>
+              <button
+                type="button"
+                onClick={() => onFiltersChange({ ip_id: null })}
+                aria-pressed={!filters.ip_id}
+                className={scopeResetChip}
+              >
+                All
+              </button>
               {facets.ips.map((ip) => (
-                <option key={ip.ip_id} value={ip.ip_id}>
-                  {ip.name ?? "—"} ({ip.n})
-                </option>
+                <button
+                  key={ip.ip_id}
+                  type="button"
+                  onClick={() =>
+                    onFiltersChange({
+                      ip_id: filters.ip_id === ip.ip_id ? null : ip.ip_id,
+                    })
+                  }
+                  aria-pressed={filters.ip_id === ip.ip_id}
+                  title={`${ip.name ?? "Unnamed IP"} · ${ip.n} finding${ip.n === 1 ? "" : "s"}`}
+                  className={`h-5 shrink-0 max-w-[8rem] px-1.5 rounded text-[10px] font-medium border truncate transition-colors ${
+                    filters.ip_id === ip.ip_id ? activeChip : inactiveChip
+                  }`}
+                >
+                  {ip.name ?? "Unnamed IP"}
+                </button>
               ))}
-            </select>
+            </div>
           )}
           {facets.platforms.length > 1 && (
-            <select
-              value={filters.platform ?? "all"}
-              onChange={(e) =>
-                onFiltersChange({
-                  platform: e.target.value === "all" ? null : e.target.value,
-                })
-              }
-              title="Filter by platform"
-              className={FILTER_SELECT}
+            <div
+              className="flex items-center gap-0.5 min-w-0 max-w-full overflow-x-auto whitespace-nowrap pb-0.5"
+              role="group"
+              aria-label="Filter by platform"
             >
-              <option value="all">All platforms ({facets.platforms.reduce((s, p) => s + p.n, 0)})</option>
+              <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+                Platform
+              </span>
+              <button
+                type="button"
+                onClick={() => onFiltersChange({ platform: null })}
+                aria-pressed={!filters.platform}
+                className={scopeResetChip}
+              >
+                All
+              </button>
               {facets.platforms.map((p) => (
-                <option key={p.domain} value={p.domain}>
-                  {p.domain} ({p.n})
-                </option>
+                <button
+                  key={p.domain}
+                  type="button"
+                  onClick={() =>
+                    onFiltersChange({
+                      platform: filters.platform === p.domain ? null : p.domain,
+                    })
+                  }
+                  aria-pressed={filters.platform === p.domain}
+                  title={`${p.domain} · ${p.n} finding${p.n === 1 ? "" : "s"}`}
+                  className={`h-5 shrink-0 max-w-[7rem] px-1.5 rounded text-[10px] font-medium border truncate transition-colors ${
+                    filters.platform === p.domain ? activeChip : inactiveChip
+                  }`}
+                >
+                  {p.domain}
+                </button>
               ))}
-            </select>
-          )}
-          {(filters.seller || (facets.sellers && facets.sellers.length > 0)) && (
-            <select
-              value={filters.seller ?? "all"}
-              onChange={(e) =>
-                onFiltersChange({
-                  seller: e.target.value === "all" ? null : e.target.value,
-                })
-              }
-              title="Filter by seller"
-              className={FILTER_SELECT}
-            >
-              <option value="all">All sellers ({(facets.sellers ?? []).reduce((s, x) => s + x.n, 0)})</option>
-              {/* Ensure the active filter is selectable even if facets dropped it
-                  (e.g. tenant has many sellers and the active one fell off the
-                  top-50 list, or the seller has zero current findings). */}
-              {filters.seller && !(facets.sellers ?? []).some((x) => x.seller_name === filters.seller) && (
-                <option value={filters.seller}>{filters.seller}</option>
-              )}
-              {(facets.sellers ?? []).map((s) => (
-                <option key={s.seller_name} value={s.seller_name}>
-                  {s.seller_name} ({s.n})
-                </option>
-              ))}
-            </select>
+            </div>
           )}
           {(filters.status === "dismissed" || filters.dismissal_reason) && (
             <select
@@ -736,6 +866,7 @@ export function MonitoringBoard({
                   show_dismissed: true,
                 })
               }
+              aria-label="Filter dismissed findings by outcome"
               title="Filter dismissed findings by outcome"
               className={FILTER_SELECT}
             >
@@ -747,56 +878,41 @@ export function MonitoringBoard({
               ))}
             </select>
           )}
-        <span className="flex-1 min-w-[8px]" aria-hidden />
-        <span className="text-[11px] font-semibold text-stone-500 whitespace-nowrap">
-          {activeCandidateLabel}
-          {selected.size > 0 ? ` · ${selected.size} selected` : ""}
-        </span>
-      </div>
+          <span className="flex-1 min-w-[8px]" aria-hidden />
+          <span className="text-[11px] font-semibold text-stone-500 whitespace-nowrap">
+            {selected.size > 0 ? `${selected.size} selected` : activeCandidateLabel}
+          </span>
+        </div>
 
-      {/* Candidate buckets — compact secondary filter line. */}
-      <div className="flex items-center gap-1 flex-wrap mb-2">
-        <button
-          type="button"
-          onClick={() => onFiltersChange({ candidate_outcome: null })}
-          className={`h-7 px-2.5 rounded-md text-[11px] font-semibold ${
-            !filters.candidate_outcome ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"
-          }`}
-        >
-          All ({facets.statuses.pending ?? 0})
-        </button>
-        {CANDIDATE_OUTCOME_ORDER.map((outcome) => (
-          <button
-            key={outcome}
-            type="button"
-            onClick={() => onFiltersChange({ candidate_outcome: outcome, status: "pending" })}
-            className={`h-7 px-2.5 rounded-md text-[11px] font-semibold ${
-              filters.candidate_outcome === outcome
-                ? "bg-stone-900 text-white"
-                : "text-stone-500 hover:bg-stone-100"
-            }`}
-          >
-            {CANDIDATE_OUTCOME_LABELS[outcome]} ({facets.candidate_outcomes?.[outcome] ?? 0})
-          </button>
-        ))}
-      </div>
-
-      <div className="rounded-lg border border-stone-200 bg-white overflow-hidden">
-        {lastAction && (
-          <div className="px-4 py-2 border-b border-stone-100 bg-blue-50 text-xs text-blue-900 flex items-center justify-between gap-3">
-            <span>
-              {lastAction.label} applied.
+        {showAiRecommendationTabs && (
+          <div className="flex items-center gap-0.5 flex-wrap px-3 py-1.5 border-t border-stone-100">
+            <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+              AI rec
             </span>
             <button
               type="button"
-              disabled={undoing}
-              onClick={undoLastAction}
-              className="px-2.5 py-1 rounded-md bg-white border border-blue-200 text-blue-700 font-semibold hover:bg-blue-100 disabled:opacity-50"
+              onClick={() => onFiltersChange({ candidate_outcome: null })}
+              className={scopeResetChip}
             >
-              {undoing ? "Undoing…" : "Undo"}
+              All ({facets.statuses.pending ?? 0})
             </button>
+            {CANDIDATE_OUTCOME_ORDER.map((outcome) => (
+              <button
+                key={outcome}
+                type="button"
+                onClick={() => onFiltersChange({ candidate_outcome: outcome, status: "pending" })}
+                className={`h-5 px-1.5 rounded text-[10px] font-medium border transition-colors ${
+                  filters.candidate_outcome === outcome ? activeChip : inactiveChip
+                }`}
+              >
+                {CANDIDATE_OUTCOME_LABELS[outcome]} ({facets.candidate_outcomes?.[outcome] ?? 0})
+              </button>
+            ))}
           </div>
         )}
+      </div>
+
+      <div className="rounded-lg border border-stone-200 bg-white overflow-hidden">
         {batchResult && (
           <div className="px-5 py-2 border-b border-stone-100 bg-stone-50 text-xs text-stone-600 flex items-center justify-between gap-3">
             <span>{batchResult}</span>
@@ -829,7 +945,7 @@ export function MonitoringBoard({
                   f={f}
                   ipId={f.ip_id ?? ipId}
                   showIp={ipAware}
-                  active={effectiveActiveId === f.result_id}
+                  active={activeId === f.result_id}
                   selected={selected.has(f.result_id)}
                   isDismissed={rowDismissed}
                   isDismissing={dismissing.has(f.result_id) && !f.dismissed_at}
@@ -842,6 +958,8 @@ export function MonitoringBoard({
                   onDismiss={(reason) => handleDismiss(f, reason)}
                   onActionComplete={() => advanceAfterAction(f.result_id)}
                   onTakedownSent={() => rememberTakedownAction(f)}
+                  onEnforced={() => rememberEnforcedAction(f)}
+                  onLicensed={(dismissedCount) => rememberLicensedAction(f, dismissedCount)}
                   onUpdated={onRefresh}
                 />
               );
@@ -849,8 +967,7 @@ export function MonitoringBoard({
           </div>
         ) : (
           /* Columnar findings table. Sortable headers drive the server sort;
-             clicking a row still expands the inline comparison panel (only one
-             row open at a time). */
+             clicking a row opens/updates the right-side inspector. */
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -869,7 +986,7 @@ export function MonitoringBoard({
                       />
                     </label>
                   </th>
-                  <SortHeader label="Rate" col="rate" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="w-12" />
+                  <SortHeader label="Similarity" col="rate" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="w-20" />
                   <th className="py-1.5 px-2 font-semibold w-16"><span className="sr-only">Image</span></th>
                   <th className="py-1.5 px-2 font-semibold">Listing</th>
                   <SortHeader label="Seller" col="seller" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="hidden md:table-cell" />
@@ -881,7 +998,7 @@ export function MonitoringBoard({
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {displayFindings.map((f) => {
-                  const expanded = f.result_id === effectiveActiveId;
+                  const active = f.result_id === activeFinding?.result_id;
                   const rowDismissed = !!f.dismissed_at || dismissing.has(f.result_id);
                   const rowActionable =
                     !rowDismissed &&
@@ -889,59 +1006,38 @@ export function MonitoringBoard({
                     f.ready_for_review &&
                     hasReviewAnalysis(f);
                   return (
-                    <Fragment key={f.result_id}>
-                      <tr
-                        onClick={() => setActiveFinding(expanded ? null : f.result_id)}
-                        className={`group relative cursor-pointer transition-colors ${
-                          expanded ? "bg-stone-50" : "hover:bg-stone-50 focus-within:bg-stone-50"
-                        } ${rowDismissed ? "opacity-50" : ""}`}
+                    <tr
+                      key={f.result_id}
+                      onClick={() => setActiveFinding(f.result_id)}
+                      className={`group relative cursor-pointer transition-colors ${
+                        active ? "bg-blue-50/70" : "hover:bg-stone-50 focus-within:bg-stone-50"
+                      } ${rowDismissed ? "opacity-50" : ""}`}
+                    >
+                      <td
+                        className="w-9 pl-2 pr-1 align-middle"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <td
-                          className="w-9 pl-2 pr-1 align-middle"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <label className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-stone-100 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              aria-label="Select finding"
-                              checked={selected.has(f.result_id)}
-                              onChange={() => toggleSelect(f.result_id)}
-                              className="h-4 w-4"
-                            />
-                          </label>
-                        </td>
-                        <FindingRow
-                          f={f}
-                          expanded={expanded}
-                          showIp={ipAware}
-                          actionable={rowActionable}
-                          quickBusy={shortcutBusy || dismissing.has(f.result_id)}
-                          onQuickSend={() => handleQuickSend(f)}
-                          onQuickDismiss={() => handleDismiss(f, "false_positive")}
-                        />
-                      </tr>
-                      {expanded && (
-                        <tr>
-                          <td
-                            colSpan={9}
-                            className="bg-stone-50 border-t border-stone-100 px-4 py-3"
-                          >
-                            <FindingComparison
-                              key={f.result_id}
-                              f={f}
-                              ipId={f.ip_id ?? ipId}
-                              showIp={ipAware}
-                              isDismissed={rowDismissed}
-                              isDismissing={dismissing.has(f.result_id) && !f.dismissed_at}
-                              onDismiss={(reason) => handleDismiss(f, reason)}
-                              onActionComplete={() => advanceAfterAction(f.result_id)}
-                              onTakedownSent={() => rememberTakedownAction(f)}
-                              onUpdated={onRefresh}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
+                        <label className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-stone-100 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            aria-label="Select finding"
+                            checked={selected.has(f.result_id)}
+                            onChange={() => toggleSelect(f.result_id)}
+                            className="h-4 w-4"
+                          />
+                        </label>
+                      </td>
+                      <FindingRow
+                        f={f}
+                        active={active}
+                        showIp={ipAware}
+                        actionable={rowActionable}
+                        quickBusy={shortcutBusy || dismissing.has(f.result_id)}
+                        onOpen={() => setActiveFinding(f.result_id)}
+                        onQuickSend={() => handleQuickSend(f)}
+                        onQuickDismiss={() => handleDismiss(f, "false_positive")}
+                      />
+                    </tr>
                   );
                 })}
               </tbody>
@@ -971,6 +1067,23 @@ export function MonitoringBoard({
       {selected.size > 0 && <div aria-hidden="true" className="h-32 sm:h-24" />}
       {bulkSelectionBar}
 
+      {activeFinding && (
+        <FindingInspector
+          f={activeFinding}
+          ipId={activeFinding.ip_id ?? ipId}
+          showIp={ipAware}
+          isDismissed={!!activeFinding.dismissed_at || dismissing.has(activeFinding.result_id)}
+          isDismissing={dismissing.has(activeFinding.result_id) && !activeFinding.dismissed_at}
+          onClose={() => setActiveFinding(null)}
+          onDismiss={(reason) => handleDismiss(activeFinding, reason)}
+          onActionComplete={() => advanceAfterAction(activeFinding.result_id)}
+          onTakedownSent={() => rememberTakedownAction(activeFinding)}
+          onEnforced={() => rememberEnforcedAction(activeFinding)}
+          onLicensed={(dismissedCount) => rememberLicensedAction(activeFinding, dismissedCount)}
+          onUpdated={onRefresh}
+        />
+      )}
+
       {confirmAction && (
         <BatchConfirmModal
           action={confirmAction}
@@ -983,6 +1096,144 @@ export function MonitoringBoard({
           }}
         />
       )}
+
+      <LastDecisionToast
+        action={lastAction}
+        undoing={undoing}
+        onUndo={undoLastAction}
+        onDismiss={() => setLastAction(null)}
+      />
     </>
+  );
+}
+
+function LastDecisionToast({
+  action,
+  undoing,
+  onUndo,
+  onDismiss,
+}: {
+  action: LastReviewAction | null;
+  undoing: boolean;
+  onUndo: () => void;
+  onDismiss: () => void;
+}) {
+  if (!action) return null;
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-4 left-4 z-50 w-[min(calc(100vw-2rem),19rem)] rounded-lg border border-stone-200 bg-white text-stone-900 shadow-[0_12px_32px_rgba(28,25,23,0.14)]"
+    >
+      <div className="px-3 py-2.5">
+        <div className="flex items-start gap-2">
+          <CircleCheck size={14} className="mt-0.5 shrink-0 text-emerald-500" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-semibold leading-4 text-stone-900">
+              {action.label}
+            </div>
+            {action.detail && (
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-stone-500">
+                <span className="h-3 w-3 shrink-0 rounded-full border border-dashed border-stone-300" aria-hidden />
+                <span className="truncate">{action.detail}</span>
+              </div>
+            )}
+            {action.undo && (
+              <button
+                type="button"
+                disabled={undoing}
+                onClick={onUndo}
+                className="mt-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              >
+                {undoing ? "Undoing..." : "Undo"}
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="-mr-1 -mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            aria-label="Dismiss last decision"
+            title="Dismiss"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FindingInspector({
+  f,
+  ipId,
+  showIp,
+  isDismissed,
+  isDismissing,
+  onClose,
+  onDismiss,
+  onActionComplete,
+  onTakedownSent,
+  onEnforced,
+  onLicensed,
+  onUpdated,
+}: {
+  f: IpReviewFinding;
+  ipId?: string;
+  showIp?: boolean;
+  isDismissed: boolean;
+  isDismissing: boolean;
+  onClose: () => void;
+  onDismiss: (reason: MonitoringReviewOutcome) => void;
+  onActionComplete: () => void;
+  onTakedownSent: () => void;
+  onEnforced: () => void;
+  onLicensed: (dismissedCount: number) => void;
+  onUpdated: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 pointer-events-none flex justify-end">
+      <aside
+        role="dialog"
+        aria-modal="false"
+        aria-label="Finding details"
+        className="pointer-events-auto h-full w-full bg-white shadow-2xl shadow-stone-950/20 border-l border-stone-200 sm:w-[min(92vw,48rem)] xl:w-[min(58vw,60rem)] flex flex-col"
+      >
+        <div className="h-12 shrink-0 border-b border-stone-200 bg-white/95 backdrop-blur flex items-center gap-3 px-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-stone-900 truncate">
+              {compactListingTitle(f)}
+            </div>
+            <div className="text-[11px] text-stone-400 truncate">{f.domain}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 w-8 rounded-md inline-flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            aria-label="Close finding details"
+            title="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+          <FindingComparison
+            key={f.result_id}
+            f={f}
+            ipId={ipId}
+            showIp={showIp}
+            isDismissed={isDismissed}
+            isDismissing={isDismissing}
+            onDismiss={onDismiss}
+            onActionComplete={onActionComplete}
+            onTakedownSent={onTakedownSent}
+            onEnforced={onEnforced}
+            onLicensed={onLicensed}
+            onUpdated={onUpdated}
+          />
+        </div>
+      </aside>
+    </div>
   );
 }

@@ -23,6 +23,8 @@ export function GridFindingCard({
   onDismiss,
   onActionComplete,
   onTakedownSent,
+  onEnforced,
+  onLicensed,
   onUpdated,
 }: {
   f: IpReviewFinding;
@@ -38,6 +40,8 @@ export function GridFindingCard({
   onDismiss: (reason: MonitoringReviewOutcome) => void;
   onActionComplete: () => void;
   onTakedownSent: () => void;
+  onEnforced: () => void;
+  onLicensed: (dismissedCount: number) => void;
   onUpdated: () => void;
 }) {
   const status = findingStatusBadge(f);
@@ -174,6 +178,8 @@ export function GridFindingCard({
             onDismiss={onDismiss}
             onActionComplete={onActionComplete}
             onTakedownSent={onTakedownSent}
+            onEnforced={onEnforced}
+            onLicensed={onLicensed}
             onUpdated={onUpdated}
             compact
           />
