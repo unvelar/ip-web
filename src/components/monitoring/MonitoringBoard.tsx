@@ -1,4 +1,5 @@
 import { Fragment, type MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Shuffle } from "lucide-react";
 import TakedownPanel, { ComposeModal, ConfirmSendModal } from "../TakedownPanel";
 import CaseComments from "../CaseComments";
 import {
@@ -67,8 +68,6 @@ const CANDIDATE_OUTCOME_ORDER: MonitoringCandidateOutcome[] = [
   "false_positive",
   "none",
 ];
-
-type ResortTarget = MonitoringCandidateOutcome | null;
 
 function ShortcutKey({ value, dark = false }: { value: string; dark?: boolean }) {
   return (
@@ -189,13 +188,11 @@ function summarizeBatch(
 }
 
 function summarizeResort(
-  target: ResortTarget,
   ok: number,
   skipped: Record<string, number>,
   failed: number,
 ): string {
-  const label = target ? CANDIDATE_OUTCOME_LABELS[target] : "Auto bucket";
-  const parts = [`Moved ${ok} to ${label}`];
+  const parts = [`Resorted ${ok}`];
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
   if (skipTotal > 0) {
     const detail = Object.entries(skipped)
@@ -501,16 +498,21 @@ export function MonitoringBoard({
     onRefresh();
   }
 
-  async function runResort(target: ResortTarget) {
+  async function runResort() {
+    const rejectedOutcome = filters.candidate_outcome;
+    if (!rejectedOutcome) {
+      setBatchResult("Choose a candidate bucket before resorting selected findings.");
+      return;
+    }
     const { eligible, skipped } = partitionResort();
     if (eligible.length === 0) {
-      setBatchResult(summarizeResort(target, 0, skipped, 0));
+      setBatchResult(summarizeResort(0, skipped, 0));
       return;
     }
     setBatchProgress({ done: 0, total: eligible.length });
     let failed = 0;
     try {
-      await resortMonitoringFindings(eligible.map((f) => f.result_id), target);
+      await resortMonitoringFindings(eligible.map((f) => f.result_id), rejectedOutcome);
     } catch {
       failed = eligible.length;
     } finally {
@@ -518,7 +520,7 @@ export function MonitoringBoard({
     }
     setBatchProgress(null);
     setSelected(new Set());
-    setBatchResult(summarizeResort(target, failed > 0 ? 0 : eligible.length, skipped, failed));
+    setBatchResult(summarizeResort(failed > 0 ? 0 : eligible.length, skipped, failed));
     onRefresh();
   }
 
@@ -863,24 +865,20 @@ export function MonitoringBoard({
                   >
                     <ButtonWithShortcut label="Resale" shortcut="3" />
                   </button>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      e.currentTarget.value = "";
-                      if (!value) return;
-                      void runResort(value as MonitoringCandidateOutcome);
-                    }}
-                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
-                    title="Move selected findings to a candidate bucket"
+                  <button
+                    type="button"
+                    onClick={() => void runResort()}
+                    disabled={!filters.candidate_outcome}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+                    title={
+                      filters.candidate_outcome
+                        ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
+                        : "Choose a candidate bucket before resorting"
+                    }
                   >
-                    <option value="" disabled>Move to…</option>
-                    {CANDIDATE_OUTCOME_ORDER.filter((outcome) => outcome !== filters.candidate_outcome).map((outcome) => (
-                      <option key={outcome} value={outcome}>
-                        {CANDIDATE_OUTCOME_LABELS[outcome]}
-                      </option>
-                    ))}
-                  </select>
+                    <Shuffle size={13} aria-hidden="true" />
+                    <span>Resort selected</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setSelected(new Set())}

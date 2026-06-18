@@ -1561,7 +1561,7 @@ export function listMonitoringFindingsGlobal(
 
 export function resortMonitoringFindings(
   resultIds: string[],
-  candidateOutcome: MonitoringCandidateOutcome | null,
+  rejectedCandidateOutcome: MonitoringCandidateOutcome,
 ) {
   return request<{ ok: boolean; updated: number }>(
     "/api/monitoring/findings/resort",
@@ -1569,7 +1569,7 @@ export function resortMonitoringFindings(
       method: "POST",
       body: JSON.stringify({
         result_ids: resultIds,
-        candidate_outcome: candidateOutcome,
+        rejected_candidate_outcome: rejectedCandidateOutcome,
       }),
     },
   );
