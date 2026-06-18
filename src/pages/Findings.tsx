@@ -34,6 +34,7 @@ interface InboxFilters {
 }
 
 const DEFAULT_SORT: MonitoringSortMode = "score_desc";
+const MONITORING_PAGE_SIZE = 50;
 
 function parseFilters(params: URLSearchParams): InboxFilters {
   const status = params.get("status");
@@ -137,16 +138,28 @@ export function MonitoringInboxView() {
   const linkedReqSeq = useRef(0);
 
   // Filter-aware first-page fetch. Triggered on any filter/sort change.
+  // Action refreshes can ask for the currently loaded window so an expanded
+  // row beyond page one does not disappear after a decision.
   const loadFirstPage = useCallback(
-    async (q: MonitoringFindingsQuery) => {
+    async (q: MonitoringFindingsQuery, minRows = MONITORING_PAGE_SIZE) => {
       const seq = ++reqSeq.current;
       setErr("");
       try {
-        const page = await listMonitoringFindingsGlobal({ ...q, cursor: null });
+        const limit = q.limit ?? MONITORING_PAGE_SIZE;
+        const page = await listMonitoringFindingsGlobal({ ...q, cursor: null, limit });
         if (reqSeq.current !== seq) return;
-        setFindings(page.findings);
+        const allFindings = [...page.findings];
+        let cursor = page.next_cursor;
+        while (cursor && allFindings.length < minRows) {
+          const nextPage = await listMonitoringFindingsGlobal({ ...q, cursor, limit });
+          if (reqSeq.current !== seq) return;
+          allFindings.push(...nextPage.findings);
+          cursor = nextPage.next_cursor;
+          if (nextPage.findings.length === 0) break;
+        }
+        setFindings(allFindings);
         setFacets(page.facets);
-        setNextCursor(page.next_cursor);
+        setNextCursor(cursor);
       } catch (e) {
         if (reqSeq.current !== seq) return;
         setErr(e instanceof Error ? e.message : String(e));
@@ -209,11 +222,12 @@ export function MonitoringInboxView() {
   }, [nextCursor, loadingMore, filters]);
 
   // Refresh in place after an action (dismiss, confirm, …) without losing
-  // the current scroll position: re-fetch the first page only.
+  // the currently loaded window. This keeps auto-advance targets present even
+  // after the user has loaded past the first page.
   const refresh = useCallback(() => {
-    void loadFirstPage(filters);
+    void loadFirstPage(filters, Math.max(findings.length, MONITORING_PAGE_SIZE));
     if (taskId) void loadLinkedFinding(taskId);
-  }, [loadFirstPage, loadLinkedFinding, filters, taskId]);
+  }, [loadFirstPage, loadLinkedFinding, filters, findings.length, taskId]);
 
   const onFiltersChange = useCallback(
     (next: Partial<InboxFilters>) => {
