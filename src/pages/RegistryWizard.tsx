@@ -12,7 +12,7 @@ import {
 } from "../api";
 import { useJobPoller } from "../hooks/useJobPoller";
 import ImageUploader from "../components/ImageUploader";
-import { mergeKeywords } from "../lib/keywords";
+import { consumeCommittedKeywords, mergeKeywords } from "../lib/keywords";
 
 /**
  * Four-step IP-creation wizard at /ips/new.
@@ -117,6 +117,12 @@ export default function RegistryWizard() {
     }
     setKeywords(next);
     setKeywordDraft("");
+  }
+
+  function handleKeywordDraftChange(value: string) {
+    const next = consumeCommittedKeywords(keywords, value);
+    setKeywords(next.keywords);
+    setKeywordDraft(next.draft);
   }
 
   function removeKeyword(idx: number) {
@@ -297,7 +303,7 @@ export default function RegistryWizard() {
               <div className="flex items-center gap-2">
                 <input
                   value={keywordDraft}
-                  onChange={(e) => setKeywordDraft(e.target.value)}
+                  onChange={(e) => handleKeywordDraftChange(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();

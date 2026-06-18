@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   getTrademark,
@@ -17,7 +17,7 @@ import { useJobPoller } from "../hooks/useJobPoller";
 import ImageUploader from "../components/ImageUploader";
 import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
 import IpTakedownSigner from "../components/IpTakedownSigner";
-import { mergeKeywords } from "../lib/keywords";
+import { consumeCommittedKeywords, mergeKeywords } from "../lib/keywords";
 
 export default function RegistryDetail() {
   const { id } = useParams<{ id: string }>();
@@ -32,37 +32,48 @@ export default function RegistryDetail() {
   const [descDraft, setDescDraft] = useState("");
   const [savingDesc, setSavingDesc] = useState(false);
   const [keywordDraft, setKeywordDraft] = useState("");
+  const keywordSaveSeq = useRef(0);
 
   const indexJob = useJobPoller(indexJobId);
 
-  async function addKeyword() {
-    if (!ip || !keywordDraft.trim()) return;
-    const existing = ip.keywords ?? [];
-    const next = mergeKeywords(existing, keywordDraft);
-    if (next.length === existing.length) {
-      setKeywordDraft("");
-      return;
-    }
+  async function saveKeywords(next: string[]) {
+    if (!ip) return;
+    const seq = ++keywordSaveSeq.current;
+    const previous = ip;
+    setIp({ ...ip, keywords: next });
     try {
-      const { trademark } = await updateTrademark(ip.id, {
-        keywords: next,
-      });
-      setIp(trademark);
-      setKeywordDraft("");
+      const { trademark } = await updateTrademark(ip.id, { keywords: next });
+      if (seq === keywordSaveSeq.current) setIp(trademark);
     } catch (e: any) {
+      if (seq === keywordSaveSeq.current) setIp(previous);
       setError(e.message);
     }
   }
 
-  async function removeKeyword(idx: number) {
+  function addKeyword() {
+    if (!ip || !keywordDraft.trim()) return;
+    const next = mergeKeywords(ip.keywords ?? [], keywordDraft);
+    if (next.length === (ip.keywords ?? []).length) {
+      setKeywordDraft("");
+      return;
+    }
+    setKeywordDraft("");
+    void saveKeywords(next);
+  }
+
+  function handleKeywordDraftChange(value: string) {
+    if (!ip) return;
+    const next = consumeCommittedKeywords(ip.keywords ?? [], value);
+    setKeywordDraft(next.draft);
+    if (next.keywords.length !== (ip.keywords ?? []).length) {
+      void saveKeywords(next.keywords);
+    }
+  }
+
+  function removeKeyword(idx: number) {
     if (!ip) return;
     const next = (ip.keywords ?? []).filter((_, i) => i !== idx);
-    try {
-      const { trademark } = await updateTrademark(ip.id, { keywords: next });
-      setIp(trademark);
-    } catch (e: any) {
-      setError(e.message);
-    }
+    void saveKeywords(next);
   }
 
   async function load() {
@@ -250,7 +261,7 @@ export default function RegistryDetail() {
         <div className="flex items-center gap-2">
           <input
             value={keywordDraft}
-            onChange={(e) => setKeywordDraft(e.target.value)}
+            onChange={(e) => handleKeywordDraftChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
