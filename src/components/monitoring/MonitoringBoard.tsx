@@ -146,7 +146,7 @@ const BATCH_META: Record<
   send: { label: "Send takedowns", verb: "Sent", gerund: "Send takedowns for" },
   false_positive: { label: "False positive", verb: "Cleared", gerund: "Mark false positive for" },
   do_not_pursue: { label: "Don't pursue", verb: "Cleared", gerund: "Don't pursue" },
-  second_hand: { label: "Resale / second hand", verb: "Marked resale", gerund: "Mark resale / second hand for" },
+  second_hand: { label: "Second hand", verb: "Marked second hand", gerund: "Mark second hand for" },
   enforce: { label: "Mark enforced", verb: "Marked enforced", gerund: "Mark enforced" },
 };
 
@@ -646,6 +646,88 @@ export function MonitoringBoard({
   const resortSelectedTooltip = filters.candidate_outcome
     ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
     : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
+  const bulkSelectionBar = selected.size > 0 ? (
+    <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 sm:px-6 lg:left-64 pointer-events-none">
+      <div className="mx-auto max-w-7xl pointer-events-auto max-h-[45vh] overflow-y-auto rounded-lg border border-stone-200 bg-white/95 px-4 py-3 shadow-[0_16px_48px_-20px_rgba(28,25,23,0.45)] backdrop-blur">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-xs font-semibold text-stone-700 shrink-0">
+            {selected.size} selected
+          </span>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {batchProgress ? (
+              <span className="text-xs text-stone-500">
+                Working… ({batchProgress.done}/{batchProgress.total})
+              </span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction("send")}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-500"
+                >
+                  <ButtonWithShortcut label="Send takedowns" shortcut="2" dark />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction("enforce")}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-500 whitespace-nowrap"
+                >
+                  Mark enforced
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction("false_positive")}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
+                >
+                  <ButtonWithShortcut label="False positive" shortcut="0" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction("do_not_pursue")}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
+                >
+                  <ButtonWithShortcut label="Don't pursue" shortcut="1" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction("second_hand")}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
+                >
+                  <ButtonWithShortcut label="Second hand" shortcut="3" />
+                </button>
+                <span
+                  className={`relative inline-flex group ${!filters.candidate_outcome ? "cursor-not-allowed" : ""}`}
+                  title={resortSelectedTooltip}
+                >
+                  <button
+                    type="button"
+                    onClick={() => void runResort()}
+                    disabled={!filters.candidate_outcome}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 disabled:pointer-events-none disabled:hover:bg-white"
+                  >
+                    <Shuffle size={13} aria-hidden="true" />
+                    <span>Resort selected</span>
+                  </button>
+                  {!filters.candidate_outcome && (
+                    <span className="pointer-events-none absolute right-0 bottom-full z-50 mb-1 w-60 rounded-md bg-stone-900 px-2 py-1.5 text-[11px] font-medium leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                      {resortSelectedTooltip}
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set())}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold text-stone-500 hover:text-stone-700"
+                >
+                  Clear
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <>
@@ -849,84 +931,6 @@ export function MonitoringBoard({
             </button>
           </div>
         )}
-        {selected.size > 0 && (
-          <div className="px-4 py-2 border-b border-stone-100 bg-stone-50 flex items-center justify-between gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-stone-600">
-              {selected.size} selected
-            </span>
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              {batchProgress ? (
-                <span className="text-xs text-stone-500">
-                  Working… ({batchProgress.done}/{batchProgress.total})
-                </span>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmAction("send")}
-                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-500"
-                  >
-                    <ButtonWithShortcut label="Send takedowns" shortcut="2" dark />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmAction("enforce")}
-                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
-                  >
-                    Mark enforced
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmAction("false_positive")}
-                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
-                  >
-                    <ButtonWithShortcut label="False positive" shortcut="0" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmAction("do_not_pursue")}
-                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
-                  >
-                    <ButtonWithShortcut label="Don't pursue" shortcut="1" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmAction("second_hand")}
-                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
-                  >
-                    <ButtonWithShortcut label="Resale" shortcut="3" />
-                  </button>
-                  <span
-                    className={`relative inline-flex group ${!filters.candidate_outcome ? "cursor-not-allowed" : ""}`}
-                    title={resortSelectedTooltip}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => void runResort()}
-                      disabled={!filters.candidate_outcome}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 disabled:pointer-events-none disabled:hover:bg-white"
-                    >
-                      <Shuffle size={13} aria-hidden="true" />
-                      <span>Resort selected</span>
-                    </button>
-                    {!filters.candidate_outcome && (
-                      <span className="pointer-events-none absolute right-0 top-full z-20 mt-1 w-60 rounded-md bg-stone-900 px-2 py-1.5 text-[11px] font-medium leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                        {resortSelectedTooltip}
-                      </span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelected(new Set())}
-                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold text-stone-500 hover:text-stone-700"
-                  >
-                    Clear
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        )}
         {batchResult && (
           <div className="px-5 py-2 border-b border-stone-100 bg-stone-50 text-xs text-stone-600 flex items-center justify-between gap-3">
             <span>{batchResult}</span>
@@ -1084,6 +1088,9 @@ export function MonitoringBoard({
           </div>
         )}
       </div>
+
+      {selected.size > 0 && <div aria-hidden="true" className="h-32 sm:h-24" />}
+      {bulkSelectionBar}
 
       {confirmAction && (
         <BatchConfirmModal
