@@ -117,27 +117,65 @@ function hasReviewAnalysis(f: IpReviewFinding) {
   );
 }
 
+function readableEnum(value: string) {
+  return value.replace(/_/g, " ");
+}
+
 function infringementTypeMeta(type: string | null) {
   switch (type) {
     case "full_copy":
       return {
-        label: "Verbatim IP use",
-        title: "Uses canonical or official-looking IP imagery rather than a reinterpretation.",
+        label: "IP use: direct copy",
+        title: "The listing appears to use the protected IP directly, rather than as a loose reference.",
       };
     case "derivative":
       return {
-        label: "Derivative",
+        label: "IP use: derivative",
         title: "Reinterprets the IP in a new medium, style, or composition.",
       };
     case "different_class":
       return {
-        label: "Different class",
+        label: "IP use: different category",
         title: "Uses the IP on goods or services outside the expected registration class.",
       };
     case "unclear":
-      return { label: "Unclear use", title: "The type of IP use is unclear." };
+      return {
+        label: "IP use: needs review",
+        title: "The analysis saw a possible IP signal, but could not classify the type of use.",
+      };
     default:
-      return type ? { label: type.replace(/_/g, " "), title: undefined } : null;
+      return type ? { label: `IP use: ${readableEnum(type)}`, title: undefined } : null;
+  }
+}
+
+function licenseStatusMeta(status: string | null) {
+  switch (status) {
+    case "likely_licensed":
+      return {
+        label: "License: likely authorized",
+        cls: "bg-emerald-100 text-emerald-700",
+        title: "The listing includes signals that it may be licensed or otherwise authorized.",
+      };
+    case "likely_unlicensed":
+      return {
+        label: "License: likely unauthorized",
+        cls: "bg-red-100 text-red-700",
+        title: "The listing has no clear authorization signal and appears likely unlicensed.",
+      };
+    case "unclear":
+      return {
+        label: "License: unknown",
+        cls: "bg-stone-100 text-stone-600",
+        title: "The enrichment did not find enough information to determine licensing.",
+      };
+    default:
+      return status
+        ? {
+            label: `License: ${readableEnum(status)}`,
+            cls: "bg-stone-100 text-stone-600",
+            title: undefined,
+          }
+        : null;
   }
 }
 
@@ -1819,14 +1857,16 @@ function findingChips(f: IpReviewFinding, showIp?: boolean) {
   const priceUsd =
     f.price_value_usd != null ? formatMoney(Number(f.price_value_usd), "USD") : null;
   const priceText = priceUsd ?? f.price ?? null;
+  const infringement = infringementTypeMeta(f.infringement_type);
+  const condition = inferCondition(f);
   const category =
     detailValue(f.item_details, ["category", "type", "department"]) ||
-    f.infringement_type ||
+    infringement?.label ||
     null;
   return [
     showIp && f.ip_name ? f.ip_name : null,
     category,
-    inferCondition(f),
+    condition ? `Condition: ${condition}` : null,
     priceText,
     f.domain,
   ].filter(Boolean) as string[];
@@ -2230,6 +2270,7 @@ function FindingComparison({
   const sb = findingStatusBadge(f);
   const suggestion = suggestionMeta(f.suggested_review_outcome);
   const infringement = infringementTypeMeta(f.infringement_type);
+  const licenseStatus = licenseStatusMeta(f.license_status);
 
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
@@ -2318,7 +2359,7 @@ function FindingComparison({
         )}
         {infringement && (
           <span
-            className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-700 uppercase tracking-wide font-semibold"
+            className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-700 font-semibold"
             title={infringement.title}
           >
             {infringement.label}
@@ -2332,17 +2373,12 @@ function FindingComparison({
             📍 {f.country || f.location}
           </span>
         )}
-        {f.license_status && (
+        {licenseStatus && (
           <span
-            className={`px-1.5 py-0.5 rounded font-semibold ${
-              f.license_status === "likely_licensed"
-                ? "bg-emerald-100 text-emerald-700"
-                : f.license_status === "likely_unlicensed"
-                  ? "bg-red-100 text-red-700"
-                  : "bg-stone-100 text-stone-600"
-            }`}
+            className={`px-1.5 py-0.5 rounded font-semibold ${licenseStatus.cls}`}
+            title={licenseStatus.title}
           >
-            {f.license_status.replace(/_/g, " ")}
+            {licenseStatus.label}
           </span>
         )}
         {f.quantity_available != null && f.quantity_available > 0 && (
