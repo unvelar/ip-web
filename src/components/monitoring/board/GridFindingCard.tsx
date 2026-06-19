@@ -1,5 +1,5 @@
 import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
-import { FindingActions } from "./FindingActions";
+import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
 import {
   findingChips,
@@ -42,7 +42,7 @@ export function GridFindingCard({
   onTakedownSent: () => void;
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
-  onUpdated: () => void;
+  onUpdated: (opts?: FindingUpdateOptions) => void;
 }) {
   const status = findingStatusBadge(f);
   const suggestion = suggestionMeta(f.suggested_review_outcome);

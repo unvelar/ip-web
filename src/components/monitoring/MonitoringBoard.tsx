@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleCheck, Shuffle, X } from "lucide-react";
 import {
   dismissIpFinding,
@@ -30,6 +30,7 @@ import {
   type ResortTarget,
 } from "./board/constants";
 import { FindingComparison } from "./board/FindingComparison";
+import type { FindingUpdateOptions } from "./board/FindingActions";
 import { GridFindingCard } from "./board/GridFindingCard";
 import { FindingRow } from "./board/FindingRow";
 import { SortHeader } from "./board/SortHeader";
@@ -51,6 +52,7 @@ export interface BoardFilters {
 
 type LastReviewAction = {
   id: number;
+  expiresAt: number;
   label: string;
   detail?: string;
   undo?: {
@@ -59,6 +61,8 @@ type LastReviewAction = {
     resultId: string;
   };
 };
+
+const TOAST_VISIBLE_MS = 5000;
 
 function dismissalDecisionLabel(reason: MonitoringReviewOutcome) {
   switch (reason) {
@@ -157,7 +161,7 @@ export function MonitoringBoard({
   /** A monitor run is currently pending/executing — tweaks the empty state. */
   runInProgress: boolean;
   /** Re-fetch the first page (e.g. after a dismiss / license backfill). */
-  onRefresh: () => void;
+  onRefresh: (completedResultId?: string) => void;
   /** Optional post-dismiss notification with the dismissed result_id. */
   onDismiss?: (resultId: string) => void;
   /** Render the IP-name chip + IP filter dropdown. */
@@ -173,14 +177,42 @@ export function MonitoringBoard({
   // Optimistically-dismissed result_ids — the next refetch replaces these
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
+  const [pendingShortcutIds, setPendingShortcutIds] = useState<Set<string>>(new Set());
+  const pendingShortcutIdsRef = useRef<Set<string>>(new Set());
   // Active finding shown in the side inspector. null = inspector closed.
   const [activeId, setActiveIdState] = useState<string | null>(activeFindingId ?? null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
-  const [lastAction, setLastAction] = useState<LastReviewAction | null>(null);
-  const [undoing, setUndoing] = useState(false);
+  const [reviewToasts, setReviewToasts] = useState<LastReviewAction[]>([]);
+  const [undoingToastIds, setUndoingToastIds] = useState<Set<number>>(new Set());
+  const nextToastId = useRef(0);
 
-  const recordLastAction = useCallback((action: Omit<LastReviewAction, "id">) => {
-    setLastAction({ ...action, id: Date.now() });
+  const dismissReviewToast = useCallback((id: number) => {
+    setReviewToasts((prev) => prev.filter((action) => action.id !== id));
+    setUndoingToastIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const recordLastAction = useCallback((action: Omit<LastReviewAction, "id" | "expiresAt">) => {
+    setReviewToasts((prev) => [
+      ...prev,
+      {
+        ...action,
+        id: ++nextToastId.current,
+        expiresAt: Date.now() + TOAST_VISIBLE_MS,
+      },
+    ]);
+  }, []);
+
+  const setShortcutPending = useCallback((resultId: string, pending: boolean) => {
+    const next = new Set(pendingShortcutIdsRef.current);
+    if (pending) next.add(resultId);
+    else next.delete(resultId);
+    pendingShortcutIdsRef.current = next;
+    setPendingShortcutIds(next);
   }, []);
 
   useEffect(() => {
@@ -236,10 +268,31 @@ export function MonitoringBoard({
         const state: CaseReviewStatus = f.dismissed_at
           ? "dismissed"
           : (f.review_status ?? "pending");
-        return state === "pending" && f.ready_for_review && hasReviewAnalysis(f) && !dismissing.has(f.result_id);
+        return (
+          state === "pending" &&
+          f.ready_for_review &&
+          hasReviewAnalysis(f) &&
+          !dismissing.has(f.result_id) &&
+          !pendingShortcutIds.has(f.result_id)
+        );
       }),
-    [displayFindings, dismissing],
+    [displayFindings, dismissing, pendingShortcutIds],
   );
+
+  useEffect(() => {
+    if (pendingShortcutIdsRef.current.size === 0) return;
+    const next = new Set(pendingShortcutIdsRef.current);
+    for (const resultId of next) {
+      const finding = displayFindings.find((f) => f.result_id === resultId);
+      const state: CaseReviewStatus = finding?.dismissed_at
+        ? "dismissed"
+        : (finding?.review_status ?? "pending");
+      if (!finding || state !== "pending") next.delete(resultId);
+    }
+    if (next.size === pendingShortcutIdsRef.current.size) return;
+    pendingShortcutIdsRef.current = next;
+    setPendingShortcutIds(next);
+  }, [displayFindings]);
 
   const advanceAfterAction = useCallback((resultId: string) => {
     const currentIndex = visibleActionableFindings.findIndex((f) => f.result_id === resultId);
@@ -254,6 +307,13 @@ export function MonitoringBoard({
         : visibleActionableFindings.find((f) => f.result_id !== resultId);
     setActiveFinding(next?.result_id ?? null);
   }, [setActiveFinding, visibleActionableFindings]);
+
+  const refreshAfterFindingUpdate = useCallback((
+    resultId: string,
+    opts?: FindingUpdateOptions,
+  ) => {
+    onRefresh(opts?.completed ? resultId : undefined);
+  }, [onRefresh]);
 
   const moveActive = useCallback((delta: -1 | 1) => {
     if (displayFindings.length === 0) return;
@@ -285,7 +345,7 @@ export function MonitoringBoard({
         undo: { kind: "undismiss", ipId: fipId, resultId: f.result_id },
       });
       advanceAfterAction(f.result_id);
-      onRefresh();
+      onRefresh(f.result_id);
     } catch (e) {
       setDismissing((prev) => {
         const next = new Set(prev);
@@ -326,29 +386,43 @@ export function MonitoringBoard({
     });
   }, [recordLastAction]);
 
-  async function undoLastAction() {
-    if (!lastAction?.undo || undoing) return;
-    setUndoing(true);
+  const undoReviewToast = useCallback(async (action: LastReviewAction) => {
+    if (!action.undo || undoingToastIds.has(action.id)) return;
+    setUndoingToastIds((prev) => new Set(prev).add(action.id));
     try {
-      if (lastAction.undo.kind === "undismiss") {
-        await undismissIpFinding(lastAction.undo.ipId, lastAction.undo.resultId);
+      if (action.undo.kind === "undismiss") {
+        await undismissIpFinding(action.undo.ipId, action.undo.resultId);
       } else {
-        await reopenIpFinding(lastAction.undo.ipId, lastAction.undo.resultId);
+        await reopenIpFinding(action.undo.ipId, action.undo.resultId);
       }
-      setLastAction(null);
+      dismissReviewToast(action.id);
       onRefresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to undo action");
     } finally {
-      setUndoing(false);
+      setUndoingToastIds((prev) => {
+        const next = new Set(prev);
+        next.delete(action.id);
+        return next;
+      });
     }
-  }
+  }, [dismissReviewToast, onRefresh, undoingToastIds]);
 
   useEffect(() => {
-    if (!lastAction || undoing) return;
-    const timer = window.setTimeout(() => setLastAction(null), 5000);
-    return () => window.clearTimeout(timer);
-  }, [lastAction, undoing]);
+    if (reviewToasts.length === 0) return;
+    const now = Date.now();
+    const timers = reviewToasts
+      .filter((action) => !undoingToastIds.has(action.id))
+      .map((action) =>
+        window.setTimeout(
+          () => dismissReviewToast(action.id),
+          Math.max(0, action.expiresAt - now),
+        ),
+      );
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [dismissReviewToast, reviewToasts, undoingToastIds]);
 
   // --- Multi-select + batch operations -------------------------------------
   // Selection is keyed by result_id and page-local (covers loaded rows only).
@@ -475,7 +549,7 @@ export function MonitoringBoard({
     setBatchProgress(null);
     setSelected(new Set());
     setBatchResult(summarizeBatch(action, ok, skipCounts, failed));
-    onRefresh();
+    onRefresh(activeId && eligible.some((f) => f.result_id === activeId) ? activeId : undefined);
   }
 
   async function runResort(target: ResortTarget | null = filters.candidate_outcome) {
@@ -503,40 +577,47 @@ export function MonitoringBoard({
     onRefresh();
   }
 
-  const [shortcutBusy, setShortcutBusy] = useState(false);
-
   const runShortcutAction = useCallback(async (action: "false_positive" | "do_not_pursue" | "send" | "second_hand") => {
-    if (shortcutBusy) return;
     if (selected.size > 0) {
       setConfirmAction(action);
       return;
     }
+    const pendingShortcutIds = pendingShortcutIdsRef.current;
     const targetFinding =
-      activeFinding ||
-      visibleActionableFindings[0];
+      activeFinding && !pendingShortcutIds.has(activeFinding.result_id)
+        ? activeFinding
+        : visibleActionableFindings.find((f) => !pendingShortcutIds.has(f.result_id));
     if (!targetFinding) return;
+    if (pendingShortcutIds.has(targetFinding.result_id)) return;
 
     const state: CaseReviewStatus = targetFinding.dismissed_at
       ? "dismissed"
       : (targetFinding.review_status ?? "pending");
     if (state !== "pending") return;
 
-    setShortcutBusy(true);
+    let targetCaseId: string | null = null;
+    if (action === "send") {
+      if (!targetFinding.case_id) {
+        alert("Finding is still preparing.");
+        return;
+      }
+      targetCaseId = targetFinding.case_id;
+      setShortcutPending(targetFinding.result_id, true);
+      advanceAfterAction(targetFinding.result_id);
+    }
     try {
       if (action === "send") {
-        if (!targetFinding.case_id) throw new Error("Finding is still preparing.");
-        const r = await autoSendTakedown(targetFinding.case_id);
+        if (!targetCaseId) return;
+        const r = await autoSendTakedown(targetCaseId);
         if (r.status === "sent") {
           rememberTakedownAction(targetFinding);
-          advanceAfterAction(targetFinding.result_id);
-          onRefresh();
+          onRefresh(targetFinding.result_id);
           return;
         }
         if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(targetFinding.case_id);
+          await markTakedownSentWithoutEmail(targetCaseId);
           rememberTakedownAction(targetFinding);
-          advanceAfterAction(targetFinding.result_id);
-          onRefresh();
+          onRefresh(targetFinding.result_id);
           return;
         }
         throw new Error(
@@ -547,9 +628,8 @@ export function MonitoringBoard({
       }
       await handleDismiss(targetFinding, action);
     } catch (e) {
+      if (action === "send") setShortcutPending(targetFinding.result_id, false);
       alert(e instanceof Error ? e.message : "Failed to update finding");
-    } finally {
-      setShortcutBusy(false);
     }
   }, [
     advanceAfterAction,
@@ -557,52 +637,11 @@ export function MonitoringBoard({
     activeFinding,
     handleDismiss,
     onRefresh,
+    setShortcutPending,
     rememberTakedownAction,
     selected,
-    shortcutBusy,
     visibleActionableFindings,
   ]);
-
-  // Hover/focus row quick-action: send the takedown for one specific finding
-  // rather than whichever row is active/first. The full action set stays in
-  // the inspector.
-  const handleQuickSend = useCallback(async (f: IpReviewFinding) => {
-    if (shortcutBusy) return;
-    const state: CaseReviewStatus = f.dismissed_at
-      ? "dismissed"
-      : (f.review_status ?? "pending");
-    if (state !== "pending") return;
-    if (!f.case_id) {
-      alert("Finding is still preparing.");
-      return;
-    }
-    setShortcutBusy(true);
-    try {
-      const r = await autoSendTakedown(f.case_id);
-      if (r.status === "sent") {
-        rememberTakedownAction(f);
-        advanceAfterAction(f.result_id);
-        onRefresh();
-        return;
-      }
-      if (canMarkSentWithoutEmail) {
-        await markTakedownSentWithoutEmail(f.case_id);
-        rememberTakedownAction(f);
-        advanceAfterAction(f.result_id);
-        onRefresh();
-        return;
-      }
-      throw new Error(
-        r.status === "needs_compose"
-          ? "This takedown needs manual compose."
-          : "Email is not configured.",
-      );
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to update finding");
-    } finally {
-      setShortcutBusy(false);
-    }
-  }, [advanceAfterAction, canMarkSentWithoutEmail, onRefresh, rememberTakedownAction, shortcutBusy]);
 
   useEffect(() => {
     function editableTarget(target: EventTarget | null) {
@@ -635,7 +674,7 @@ export function MonitoringBoard({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeFinding, moveActive, runShortcutAction]);
+  }, [activeFinding, moveActive, runShortcutAction, setActiveFinding]);
 
   const allSelected = displayFindings.length > 0 && selected.size === displayFindings.length;
   const someSelected = selected.size > 0 && !allSelected;
@@ -647,9 +686,6 @@ export function MonitoringBoard({
     () => selectedFindingSummary(selectedFindings),
     [selectedFindings],
   );
-  const activeCandidateLabel = filters.candidate_outcome
-    ? CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]
-    : "All AI recommendations";
   const resortSelectedTooltip = filters.candidate_outcome
     ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
     : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
@@ -778,10 +814,10 @@ export function MonitoringBoard({
           </span>
         </div>
 
-        <div className="flex items-center gap-x-2 gap-y-1 flex-wrap px-3 py-1.5">
+        <div className="divide-y divide-stone-100">
           {ipAware && facets.ips.length > 1 && (
             <div
-              className="flex items-center gap-0.5 min-w-0 max-w-full overflow-x-auto whitespace-nowrap pb-0.5"
+              className="flex items-center gap-0.5 px-3 py-1.5 overflow-x-auto whitespace-nowrap"
               role="group"
               aria-label="Filter by IP"
             >
@@ -818,12 +854,12 @@ export function MonitoringBoard({
           )}
           {facets.platforms.length > 1 && (
             <div
-              className="flex items-center gap-0.5 min-w-0 max-w-full overflow-x-auto whitespace-nowrap pb-0.5"
+              className="flex items-center gap-0.5 px-3 py-1.5 overflow-x-auto whitespace-nowrap"
               role="group"
-              aria-label="Filter by platform"
+              aria-label="Filter by website"
             >
               <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
-                Platform
+                Websites
               </span>
               <button
                 type="button"
@@ -854,62 +890,68 @@ export function MonitoringBoard({
             </div>
           )}
           {(filters.status === "dismissed" || filters.dismissal_reason) && (
-            <select
-              value={filters.dismissal_reason ?? "all"}
-              onChange={(e) =>
-                onFiltersChange({
-                  status: "dismissed",
-                  dismissal_reason:
-                    e.target.value === "all"
-                      ? null
-                      : (e.target.value as MonitoringDismissalReasonFilter),
-                  show_dismissed: true,
-                })
-              }
-              aria-label="Filter dismissed findings by outcome"
-              title="Filter dismissed findings by outcome"
-              className={FILTER_SELECT}
-            >
-              <option value="all">All dismissed ({facets.statuses.dismissed ?? 0})</option>
-              {Object.entries(DISMISSAL_REASON_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label} ({facets.dismissal_reasons?.[key] ?? 0})
-                </option>
-              ))}
-            </select>
-          )}
-          <span className="flex-1 min-w-[8px]" aria-hidden />
-          <span className="text-[11px] font-semibold text-stone-500 whitespace-nowrap">
-            {selected.size > 0 ? `${selected.size} selected` : activeCandidateLabel}
-          </span>
-        </div>
-
-        {showAiRecommendationTabs && (
-          <div className="flex items-center gap-0.5 flex-wrap px-3 py-1.5 border-t border-stone-100">
-            <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
-              AI rec
-            </span>
-            <button
-              type="button"
-              onClick={() => onFiltersChange({ candidate_outcome: null })}
-              className={scopeResetChip}
-            >
-              All ({facets.statuses.pending ?? 0})
-            </button>
-            {CANDIDATE_OUTCOME_ORDER.map((outcome) => (
-              <button
-                key={outcome}
-                type="button"
-                onClick={() => onFiltersChange({ candidate_outcome: outcome, status: "pending" })}
-                className={`h-5 px-1.5 rounded text-[10px] font-medium border transition-colors ${
-                  filters.candidate_outcome === outcome ? activeChip : inactiveChip
-                }`}
+            <div className="flex items-center gap-2 px-3 py-1.5">
+              <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+                Dismissal
+              </span>
+              <select
+                value={filters.dismissal_reason ?? "all"}
+                onChange={(e) =>
+                  onFiltersChange({
+                    status: "dismissed",
+                    dismissal_reason:
+                      e.target.value === "all"
+                        ? null
+                        : (e.target.value as MonitoringDismissalReasonFilter),
+                    show_dismissed: true,
+                  })
+                }
+                aria-label="Filter dismissed findings by outcome"
+                title="Filter dismissed findings by outcome"
+                className={FILTER_SELECT}
               >
-                {CANDIDATE_OUTCOME_LABELS[outcome]} ({facets.candidate_outcomes?.[outcome] ?? 0})
+                <option value="all">All dismissed ({facets.statuses.dismissed ?? 0})</option>
+                {Object.entries(DISMISSAL_REASON_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label} ({facets.dismissal_reasons?.[key] ?? 0})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {showAiRecommendationTabs && (
+            <div className="flex items-center gap-0.5 flex-wrap px-3 py-1.5">
+              <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+                AI rec
+              </span>
+              <button
+                type="button"
+                onClick={() => onFiltersChange({ candidate_outcome: null })}
+                className={scopeResetChip}
+              >
+                All ({facets.statuses.pending ?? 0})
               </button>
-            ))}
-          </div>
-        )}
+              {CANDIDATE_OUTCOME_ORDER.map((outcome) => (
+                <button
+                  key={outcome}
+                  type="button"
+                  onClick={() => onFiltersChange({ candidate_outcome: outcome, status: "pending" })}
+                  className={`h-5 px-1.5 rounded text-[10px] font-medium border transition-colors ${
+                    filters.candidate_outcome === outcome ? activeChip : inactiveChip
+                  }`}
+                >
+                  {CANDIDATE_OUTCOME_LABELS[outcome]} ({facets.candidate_outcomes?.[outcome] ?? 0})
+                </button>
+              ))}
+              {selected.size > 0 && (
+                <span className="ml-auto text-[11px] font-semibold text-stone-500 whitespace-nowrap">
+                  {selected.size} selected
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="rounded-lg border border-stone-200 bg-white overflow-hidden">
@@ -960,7 +1002,7 @@ export function MonitoringBoard({
                   onTakedownSent={() => rememberTakedownAction(f)}
                   onEnforced={() => rememberEnforcedAction(f)}
                   onLicensed={(dismissedCount) => rememberLicensedAction(f, dismissedCount)}
-                  onUpdated={onRefresh}
+                  onUpdated={(opts) => refreshAfterFindingUpdate(f.result_id, opts)}
                 />
               );
             })}
@@ -1000,11 +1042,6 @@ export function MonitoringBoard({
                 {displayFindings.map((f) => {
                   const active = f.result_id === activeFinding?.result_id;
                   const rowDismissed = !!f.dismissed_at || dismissing.has(f.result_id);
-                  const rowActionable =
-                    !rowDismissed &&
-                    (f.review_status ?? "pending") === "pending" &&
-                    f.ready_for_review &&
-                    hasReviewAnalysis(f);
                   return (
                     <tr
                       key={f.result_id}
@@ -1031,11 +1068,6 @@ export function MonitoringBoard({
                         f={f}
                         active={active}
                         showIp={ipAware}
-                        actionable={rowActionable}
-                        quickBusy={shortcutBusy || dismissing.has(f.result_id)}
-                        onOpen={() => setActiveFinding(f.result_id)}
-                        onQuickSend={() => handleQuickSend(f)}
-                        onQuickDismiss={() => handleDismiss(f, "false_positive")}
                       />
                     </tr>
                   );
@@ -1080,7 +1112,7 @@ export function MonitoringBoard({
           onTakedownSent={() => rememberTakedownAction(activeFinding)}
           onEnforced={() => rememberEnforcedAction(activeFinding)}
           onLicensed={(dismissedCount) => rememberLicensedAction(activeFinding, dismissedCount)}
-          onUpdated={onRefresh}
+          onUpdated={(opts) => refreshAfterFindingUpdate(activeFinding.result_id, opts)}
         />
       )}
 
@@ -1097,70 +1129,78 @@ export function MonitoringBoard({
         />
       )}
 
-      <LastDecisionToast
-        action={lastAction}
-        undoing={undoing}
-        onUndo={undoLastAction}
-        onDismiss={() => setLastAction(null)}
+      <LastDecisionToasts
+        actions={reviewToasts}
+        undoingIds={undoingToastIds}
+        onUndo={undoReviewToast}
+        onDismiss={dismissReviewToast}
       />
     </>
   );
 }
 
-function LastDecisionToast({
-  action,
-  undoing,
+function LastDecisionToasts({
+  actions,
+  undoingIds,
   onUndo,
   onDismiss,
 }: {
-  action: LastReviewAction | null;
-  undoing: boolean;
-  onUndo: () => void;
-  onDismiss: () => void;
+  actions: LastReviewAction[];
+  undoingIds: Set<number>;
+  onUndo: (action: LastReviewAction) => void;
+  onDismiss: (id: number) => void;
 }) {
-  if (!action) return null;
+  if (actions.length === 0) return null;
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed bottom-4 left-4 z-50 w-[min(calc(100vw-2rem),19rem)] rounded-lg border border-stone-200 bg-white text-stone-900 shadow-[0_12px_32px_rgba(28,25,23,0.14)]"
-    >
-      <div className="px-3 py-2.5">
-        <div className="flex items-start gap-2">
-          <CircleCheck size={14} className="mt-0.5 shrink-0 text-emerald-500" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-semibold leading-4 text-stone-900">
-              {action.label}
-            </div>
-            {action.detail && (
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-stone-500">
-                <span className="h-3 w-3 shrink-0 rounded-full border border-dashed border-stone-300" aria-hidden />
-                <span className="truncate">{action.detail}</span>
-              </div>
-            )}
-            {action.undo && (
-              <button
-                type="button"
-                disabled={undoing}
-                onClick={onUndo}
-                className="mt-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
-              >
-                {undoing ? "Undoing..." : "Undo"}
-              </button>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="-mr-1 -mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-            aria-label="Dismiss last decision"
-            title="Dismiss"
+    <div className="fixed bottom-4 left-4 z-50 flex max-h-[min(calc(100vh-2rem),32rem)] w-[min(calc(100vw-2rem),19rem)] flex-col gap-2 overflow-y-auto">
+      {actions.map((action) => {
+        const undoing = undoingIds.has(action.id);
+        return (
+          <div
+            key={action.id}
+            role="status"
+            aria-live="polite"
+            className="rounded-lg border border-stone-200 bg-white text-stone-900 shadow-[0_12px_32px_rgba(28,25,23,0.14)]"
           >
-            <X size={13} />
-          </button>
-        </div>
-      </div>
+            <div className="px-3 py-2.5">
+              <div className="flex items-start gap-2">
+                <CircleCheck size={14} className="mt-0.5 shrink-0 text-emerald-500" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-semibold leading-4 text-stone-900">
+                    {action.label}
+                  </div>
+                  {action.detail && (
+                    <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-stone-500">
+                      <span className="h-3 w-3 shrink-0 rounded-full border border-dashed border-stone-300" aria-hidden />
+                      <span className="truncate">{action.detail}</span>
+                    </div>
+                  )}
+                  {action.undo && (
+                    <button
+                      type="button"
+                      disabled={undoing}
+                      onClick={() => onUndo(action)}
+                      className="mt-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                    >
+                      {undoing ? "Undoing..." : "Undo"}
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onDismiss(action.id)}
+                  className="-mr-1 -mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                  aria-label="Dismiss notification"
+                  title="Dismiss"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1190,7 +1230,7 @@ function FindingInspector({
   onTakedownSent: () => void;
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
-  onUpdated: () => void;
+  onUpdated: (opts?: FindingUpdateOptions) => void;
 }) {
   return (
     <div className="fixed inset-0 z-40 pointer-events-none flex justify-end">

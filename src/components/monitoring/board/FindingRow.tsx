@@ -60,20 +60,10 @@ export function FindingRow({
   f,
   active,
   showIp,
-  actionable = false,
-  quickBusy = false,
-  onQuickSend,
-  onQuickDismiss,
-  onOpen,
 }: {
   f: IpReviewFinding;
   active: boolean;
   showIp?: boolean;
-  actionable?: boolean;
-  quickBusy?: boolean;
-  onQuickSend?: () => void;
-  onQuickDismiss?: () => void;
-  onOpen?: () => void;
 }) {
   const similarity = f.similarity_score ?? f.enforcement_priority;
   const scoreBg =
@@ -193,59 +183,12 @@ export function FindingRow({
         {priceText ?? <span className="text-stone-300">—</span>}
       </td>
 
-      {/* Days — found relative; tooltip carries last-checked. Also hosts the
-          hover/focus quick-action overlay, positioned against the <tr>. */}
+      {/* Days — found relative; tooltip carries last-checked. */}
       <td
-        className="relative py-1 px-2 align-middle text-right whitespace-nowrap text-[11px] text-stone-500 tabular-nums"
+        className="py-1 px-2 align-middle text-right whitespace-nowrap text-[11px] text-stone-500 tabular-nums"
         title={updatedAgo ? `Updated ${updatedAgo}` : undefined}
       >
         {foundAgo}
-        <span
-          className={`absolute right-2 top-1/2 -translate-y-1/2 hidden items-center gap-1 pl-8 bg-gradient-to-l to-transparent group-hover:flex group-focus-within:flex ${
-            active ? "from-blue-50 via-blue-50" : "from-stone-50 via-stone-50"
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            title="Open finding details"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpen?.();
-            }}
-            className="h-[22px] px-2 rounded text-[10px] font-semibold leading-none border border-stone-300 bg-white text-stone-700 hover:bg-stone-100"
-          >
-            Open
-          </button>
-          {actionable && (
-            <>
-            <button
-              type="button"
-              disabled={quickBusy}
-              title="Send takedown (shortcut T)"
-              onClick={(e) => {
-                e.stopPropagation();
-                onQuickSend?.();
-              }}
-              className="h-[22px] px-2 rounded text-[10px] font-semibold leading-none bg-stone-900 text-white hover:bg-stone-700 disabled:opacity-50"
-            >
-              Send
-            </button>
-            <button
-              type="button"
-              disabled={quickBusy}
-              title="Dismiss as false positive (shortcut 1)"
-              onClick={(e) => {
-                e.stopPropagation();
-                onQuickDismiss?.();
-              }}
-              className="h-[22px] px-2 rounded text-[10px] font-semibold leading-none border border-stone-300 bg-white text-stone-600 hover:bg-stone-100 disabled:opacity-50"
-            >
-              Dismiss
-            </button>
-            </>
-          )}
-        </span>
       </td>
     </>
   );

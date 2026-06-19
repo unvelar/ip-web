@@ -135,6 +135,9 @@ export function MonitoringInboxView() {
   // payload back on screen.
   const reqSeq = useRef(0);
   const linkedReqSeq = useRef(0);
+  const taskIdRef = useRef<string | undefined>(taskId);
+  const completedLinkedIds = useRef<Set<string>>(new Set());
+  taskIdRef.current = taskId;
 
   // Filter-aware first-page fetch. Triggered on any filter/sort change.
   // Action refreshes can ask for the currently loaded window so an expanded
@@ -170,11 +173,18 @@ export function MonitoringInboxView() {
   );
 
   const loadLinkedFinding = useCallback(async (id: string) => {
+    if (completedLinkedIds.current.has(id)) {
+      linkedReqSeq.current++;
+      setLinkedFinding(null);
+      setLinkedErr("");
+      return;
+    }
     const seq = ++linkedReqSeq.current;
     setLinkedErr("");
     try {
       const { finding } = await getMonitoringFinding(id);
       if (linkedReqSeq.current !== seq) return;
+      if (completedLinkedIds.current.has(id)) return;
       setLinkedFinding(finding);
     } catch (e) {
       if (linkedReqSeq.current !== seq) return;
@@ -223,10 +233,26 @@ export function MonitoringInboxView() {
   // Refresh in place after an action (dismiss, confirm, …) without losing
   // the currently loaded window. This keeps auto-advance targets present even
   // after the user has loaded past the first page.
-  const refresh = useCallback(() => {
+  const refresh = useCallback((completedResultId?: string) => {
+    if (completedResultId) {
+      completedLinkedIds.current.add(completedResultId);
+      linkedReqSeq.current++;
+      setLinkedFinding((current) =>
+        current?.result_id === completedResultId ? null : current,
+      );
+      setLinkedErr("");
+    }
     void loadFirstPage(filters, Math.max(findings.length, MONITORING_PAGE_SIZE));
-    if (taskId) void loadLinkedFinding(taskId);
-  }, [loadFirstPage, loadLinkedFinding, filters, findings.length, taskId]);
+    const currentTaskId = taskIdRef.current;
+    if (!currentTaskId) return;
+    if (completedLinkedIds.current.has(currentTaskId)) {
+      linkedReqSeq.current++;
+      setLinkedFinding(null);
+      setLinkedErr("");
+      return;
+    }
+    void loadLinkedFinding(currentTaskId);
+  }, [loadFirstPage, loadLinkedFinding, filters, findings.length]);
 
   const onFiltersChange = useCallback(
     (next: Partial<InboxFilters>) => {
@@ -238,6 +264,11 @@ export function MonitoringInboxView() {
   );
 
   const onActiveFindingChange = useCallback((resultId: string | null) => {
+    if (resultId !== taskIdRef.current) {
+      linkedReqSeq.current++;
+      setLinkedFinding(null);
+      setLinkedErr("");
+    }
     navigate({
       pathname: resultId ? `/monitoring/tasks/${resultId}` : "/monitoring/tasks",
       search: location.search,

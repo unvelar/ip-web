@@ -1,7 +1,7 @@
 import TakedownPanel from "../../TakedownPanel";
 import CaseComments from "../../CaseComments";
 import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
-import { FindingActions } from "./FindingActions";
+import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
 import {
   dismissalBadge,
@@ -39,7 +39,7 @@ export function FindingComparison({
   onTakedownSent: () => void;
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
-  onUpdated: () => void;
+  onUpdated: (opts?: FindingUpdateOptions) => void;
 }) {
   const similarity = f.similarity_score ?? f.enforcement_priority;
   const similarityCls =

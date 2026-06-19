@@ -14,6 +14,10 @@ import {
 import { useAuth } from "../../../context/AuthContext";
 import { ButtonWithShortcut } from "./ButtonWithShortcut";
 
+export type FindingUpdateOptions = {
+  completed?: boolean;
+};
+
 export function FindingActions({
   f,
   ipId,
@@ -38,7 +42,7 @@ export function FindingActions({
   onTakedownSent: () => void;
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
-  onUpdated: () => void;
+  onUpdated: (opts?: FindingUpdateOptions) => void;
   compact?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -65,7 +69,7 @@ export function FindingActions({
           setConfirming(false);
           onTakedownSent();
           onActionComplete();
-          onUpdated();
+          onUpdated({ completed: true });
           return;
         }
         setSendErr("Email isn't configured yet — contact your administrator.");
@@ -77,7 +81,7 @@ export function FindingActions({
           setConfirming(false);
           onTakedownSent();
           onActionComplete();
-          onUpdated();
+          onUpdated({ completed: true });
           return;
         }
         setConfirming(false);
@@ -87,7 +91,7 @@ export function FindingActions({
       setConfirming(false);
       onTakedownSent();
       onActionComplete();
-      onUpdated();
+      onUpdated({ completed: true });
     } catch (e) {
       setSendErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -105,7 +109,7 @@ export function FindingActions({
     try {
       await fn();
       if (opts.completeCurrent) onActionComplete();
-      onUpdated();
+      onUpdated(opts.completeCurrent ? { completed: true } : undefined);
     } catch (e) {
       alert(e instanceof Error ? e.message : `Failed: ${label}`);
     } finally {
@@ -124,7 +128,7 @@ export function FindingActions({
       });
       onLicensed(result.dismissed);
       onActionComplete();
-      onUpdated(); // backfill dismisses this + any sibling finding from the seller
+      onUpdated({ completed: true }); // backfill dismisses this + any sibling finding from the seller
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to add license");
     } finally {
@@ -377,7 +381,7 @@ export function FindingActions({
             setComposing(false);
             onTakedownSent();
             onActionComplete();
-            onUpdated(); // case flips to takedown_sent; board refresh re-renders the row
+            onUpdated({ completed: true }); // case flips to takedown_sent; board refresh re-renders the row
           }}
         />
       )}
