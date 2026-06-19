@@ -117,6 +117,30 @@ function hasReviewAnalysis(f: IpReviewFinding) {
   );
 }
 
+function infringementTypeMeta(type: string | null) {
+  switch (type) {
+    case "full_copy":
+      return {
+        label: "Verbatim IP use",
+        title: "Uses canonical or official-looking IP imagery rather than a reinterpretation.",
+      };
+    case "derivative":
+      return {
+        label: "Derivative",
+        title: "Reinterprets the IP in a new medium, style, or composition.",
+      };
+    case "different_class":
+      return {
+        label: "Different class",
+        title: "Uses the IP on goods or services outside the expected registration class.",
+      };
+    case "unclear":
+      return { label: "Unclear use", title: "The type of IP use is unclear." };
+    default:
+      return type ? { label: type.replace(/_/g, " "), title: undefined } : null;
+  }
+}
+
 /** Compact relative-time formatter for "last checked"/"found" meta lines.
  *  Falls back to null when the input is missing/invalid. */
 function formatAgo(iso: string | null): string | null {
@@ -1738,10 +1762,17 @@ function inferCondition(f: IpReviewFinding): "new" | "second hand" | null {
   if (f.marketplace_condition === "second_hand") return "second hand";
   if (f.dismissal_reason === "second_hand" || f.dismissal_reason === "resale") return "second hand";
   const detail = detailValue(f.item_details, ["condition", "item condition"]);
+  const lowerTerms = f.description_risk_breakdown?.lower_terms;
+  const riskTermValues =
+    lowerTerms && typeof lowerTerms === "object" && !Array.isArray(lowerTerms)
+      ? Object.values(lowerTerms)
+          .flatMap((terms) => Array.isArray(terms) ? terms : [])
+          .filter((term): term is string => typeof term === "string")
+      : [];
   const haystack = [
     detail,
     f.license_status,
-    f.description_risk_breakdown ? JSON.stringify(f.description_risk_breakdown) : null,
+    riskTermValues.join(" "),
     f.description_summary,
     f.description_full,
   ].filter(Boolean).join(" ").toLowerCase();
@@ -2198,6 +2229,7 @@ function FindingComparison({
 
   const sb = findingStatusBadge(f);
   const suggestion = suggestionMeta(f.suggested_review_outcome);
+  const infringement = infringementTypeMeta(f.infringement_type);
 
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
@@ -2284,9 +2316,12 @@ function FindingComparison({
         {f.shipping_price && (
           <span className="text-stone-500" title="Shipping">+ {f.shipping_price}</span>
         )}
-        {f.infringement_type && (
-          <span className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-700 uppercase tracking-wide font-semibold">
-            {f.infringement_type.replace(/_/g, " ")}
+        {infringement && (
+          <span
+            className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-700 uppercase tracking-wide font-semibold"
+            title={infringement.title}
+          >
+            {infringement.label}
           </span>
         )}
         {(f.country || f.location) && (
