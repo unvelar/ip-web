@@ -710,16 +710,21 @@ export function MonitoringBoard({
   const showAiRecommendationTabs =
     filters.status === null || filters.status === "pending" || !!filters.candidate_outcome;
   const filterHeaderLabel =
-    "flex h-6 w-24 shrink-0 items-center rounded-md border border-stone-200 bg-stone-50 px-2 " +
-    "text-[10px] font-bold uppercase tracking-wide text-stone-700";
+    "w-24 shrink-0 text-[10px] font-bold uppercase tracking-wide text-stone-600";
   const filterRow =
-    "flex items-center gap-1 px-3 py-2 overflow-x-auto whitespace-nowrap";
-  const scopeResetChip =
-    "h-6 shrink-0 px-2 rounded-md text-[10px] font-semibold border border-transparent " +
-    "bg-transparent text-stone-500 hover:bg-stone-100 hover:text-stone-800 transition-colors";
-  const inactiveChip =
-    "bg-white text-stone-700 border-stone-200 hover:bg-stone-50 hover:border-stone-300";
-  const activeChip = "bg-stone-900 text-white border-stone-900 shadow-sm";
+    "flex items-center gap-1.5 px-3 py-2 overflow-x-auto whitespace-nowrap";
+  const filterChip = (active: boolean, extra = "") =>
+    `h-6 shrink-0 px-2.5 inline-flex items-center rounded-md border text-[10px] font-semibold transition-colors ${extra} ${
+      active
+        ? "border-stone-900 bg-stone-900 text-white shadow-sm"
+        : "border-stone-200 bg-stone-50 text-stone-700 hover:border-stone-300 hover:bg-white hover:text-stone-900"
+    }`;
+  const allFilterChip = (active: boolean) =>
+    `h-6 shrink-0 px-2 inline-flex items-center rounded-md border text-[10px] font-semibold transition-colors ${
+      active
+        ? "border-stone-300 bg-white text-stone-900 shadow-sm"
+        : "border-transparent bg-transparent text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+    }`;
   const bulkSelectionBar = selected.size > 0 ? (
     <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 sm:px-6 lg:left-64 pointer-events-none">
       <div className="mx-auto max-w-7xl pointer-events-auto max-h-[45vh] overflow-y-auto rounded-lg border border-stone-200 bg-white/95 px-4 py-3 shadow-[0_16px_48px_-20px_rgba(28,25,23,0.45)] backdrop-blur">
@@ -816,7 +821,7 @@ export function MonitoringBoard({
   return (
     <>
       <div className="rounded-lg border border-stone-200 bg-white overflow-hidden mb-2">
-        <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-b border-stone-100 bg-stone-50/30">
+        <div className="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-stone-100 bg-white">
           <span className={filterHeaderLabel}>
             Workflow
           </span>
@@ -851,7 +856,7 @@ export function MonitoringBoard({
                 type="button"
                 onClick={() => onFiltersChange({ ip_id: null })}
                 aria-pressed={!filters.ip_id}
-                className={`${scopeResetChip} ${!filters.ip_id ? activeChip : ""}`}
+                className={allFilterChip(!filters.ip_id)}
               >
                 All
               </button>
@@ -866,9 +871,7 @@ export function MonitoringBoard({
                   }
                   aria-pressed={filters.ip_id === ip.ip_id}
                   title={`${ip.name ?? "Unnamed IP"} · ${ip.n} finding${ip.n === 1 ? "" : "s"}`}
-                  className={`h-6 shrink-0 max-w-[8rem] px-2 rounded-md text-[10px] font-semibold border truncate transition-colors ${
-                    filters.ip_id === ip.ip_id ? activeChip : inactiveChip
-                  }`}
+                  className={filterChip(filters.ip_id === ip.ip_id, "max-w-[8rem] truncate")}
                 >
                   {ip.name ?? "Unnamed IP"}
                 </button>
@@ -888,7 +891,7 @@ export function MonitoringBoard({
                 type="button"
                 onClick={() => onFiltersChange({ platform: null })}
                 aria-pressed={!filters.platform}
-                className={`${scopeResetChip} ${!filters.platform ? activeChip : ""}`}
+                className={allFilterChip(!filters.platform)}
               >
                 All
               </button>
@@ -903,9 +906,7 @@ export function MonitoringBoard({
                   }
                   aria-pressed={filters.platform === p.domain}
                   title={`${p.domain} · ${p.n} finding${p.n === 1 ? "" : "s"}`}
-                  className={`h-6 shrink-0 max-w-[7rem] px-2 rounded-md text-[10px] font-semibold border truncate transition-colors ${
-                    filters.platform === p.domain ? activeChip : inactiveChip
-                  }`}
+                  className={filterChip(filters.platform === p.domain, "max-w-[7rem] truncate")}
                 >
                   {p.domain}
                 </button>
@@ -952,7 +953,7 @@ export function MonitoringBoard({
                 type="button"
                 onClick={() => onFiltersChange({ candidate_outcome: null })}
                 aria-pressed={!filters.candidate_outcome}
-                className={`${scopeResetChip} ${!filters.candidate_outcome ? activeChip : ""}`}
+                className={allFilterChip(!filters.candidate_outcome)}
               >
                 All ({facets.statuses.pending ?? 0})
               </button>
@@ -961,9 +962,7 @@ export function MonitoringBoard({
                   key={outcome}
                   type="button"
                   onClick={() => onFiltersChange({ candidate_outcome: outcome, status: "pending" })}
-                  className={`h-6 px-2 rounded-md text-[10px] font-semibold border transition-colors ${
-                    filters.candidate_outcome === outcome ? activeChip : inactiveChip
-                  }`}
+                  className={filterChip(filters.candidate_outcome === outcome)}
                 >
                   {CANDIDATE_OUTCOME_LABELS[outcome]} ({facets.candidate_outcomes?.[outcome] ?? 0})
                 </button>
