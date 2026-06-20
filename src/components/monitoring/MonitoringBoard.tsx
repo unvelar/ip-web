@@ -96,7 +96,7 @@ function selectedFindingSummary(findings: IpReviewFinding[]) {
   if (findings.length === 0) return [];
   const parts: string[] = [];
   const takedownCount = findings.filter((f) => f.suggested_review_outcome === "takedown").length;
-  if (takedownCount === findings.length) parts.push("AI recommends takedown");
+  if (takedownCount === findings.length) parts.push("Takedown");
   else if (takedownCount > 0) parts.push(`${takedownCount} AI takedown recs`);
 
   const similarities = findings
@@ -929,7 +929,7 @@ export function MonitoringBoard({
           {showAiRecommendationTabs && (
             <div className="flex items-center gap-1 flex-wrap px-3 py-2">
               <span className={filterHeaderLabel}>
-                AI rec
+                AI Reasoning
               </span>
               <FilterPill
                 label="All"
