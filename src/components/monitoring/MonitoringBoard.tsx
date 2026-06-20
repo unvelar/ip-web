@@ -709,12 +709,17 @@ export function MonitoringBoard({
     : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
   const showAiRecommendationTabs =
     filters.status === null || filters.status === "pending" || !!filters.candidate_outcome;
+  const filterHeaderLabel =
+    "flex h-6 w-24 shrink-0 items-center rounded-md border border-stone-200 bg-stone-50 px-2 " +
+    "text-[10px] font-bold uppercase tracking-wide text-stone-700";
+  const filterRow =
+    "flex items-center gap-1 px-3 py-2 overflow-x-auto whitespace-nowrap";
   const scopeResetChip =
-    "h-5 shrink-0 px-1.5 rounded text-[10px] font-medium border border-transparent " +
-    "bg-transparent text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors";
+    "h-6 shrink-0 px-2 rounded-md text-[10px] font-semibold border border-transparent " +
+    "bg-transparent text-stone-500 hover:bg-stone-100 hover:text-stone-800 transition-colors";
   const inactiveChip =
-    "bg-stone-100 text-stone-600 border-transparent hover:bg-stone-200 hover:text-stone-800";
-  const activeChip = "bg-stone-900 text-white border-stone-900";
+    "bg-white text-stone-700 border-stone-200 hover:bg-stone-50 hover:border-stone-300";
+  const activeChip = "bg-stone-900 text-white border-stone-900 shadow-sm";
   const bulkSelectionBar = selected.size > 0 ? (
     <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 sm:px-6 lg:left-64 pointer-events-none">
       <div className="mx-auto max-w-7xl pointer-events-auto max-h-[45vh] overflow-y-auto rounded-lg border border-stone-200 bg-white/95 px-4 py-3 shadow-[0_16px_48px_-20px_rgba(28,25,23,0.45)] backdrop-blur">
@@ -811,8 +816,8 @@ export function MonitoringBoard({
   return (
     <>
       <div className="rounded-lg border border-stone-200 bg-white overflow-hidden mb-2">
-        <div className="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-stone-100">
-          <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+        <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-b border-stone-100 bg-stone-50/30">
+          <span className={filterHeaderLabel}>
             Workflow
           </span>
           <StatusTabs
@@ -835,18 +840,18 @@ export function MonitoringBoard({
         <div className="divide-y divide-stone-100">
           {ipAware && facets.ips.length > 1 && (
             <div
-              className="flex items-center gap-0.5 px-3 py-1.5 overflow-x-auto whitespace-nowrap"
+              className={filterRow}
               role="group"
               aria-label="Filter by IP"
             >
-              <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+              <span className={filterHeaderLabel}>
                 IP
               </span>
               <button
                 type="button"
                 onClick={() => onFiltersChange({ ip_id: null })}
                 aria-pressed={!filters.ip_id}
-                className={scopeResetChip}
+                className={`${scopeResetChip} ${!filters.ip_id ? activeChip : ""}`}
               >
                 All
               </button>
@@ -861,7 +866,7 @@ export function MonitoringBoard({
                   }
                   aria-pressed={filters.ip_id === ip.ip_id}
                   title={`${ip.name ?? "Unnamed IP"} · ${ip.n} finding${ip.n === 1 ? "" : "s"}`}
-                  className={`h-5 shrink-0 max-w-[8rem] px-1.5 rounded text-[10px] font-medium border truncate transition-colors ${
+                  className={`h-6 shrink-0 max-w-[8rem] px-2 rounded-md text-[10px] font-semibold border truncate transition-colors ${
                     filters.ip_id === ip.ip_id ? activeChip : inactiveChip
                   }`}
                 >
@@ -872,18 +877,18 @@ export function MonitoringBoard({
           )}
           {facets.platforms.length > 1 && (
             <div
-              className="flex items-center gap-0.5 px-3 py-1.5 overflow-x-auto whitespace-nowrap"
+              className={filterRow}
               role="group"
               aria-label="Filter by website"
             >
-              <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+              <span className={filterHeaderLabel}>
                 Websites
               </span>
               <button
                 type="button"
                 onClick={() => onFiltersChange({ platform: null })}
                 aria-pressed={!filters.platform}
-                className={scopeResetChip}
+                className={`${scopeResetChip} ${!filters.platform ? activeChip : ""}`}
               >
                 All
               </button>
@@ -898,7 +903,7 @@ export function MonitoringBoard({
                   }
                   aria-pressed={filters.platform === p.domain}
                   title={`${p.domain} · ${p.n} finding${p.n === 1 ? "" : "s"}`}
-                  className={`h-5 shrink-0 max-w-[7rem] px-1.5 rounded text-[10px] font-medium border truncate transition-colors ${
+                  className={`h-6 shrink-0 max-w-[7rem] px-2 rounded-md text-[10px] font-semibold border truncate transition-colors ${
                     filters.platform === p.domain ? activeChip : inactiveChip
                   }`}
                 >
@@ -908,8 +913,8 @@ export function MonitoringBoard({
             </div>
           )}
           {(filters.status === "dismissed" || filters.dismissal_reason) && (
-            <div className="flex items-center gap-2 px-3 py-1.5">
-              <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+            <div className="flex items-center gap-2 px-3 py-2">
+              <span className={filterHeaderLabel}>
                 Dismissal
               </span>
               <select
@@ -939,14 +944,15 @@ export function MonitoringBoard({
           )}
 
           {showAiRecommendationTabs && (
-            <div className="flex items-center gap-0.5 flex-wrap px-3 py-1.5">
-              <span className="w-20 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400">
+            <div className="flex items-center gap-1 flex-wrap px-3 py-2">
+              <span className={filterHeaderLabel}>
                 AI rec
               </span>
               <button
                 type="button"
                 onClick={() => onFiltersChange({ candidate_outcome: null })}
-                className={scopeResetChip}
+                aria-pressed={!filters.candidate_outcome}
+                className={`${scopeResetChip} ${!filters.candidate_outcome ? activeChip : ""}`}
               >
                 All ({facets.statuses.pending ?? 0})
               </button>
@@ -955,7 +961,7 @@ export function MonitoringBoard({
                   key={outcome}
                   type="button"
                   onClick={() => onFiltersChange({ candidate_outcome: outcome, status: "pending" })}
-                  className={`h-5 px-1.5 rounded text-[10px] font-medium border transition-colors ${
+                  className={`h-6 px-2 rounded-md text-[10px] font-semibold border transition-colors ${
                     filters.candidate_outcome === outcome ? activeChip : inactiveChip
                   }`}
                 >
