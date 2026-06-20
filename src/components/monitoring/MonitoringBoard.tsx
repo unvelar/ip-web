@@ -34,7 +34,7 @@ import type { FindingUpdateOptions } from "./board/FindingActions";
 import { GridFindingCard } from "./board/GridFindingCard";
 import { FindingRow } from "./board/FindingRow";
 import { SortHeader } from "./board/SortHeader";
-import { StatusTabs } from "./board/StatusTabs";
+import { FilterPill, StatusTabs } from "./board/StatusTabs";
 import { compactListingTitle, hasReviewAnalysis } from "./board/utils";
 
 /** Shape pushed up to the parent — must match Findings.tsx::InboxFilters. */
@@ -712,19 +712,7 @@ export function MonitoringBoard({
   const filterHeaderLabel =
     "w-24 shrink-0 text-[10px] font-bold uppercase tracking-wide text-stone-600";
   const filterRow =
-    "flex items-center gap-1.5 px-3 py-2 overflow-x-auto whitespace-nowrap";
-  const filterChip = (active: boolean, extra = "") =>
-    `h-6 shrink-0 px-2.5 inline-flex items-center rounded-md border text-[10px] font-semibold transition-colors ${extra} ${
-      active
-        ? "border-stone-900 bg-stone-900 text-white shadow-sm"
-        : "border-stone-200 bg-stone-50 text-stone-700 hover:border-stone-300 hover:bg-white hover:text-stone-900"
-    }`;
-  const allFilterChip = (active: boolean) =>
-    `h-6 shrink-0 px-2 inline-flex items-center rounded-md border text-[10px] font-semibold transition-colors ${
-      active
-        ? "border-stone-300 bg-white text-stone-900 shadow-sm"
-        : "border-transparent bg-transparent text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-    }`;
+    "flex items-center gap-0.5 px-3 py-2 overflow-x-auto whitespace-nowrap";
   const bulkSelectionBar = selected.size > 0 ? (
     <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 sm:px-6 lg:left-64 pointer-events-none">
       <div className="mx-auto max-w-7xl pointer-events-auto max-h-[45vh] overflow-y-auto rounded-lg border border-stone-200 bg-white/95 px-4 py-3 shadow-[0_16px_48px_-20px_rgba(28,25,23,0.45)] backdrop-blur">
@@ -852,29 +840,26 @@ export function MonitoringBoard({
               <span className={filterHeaderLabel}>
                 IP
               </span>
-              <button
-                type="button"
+              <FilterPill
+                label="All"
+                count={facets.total}
+                active={!filters.ip_id}
                 onClick={() => onFiltersChange({ ip_id: null })}
-                aria-pressed={!filters.ip_id}
-                className={allFilterChip(!filters.ip_id)}
-              >
-                All
-              </button>
+              />
               {facets.ips.map((ip) => (
-                <button
+                <FilterPill
                   key={ip.ip_id}
-                  type="button"
+                  label={ip.name ?? "Unnamed IP"}
+                  count={ip.n}
+                  active={filters.ip_id === ip.ip_id}
                   onClick={() =>
                     onFiltersChange({
                       ip_id: filters.ip_id === ip.ip_id ? null : ip.ip_id,
                     })
                   }
-                  aria-pressed={filters.ip_id === ip.ip_id}
                   title={`${ip.name ?? "Unnamed IP"} · ${ip.n} finding${ip.n === 1 ? "" : "s"}`}
-                  className={filterChip(filters.ip_id === ip.ip_id, "max-w-[8rem] truncate")}
-                >
-                  {ip.name ?? "Unnamed IP"}
-                </button>
+                  className="max-w-[9rem]"
+                />
               ))}
             </div>
           )}
@@ -887,29 +872,26 @@ export function MonitoringBoard({
               <span className={filterHeaderLabel}>
                 Websites
               </span>
-              <button
-                type="button"
+              <FilterPill
+                label="All"
+                count={facets.total}
+                active={!filters.platform}
                 onClick={() => onFiltersChange({ platform: null })}
-                aria-pressed={!filters.platform}
-                className={allFilterChip(!filters.platform)}
-              >
-                All
-              </button>
+              />
               {facets.platforms.map((p) => (
-                <button
+                <FilterPill
                   key={p.domain}
-                  type="button"
+                  label={p.domain}
+                  count={p.n}
+                  active={filters.platform === p.domain}
                   onClick={() =>
                     onFiltersChange({
                       platform: filters.platform === p.domain ? null : p.domain,
                     })
                   }
-                  aria-pressed={filters.platform === p.domain}
                   title={`${p.domain} · ${p.n} finding${p.n === 1 ? "" : "s"}`}
-                  className={filterChip(filters.platform === p.domain, "max-w-[7rem] truncate")}
-                >
-                  {p.domain}
-                </button>
+                  className="max-w-[8rem]"
+                />
               ))}
             </div>
           )}
@@ -949,23 +931,20 @@ export function MonitoringBoard({
               <span className={filterHeaderLabel}>
                 AI rec
               </span>
-              <button
-                type="button"
+              <FilterPill
+                label="All"
+                count={facets.statuses.pending ?? 0}
+                active={!filters.candidate_outcome}
                 onClick={() => onFiltersChange({ candidate_outcome: null })}
-                aria-pressed={!filters.candidate_outcome}
-                className={allFilterChip(!filters.candidate_outcome)}
-              >
-                All ({facets.statuses.pending ?? 0})
-              </button>
+              />
               {CANDIDATE_OUTCOME_ORDER.map((outcome) => (
-                <button
+                <FilterPill
                   key={outcome}
-                  type="button"
+                  label={CANDIDATE_OUTCOME_LABELS[outcome]}
+                  count={facets.candidate_outcomes?.[outcome] ?? 0}
+                  active={filters.candidate_outcome === outcome}
                   onClick={() => onFiltersChange({ candidate_outcome: outcome, status: "pending" })}
-                  className={filterChip(filters.candidate_outcome === outcome)}
-                >
-                  {CANDIDATE_OUTCOME_LABELS[outcome]} ({facets.candidate_outcomes?.[outcome] ?? 0})
-                </button>
+                />
               ))}
               {selected.size > 0 && (
                 <span className="ml-auto text-[11px] font-semibold text-stone-500 whitespace-nowrap">
