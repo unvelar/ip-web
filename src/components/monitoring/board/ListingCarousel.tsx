@@ -131,6 +131,7 @@ export function ListingCarousel({
   const [idx, setIdx] = useState(0);
   const [allowingUrl, setAllowingUrl] = useState<string | null>(null);
   const [allowedUrls, setAllowedUrls] = useState<Set<string>>(new Set());
+  const [zoomPos, setZoomPos] = useState<{ x: number; y: number } | null>(null);
   // Natural dimensions of the active hero image — needed so the SVG bbox
   // overlay (in pixel coords) lines up under the same `object-contain`
   // letterboxing as the <img>. Keyed by URL so switching slides invalidates a
@@ -156,6 +157,15 @@ export function ListingCarousel({
   const activeNatural = natural?.url === active ? natural : null;
   const canAllowImage = !!ipId && !!active && active !== f.screenshot_url && !f.dismissed_at;
   const activeAllowed = active ? allowedUrls.has(active) : false;
+  const canZoomHero = !compact;
+
+  function updateHeroZoom(e: MouseEvent<HTMLAnchorElement>) {
+    if (!canZoomHero) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100));
+    setZoomPos({ x, y });
+  }
 
   async function allowImageUrl(e: MouseEvent, imageUrl: string) {
     e.preventDefault();
@@ -179,31 +189,50 @@ export function ListingCarousel({
         href={active}
         target="_blank"
         rel="noreferrer"
-        title="Open full size"
+        title={canZoomHero ? "Hover to zoom; click to open full size" : "Open full size"}
+        onMouseEnter={canZoomHero ? updateHeroZoom : undefined}
+        onMouseMove={canZoomHero ? updateHeroZoom : undefined}
+        onMouseLeave={canZoomHero ? () => setZoomPos(null) : undefined}
         className={`block w-full aspect-square bg-stone-50 border border-stone-200 rounded-lg overflow-hidden relative ${
           compact ? "max-h-[300px]" : "max-h-[480px]"
-        }`}
+        } ${canZoomHero ? "cursor-zoom-in" : ""}`}
       >
-        <img
-          src={active}
-          alt=""
-          className="w-full h-full object-contain"
-          onLoad={(e) => {
-            const img = e.currentTarget;
-            setNatural({ url: active, w: img.naturalWidth, h: img.naturalHeight });
-          }}
-        />
-        {activeBbox && activeNatural && (
-          // SVG laid over the container with its viewBox = the image's natural
-          // pixel space. Default preserveAspectRatio ("xMidYMid meet") matches
-          // <img>'s `object-contain` letterboxing, so the overlay lands on the
-          // same pixels regardless of the container's aspect ratio.
-          <BboxOverlay
-            naturalW={activeNatural.w}
-            naturalH={activeNatural.h}
-            bbox={activeBbox}
+        <div
+          className={`absolute inset-0 pointer-events-none ${
+            canZoomHero
+              ? "transition-transform duration-150 ease-out will-change-transform motion-reduce:transition-none"
+              : ""
+          }`}
+          style={
+            canZoomHero
+              ? {
+                  transform: zoomPos ? "scale(2.15)" : "scale(1)",
+                  transformOrigin: zoomPos ? `${zoomPos.x}% ${zoomPos.y}%` : "50% 50%",
+                }
+              : undefined
+          }
+        >
+          <img
+            src={active}
+            alt=""
+            className="w-full h-full object-contain"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              setNatural({ url: active, w: img.naturalWidth, h: img.naturalHeight });
+            }}
           />
-        )}
+          {activeBbox && activeNatural && (
+            // SVG laid over the container with its viewBox = the image's natural
+            // pixel space. Default preserveAspectRatio ("xMidYMid meet") matches
+            // <img>'s `object-contain` letterboxing, so the overlay lands on the
+            // same pixels regardless of the container's aspect ratio.
+            <BboxOverlay
+              naturalW={activeNatural.w}
+              naturalH={activeNatural.h}
+              bbox={activeBbox}
+            />
+          )}
+        </div>
         {activeSim != null && (
           <span
             className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[11px] font-bold ${
@@ -255,6 +284,7 @@ export function ListingCarousel({
               <button
                 key={`${u}-${i}`}
                 type="button"
+                onMouseEnter={() => setIdx(i)}
                 onClick={(e) => {
                   e.preventDefault();
                   setIdx(i);

@@ -177,9 +177,9 @@ export function MonitoringBoard({
   // Optimistically-dismissed result_ids — the next refetch replaces these
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
-  const [pendingShortcutIds, setPendingShortcutIds] = useState<Set<string>>(new Set());
-  const pendingShortcutIdsRef = useRef<Set<string>>(new Set());
   const queueRef = useRef<HTMLDivElement | null>(null);
+  const [completingResultIds, setCompletingResultIds] = useState<Set<string>>(new Set());
+  const completingResultIdsRef = useRef<Set<string>>(new Set());
   // Active finding shown in the side inspector. null = inspector closed.
   const [activeId, setActiveIdState] = useState<string | null>(activeFindingId ?? null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
@@ -208,12 +208,12 @@ export function MonitoringBoard({
     ]);
   }, []);
 
-  const setShortcutPending = useCallback((resultId: string, pending: boolean) => {
-    const next = new Set(pendingShortcutIdsRef.current);
-    if (pending) next.add(resultId);
+  const setResultCompleting = useCallback((resultId: string, completing: boolean) => {
+    const next = new Set(completingResultIdsRef.current);
+    if (completing) next.add(resultId);
     else next.delete(resultId);
-    pendingShortcutIdsRef.current = next;
-    setPendingShortcutIds(next);
+    completingResultIdsRef.current = next;
+    setCompletingResultIds(next);
   }, []);
 
   useEffect(() => {
@@ -249,12 +249,13 @@ export function MonitoringBoard({
       : null;
     if (
       activeFinding &&
+      !completingResultIds.has(activeFinding.result_id) &&
       !filteredFindings.some((f) => f.result_id === activeFinding.result_id)
     ) {
       return [activeFinding, ...filteredFindings];
     }
     return filteredFindings;
-  }, [activeId, filteredFindings, findings]);
+  }, [activeId, completingResultIds, filteredFindings, findings]);
 
   // If filters/refetches remove the active row, the inspector naturally closes
   // until the user selects another visible row.
@@ -291,26 +292,11 @@ export function MonitoringBoard({
           f.ready_for_review &&
           hasReviewAnalysis(f) &&
           !dismissing.has(f.result_id) &&
-          !pendingShortcutIds.has(f.result_id)
+          !completingResultIds.has(f.result_id)
         );
       }),
-    [displayFindings, dismissing, pendingShortcutIds],
+    [completingResultIds, displayFindings, dismissing],
   );
-
-  useEffect(() => {
-    if (pendingShortcutIdsRef.current.size === 0) return;
-    const next = new Set(pendingShortcutIdsRef.current);
-    for (const resultId of next) {
-      const finding = displayFindings.find((f) => f.result_id === resultId);
-      const state: CaseReviewStatus = finding?.dismissed_at
-        ? "dismissed"
-        : (finding?.review_status ?? "pending");
-      if (!finding || state !== "pending") next.delete(resultId);
-    }
-    if (next.size === pendingShortcutIdsRef.current.size) return;
-    pendingShortcutIdsRef.current = next;
-    setPendingShortcutIds(next);
-  }, [displayFindings]);
 
   const advanceAfterAction = useCallback((resultId: string) => {
     const currentIndex = visibleActionableFindings.findIndex((f) => f.result_id === resultId);
@@ -330,8 +316,9 @@ export function MonitoringBoard({
     resultId: string,
     opts?: FindingUpdateOptions,
   ) => {
+    if (opts?.completed) setResultCompleting(resultId, true);
     onRefresh(opts?.completed ? resultId : undefined);
-  }, [onRefresh]);
+  }, [onRefresh, setResultCompleting]);
 
   const moveActive = useCallback((delta: -1 | 1) => {
     if (displayFindings.length === 0) return;
@@ -347,13 +334,15 @@ export function MonitoringBoard({
     f: IpReviewFinding,
     reason: MonitoringReviewOutcome = "false_positive",
   ) => {
-    if (dismissing.has(f.result_id)) return;
+    if (dismissing.has(f.result_id) || completingResultIdsRef.current.has(f.result_id)) return;
     const fipId = f.ip_id ?? ipId;
     if (!fipId) {
       alert("Cannot update finding: finding has no associated IP.");
       return;
     }
     setDismissing((prev) => new Set(prev).add(f.result_id));
+    setResultCompleting(f.result_id, true);
+    advanceAfterAction(f.result_id);
     try {
       await dismissIpFinding(fipId, f.result_id, { reason });
       onDismiss?.(f.result_id);
@@ -362,17 +351,27 @@ export function MonitoringBoard({
         detail: compactListingTitle(f),
         undo: { kind: "undismiss", ipId: fipId, resultId: f.result_id },
       });
-      advanceAfterAction(f.result_id);
       onRefresh(f.result_id);
     } catch (e) {
+      setResultCompleting(f.result_id, false);
       setDismissing((prev) => {
         const next = new Set(prev);
         next.delete(f.result_id);
         return next;
       });
+      setActiveFinding(f.result_id);
       alert(e instanceof Error ? e.message : "Failed to update finding");
     }
-  }, [advanceAfterAction, dismissing, ipId, onDismiss, onRefresh, recordLastAction]);
+  }, [
+    advanceAfterAction,
+    dismissing,
+    ipId,
+    onDismiss,
+    onRefresh,
+    recordLastAction,
+    setActiveFinding,
+    setResultCompleting,
+  ]);
 
   const rememberTakedownAction = useCallback((f: IpReviewFinding) => {
     const fipId = f.ip_id ?? ipId;
@@ -600,13 +599,13 @@ export function MonitoringBoard({
       setConfirmAction(action);
       return;
     }
-    const pendingShortcutIds = pendingShortcutIdsRef.current;
+    const completingResultIds = completingResultIdsRef.current;
     const targetFinding =
-      activeFinding && !pendingShortcutIds.has(activeFinding.result_id)
+      activeFinding && !completingResultIds.has(activeFinding.result_id)
         ? activeFinding
-        : visibleActionableFindings.find((f) => !pendingShortcutIds.has(f.result_id));
+        : visibleActionableFindings.find((f) => !completingResultIds.has(f.result_id));
     if (!targetFinding) return;
-    if (pendingShortcutIds.has(targetFinding.result_id)) return;
+    if (completingResultIds.has(targetFinding.result_id)) return;
 
     const state: CaseReviewStatus = targetFinding.dismissed_at
       ? "dismissed"
@@ -620,7 +619,7 @@ export function MonitoringBoard({
         return;
       }
       targetCaseId = targetFinding.case_id;
-      setShortcutPending(targetFinding.result_id, true);
+      setResultCompleting(targetFinding.result_id, true);
       advanceAfterAction(targetFinding.result_id);
     }
     try {
@@ -646,7 +645,10 @@ export function MonitoringBoard({
       }
       await handleDismiss(targetFinding, action);
     } catch (e) {
-      if (action === "send") setShortcutPending(targetFinding.result_id, false);
+      if (action === "send") {
+        setResultCompleting(targetFinding.result_id, false);
+        setActiveFinding(targetFinding.result_id);
+      }
       alert(e instanceof Error ? e.message : "Failed to update finding");
     }
   }, [
@@ -655,9 +657,10 @@ export function MonitoringBoard({
     activeFinding,
     handleDismiss,
     onRefresh,
-    setShortcutPending,
     rememberTakedownAction,
     selected,
+    setActiveFinding,
+    setResultCompleting,
     visibleActionableFindings,
   ]);
 
