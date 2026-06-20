@@ -8,6 +8,8 @@ import {
   findingStatusBadge,
   formatAgo,
   formatMoney,
+  infringementTypeMeta,
+  licenseStatusMeta,
   matchMethodChip,
   methodChip,
   suggestionMeta,
@@ -55,6 +57,8 @@ export function FindingComparison({
 
   const sb = findingStatusBadge(f);
   const suggestion = suggestionMeta(f.suggested_review_outcome);
+  const infringement = infringementTypeMeta(f.infringement_type);
+  const licenseStatus = licenseStatusMeta(f.license_status);
 
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
@@ -159,9 +163,12 @@ export function FindingComparison({
         {f.shipping_price && (
           <span className="text-stone-500" title="Shipping">+ {f.shipping_price}</span>
         )}
-        {f.infringement_type && (
-          <span className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-700 uppercase tracking-wide font-semibold">
-            {f.infringement_type.replace(/_/g, " ")}
+        {infringement && (
+          <span
+            className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-700 font-semibold"
+            title={infringement.title}
+          >
+            {infringement.label}
           </span>
         )}
         {(f.country || f.location) && (
@@ -172,17 +179,12 @@ export function FindingComparison({
             📍 {f.country || f.location}
           </span>
         )}
-        {f.license_status && (
+        {licenseStatus && (
           <span
-            className={`px-1.5 py-0.5 rounded font-semibold ${
-              f.license_status === "likely_licensed"
-                ? "bg-emerald-100 text-emerald-700"
-                : f.license_status === "likely_unlicensed"
-                  ? "bg-red-100 text-red-700"
-                  : "bg-stone-100 text-stone-600"
-            }`}
+            className={`px-1.5 py-0.5 rounded font-semibold ${licenseStatus.cls}`}
+            title={licenseStatus.title}
           >
-            {f.license_status.replace(/_/g, " ")}
+            {licenseStatus.label}
           </span>
         )}
         {f.quantity_available != null && f.quantity_available > 0 && (
