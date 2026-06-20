@@ -34,10 +34,10 @@ interface InboxFilters {
 }
 
 const DEFAULT_SORT: MonitoringSortMode = "score_desc";
+const MONITORING_PAGE_SIZE = 50;
 
 function parseFilters(params: URLSearchParams): InboxFilters {
   const status = params.get("status");
-  const priority = params.get("priority");
   const sort = params.get("sort");
   const dismissalReason = params.get("dismissal_reason");
   const candidateOutcome = params.get("candidate_outcome");
@@ -52,10 +52,10 @@ function parseFilters(params: URLSearchParams): InboxFilters {
           : status === null
             ? "pending"
             : null,
-    priority: priority === "high" || priority === "med" || priority === "low" ? priority : null,
+    priority: null,
     ip_id: params.get("ip_id"),
     platform: params.get("platform"),
-    seller: params.get("seller"),
+    seller: null,
     dismissal_reason:
       dismissalReason === "false_positive" ||
       dismissalReason === "do_not_pursue" ||
@@ -135,18 +135,33 @@ export function MonitoringInboxView() {
   // payload back on screen.
   const reqSeq = useRef(0);
   const linkedReqSeq = useRef(0);
+  const taskIdRef = useRef<string | undefined>(taskId);
+  const completedLinkedIds = useRef<Set<string>>(new Set());
+  taskIdRef.current = taskId;
 
   // Filter-aware first-page fetch. Triggered on any filter/sort change.
+  // Action refreshes can ask for the currently loaded window so an expanded
+  // row beyond page one does not disappear after a decision.
   const loadFirstPage = useCallback(
-    async (q: MonitoringFindingsQuery) => {
+    async (q: MonitoringFindingsQuery, minRows = MONITORING_PAGE_SIZE) => {
       const seq = ++reqSeq.current;
       setErr("");
       try {
-        const page = await listMonitoringFindingsGlobal({ ...q, cursor: null });
+        const limit = q.limit ?? MONITORING_PAGE_SIZE;
+        const page = await listMonitoringFindingsGlobal({ ...q, cursor: null, limit });
         if (reqSeq.current !== seq) return;
-        setFindings(page.findings);
+        const allFindings = [...page.findings];
+        let cursor = page.next_cursor;
+        while (cursor && allFindings.length < minRows) {
+          const nextPage = await listMonitoringFindingsGlobal({ ...q, cursor, limit });
+          if (reqSeq.current !== seq) return;
+          allFindings.push(...nextPage.findings);
+          cursor = nextPage.next_cursor;
+          if (nextPage.findings.length === 0) break;
+        }
+        setFindings(allFindings);
         setFacets(page.facets);
-        setNextCursor(page.next_cursor);
+        setNextCursor(cursor);
       } catch (e) {
         if (reqSeq.current !== seq) return;
         setErr(e instanceof Error ? e.message : String(e));
@@ -158,11 +173,18 @@ export function MonitoringInboxView() {
   );
 
   const loadLinkedFinding = useCallback(async (id: string) => {
+    if (completedLinkedIds.current.has(id)) {
+      linkedReqSeq.current++;
+      setLinkedFinding(null);
+      setLinkedErr("");
+      return;
+    }
     const seq = ++linkedReqSeq.current;
     setLinkedErr("");
     try {
       const { finding } = await getMonitoringFinding(id);
       if (linkedReqSeq.current !== seq) return;
+      if (completedLinkedIds.current.has(id)) return;
       setLinkedFinding(finding);
     } catch (e) {
       if (linkedReqSeq.current !== seq) return;
@@ -209,11 +231,28 @@ export function MonitoringInboxView() {
   }, [nextCursor, loadingMore, filters]);
 
   // Refresh in place after an action (dismiss, confirm, …) without losing
-  // the current scroll position: re-fetch the first page only.
-  const refresh = useCallback(() => {
-    void loadFirstPage(filters);
-    if (taskId) void loadLinkedFinding(taskId);
-  }, [loadFirstPage, loadLinkedFinding, filters, taskId]);
+  // the currently loaded window. This keeps auto-advance targets present even
+  // after the user has loaded past the first page.
+  const refresh = useCallback((completedResultId?: string) => {
+    if (completedResultId) {
+      completedLinkedIds.current.add(completedResultId);
+      linkedReqSeq.current++;
+      setLinkedFinding((current) =>
+        current?.result_id === completedResultId ? null : current,
+      );
+      setLinkedErr("");
+    }
+    void loadFirstPage(filters, Math.max(findings.length, MONITORING_PAGE_SIZE));
+    const currentTaskId = taskIdRef.current;
+    if (!currentTaskId) return;
+    if (completedLinkedIds.current.has(currentTaskId)) {
+      linkedReqSeq.current++;
+      setLinkedFinding(null);
+      setLinkedErr("");
+      return;
+    }
+    void loadLinkedFinding(currentTaskId);
+  }, [loadFirstPage, loadLinkedFinding, filters, findings.length]);
 
   const onFiltersChange = useCallback(
     (next: Partial<InboxFilters>) => {
@@ -225,6 +264,11 @@ export function MonitoringInboxView() {
   );
 
   const onActiveFindingChange = useCallback((resultId: string | null) => {
+    if (resultId !== taskIdRef.current) {
+      linkedReqSeq.current++;
+      setLinkedFinding(null);
+      setLinkedErr("");
+    }
     navigate({
       pathname: resultId ? `/monitoring/tasks/${resultId}` : "/monitoring/tasks",
       search: location.search,
@@ -238,13 +282,31 @@ export function MonitoringInboxView() {
     return [linkedFinding, ...findings];
   }, [findings, linkedFinding]);
 
+  const queueSummary = useMemo(() => {
+    if (!facets) return "Loading…";
+    const count = facets.total;
+    const statusLabel =
+      filters.status === "pending"
+        ? "to triage"
+        : filters.status === "takedown_sent"
+          ? "with takedowns sent"
+          : filters.status === "enforced"
+            ? "enforced"
+            : filters.status === "dismissed"
+              ? "dismissed"
+              : "open";
+    const ipName =
+      filters.ip_id
+        ? facets.ips.find((ip) => ip.ip_id === filters.ip_id)?.name ?? "selected IP"
+        : "all monitored IPs";
+    return `${count} finding${count === 1 ? "" : "s"} ${statusLabel} · ${ipName}.`;
+  }, [facets, filters.ip_id, filters.status]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-stone-500">
-          {facets
-            ? `${facets.total} open finding${facets.total === 1 ? "" : "s"} across all monitored IPs.`
-            : "Loading…"}
+          {queueSummary}
         </p>
       </div>
 
