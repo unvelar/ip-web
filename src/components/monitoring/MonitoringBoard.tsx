@@ -1233,12 +1233,17 @@ function FindingInspector({
   onUpdated: (opts?: FindingUpdateOptions) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-40 pointer-events-none flex justify-end">
+    <div
+      className="fixed inset-0 z-40 flex justify-end"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <aside
         role="dialog"
         aria-modal="false"
         aria-label="Finding details"
-        className="pointer-events-auto h-full w-full bg-white shadow-2xl shadow-stone-950/20 border-l border-stone-200 sm:w-[min(92vw,48rem)] xl:w-[min(58vw,60rem)] flex flex-col"
+        className="h-full w-full bg-white shadow-2xl shadow-stone-950/20 border-l border-stone-200 sm:w-[min(92vw,48rem)] xl:w-[min(58vw,60rem)] flex flex-col"
       >
         <div className="h-12 shrink-0 border-b border-stone-200 bg-white/95 backdrop-blur flex items-center gap-3 px-4">
           <div className="min-w-0 flex-1">
