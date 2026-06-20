@@ -179,6 +179,7 @@ export function MonitoringBoard({
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
   const [pendingShortcutIds, setPendingShortcutIds] = useState<Set<string>>(new Set());
   const pendingShortcutIdsRef = useRef<Set<string>>(new Set());
+  const queueRef = useRef<HTMLDivElement | null>(null);
   // Active finding shown in the side inspector. null = inspector closed.
   const [activeId, setActiveIdState] = useState<string | null>(activeFindingId ?? null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
@@ -261,6 +262,23 @@ export function MonitoringBoard({
     ? displayFindings.findIndex((f) => f.result_id === activeId)
     : -1;
   const activeFinding = activeIndex >= 0 ? displayFindings[activeIndex] : null;
+
+  useEffect(() => {
+    if (!activeFinding) return;
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (queueRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest("[data-finding-inspector]")) return;
+      setActiveFinding(null);
+    };
+
+    document.addEventListener("pointerdown", handleOutsidePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointerDown, true);
+    };
+  }, [activeFinding, setActiveFinding]);
 
   const visibleActionableFindings = useMemo(
     () =>
@@ -954,7 +972,7 @@ export function MonitoringBoard({
         </div>
       </div>
 
-      <div className="rounded-lg border border-stone-200 bg-white overflow-hidden">
+      <div ref={queueRef} className="rounded-lg border border-stone-200 bg-white overflow-hidden">
         {batchResult && (
           <div className="px-5 py-2 border-b border-stone-100 bg-stone-50 text-xs text-stone-600 flex items-center justify-between gap-3">
             <span>{batchResult}</span>
@@ -1233,17 +1251,13 @@ function FindingInspector({
   onUpdated: (opts?: FindingUpdateOptions) => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-40 flex justify-end"
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <div className="fixed inset-0 z-40 pointer-events-none flex justify-end">
       <aside
+        data-finding-inspector
         role="dialog"
         aria-modal="false"
         aria-label="Finding details"
-        className="h-full w-full bg-white shadow-2xl shadow-stone-950/20 border-l border-stone-200 sm:w-[min(92vw,48rem)] xl:w-[min(58vw,60rem)] flex flex-col"
+        className="pointer-events-auto h-full w-full bg-white shadow-2xl shadow-stone-950/20 border-l border-stone-200 sm:w-[min(92vw,48rem)] xl:w-[min(58vw,60rem)] flex flex-col"
       >
         <div className="h-12 shrink-0 border-b border-stone-200 bg-white/95 backdrop-blur flex items-center gap-3 px-4">
           <div className="min-w-0 flex-1">
