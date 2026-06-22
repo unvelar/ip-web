@@ -34,6 +34,7 @@ import { FindingComparison } from "./board/FindingComparison";
 import type { FindingUpdateOptions } from "./board/FindingActions";
 import { GridFindingCard } from "./board/GridFindingCard";
 import { FindingRow } from "./board/FindingRow";
+import { RelatedItemsPanel } from "./board/RelatedItemsPanel";
 import { SortHeader } from "./board/SortHeader";
 import { FilterPill, StatusTabs } from "./board/StatusTabs";
 import { compactListingTitle, hasReviewAnalysis } from "./board/utils";
@@ -243,6 +244,7 @@ export function MonitoringBoard({
               f.ready_for_review &&
               hasReviewAnalysis(f) &&
               !f.dismissed_at &&
+              !f.licensed_seller &&
               (f.review_status ?? "pending") === "pending",
           )
         : findings,
@@ -297,6 +299,7 @@ export function MonitoringBoard({
           f.ready_for_review &&
           hasReviewAnalysis(f) &&
           !dismissing.has(f.result_id) &&
+          !f.licensed_seller &&
           !completingResultIds.has(f.result_id)
         );
       }),
@@ -457,8 +460,11 @@ export function MonitoringBoard({
   }, [dismissReviewToast, reviewToasts, undoingToastIds]);
 
   // --- Multi-select + batch operations -------------------------------------
-  // Selection is keyed by result_id and page-local (covers loaded rows only).
+  // Selection is keyed by result_id. Related-items can add rows that are not
+  // currently loaded in the visible page, so keep their full finding payloads
+  // in a small side map for batch actions.
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectionExtras, setSelectionExtras] = useState<Map<string, IpReviewFinding>>(new Map());
   const [confirmAction, setConfirmAction] = useState<BatchAction | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchResult, setBatchResult] = useState<string | null>(null);
@@ -468,8 +474,14 @@ export function MonitoringBoard({
   const filterKey = JSON.stringify(filters);
   useEffect(() => {
     setSelected(new Set());
+    setSelectionExtras(new Map());
     setBatchResult(null);
   }, [filterKey]);
+
+  function clearSelection() {
+    setSelected(new Set());
+    setSelectionExtras(new Map());
+  }
 
   function toggleSelect(resultId: string) {
     setBatchResult(null);
@@ -482,12 +494,49 @@ export function MonitoringBoard({
   }
   function toggleSelectAll() {
     setBatchResult(null);
-    setSelected((prev) =>
-      prev.size === displayFindings.length
-        ? new Set()
-        : new Set(displayFindings.map((f) => f.result_id)),
-    );
+    const visibleIds = new Set(displayFindings.map((f) => f.result_id));
+    const visibleSelected = displayFindings.every((f) => selected.has(f.result_id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (visibleSelected) {
+        for (const id of visibleIds) next.delete(id);
+      } else {
+        for (const id of visibleIds) next.add(id);
+      }
+      return next;
+    });
   }
+
+  function addRelatedToBatch(findingsToAdd: IpReviewFinding[]) {
+    const openFindings = findingsToAdd.filter((f) => {
+      const state: CaseReviewStatus = f.dismissed_at
+        ? "dismissed"
+        : (f.review_status ?? "pending");
+      return isDecisionState(state) && f.ready_for_review && !f.licensed_seller;
+    });
+    if (openFindings.length === 0) {
+      setBatchResult("No open related findings to add.");
+      return;
+    }
+    setSelectionExtras((prev) => {
+      const next = new Map(prev);
+      for (const f of openFindings) next.set(f.result_id, f);
+      return next;
+    });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const f of openFindings) next.add(f.result_id);
+      return next;
+    });
+    setBatchResult(`Added ${openFindings.length} related finding${openFindings.length === 1 ? "" : "s"} to the batch.`);
+  }
+
+  const selectedActionFindings = useMemo(() => {
+    const byId = new Map<string, IpReviewFinding>();
+    for (const f of displayFindings) byId.set(f.result_id, f);
+    for (const [id, f] of selectionExtras) if (!byId.has(id)) byId.set(id, f);
+    return Array.from(byId.values()).filter((f) => selected.has(f.result_id));
+  }, [displayFindings, selected, selectionExtras]);
 
   // Split the current selection for an action into rows to act on vs.
   // skip-reason counts to report. `state` mirrors FindingActions' derivation.
@@ -497,7 +546,7 @@ export function MonitoringBoard({
     const skip = (r: string) => {
       skipped[r] = (skipped[r] ?? 0) + 1;
     };
-    for (const f of displayFindings) {
+    for (const f of selectedActionFindings) {
       if (!selected.has(f.result_id)) continue;
       const state: CaseReviewStatus = f.dismissed_at
         ? "dismissed"
@@ -531,7 +580,7 @@ export function MonitoringBoard({
     const skip = (r: string) => {
       skipped[r] = (skipped[r] ?? 0) + 1;
     };
-    for (const f of displayFindings) {
+    for (const f of selectedActionFindings) {
       if (!selected.has(f.result_id)) continue;
       const state: CaseReviewStatus = f.dismissed_at
         ? "dismissed"
@@ -587,7 +636,7 @@ export function MonitoringBoard({
       4,
     );
     setBatchProgress(null);
-    setSelected(new Set());
+    clearSelection();
     setBatchResult(summarizeBatch(action, ok, skipCounts, failed));
     onRefresh(activeId && eligible.some((f) => f.result_id === activeId) ? activeId : undefined);
   }
@@ -612,7 +661,7 @@ export function MonitoringBoard({
       setBatchProgress((p) => (p ? { ...p, done: p.total } : p));
     }
     setBatchProgress(null);
-    setSelected(new Set());
+    clearSelection();
     setBatchResult(summarizeResort(target, failed > 0 ? 0 : eligible.length, skipped, failed));
     onRefresh();
   }
@@ -743,15 +792,12 @@ export function MonitoringBoard({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeFinding, moveActive, runShortcutAction, setActiveFinding]);
 
-  const allSelected = displayFindings.length > 0 && selected.size === displayFindings.length;
+  const visibleSelectedCount = displayFindings.filter((f) => selected.has(f.result_id)).length;
+  const allSelected = displayFindings.length > 0 && visibleSelectedCount === displayFindings.length;
   const someSelected = selected.size > 0 && !allSelected;
-  const selectedFindings = useMemo(
-    () => displayFindings.filter((f) => selected.has(f.result_id)),
-    [displayFindings, selected],
-  );
   const selectedSummary = useMemo(
-    () => selectedFindingSummary(selectedFindings),
-    [selectedFindings],
+    () => selectedFindingSummary(selectedActionFindings),
+    [selectedActionFindings],
   );
   const resortSelectedTooltip = filters.candidate_outcome
     ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
@@ -849,7 +895,7 @@ export function MonitoringBoard({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setSelected(new Set())}
+                  onClick={clearSelection}
                   className="px-2.5 py-1 rounded-md text-[11px] font-semibold text-stone-500 hover:text-stone-700"
                 >
                   Clear
@@ -1173,6 +1219,7 @@ export function MonitoringBoard({
           onEnforced={() => rememberEnforcedAction(activeFinding)}
           onLicensed={(dismissedCount) => rememberLicensedAction(activeFinding, dismissedCount)}
           onUpdated={(opts) => refreshAfterFindingUpdate(activeFinding.result_id, opts)}
+          onAddRelatedToBatch={addRelatedToBatch}
         />
       )}
 
@@ -1279,6 +1326,7 @@ function FindingInspector({
   onEnforced,
   onLicensed,
   onUpdated,
+  onAddRelatedToBatch,
 }: {
   f: IpReviewFinding;
   ipId?: string;
@@ -1293,6 +1341,7 @@ function FindingInspector({
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
   onUpdated: (opts?: FindingUpdateOptions) => void;
+  onAddRelatedToBatch: (findings: IpReviewFinding[]) => void;
 }) {
   return (
     <div className="fixed inset-0 z-40 pointer-events-none flex justify-end">
@@ -1335,6 +1384,10 @@ function FindingInspector({
             onEnforced={onEnforced}
             onLicensed={onLicensed}
             onUpdated={onUpdated}
+          />
+          <RelatedItemsPanel
+            finding={f}
+            onAddToBatch={onAddRelatedToBatch}
           />
         </div>
       </aside>

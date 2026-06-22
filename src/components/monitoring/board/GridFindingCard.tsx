@@ -58,6 +58,10 @@ export function GridFindingCard({
     f.seller_name,
     f.price,
   ].filter(Boolean).length;
+  const canLicense = !!ipId &&
+    !!(f.seller_name || f.seller_url) &&
+    !f.licensed_seller &&
+    f.dismissal_reason !== "licensed";
 
   return (
     <div
@@ -174,7 +178,7 @@ export function GridFindingCard({
           <FindingActions
             f={f}
             ipId={ipId}
-            canLicense={!!ipId && !!(f.seller_name || f.seller_url)}
+            canLicense={canLicense}
             isDismissed={isDismissed}
             isDismissing={isDismissing}
             onDismiss={onDismiss}

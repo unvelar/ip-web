@@ -1046,6 +1046,8 @@ export interface IpReviewFinding {
   infringement_type: string | null;
   infringement_reasoning: string | null;
   license_status: string | null;
+  /** True when the seller matches a saved IP x domain license rule. */
+  licensed_seller: boolean;
   screenshot_url: string | null;
   enrichment_error: string | null;
   ready_for_review: boolean;
@@ -1505,6 +1507,99 @@ export type MonitoringCandidateOutcome =
   | "second_hand"
   | "none";
 
+export type MonitoringRelatedBucketKey =
+  | "same_seller"
+  | "similar_product_images"
+  | "similar_text"
+  | "past_decisions"
+  | "cross_site_matches";
+
+export type MonitoringRelatedReason =
+  | "same_seller"
+  | "same_product_image"
+  | "image_only_unverified"
+  | "similar_title"
+  | "similar_listing_text"
+  | "prior_takedown"
+  | "prior_enforced"
+  | "prior_dismissal"
+  | "allowed_product"
+  | "cleared_listing"
+  | "cross_site_reuse";
+
+export interface MonitoringRelatedFinding extends IpReviewFinding {
+  relation_reasons: MonitoringRelatedReason[];
+  relation_score: number | null;
+  campaign_eligible: boolean;
+  triageable: boolean;
+}
+
+export interface MonitoringRelatedDecision {
+  kind: "cleared_listing" | "allowed_product";
+  id: number;
+  page_url: string | null;
+  listing_title: string | null;
+  image_url?: string | null;
+  reason: string | null;
+  decided_at: string;
+  similarity: number | null;
+}
+
+export interface MonitoringRelatedExternalMatch {
+  id: string;
+  source: string;
+  page_url: string;
+  image_url: string | null;
+  title: string | null;
+  similarity_score: number;
+  created_at: string;
+}
+
+export interface MonitoringRelatedBucket {
+  key: MonitoringRelatedBucketKey;
+  label: string;
+  summary: string;
+  items: MonitoringRelatedFinding[];
+  decisions?: MonitoringRelatedDecision[];
+  external_matches?: MonitoringRelatedExternalMatch[];
+  outcome_counts?: Record<string, number>;
+}
+
+export interface MonitoringCampaignSuggestion {
+  trigger:
+    | "same_seller_prior_enforcement"
+    | "same_seller_volume"
+    | "same_seller_high_confidence"
+    | "same_product_image"
+    | "same_text_template";
+  title: string;
+  reason: string;
+  result_ids: string[];
+}
+
+export interface MonitoringCampaign {
+  id: string;
+  tenant_id: string;
+  ip_catalog_id: string;
+  source_result_id: string | null;
+  title: string;
+  trigger: string;
+  reason: string | null;
+  status: string;
+  created_by: string | null;
+  confirmed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  member_count: number;
+}
+
+export interface MonitoringRelatedItems {
+  anchor: IpReviewFinding;
+  buckets: MonitoringRelatedBucket[];
+  campaign_suggestions: MonitoringCampaignSuggestion[];
+  logo_only_notice: string;
+}
+
 /** Full-tenant facet counts returned alongside every findings page. */
 export interface MonitoringFacets {
   statuses: Record<string, number>;
@@ -1570,6 +1665,25 @@ export function getMonitoringFinding(resultId: string) {
   return request<{ finding: IpReviewFinding }>(
     `/api/monitoring/findings/${encodeURIComponent(resultId)}`,
   );
+}
+
+export function getMonitoringFindingRelated(resultId: string) {
+  return request<{ related: MonitoringRelatedItems }>(
+    `/api/monitoring/findings/${encodeURIComponent(resultId)}/related`,
+  );
+}
+
+export function createMonitoringCampaign(input: {
+  source_result_id: string;
+  title: string;
+  trigger: MonitoringCampaignSuggestion["trigger"];
+  reason?: string | null;
+  result_ids: string[];
+}) {
+  return request<{ campaign: MonitoringCampaign }>("/api/monitoring/campaigns", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function resortMonitoringFindings(

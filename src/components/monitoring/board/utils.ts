@@ -48,6 +48,7 @@ export function statusBadge(s: CaseReviewStatus | null | undefined) {
 
 export function findingStatusBadge(f: IpReviewFinding) {
   if (f.dismissed_at) return dismissalBadge(f.dismissal_reason);
+  if (f.licensed_seller) return dismissalBadge("licensed");
   if ((!f.ready_for_review || !hasReviewAnalysis(f)) && (f.review_status ?? "pending") === "pending") {
     return { label: "Preparing", cls: "bg-stone-100 text-stone-500" };
   }
@@ -214,7 +215,17 @@ export function infringementTypeMeta(type: string | null) {
   }
 }
 
-export function licenseStatusMeta(status: string | null) {
+export function licenseStatusMeta(
+  status: string | null,
+  opts: { licensedSeller?: boolean } = {},
+) {
+  if (opts.licensedSeller) {
+    return {
+      label: "License: authorized seller",
+      cls: "bg-emerald-100 text-emerald-700",
+      title: "This seller matches a saved license rule for this IP and platform.",
+    };
+  }
   switch (status) {
     case "likely_licensed":
       return {

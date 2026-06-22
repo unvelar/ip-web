@@ -52,7 +52,8 @@ export function FindingComparison({
       : similarity >= 0.5
         ? "text-amber-700"
         : "text-stone-700";
-  const canLicense = !!ipId && (!!f.seller_name || !!f.seller_url);
+  const licensedSeller = !!f.licensed_seller || f.dismissal_reason === "licensed";
+  const canLicense = !!ipId && (!!f.seller_name || !!f.seller_url) && !licensedSeller;
   // Enrichment hit a reCAPTCHA / bot-wall — the screenshot is the challenge
   // page, not the listing.
   const isChallenge = /recaptcha|bot-wall/i.test(f.enrichment_error || "");
@@ -60,7 +61,7 @@ export function FindingComparison({
   const sb = findingStatusBadge(f);
   const suggestion = suggestionMeta(f.suggested_review_outcome);
   const infringement = infringementTypeMeta(f.infringement_type);
-  const licenseStatus = licenseStatusMeta(f.license_status);
+  const licenseStatus = licenseStatusMeta(f.license_status, { licensedSeller });
 
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide

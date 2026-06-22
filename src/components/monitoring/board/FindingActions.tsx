@@ -56,6 +56,7 @@ export function FindingActions({
   const [sendErr, setSendErr] = useState("");
   const { user } = useAuth();
   const canMarkSentWithoutEmail = user?.role === "admin";
+  const sellerLicensed = !!f.licensed_seller || f.dismissal_reason === "licensed";
 
   // Quick path from the confirm dialog: send the pre-filled draft for the
   // suggested route without opening the editor. Falls back to the editor when
@@ -239,7 +240,7 @@ export function FindingActions({
     </button>
   ) : null;
 
-  const licenseBtn = canLicense ? (
+  const licenseBtn = canLicense && !sellerLicensed ? (
     <button
       key="license"
       type="button"
@@ -276,7 +277,20 @@ export function FindingActions({
   let buttons: ReactNode = null;
   let utilityButtons: ReactNode = null;
 
-  if (state === "pending") {
+  if (sellerLicensed && !isDismissed) {
+    buttons = (
+      <span
+        className={
+          compact
+            ? "col-span-2 px-2 py-1 rounded-md bg-emerald-50 text-[11px] font-semibold text-emerald-700 text-center"
+            : "h-7 px-2.5 rounded-md bg-emerald-50 text-xs font-semibold leading-none text-emerald-700 inline-flex items-center"
+        }
+        title="This seller matches a saved license rule for this IP and platform."
+      >
+        Licensed seller
+      </span>
+    );
+  } else if (state === "pending") {
     // Triage decision: send the first takedown (auto-advances to takedown_sent)
     // or choose a non-enforcement outcome. License is the fast-path for a
     // recognised seller. The send is blocked (with a tooltip) until the IP has
