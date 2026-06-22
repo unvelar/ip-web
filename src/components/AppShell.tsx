@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Building2,
+  GitBranch,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "./Avatar";
@@ -176,6 +177,12 @@ export default function AppShell() {
             label="Tasks"
             active={isActive("/monitoring/tasks") || pathname === "/findings" || pathname.startsWith("/findings/")}
             badge={monitoringCount}
+          />
+          <NavItem
+            to="/monitoring/campaigns"
+            icon={<GitBranch size={18} />}
+            label="Campaigns"
+            active={isActive("/monitoring/campaigns")}
           />
           <NavItem
             to="/monitoring/new"

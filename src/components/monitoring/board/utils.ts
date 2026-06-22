@@ -11,6 +11,49 @@ export function hasReviewAnalysis(f: IpReviewFinding) {
   );
 }
 
+function findingSimilarity(f: IpReviewFinding) {
+  return f.similarity_score ?? f.enforcement_priority;
+}
+
+function formatSimilarity(score: number) {
+  return `${Math.round(score * 100)}%`;
+}
+
+function uniqueDefined(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter(Boolean) as string[]));
+}
+
+export function selectedFindingSummary(findings: IpReviewFinding[]) {
+  if (findings.length === 0) return [];
+  const parts: string[] = [];
+  const takedownCount = findings.filter((f) => f.suggested_review_outcome === "takedown").length;
+  if (takedownCount === findings.length) parts.push("Takedown");
+  else if (takedownCount > 0) parts.push(`${takedownCount} AI takedown recs`);
+
+  const similarities = findings
+    .map(findingSimilarity)
+    .filter((score) => Number.isFinite(score));
+  if (similarities.length > 0) {
+    const min = Math.min(...similarities);
+    const max = Math.max(...similarities);
+    parts.push(
+      min === max
+        ? `Similarity ${formatSimilarity(min)}`
+        : `Similarity ${formatSimilarity(min)}-${formatSimilarity(max)}`,
+    );
+  }
+
+  const ips = uniqueDefined(findings.map((f) => f.ip_name));
+  if (ips.length === 1) parts.push(ips[0]);
+  else if (ips.length > 1) parts.push(`${ips.length} IPs`);
+
+  const platforms = uniqueDefined(findings.map((f) => f.domain));
+  if (platforms.length === 1) parts.push(platforms[0]);
+  else if (platforms.length > 1) parts.push(`${platforms.length} platforms`);
+
+  return parts.slice(0, 4);
+}
+
 /** Compact relative-time formatter for "last checked"/"found" meta lines.
  *  Falls back to null when the input is missing/invalid. */
 export function formatAgo(iso: string | null): string | null {

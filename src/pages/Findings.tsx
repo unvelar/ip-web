@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  getMonitoringCampaign,
   getMonitoringFinding,
   listMonitoringFindingsGlobal,
   type IpReviewFinding,
@@ -120,15 +121,19 @@ export function MonitoringInboxView() {
   const navigate = useNavigate();
   const location = useLocation();
   const filters = parseFilters(params);
+  const campaignBatchId = params.get("campaign_batch");
 
   const [findings, setFindings] = useState<IpReviewFinding[]>([]);
   const [linkedFinding, setLinkedFinding] = useState<IpReviewFinding | null>(null);
+  const [campaignBatchFindings, setCampaignBatchFindings] = useState<IpReviewFinding[]>([]);
+  const [campaignBatchTitle, setCampaignBatchTitle] = useState("");
   const [facets, setFacets] = useState<MonitoringFacets | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState("");
   const [linkedErr, setLinkedErr] = useState("");
+  const [campaignBatchErr, setCampaignBatchErr] = useState("");
 
   // The request currently in flight for the first page (filter changes); we
   // ignore stale responses so a quick filter toggle can't flicker an older
@@ -213,6 +218,34 @@ export function MonitoringInboxView() {
     void loadLinkedFinding(taskId);
   }, [loadLinkedFinding, taskId]);
 
+  useEffect(() => {
+    if (!campaignBatchId) {
+      setCampaignBatchFindings([]);
+      setCampaignBatchTitle("");
+      setCampaignBatchErr("");
+      return;
+    }
+    let alive = true;
+    setCampaignBatchErr("");
+    getMonitoringCampaign(campaignBatchId)
+      .then(({ campaign }) => {
+        if (!alive) return;
+        setCampaignBatchTitle(campaign.title);
+        setCampaignBatchFindings(
+          campaign.members.filter((member) => member.campaign_state === "included"),
+        );
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setCampaignBatchFindings([]);
+        setCampaignBatchTitle("");
+        setCampaignBatchErr(e instanceof Error ? e.message : "Failed to load campaign batch");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [campaignBatchId]);
+
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
@@ -276,11 +309,18 @@ export function MonitoringInboxView() {
   }, [location.search, navigate]);
 
   const boardFindings = useMemo(() => {
-    if (!linkedFinding || findings.some((f) => f.result_id === linkedFinding.result_id)) {
-      return findings;
-    }
-    return [linkedFinding, ...findings];
-  }, [findings, linkedFinding]);
+    const out: IpReviewFinding[] = [];
+    const seen = new Set<string>();
+    const add = (finding: IpReviewFinding | null) => {
+      if (!finding || seen.has(finding.result_id)) return;
+      seen.add(finding.result_id);
+      out.push(finding);
+    };
+    add(linkedFinding);
+    for (const finding of campaignBatchFindings) add(finding);
+    for (const finding of findings) add(finding);
+    return out;
+  }, [campaignBatchFindings, findings, linkedFinding]);
 
   const queueSummary = useMemo(() => {
     if (!facets) return "Loading…";
@@ -318,6 +358,16 @@ export function MonitoringInboxView() {
           Unable to open linked task: {linkedErr}
         </div>
       )}
+      {campaignBatchErr && (
+        <div className="text-sm text-red-600">
+          Unable to load campaign batch: {campaignBatchErr}
+        </div>
+      )}
+      {campaignBatchId && campaignBatchFindings.length > 0 && (
+        <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+          Campaign batch loaded: {campaignBatchTitle || campaignBatchId}
+        </div>
+      )}
 
       {!loaded ? (
         <div className="text-sm text-stone-400 py-8 text-center">Loading…</div>
@@ -342,6 +392,12 @@ export function MonitoringInboxView() {
           showIpColumn
           activeFindingId={taskId ?? null}
           onActiveFindingChange={onActiveFindingChange}
+          seedBatchFindings={campaignBatchFindings}
+          seedBatchKey={
+            campaignBatchId
+              ? `${campaignBatchId}:${campaignBatchFindings.map((f) => f.result_id).join(",")}`
+              : null
+          }
         />
       )}
     </div>

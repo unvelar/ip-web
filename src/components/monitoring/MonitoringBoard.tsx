@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleCheck, Shuffle, X } from "lucide-react";
+import { CircleCheck, X } from "lucide-react";
 import {
   dismissIpFinding,
   markIpFindingNeedsReview,
@@ -21,8 +21,8 @@ import {
 } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { BatchConfirmModal } from "./board/batch";
+import { BatchOperationBar } from "./board/BatchOperationBar";
 import { type BatchAction, runPool, summarizeBatch, summarizeResort } from "./board/batchUtils";
-import { ButtonWithShortcut } from "./board/ButtonWithShortcut";
 import {
   CANDIDATE_OUTCOME_LABELS,
   CANDIDATE_OUTCOME_ORDER,
@@ -30,14 +30,13 @@ import {
   FILTER_SELECT,
   type ResortTarget,
 } from "./board/constants";
-import { FindingComparison } from "./board/FindingComparison";
-import type { FindingUpdateOptions } from "./board/FindingActions";
 import { GridFindingCard } from "./board/GridFindingCard";
 import { FindingRow } from "./board/FindingRow";
-import { RelatedItemsPanel } from "./board/RelatedItemsPanel";
+import { FindingInspector } from "./board/FindingInspector";
+import type { FindingUpdateOptions } from "./board/FindingActions";
 import { SortHeader } from "./board/SortHeader";
 import { FilterPill, StatusTabs } from "./board/StatusTabs";
-import { compactListingTitle, hasReviewAnalysis } from "./board/utils";
+import { compactListingTitle, hasReviewAnalysis, selectedFindingSummary } from "./board/utils";
 
 /** Shape pushed up to the parent — must match Findings.tsx::InboxFilters. */
 export interface BoardFilters {
@@ -82,51 +81,15 @@ function dismissalDecisionLabel(reason: MonitoringReviewOutcome) {
   }
 }
 
-function findingSimilarity(f: IpReviewFinding) {
-  return f.similarity_score ?? f.enforcement_priority;
-}
-
-function formatSimilarity(score: number) {
-  return `${Math.round(score * 100)}%`;
-}
-
-function uniqueDefined(values: Array<string | null | undefined>) {
-  return Array.from(new Set(values.filter(Boolean) as string[]));
-}
-
-function selectedFindingSummary(findings: IpReviewFinding[]) {
-  if (findings.length === 0) return [];
-  const parts: string[] = [];
-  const takedownCount = findings.filter((f) => f.suggested_review_outcome === "takedown").length;
-  if (takedownCount === findings.length) parts.push("Takedown");
-  else if (takedownCount > 0) parts.push(`${takedownCount} AI takedown recs`);
-
-  const similarities = findings
-    .map(findingSimilarity)
-    .filter((score) => Number.isFinite(score));
-  if (similarities.length > 0) {
-    const min = Math.min(...similarities);
-    const max = Math.max(...similarities);
-    parts.push(
-      min === max
-        ? `Similarity ${formatSimilarity(min)}`
-        : `Similarity ${formatSimilarity(min)}-${formatSimilarity(max)}`,
-    );
-  }
-
-  const ips = uniqueDefined(findings.map((f) => f.ip_name));
-  if (ips.length === 1) parts.push(ips[0]);
-  else if (ips.length > 1) parts.push(`${ips.length} IPs`);
-
-  const platforms = uniqueDefined(findings.map((f) => f.domain));
-  if (platforms.length === 1) parts.push(platforms[0]);
-  else if (platforms.length > 1) parts.push(`${platforms.length} platforms`);
-
-  return parts.slice(0, 4);
-}
-
 function isDecisionState(state: CaseReviewStatus) {
   return state === "pending" || state === "review";
+}
+
+function isBatchSelectableFinding(f: IpReviewFinding) {
+  const state: CaseReviewStatus = f.dismissed_at
+    ? "dismissed"
+    : (f.review_status ?? "pending");
+  return isDecisionState(state) && f.ready_for_review && !f.licensed_seller;
 }
 
 /**
@@ -151,6 +114,8 @@ export function MonitoringBoard({
   showIpColumn,
   activeFindingId,
   onActiveFindingChange,
+  seedBatchFindings,
+  seedBatchKey,
 }: {
   findings: IpReviewFinding[];
   facets: MonitoringFacets;
@@ -176,6 +141,9 @@ export function MonitoringBoard({
   activeFindingId?: string | null;
   /** Notifies the route owner when the reviewer opens/collapses a finding. */
   onActiveFindingChange?: (resultId: string | null) => void;
+  /** Optional one-shot selection seed, used when opening a campaign as a batch. */
+  seedBatchFindings?: IpReviewFinding[];
+  seedBatchKey?: string | null;
 }) {
   const ipAware = showIpColumn ?? findings.some((f) => !!f.ip_id);
   const { user } = useAuth();
@@ -250,19 +218,43 @@ export function MonitoringBoard({
         : findings,
     [filters.status, findings],
   );
+
+  // Selection is keyed by result_id. Related-items can add rows that are not
+  // currently loaded in the visible page, so keep their full finding payloads
+  // in a small side map and float selected rows to the top of the queue.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectionExtras, setSelectionExtras] = useState<Map<string, IpReviewFinding>>(new Map());
+  const appliedSeedKey = useRef<string | null>(null);
+
   const displayFindings = useMemo(() => {
     const activeFinding = activeId
       ? findings.find((f) => f.result_id === activeId)
       : null;
-    if (
+    const baseFindings = (
       activeFinding &&
       !completingResultIds.has(activeFinding.result_id) &&
       !filteredFindings.some((f) => f.result_id === activeFinding.result_id)
-    ) {
-      return [activeFinding, ...filteredFindings];
+    )
+      ? [activeFinding, ...filteredFindings]
+      : filteredFindings;
+
+    if (selected.size === 0) return baseFindings;
+
+    const selectedFindings: IpReviewFinding[] = [];
+    const unselectedFindings: IpReviewFinding[] = [];
+    const seen = new Set<string>();
+    for (const f of baseFindings) {
+      seen.add(f.result_id);
+      if (selected.has(f.result_id)) selectedFindings.push(f);
+      else unselectedFindings.push(f);
     }
-    return filteredFindings;
-  }, [activeId, completingResultIds, filteredFindings, findings]);
+    for (const f of selectionExtras.values()) {
+      if (!selected.has(f.result_id) || seen.has(f.result_id)) continue;
+      seen.add(f.result_id);
+      selectedFindings.push(f);
+    }
+    return [...selectedFindings, ...unselectedFindings];
+  }, [activeId, completingResultIds, filteredFindings, findings, selected, selectionExtras]);
 
   // If filters/refetches remove the active row, the inspector naturally closes
   // until the user selects another visible row.
@@ -460,11 +452,6 @@ export function MonitoringBoard({
   }, [dismissReviewToast, reviewToasts, undoingToastIds]);
 
   // --- Multi-select + batch operations -------------------------------------
-  // Selection is keyed by result_id. Related-items can add rows that are not
-  // currently loaded in the visible page, so keep their full finding payloads
-  // in a small side map for batch actions.
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [selectionExtras, setSelectionExtras] = useState<Map<string, IpReviewFinding>>(new Map());
   const [confirmAction, setConfirmAction] = useState<BatchAction | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchResult, setBatchResult] = useState<string | null>(null);
@@ -476,12 +463,34 @@ export function MonitoringBoard({
     setSelected(new Set());
     setSelectionExtras(new Map());
     setBatchResult(null);
+    appliedSeedKey.current = null;
   }, [filterKey]);
 
   function clearSelection() {
     setSelected(new Set());
     setSelectionExtras(new Map());
   }
+
+  useEffect(() => {
+    if (!seedBatchKey || appliedSeedKey.current === seedBatchKey) return;
+    appliedSeedKey.current = seedBatchKey;
+    const openFindings = (seedBatchFindings ?? []).filter(isBatchSelectableFinding);
+    if (openFindings.length === 0) {
+      setBatchResult("No open campaign findings to add.");
+      return;
+    }
+    setSelectionExtras((prev) => {
+      const next = new Map(prev);
+      for (const f of openFindings) next.set(f.result_id, f);
+      return next;
+    });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const f of openFindings) next.add(f.result_id);
+      return next;
+    });
+    setBatchResult(`Added ${openFindings.length} campaign finding${openFindings.length === 1 ? "" : "s"} to the batch.`);
+  }, [filterKey, seedBatchFindings, seedBatchKey]);
 
   function toggleSelect(resultId: string) {
     setBatchResult(null);
@@ -508,12 +517,7 @@ export function MonitoringBoard({
   }
 
   function addRelatedToBatch(findingsToAdd: IpReviewFinding[]) {
-    const openFindings = findingsToAdd.filter((f) => {
-      const state: CaseReviewStatus = f.dismissed_at
-        ? "dismissed"
-        : (f.review_status ?? "pending");
-      return isDecisionState(state) && f.ready_for_review && !f.licensed_seller;
-    });
+    const openFindings = findingsToAdd.filter(isBatchSelectableFinding);
     if (openFindings.length === 0) {
       setBatchResult("No open related findings to add.");
       return;
@@ -808,105 +812,18 @@ export function MonitoringBoard({
     "w-24 shrink-0 text-[10px] font-bold uppercase tracking-wide text-stone-600";
   const filterRow =
     "flex items-center gap-0.5 px-3 py-2 overflow-x-auto whitespace-nowrap";
-  const bulkSelectionBar = selected.size > 0 ? (
-    <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 sm:px-6 lg:left-64 pointer-events-none">
-      <div className="mx-auto max-w-7xl pointer-events-auto max-h-[45vh] overflow-y-auto rounded-lg border border-stone-200 bg-white/95 px-4 py-3 shadow-[0_16px_48px_-20px_rgba(28,25,23,0.45)] backdrop-blur">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-semibold text-stone-700 shrink-0">
-              {selected.size} selected
-            </span>
-            {selectedSummary.map((part) => (
-              <span
-                key={part}
-                className="h-5 px-1.5 inline-flex items-center rounded-[5px] bg-white border border-stone-200 text-[10px] font-medium text-stone-500"
-              >
-                {part}
-              </span>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {batchProgress ? (
-              <span className="text-xs text-stone-500">
-                Working… ({batchProgress.done}/{batchProgress.total})
-              </span>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setConfirmAction("send")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-500"
-                >
-                  <ButtonWithShortcut label="Send takedowns" shortcut="T" dark />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmAction("enforce")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-500 whitespace-nowrap"
-                >
-                  Mark enforced
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmAction("false_positive")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
-                >
-                  <ButtonWithShortcut label="False positive" shortcut="1" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmAction("do_not_pursue")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
-                >
-                  <ButtonWithShortcut label="Don't pursue" shortcut="3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmAction("second_hand")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
-                >
-                  <ButtonWithShortcut label="Second hand" shortcut="2" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmAction("review")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-sky-200 text-sky-700 bg-white hover:bg-sky-50"
-                >
-                  <ButtonWithShortcut label="Review" shortcut="R" />
-                </button>
-                <span
-                  className={`relative inline-flex group ${!filters.candidate_outcome ? "cursor-not-allowed" : ""}`}
-                  title={resortSelectedTooltip}
-                >
-                  <button
-                    type="button"
-                    onClick={() => void runResort()}
-                    disabled={!filters.candidate_outcome}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 disabled:pointer-events-none disabled:hover:bg-white"
-                  >
-                    <Shuffle size={13} aria-hidden="true" />
-                    <span>Resort selected</span>
-                  </button>
-                  {!filters.candidate_outcome && (
-                    <span className="pointer-events-none absolute right-0 bottom-full z-50 mb-1 w-60 rounded-md bg-stone-900 px-2 py-1.5 text-[11px] font-medium leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                      {resortSelectedTooltip}
-                    </span>
-                  )}
-                </span>
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold text-stone-500 hover:text-stone-700"
-                >
-                  Clear
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  ) : null;
+  const bulkSelectionBar = (
+    <BatchOperationBar
+      selectedCount={selected.size}
+      selectedSummary={selectedSummary}
+      batchProgress={batchProgress}
+      onAction={setConfirmAction}
+      onResort={() => void runResort()}
+      resortDisabled={!filters.candidate_outcome}
+      resortTooltip={resortSelectedTooltip}
+      onClear={clearSelection}
+    />
+  );
 
   return (
     <>
@@ -1308,89 +1225,6 @@ function LastDecisionToasts({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function FindingInspector({
-  f,
-  ipId,
-  showIp,
-  isDismissed,
-  isDismissing,
-  onClose,
-  onDismiss,
-  onActionComplete,
-  onNeedsReview,
-  onTakedownSent,
-  onEnforced,
-  onLicensed,
-  onUpdated,
-  onAddRelatedToBatch,
-}: {
-  f: IpReviewFinding;
-  ipId?: string;
-  showIp?: boolean;
-  isDismissed: boolean;
-  isDismissing: boolean;
-  onClose: () => void;
-  onDismiss: (reason: MonitoringReviewOutcome) => void;
-  onActionComplete: () => void;
-  onNeedsReview: () => void;
-  onTakedownSent: () => void;
-  onEnforced: () => void;
-  onLicensed: (dismissedCount: number) => void;
-  onUpdated: (opts?: FindingUpdateOptions) => void;
-  onAddRelatedToBatch: (findings: IpReviewFinding[]) => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-40 pointer-events-none flex justify-end">
-      <aside
-        data-finding-inspector
-        role="dialog"
-        aria-modal="false"
-        aria-label="Finding details"
-        className="pointer-events-auto h-full w-full bg-white shadow-2xl shadow-stone-950/20 border-l border-stone-200 sm:w-[min(92vw,48rem)] xl:w-[min(58vw,60rem)] flex flex-col"
-      >
-        <div className="h-12 shrink-0 border-b border-stone-200 bg-white/95 backdrop-blur flex items-center gap-3 px-4">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-bold text-stone-900 truncate">
-              {compactListingTitle(f)}
-            </div>
-            <div className="text-[11px] text-stone-400 truncate">{f.domain}</div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-8 w-8 rounded-md inline-flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-            aria-label="Close finding details"
-            title="Close"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
-          <FindingComparison
-            key={f.result_id}
-            f={f}
-            ipId={ipId}
-            showIp={showIp}
-            isDismissed={isDismissed}
-            isDismissing={isDismissing}
-            onDismiss={onDismiss}
-            onActionComplete={onActionComplete}
-            onNeedsReview={onNeedsReview}
-            onTakedownSent={onTakedownSent}
-            onEnforced={onEnforced}
-            onLicensed={onLicensed}
-            onUpdated={onUpdated}
-          />
-          <RelatedItemsPanel
-            finding={f}
-            onAddToBatch={onAddRelatedToBatch}
-          />
-        </div>
-      </aside>
     </div>
   );
 }

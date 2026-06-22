@@ -1588,9 +1588,39 @@ export interface MonitoringCampaign {
   status: string;
   created_by: string | null;
   confirmed_at: string | null;
+  dismissed_by: string | null;
+  dismissed_at: string | null;
+  dismissal_reason: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   member_count: number;
+}
+
+export interface MonitoringCampaignSummary extends MonitoringCampaign {
+  ip_name: string | null;
+  included_count: number;
+  excluded_count: number;
+  open_count: number;
+  takedown_sent_count: number;
+  enforced_count: number;
+  dismissed_count: number;
+  platform_count: number;
+  seller_count: number;
+  platforms: string[];
+  sellers: string[];
+  sample_image_url: string | null;
+  estimated_market_usd: number | null;
+}
+
+export interface MonitoringCampaignMember extends IpReviewFinding {
+  campaign_state: "included" | "excluded";
+  exception_reason: string | null;
+  added_at: string;
+}
+
+export interface MonitoringCampaignDetail extends MonitoringCampaignSummary {
+  members: MonitoringCampaignMember[];
 }
 
 export interface MonitoringRelatedItems {
@@ -1684,6 +1714,52 @@ export function createMonitoringCampaign(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function discoverMonitoringCampaigns(opts: { lookback_days?: number; limit?: number } = {}) {
+  return request<{ created: number }>("/api/monitoring/campaigns/discover", {
+    method: "POST",
+    body: JSON.stringify(opts),
+  });
+}
+
+export function listMonitoringCampaigns(opts: { limit?: number; include_dismissed?: boolean } = {}) {
+  const params = new URLSearchParams();
+  params.set("limit", String(opts.limit ?? 50));
+  if (opts.include_dismissed) params.set("include_dismissed", "true");
+  return request<{ campaigns: MonitoringCampaignSummary[] }>(
+    `/api/monitoring/campaigns?${params.toString()}`,
+  );
+}
+
+export function getMonitoringCampaign(campaignId: string) {
+  return request<{ campaign: MonitoringCampaignDetail }>(
+    `/api/monitoring/campaigns/${encodeURIComponent(campaignId)}`,
+  );
+}
+
+export function dismissMonitoringCampaign(campaignId: string, reason?: string | null) {
+  return request<{ campaign: MonitoringCampaignSummary }>(
+    `/api/monitoring/campaigns/${encodeURIComponent(campaignId)}/dismiss`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reason: reason ?? null }),
+    },
+  );
+}
+
+export function updateMonitoringCampaignMember(
+  campaignId: string,
+  resultId: string,
+  input: { state: "included" | "excluded"; exception_reason?: string | null },
+) {
+  return request<{ member: MonitoringCampaignMember }>(
+    `/api/monitoring/campaigns/${encodeURIComponent(campaignId)}/members/${encodeURIComponent(resultId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function resortMonitoringFindings(

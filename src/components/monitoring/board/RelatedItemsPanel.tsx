@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { AlertTriangle, Check, ExternalLink, GitBranch, Loader2, Plus } from "lucide-react";
 import {
   createMonitoringCampaign,
@@ -129,6 +130,12 @@ function CampaignSuggestionRow({
             <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
               <Check size={12} aria-hidden />
               Confirmed {confirmed.member_count}
+              <Link
+                to={`/monitoring/campaigns/${confirmed.id}`}
+                className="ml-1 text-emerald-800 underline-offset-2 hover:underline"
+              >
+                View
+              </Link>
             </div>
           )}
           {confirmError && <div className="mt-1 text-[11px] font-medium text-red-700">{confirmError}</div>}
@@ -140,13 +147,13 @@ function CampaignSuggestionRow({
             className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-300 bg-white px-2 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
           >
             <Plus size={12} aria-hidden />
-            Add {findings.length}
+            Select {findings.length}
           </button>
           <button
             type="button"
             onClick={confirmCampaign}
             disabled={saving || !!confirmed}
-            className="inline-flex h-7 items-center gap-1 rounded-md bg-amber-700 px-2 text-[11px] font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-amber-300"
+            className="inline-flex h-7 items-center gap-1 rounded-md bg-amber-700 px-2 text-[11px] font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-amber-300 whitespace-nowrap"
           >
             {saving ? (
               <Loader2 size={12} className="animate-spin" aria-hidden />
@@ -155,7 +162,7 @@ function CampaignSuggestionRow({
             ) : (
               <GitBranch size={12} aria-hidden />
             )}
-            {confirmed ? "Done" : "Confirm"}
+            {confirmed ? "Done" : "Create Campaign"}
           </button>
         </div>
       </div>
@@ -248,7 +255,7 @@ function RelatedBucketSection({
             className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 text-[11px] font-semibold text-stone-700 hover:bg-stone-50"
           >
             <Plus size={12} aria-hidden />
-            Add {openItems.length}
+            Select {openItems.length}
           </button>
         )}
       </div>
