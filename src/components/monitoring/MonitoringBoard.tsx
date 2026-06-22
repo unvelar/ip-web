@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleCheck, Shuffle, X } from "lucide-react";
 import {
   dismissIpFinding,
+  markIpFindingNeedsReview,
   markIpFindingEnforced,
   markTakedownSentWithoutEmail,
   resortMonitoringFindings,
@@ -121,6 +122,10 @@ function selectedFindingSummary(findings: IpReviewFinding[]) {
   else if (platforms.length > 1) parts.push(`${platforms.length} platforms`);
 
   return parts.slice(0, 4);
+}
+
+function isDecisionState(state: CaseReviewStatus) {
+  return state === "pending" || state === "review";
 }
 
 /**
@@ -288,7 +293,7 @@ export function MonitoringBoard({
           ? "dismissed"
           : (f.review_status ?? "pending");
         return (
-          state === "pending" &&
+          isDecisionState(state) &&
           f.ready_for_review &&
           hasReviewAnalysis(f) &&
           !dismissing.has(f.result_id) &&
@@ -378,6 +383,16 @@ export function MonitoringBoard({
     if (!fipId) return;
     recordLastAction({
       label: "Takedown sent",
+      detail: compactListingTitle(f),
+      undo: { kind: "reopen", ipId: fipId, resultId: f.result_id },
+    });
+  }, [ipId, recordLastAction]);
+
+  const rememberNeedsReviewAction = useCallback((f: IpReviewFinding) => {
+    const fipId = f.ip_id ?? ipId;
+    if (!fipId) return;
+    recordLastAction({
+      label: "Moved to Review",
       detail: compactListingTitle(f),
       undo: { kind: "reopen", ipId: fipId, resultId: f.result_id },
     });
@@ -488,9 +503,14 @@ export function MonitoringBoard({
         ? "dismissed"
         : (f.review_status ?? "pending");
       if (action === "send") {
-        if (state !== "pending") skip("already sent or closed");
+        if (!isDecisionState(state)) skip("already sent or closed");
         else if (!f.case_id) skip("still preparing");
         else if (f.signer_ready === false && !canMarkSentWithoutEmail) skip("missing signer information");
+        else eligible.push(f);
+      } else if (action === "review") {
+        if (state !== "pending") skip("not in triage");
+        else if (!f.case_id) skip("still preparing");
+        else if (!(f.ip_id ?? ipId)) skip("no associated IP");
         else eligible.push(f);
       } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand") {
         if (f.dismissed_at) skip("already dismissed");
@@ -551,6 +571,9 @@ export function MonitoringBoard({
           } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand") {
             await dismissIpFinding((f.ip_id ?? ipId) as string, f.result_id, { reason: action });
             ok++;
+          } else if (action === "review") {
+            await markIpFindingNeedsReview((f.ip_id ?? ipId) as string, f.result_id);
+            ok++;
           } else {
             await markIpFindingEnforced((f.ip_id ?? ipId) as string, f.result_id);
             ok++;
@@ -594,7 +617,7 @@ export function MonitoringBoard({
     onRefresh();
   }
 
-  const runShortcutAction = useCallback(async (action: "false_positive" | "do_not_pursue" | "send" | "second_hand") => {
+  const runShortcutAction = useCallback(async (action: "false_positive" | "do_not_pursue" | "send" | "second_hand" | "review") => {
     if (selected.size > 0) {
       setConfirmAction(action);
       return;
@@ -610,7 +633,11 @@ export function MonitoringBoard({
     const state: CaseReviewStatus = targetFinding.dismissed_at
       ? "dismissed"
       : (targetFinding.review_status ?? "pending");
-    if (state !== "pending") return;
+    if (action === "review") {
+      if (state !== "pending") return;
+    } else if (!isDecisionState(state)) {
+      return;
+    }
 
     let targetCaseId: string | null = null;
     if (action === "send") {
@@ -643,6 +670,22 @@ export function MonitoringBoard({
           : "Email is not configured.",
         );
       }
+      if (action === "review") {
+        if (!targetFinding.case_id) {
+          alert("Finding is still preparing.");
+          return;
+        }
+        const fipId = targetFinding.ip_id ?? ipId;
+        if (!fipId) {
+          alert("Cannot update finding: finding has no associated IP.");
+          return;
+        }
+        await markIpFindingNeedsReview(fipId, targetFinding.result_id);
+        rememberNeedsReviewAction(targetFinding);
+        advanceAfterAction(targetFinding.result_id);
+        onRefresh(targetFinding.result_id);
+        return;
+      }
       await handleDismiss(targetFinding, action);
     } catch (e) {
       if (action === "send") {
@@ -656,7 +699,9 @@ export function MonitoringBoard({
     canMarkSentWithoutEmail,
     activeFinding,
     handleDismiss,
+    ipId,
     onRefresh,
+    rememberNeedsReviewAction,
     rememberTakedownAction,
     selected,
     setActiveFinding,
@@ -687,6 +732,7 @@ export function MonitoringBoard({
         e.key === "1" ? "false_positive" :
         e.key === "2" ? "second_hand" :
         e.key === "3" ? "do_not_pursue" :
+        e.key.toLowerCase() === "r" ? "review" :
         e.key.toLowerCase() === "t" ? "send" :
         null;
       if (!action) return;
@@ -774,6 +820,13 @@ export function MonitoringBoard({
                   className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
                 >
                   <ButtonWithShortcut label="Second hand" shortcut="2" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction("review")}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-sky-200 text-sky-700 bg-white hover:bg-sky-50"
+                >
+                  <ButtonWithShortcut label="Review" shortcut="R" />
                 </button>
                 <span
                   className={`relative inline-flex group ${!filters.candidate_outcome ? "cursor-not-allowed" : ""}`}
@@ -1004,6 +1057,7 @@ export function MonitoringBoard({
                   }}
                   onDismiss={(reason) => handleDismiss(f, reason)}
                   onActionComplete={() => advanceAfterAction(f.result_id)}
+                  onNeedsReview={() => rememberNeedsReviewAction(f)}
                   onTakedownSent={() => rememberTakedownAction(f)}
                   onEnforced={() => rememberEnforcedAction(f)}
                   onLicensed={(dismissedCount) => rememberLicensedAction(f, dismissedCount)}
@@ -1114,6 +1168,7 @@ export function MonitoringBoard({
           onClose={() => setActiveFinding(null)}
           onDismiss={(reason) => handleDismiss(activeFinding, reason)}
           onActionComplete={() => advanceAfterAction(activeFinding.result_id)}
+          onNeedsReview={() => rememberNeedsReviewAction(activeFinding)}
           onTakedownSent={() => rememberTakedownAction(activeFinding)}
           onEnforced={() => rememberEnforcedAction(activeFinding)}
           onLicensed={(dismissedCount) => rememberLicensedAction(activeFinding, dismissedCount)}
@@ -1219,6 +1274,7 @@ function FindingInspector({
   onClose,
   onDismiss,
   onActionComplete,
+  onNeedsReview,
   onTakedownSent,
   onEnforced,
   onLicensed,
@@ -1232,6 +1288,7 @@ function FindingInspector({
   onClose: () => void;
   onDismiss: (reason: MonitoringReviewOutcome) => void;
   onActionComplete: () => void;
+  onNeedsReview: () => void;
   onTakedownSent: () => void;
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
@@ -1273,6 +1330,7 @@ function FindingInspector({
             isDismissing={isDismissing}
             onDismiss={onDismiss}
             onActionComplete={onActionComplete}
+            onNeedsReview={onNeedsReview}
             onTakedownSent={onTakedownSent}
             onEnforced={onEnforced}
             onLicensed={onLicensed}

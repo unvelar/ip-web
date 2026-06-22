@@ -32,6 +32,8 @@ export function formatAgo(iso: string | null): string | null {
 export function statusBadge(s: CaseReviewStatus | null | undefined) {
   const status = (s ?? "pending") as CaseReviewStatus | "pending";
   switch (status) {
+    case "review":
+      return { label: "Review", cls: "bg-sky-100 text-sky-700" };
     case "takedown_sent":
       return { label: "Takedown sent", cls: "bg-amber-100 text-amber-700" };
     case "enforced":

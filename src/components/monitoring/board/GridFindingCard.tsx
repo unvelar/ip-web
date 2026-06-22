@@ -22,6 +22,7 @@ export function GridFindingCard({
   onOpen,
   onDismiss,
   onActionComplete,
+  onNeedsReview,
   onTakedownSent,
   onEnforced,
   onLicensed,
@@ -39,6 +40,7 @@ export function GridFindingCard({
   onOpen: () => void;
   onDismiss: (reason: MonitoringReviewOutcome) => void;
   onActionComplete: () => void;
+  onNeedsReview: () => void;
   onTakedownSent: () => void;
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
@@ -177,6 +179,7 @@ export function GridFindingCard({
             isDismissing={isDismissing}
             onDismiss={onDismiss}
             onActionComplete={onActionComplete}
+            onNeedsReview={onNeedsReview}
             onTakedownSent={onTakedownSent}
             onEnforced={onEnforced}
             onLicensed={onLicensed}

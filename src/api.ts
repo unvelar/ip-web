@@ -315,6 +315,7 @@ export interface PrimitiveResultsBlob {
 
 export type CaseReviewStatus =
   | "pending"
+  | "review"
   | "takedown_sent"
   | "enforced"
   | "dismissed";
@@ -1415,9 +1416,15 @@ export function undismissIpFinding(ipId: string, resultId: string) {
   );
 }
 
-/** Enforcement-pipeline transitions for a finding (all require the finding to
- *  have a linked case). Triage goes pending → takedown_sent (on send) → enforced;
+/** Monitoring finding state transitions (all require the finding to have a linked
+ *  case). Triage can pause in review, move to takedown_sent on send, then enforced;
  *  reopen jumps any state back to pending. */
+export function markIpFindingNeedsReview(ipId: string, resultId: string) {
+  return request<{ ok: boolean }>(
+    `/api/ip/${ipId}/monitoring/findings/${resultId}/review`,
+    { method: "POST" },
+  );
+}
 export function markIpFindingEnforced(ipId: string, resultId: string) {
   return request<{ ok: boolean }>(
     `/api/ip/${ipId}/monitoring/findings/${resultId}/enforce`,
@@ -1482,7 +1489,7 @@ export type MonitoringSortMode =
 
 export type MonitoringPriorityBand = "high" | "med" | "low";
 export type MonitoringStatusFilter =
-  | "pending" | "takedown_sent" | "enforced" | "dismissed";
+  | "pending" | "review" | "takedown_sent" | "enforced" | "dismissed";
 export type MonitoringDismissalReasonFilter =
   | "false_positive"
   | "do_not_pursue"

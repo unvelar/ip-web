@@ -46,7 +46,7 @@ function parseFilters(params: URLSearchParams): InboxFilters {
     status:
       status === "all"
         ? null
-        : status === "pending" || status === "takedown_sent" ||
+        : status === "pending" || status === "review" || status === "takedown_sent" ||
             status === "enforced" || status === "dismissed"
           ? status
           : status === null
@@ -288,6 +288,8 @@ export function MonitoringInboxView() {
     const statusLabel =
       filters.status === "pending"
         ? "to triage"
+        : filters.status === "review"
+          ? "in review"
         : filters.status === "takedown_sent"
           ? "with takedowns sent"
           : filters.status === "enforced"

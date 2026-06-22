@@ -5,6 +5,7 @@ export type BatchAction =
   | "false_positive"
   | "do_not_pursue"
   | "second_hand"
+  | "review"
   | "enforce";
 
 export const BATCH_META: Record<
@@ -15,6 +16,7 @@ export const BATCH_META: Record<
   false_positive: { label: "False positive", verb: "Cleared", gerund: "Mark false positive for" },
   do_not_pursue: { label: "Don't pursue", verb: "Cleared", gerund: "Don't pursue" },
   second_hand: { label: "Second hand / allowed", verb: "Marked second hand", gerund: "Mark second hand / allowed for" },
+  review: { label: "Review", verb: "Moved to Review", gerund: "Move to Review" },
   enforce: { label: "Mark enforced", verb: "Marked enforced", gerund: "Mark enforced" },
 };
 

@@ -3,6 +3,7 @@ import { ComposeModal, ConfirmSendModal } from "../../TakedownPanel";
 import {
   addIpLicense,
   autoSendTakedown,
+  markIpFindingNeedsReview,
   markIpFindingEnforced,
   markTakedownSentWithoutEmail,
   reenrichIpFinding,
@@ -26,6 +27,7 @@ export function FindingActions({
   isDismissing,
   onDismiss,
   onActionComplete,
+  onNeedsReview,
   onTakedownSent,
   onEnforced,
   onLicensed,
@@ -39,6 +41,7 @@ export function FindingActions({
   isDismissing: boolean;
   onDismiss: (reason: MonitoringReviewOutcome) => void;
   onActionComplete: () => void;
+  onNeedsReview: () => void;
   onTakedownSent: () => void;
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
@@ -189,6 +192,35 @@ export function FindingActions({
     "Shortcut 2: resale or second-hand item",
     "2",
   );
+  const needsReviewBtn = (
+    <button
+      key="review"
+      type="button"
+      disabled={!ipId || !f.case_id || busy === "review"}
+      title={
+        !f.case_id
+          ? "Still preparing this case..."
+          : !ipId
+            ? "Cannot update finding: finding has no associated IP"
+            : "Shortcut R: move this finding to the Review bucket for lawyer input"
+      }
+      onClick={() =>
+        ipId &&
+        run(
+          "review",
+          async () => {
+            await markIpFindingNeedsReview(ipId, f.result_id);
+            onNeedsReview();
+          },
+          { completeCurrent: true },
+        )
+      }
+      className={ghostStone}
+      aria-keyshortcuts="R"
+    >
+      {busy === "review" ? "Working..." : <ButtonWithShortcut label="Review" shortcut="R" />}
+    </button>
+  );
 
   // Always-available — re-scrapes the listing + re-extracts + re-scores
   // gallery photos (incl. bbox localization). Independent of review state.
@@ -256,6 +288,7 @@ export function FindingActions({
         {falsePositiveBtn}
         {secondHandBtn}
         {dontPursueBtn}
+        {needsReviewBtn}
         <button
           type="button"
           disabled={!f.case_id || (!signerReady && !canMarkSentWithoutEmail)}
@@ -280,6 +313,42 @@ export function FindingActions({
       </>
     );
     utilityButtons = licenseBtn;
+  } else if (state === "review") {
+    const signerReady = f.signer_ready ?? true;
+    buttons = (
+      <>
+        {falsePositiveBtn}
+        {secondHandBtn}
+        {dontPursueBtn}
+        <button
+          type="button"
+          disabled={!f.case_id || (!signerReady && !canMarkSentWithoutEmail)}
+          title={
+            !f.case_id
+              ? "Still preparing this case..."
+              : !signerReady && !canMarkSentWithoutEmail
+                ? "Add this IP's takedown signer (on the IP's page) before sending"
+                : !signerReady
+                  ? "Admin override: mark sent without sending email"
+                  : undefined
+          }
+          onClick={() => {
+            setSendErr("");
+            setConfirming(true);
+          }}
+          className={blue}
+          aria-keyshortcuts="T"
+        >
+          <ButtonWithShortcut label="Send takedown" shortcut="T" dark />
+        </button>
+      </>
+    );
+    utilityButtons = (
+      <div className="flex items-center gap-1">
+        {licenseBtn}
+        {reopenBtn("Move to triage")}
+      </div>
+    );
   } else if (state === "takedown_sent") {
     buttons = (
       <>

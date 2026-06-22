@@ -24,6 +24,7 @@ export function FindingComparison({
   isDismissing,
   onDismiss,
   onActionComplete,
+  onNeedsReview,
   onTakedownSent,
   onEnforced,
   onLicensed,
@@ -38,6 +39,7 @@ export function FindingComparison({
   isDismissing: boolean;
   onDismiss: (reason: MonitoringReviewOutcome) => void;
   onActionComplete: () => void;
+  onNeedsReview: () => void;
   onTakedownSent: () => void;
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
@@ -126,6 +128,7 @@ export function FindingComparison({
           isDismissing={isDismissing}
           onDismiss={onDismiss}
           onActionComplete={onActionComplete}
+          onNeedsReview={onNeedsReview}
           onTakedownSent={onTakedownSent}
           onEnforced={onEnforced}
           onLicensed={onLicensed}
