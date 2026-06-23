@@ -42,6 +42,7 @@ function parseFilters(params: URLSearchParams): InboxFilters {
   const sort = params.get("sort");
   const dismissalReason = params.get("dismissal_reason");
   const candidateOutcome = params.get("candidate_outcome");
+  const seller = params.get("seller");
   return {
     // Default to "To triage" (pending); an explicit `status=all` clears it.
     status:
@@ -56,7 +57,7 @@ function parseFilters(params: URLSearchParams): InboxFilters {
     priority: null,
     ip_id: params.get("ip_id"),
     platform: params.get("platform"),
-    seller: null,
+    seller: seller && seller.trim() ? seller.trim() : null,
     dismissal_reason:
       dismissalReason === "false_positive" ||
       dismissalReason === "do_not_pursue" ||

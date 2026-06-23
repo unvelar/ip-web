@@ -1841,6 +1841,9 @@ export function getMonitoringFindingsCount() {
 export interface DashboardSummary {
   kpis: {
     to_triage: number;
+    triaged: number;
+    acknowledged_infringement: number;
+    second_hand_market: number;
     in_progress: number;
     enforced_30d: number;
     high_risk: number;
