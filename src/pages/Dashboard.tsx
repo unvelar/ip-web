@@ -50,6 +50,7 @@ const EMPTY_KPIS: DashboardGroups["kpis"] = {
  */
 export default function Dashboard() {
   const [days, setDays] = useState<Days>(30);
+  const [selectedIpId, setSelectedIpId] = useState<string | null>(null);
   const [data, setData] = useState<DashboardGroups | null>(null);
   const [err, setErr] = useState("");
 
@@ -89,6 +90,16 @@ export default function Dashboard() {
   // than crashing the whole page on a missing field.
   const ips = data.ips ?? [];
   const kpis = data.kpis ?? EMPTY_KPIS;
+  const selectedIp = selectedIpId ? ips.find((ip) => ip.ip_id === selectedIpId) ?? null : null;
+  const activeIpId = selectedIp?.ip_id ?? null;
+  const scopedIps = selectedIp ? [selectedIp] : ips;
+  const scopedKpis = selectedIp ? kpisForIp(selectedIp) : kpis;
+  const scopedPlatforms = filterCountRows(data.platforms ?? [], activeIpId);
+  const scopedCountries = filterCountRows(data.countries ?? [], activeIpId);
+  const scopedMarketByCountry = filterCountRows(data.marketByCountry ?? [], activeIpId);
+  const scopedSellers = activeIpId
+    ? (data.sellers ?? []).filter((s) => s.ip_id === activeIpId)
+    : (data.sellers ?? []);
   const empty = ips.length === 0;
 
   return (
@@ -100,7 +111,10 @@ export default function Dashboard() {
             Last {days} days of monitoring activity · grouped by IP.
           </p>
         </div>
-        <RangeToggle days={days} onChange={setDays} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <IpFilterSelect ips={ips} selectedIpId={activeIpId} onChange={setSelectedIpId} />
+          <RangeToggle days={days} onChange={setDays} />
+        </div>
       </div>
 
       {empty ? (
@@ -120,38 +134,63 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <UnlicensedMarketHero totalUsd={kpis.total_unlicensed_market_usd ?? 0} />
-          <KpiRow kpis={kpis} />
-          <FindingsOverTimeCard timeseries={data.timeseries ?? []} ips={ips} colors={colors} />
-          <MarketCard marketByCountry={data.marketByCountry ?? []} ips={ips} colors={colors} />
+          <UnlicensedMarketHero totalUsd={scopedKpis.total_unlicensed_market_usd ?? 0} />
+          <KpiRow kpis={scopedKpis} ipId={activeIpId} />
+          <FindingsOverTimeCard timeseries={data.timeseries ?? []} ips={scopedIps} colors={colors} />
+          <MarketCard marketByCountry={scopedMarketByCountry} ips={scopedIps} colors={colors} />
           <div className="grid lg:grid-cols-2 gap-4">
             <StackedDimensionCard
               title="Top platforms"
               subtitle="Findings per marketplace, colored by IP."
-              items={(data.platforms ?? []).map((p) => ({ label: p.domain, counts: p.counts }))}
-              ips={ips}
+              items={scopedPlatforms.map((p) => ({ label: p.domain, counts: p.counts }))}
+              ips={scopedIps}
               colors={colors}
             />
             <StackedDimensionCard
               title="Countries"
               subtitle="Where listings ship from, colored by IP."
-              items={(data.countries ?? []).map((c) => ({ label: c.country || "Unknown", counts: c.counts }))}
-              ips={ips}
+              items={scopedCountries.map((c) => ({ label: c.country || "Unknown", counts: c.counts }))}
+              ips={scopedIps}
               colors={colors}
             />
           </div>
           <div className="grid lg:grid-cols-3 gap-4">
             <div className="lg:col-span-1">
-              <IpSharePie ips={ips} colors={colors} />
+              <IpSharePie ips={scopedIps} colors={colors} />
             </div>
             <div className="lg:col-span-2">
-              <SellersCard sellers={data.sellers ?? []} ips={ips} colors={colors} />
+              <SellersCard sellers={scopedSellers} ips={scopedIps} colors={colors} />
             </div>
           </div>
         </>
       )}
     </div>
   );
+}
+
+function kpisForIp(ip: Ip): DashboardGroups["kpis"] {
+  return {
+    to_triage: ip.to_triage ?? 0,
+    triaged: ip.triaged ?? 0,
+    acknowledged_infringement: ip.acknowledged_infringement ?? 0,
+    second_hand_market: ip.second_hand_market ?? 0,
+    in_progress: ip.in_progress ?? 0,
+    enforced_30d: ip.enforced_30d ?? 0,
+    high_risk: ip.high_risk ?? 0,
+    ips_monitored: ip.ips_monitored ?? 1,
+    platforms_monitored: ip.platforms_monitored ?? 0,
+    total_unlicensed_market_usd: ip.unlicensed_market_usd ?? 0,
+  };
+}
+
+function filterCountRows<T extends { counts: Record<string, number> }>(
+  rows: T[],
+  ipId: string | null,
+): T[] {
+  if (!ipId) return rows;
+  return rows
+    .map((row) => ({ ...row, counts: { [ipId]: row.counts[ipId] ?? 0 } }))
+    .filter((row) => (row.counts[ipId] ?? 0) > 0);
 }
 
 function RangeToggle({ days, onChange }: { days: Days; onChange: (d: Days) => void }) {
@@ -171,6 +210,33 @@ function RangeToggle({ days, onChange }: { days: Days; onChange: (d: Days) => vo
         </button>
       ))}
     </div>
+  );
+}
+
+function IpFilterSelect({
+  ips,
+  selectedIpId,
+  onChange,
+}: {
+  ips: Ip[];
+  selectedIpId: string | null;
+  onChange: (ipId: string | null) => void;
+}) {
+  return (
+    <select
+      value={selectedIpId ?? ""}
+      onChange={(e) => onChange(e.target.value || null)}
+      aria-label="Filter dashboard by IP"
+      title="Filter dashboard by IP"
+      className="h-8 max-w-[14rem] rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-700 outline-none focus:ring-1 focus:ring-stone-300"
+    >
+      <option value="">All IPs</option>
+      {ips.map((ip) => (
+        <option key={ip.ip_id} value={ip.ip_id}>
+          {ip.ip_name ?? "Unnamed IP"}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -201,7 +267,7 @@ function UnlicensedMarketHero({ totalUsd }: { totalUsd: number }) {
   );
 }
 
-function KpiRow({ kpis }: { kpis: DashboardGroups["kpis"] }) {
+function KpiRow({ kpis, ipId }: { kpis: DashboardGroups["kpis"]; ipId: string | null }) {
   const tiles: Array<{ label: string; value: number; to: string | null; accent?: string }> = [
     { label: "To triage", value: kpis.to_triage ?? 0, to: "/monitoring/tasks?status=pending", accent: "text-stone-900" },
     { label: "Triaged", value: kpis.triaged ?? 0, to: null, accent: "text-indigo-700" },
@@ -216,10 +282,19 @@ function KpiRow({ kpis }: { kpis: DashboardGroups["kpis"] }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-9 gap-3">
       {tiles.map((t) => (
-        <KpiTile key={t.label} {...t} />
+        <KpiTile key={t.label} {...t} to={withIpFilter(t.to, ipId)} />
       ))}
     </div>
   );
+}
+
+function withIpFilter(to: string | null, ipId: string | null): string | null {
+  if (!to || !ipId) return to;
+  const [path, query = ""] = to.split("?");
+  const params = new URLSearchParams(query);
+  params.set("ip_id", ipId);
+  const qs = params.toString();
+  return qs ? `${path}?${qs}` : path;
 }
 
 function KpiTile({

@@ -1892,6 +1892,15 @@ export interface DashboardGroups {
     ip_id: string;
     ip_name: string | null;
     findings: number;
+    to_triage: number;
+    triaged: number;
+    acknowledged_infringement: number;
+    second_hand_market: number;
+    in_progress: number;
+    enforced_30d: number;
+    high_risk: number;
+    ips_monitored: number;
+    platforms_monitored: number;
     unlicensed_market_usd: number;
   }>;
   timeseries: Array<{ day: string; counts: Record<string, number> }>;
