@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import {
   getTrademark,
   deleteTrademark,
@@ -9,15 +10,22 @@ import {
   listIpLicenses,
   addIpLicense,
   deleteIpLicense,
+  listAllowedProductImages,
+  deleteAllowedProductImage,
   type Trademark,
   type TrademarkImage,
   type IpLicense,
+  type IpAllowedProductImage,
 } from "../api";
 import { useJobPoller } from "../hooks/useJobPoller";
 import ImageUploader from "../components/ImageUploader";
 import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
 import IpTakedownSigner from "../components/IpTakedownSigner";
 import { consumeCommittedKeywords, mergeKeywords } from "../lib/keywords";
+
+function errorMessage(e: unknown) {
+  return e instanceof Error ? e.message : String(e);
+}
 
 export default function RegistryDetail() {
   const { id } = useParams<{ id: string }>();
@@ -44,9 +52,9 @@ export default function RegistryDetail() {
     try {
       const { trademark } = await updateTrademark(ip.id, { keywords: next });
       if (seq === keywordSaveSeq.current) setIp(trademark);
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (seq === keywordSaveSeq.current) setIp(previous);
-      setError(e.message);
+      setError(errorMessage(e));
     }
   }
 
@@ -104,8 +112,8 @@ export default function RegistryDetail() {
       const { job_id } = await uploadTrademarkImages(id, files);
       setIndexJobId(job_id);
       load();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(errorMessage(e));
     } finally {
       setUploading(false);
     }
@@ -198,8 +206,8 @@ export default function RegistryDetail() {
                     const { trademark } = await updateTrademark(id!, { description: descDraft.trim() || undefined });
                     setIp(trademark);
                     setEditingDesc(false);
-                  } catch (e: any) {
-                    setError(e.message);
+                  } catch (e: unknown) {
+                    setError(errorMessage(e));
                   } finally {
                     setSavingDesc(false);
                   }
@@ -284,6 +292,9 @@ export default function RegistryDetail() {
       {/* Licenses — authorised sellers per domain */}
       <LicensesSection ipId={ip.id} />
 
+      {/* Allowed product images — reviewer-selected visual exceptions */}
+      <AllowedProductImagesSection ipId={ip.id} />
+
       {/* Monitoring — watched platforms + findings board */}
       <MonitoringSection ip={ip} />
 
@@ -350,6 +361,153 @@ export default function RegistryDetail() {
         </div>
       )}
 
+    </div>
+  );
+}
+
+function allowedByLabel(item: IpAllowedProductImage) {
+  return item.allowed_by_display_name || item.allowed_by_email || "Unknown user";
+}
+
+function allowedDateLabel(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function AllowedProductImagesSection({ ipId }: { ipId: string }) {
+  const [items, setItems] = useState<IpAllowedProductImage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setErr("");
+    listAllowedProductImages(ipId)
+      .then(({ allowed_product_images }) => {
+        if (!cancelled) setItems(allowed_product_images);
+      })
+      .catch((e) => {
+        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ipId]);
+
+  async function remove(item: IpAllowedProductImage) {
+    if (deletingId !== null) return;
+    if (!confirm("Remove this allowed product image?")) return;
+    setDeletingId(item.id);
+    setErr("");
+    try {
+      await deleteAllowedProductImage(ipId, item.id);
+      setItems((prev) => prev.filter((p) => p.id !== item.id));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div id="allowed-product-images" className="rounded-xl border border-stone-200 bg-white px-5 py-4 space-y-3">
+      <div>
+        <label className="text-xs font-medium text-stone-400 uppercase tracking-wider">
+          Allowed product images
+        </label>
+        <p className="text-xs text-stone-500 mt-0.5">
+          Product images allowed from monitoring findings for this IP.
+        </p>
+      </div>
+
+      {err && <div className="text-xs text-red-600">{err}</div>}
+
+      {loading ? (
+        <div className="text-xs text-stone-400 py-2">Loading…</div>
+      ) : items.length === 0 ? (
+        <div className="text-xs text-stone-400 italic">
+          No allowed product images yet.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {items.map((item) => {
+            const by = allowedByLabel(item);
+            return (
+              <div
+                key={item.id}
+                className="flex items-start gap-3 rounded-lg border border-stone-100 bg-stone-50/60 p-2.5"
+              >
+                {item.image_url ? (
+                  <a
+                    href={item.image_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-stone-200 bg-white"
+                    title="Open image"
+                  >
+                    <img
+                      src={item.image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </a>
+                ) : (
+                  <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg border border-stone-200 bg-white px-2 text-center text-[10px] text-stone-400">
+                    No image
+                  </div>
+                )}
+
+                <div className="min-w-0 flex-1 space-y-1 text-xs">
+                  <div className="font-semibold text-stone-800">
+                    Allowed {allowedDateLabel(item.allowed_at)}
+                  </div>
+                  {item.source_page_url ? (
+                    <a
+                      href={item.source_page_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block truncate text-blue-700 hover:underline"
+                      title={item.source_page_url}
+                    >
+                      Source listing
+                    </a>
+                  ) : (
+                    <div className="text-stone-400">No source listing</div>
+                  )}
+                  <div className="truncate text-stone-400" title={by}>
+                    By {by}
+                  </div>
+                  {item.reason_notes && (
+                    <p className="line-clamp-2 text-stone-500" title={item.reason_notes}>
+                      {item.reason_notes}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void remove(item)}
+                  disabled={deletingId !== null}
+                  className="grid size-8 shrink-0 place-items-center rounded-md border border-stone-200 bg-white text-stone-400 hover:border-red-200 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Remove allowed product image"
+                >
+                  <Trash2 className="size-3.5" aria-hidden="true" />
+                  <span className="sr-only">Remove allowed product image</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1411,6 +1411,33 @@ export function allowIpFindingProductImage(
   );
 }
 
+export interface IpAllowedProductImage {
+  id: number;
+  ip_catalog_id: string;
+  source_case_id: string | null;
+  source_result_id: string | null;
+  source_page_url: string | null;
+  image_url: string | null;
+  reason_notes: string | null;
+  allowed_by: string | null;
+  allowed_by_display_name?: string | null;
+  allowed_by_email?: string | null;
+  allowed_at: string;
+}
+
+export function listAllowedProductImages(ipId: string) {
+  return request<{ allowed_product_images: IpAllowedProductImage[] }>(
+    `/api/ip/${ipId}/allowed-product-images`,
+  );
+}
+
+export function deleteAllowedProductImage(ipId: string, allowedImageId: number) {
+  return request<{ ok: true }>(
+    `/api/ip/${ipId}/allowed-product-images/${allowedImageId}`,
+    { method: "DELETE" },
+  );
+}
+
 export function undismissIpFinding(ipId: string, resultId: string) {
   return request<{ ok: boolean; restored: number }>(
     `/api/ip/${ipId}/monitoring/findings/${resultId}/undismiss`,
