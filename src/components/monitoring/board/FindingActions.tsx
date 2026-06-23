@@ -7,13 +7,13 @@ import {
   markIpFindingEnforced,
   markTakedownSentWithoutEmail,
   reenrichIpFinding,
-  reopenIpFinding,
   type CaseReviewStatus,
   type IpReviewFinding,
   type MonitoringReviewOutcome,
 } from "../../../api";
 import { useAuth } from "../../../context/AuthContext";
 import { ButtonWithShortcut } from "./ButtonWithShortcut";
+import { undoMonitoringFindingAction } from "./findingUndo";
 
 export type FindingUpdateOptions = {
   completed?: boolean;
@@ -264,11 +264,32 @@ export function FindingActions({
         disabled={!ipId || busy === "reopen"}
         onClick={() =>
           ipId &&
-          run("reopen", () => reopenIpFinding(ipId, f.result_id))
+          run("reopen", () =>
+            undoMonitoringFindingAction({ kind: "reopen", ipId, resultId: f.result_id }),
+          )
         }
         className={ghostStone}
       >
         {busy === "reopen" ? "Working…" : label}
+      </button>
+    );
+  }
+
+  function undoDismissalBtn(label = "Undo dismissal") {
+    return (
+      <button
+        key="undo-dismissal"
+        type="button"
+        disabled={!ipId || busy === "undo-dismissal"}
+        onClick={() =>
+          ipId &&
+          run("undo-dismissal", () =>
+            undoMonitoringFindingAction({ kind: "undismiss", ipId, resultId: f.result_id }),
+          )
+        }
+        className={ghostStone}
+      >
+        {busy === "undo-dismissal" ? "Working…" : label}
       </button>
     );
   }
@@ -379,7 +400,7 @@ export function FindingActions({
     buttons = reopenBtn();
   } else {
     // dismissed
-    buttons = reopenBtn();
+    buttons = undoDismissalBtn();
   }
 
   return (

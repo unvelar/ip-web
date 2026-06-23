@@ -6,8 +6,6 @@ import {
   markIpFindingEnforced,
   markTakedownSentWithoutEmail,
   resortMonitoringFindings,
-  reopenIpFinding,
-  undismissIpFinding,
   autoSendTakedown,
   type CaseReviewStatus,
   type IpReviewFinding,
@@ -36,6 +34,7 @@ import { GridFindingCard } from "./board/GridFindingCard";
 import { FindingRow } from "./board/FindingRow";
 import { SortHeader } from "./board/SortHeader";
 import { FilterPill, StatusTabs } from "./board/StatusTabs";
+import { undoMonitoringFindingAction, type MonitoringFindingUndoAction } from "./board/findingUndo";
 import { compactListingTitle, hasReviewAnalysis } from "./board/utils";
 
 /** Shape pushed up to the parent — must match Findings.tsx::InboxFilters. */
@@ -56,11 +55,7 @@ type LastReviewAction = {
   expiresAt: number;
   label: string;
   detail?: string;
-  undo?: {
-    kind: "undismiss" | "reopen";
-    ipId: string;
-    resultId: string;
-  };
+  undo?: MonitoringFindingUndoAction;
 };
 
 const TOAST_VISIBLE_MS = 5000;
@@ -190,6 +185,7 @@ export function MonitoringBoard({
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [reviewToasts, setReviewToasts] = useState<LastReviewAction[]>([]);
   const [undoingToastIds, setUndoingToastIds] = useState<Set<number>>(new Set());
+  const undoingActiveFindingRef = useRef(false);
   const nextToastId = useRef(0);
 
   const dismissReviewToast = useCallback((id: number) => {
@@ -221,6 +217,16 @@ export function MonitoringBoard({
     setCompletingResultIds(next);
   }, []);
 
+  const clearOptimisticCompletion = useCallback((resultId: string) => {
+    setResultCompleting(resultId, false);
+    setDismissing((prev) => {
+      if (!prev.has(resultId)) return prev;
+      const next = new Set(prev);
+      next.delete(resultId);
+      return next;
+    });
+  }, [setResultCompleting]);
+
   useEffect(() => {
     setActiveIdState(activeFindingId ?? null);
     if (activeFindingId) setViewMode("table");
@@ -230,6 +236,11 @@ export function MonitoringBoard({
     setActiveIdState(resultId);
     onActiveFindingChange?.(resultId);
   }, [onActiveFindingChange]);
+
+  const openRestoredFinding = useCallback((resultId: string) => {
+    setViewMode("table");
+    setActiveFinding(resultId);
+  }, [setActiveFinding]);
 
   // Stale entries in `dismissing` for findings that have since been removed
   // from the page are harmless — they're never queried after the row goes
@@ -261,6 +272,10 @@ export function MonitoringBoard({
     }
     return filteredFindings;
   }, [activeId, completingResultIds, filteredFindings, findings]);
+  const navigableFindings = useMemo(
+    () => displayFindings.filter((f) => !completingResultIds.has(f.result_id)),
+    [completingResultIds, displayFindings],
+  );
 
   // If filters/refetches remove the active row, the inspector naturally closes
   // until the user selects another visible row.
@@ -326,14 +341,14 @@ export function MonitoringBoard({
   }, [onRefresh, setResultCompleting]);
 
   const moveActive = useCallback((delta: -1 | 1) => {
-    if (displayFindings.length === 0) return;
+    if (navigableFindings.length === 0) return;
     const current = activeId
-      ? displayFindings.findIndex((f) => f.result_id === activeId)
+      ? navigableFindings.findIndex((f) => f.result_id === activeId)
       : -1;
-    const base = current >= 0 ? current : delta > 0 ? -1 : displayFindings.length;
-    const next = Math.max(0, Math.min(displayFindings.length - 1, base + delta));
-    setActiveFinding(displayFindings[next].result_id);
-  }, [activeId, displayFindings, setActiveFinding]);
+    const base = current >= 0 ? current : delta > 0 ? -1 : navigableFindings.length;
+    const next = Math.max(0, Math.min(navigableFindings.length - 1, base + delta));
+    setActiveFinding(navigableFindings[next].result_id);
+  }, [activeId, navigableFindings, setActiveFinding]);
 
   const handleDismiss = useCallback(async (
     f: IpReviewFinding,
@@ -422,11 +437,9 @@ export function MonitoringBoard({
     if (!action.undo || undoingToastIds.has(action.id)) return;
     setUndoingToastIds((prev) => new Set(prev).add(action.id));
     try {
-      if (action.undo.kind === "undismiss") {
-        await undismissIpFinding(action.undo.ipId, action.undo.resultId);
-      } else {
-        await reopenIpFinding(action.undo.ipId, action.undo.resultId);
-      }
+      await undoMonitoringFindingAction(action.undo);
+      clearOptimisticCompletion(action.undo.resultId);
+      openRestoredFinding(action.undo.resultId);
       dismissReviewToast(action.id);
       onRefresh();
     } catch (e) {
@@ -438,7 +451,44 @@ export function MonitoringBoard({
         return next;
       });
     }
-  }, [dismissReviewToast, onRefresh, undoingToastIds]);
+  }, [clearOptimisticCompletion, dismissReviewToast, onRefresh, openRestoredFinding, undoingToastIds]);
+
+  const undoMostRecentReviewToast = useCallback(() => {
+    for (let i = reviewToasts.length - 1; i >= 0; i--) {
+      const action = reviewToasts[i];
+      if (!action.undo || undoingToastIds.has(action.id)) continue;
+      void undoReviewToast(action);
+      return true;
+    }
+    return false;
+  }, [reviewToasts, undoReviewToast, undoingToastIds]);
+
+  const undoActiveDismissedFinding = useCallback(() => {
+    if (!activeFinding || undoingActiveFindingRef.current) return false;
+    const fipId = activeFinding.ip_id ?? ipId;
+    if (!fipId) return false;
+    const isDismissed = !!activeFinding.dismissed_at || dismissing.has(activeFinding.result_id);
+    if (!isDismissed) return false;
+
+    undoingActiveFindingRef.current = true;
+    void undoMonitoringFindingAction({
+      kind: "undismiss",
+      ipId: fipId,
+      resultId: activeFinding.result_id,
+    })
+      .then(() => {
+        clearOptimisticCompletion(activeFinding.result_id);
+        openRestoredFinding(activeFinding.result_id);
+        onRefresh();
+      })
+      .catch((e) => {
+        alert(e instanceof Error ? e.message : "Failed to undo dismissal");
+      })
+      .finally(() => {
+        undoingActiveFindingRef.current = false;
+      });
+    return true;
+  }, [activeFinding, clearOptimisticCompletion, dismissing, ipId, onRefresh, openRestoredFinding]);
 
   useEffect(() => {
     if (reviewToasts.length === 0) return;
@@ -471,7 +521,21 @@ export function MonitoringBoard({
     setBatchResult(null);
   }, [filterKey]);
 
+  useEffect(() => {
+    if (completingResultIds.size === 0) return;
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set(prev);
+      for (const resultId of completingResultIds) {
+        if (next.delete(resultId)) changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [completingResultIds]);
+
   function toggleSelect(resultId: string) {
+    if (completingResultIdsRef.current.has(resultId)) return;
     setBatchResult(null);
     setSelected((prev) => {
       const next = new Set(prev);
@@ -482,11 +546,17 @@ export function MonitoringBoard({
   }
   function toggleSelectAll() {
     setBatchResult(null);
-    setSelected((prev) =>
-      prev.size === displayFindings.length
-        ? new Set()
-        : new Set(displayFindings.map((f) => f.result_id)),
-    );
+    setSelected((prev) => {
+      const selectableIds = navigableFindings.map((f) => f.result_id);
+      const allSelectableSelected =
+        selectableIds.length > 0 && selectableIds.every((resultId) => prev.has(resultId));
+      const next = new Set(prev);
+      for (const resultId of selectableIds) {
+        if (allSelectableSelected) next.delete(resultId);
+        else next.add(resultId);
+      }
+      return next;
+    });
   }
 
   // Split the current selection for an action into rows to act on vs.
@@ -499,6 +569,10 @@ export function MonitoringBoard({
     };
     for (const f of displayFindings) {
       if (!selected.has(f.result_id)) continue;
+      if (completingResultIdsRef.current.has(f.result_id)) {
+        skip("already working");
+        continue;
+      }
       const state: CaseReviewStatus = f.dismissed_at
         ? "dismissed"
         : (f.review_status ?? "pending");
@@ -533,6 +607,10 @@ export function MonitoringBoard({
     };
     for (const f of displayFindings) {
       if (!selected.has(f.result_id)) continue;
+      if (completingResultIdsRef.current.has(f.result_id)) {
+        skip("already working");
+        continue;
+      }
       const state: CaseReviewStatus = f.dismissed_at
         ? "dismissed"
         : (f.review_status ?? "pending");
@@ -715,9 +793,21 @@ export function MonitoringBoard({
       const tag = target.tagName.toLowerCase();
       return target.isContentEditable || tag === "input" || tag === "textarea" || tag === "select";
     }
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      if (editableTarget(e.target)) return;
+    function onKeyEvent(e: KeyboardEvent) {
+      const isShortcutKey = e.metaKey || e.ctrlKey;
+      const isUndoShortcut =
+        isShortcutKey &&
+        !e.altKey &&
+        !e.shiftKey &&
+        (e.key.toLowerCase() === "z" || e.code === "KeyZ");
+      const targetIsEditable = editableTarget(e.target);
+      if (e.defaultPrevented) return;
+      if (targetIsEditable) return;
+      if (isUndoShortcut) {
+        if (undoMostRecentReviewToast() || undoActiveDismissedFinding()) e.preventDefault();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (e.key === "Escape" && activeFinding) {
         e.preventDefault();
         setActiveFinding(null);
@@ -739,12 +829,28 @@ export function MonitoringBoard({
       e.preventDefault();
       void runShortcutAction(action);
     }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeFinding, moveActive, runShortcutAction, setActiveFinding]);
+    document.addEventListener("keydown", onKeyEvent, true);
+    window.addEventListener("keydown", onKeyEvent, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyEvent, true);
+      window.removeEventListener("keydown", onKeyEvent, true);
+    };
+  }, [
+    activeFinding,
+    moveActive,
+    reviewToasts,
+    runShortcutAction,
+    setActiveFinding,
+    undoActiveDismissedFinding,
+    undoMostRecentReviewToast,
+    undoingToastIds,
+  ]);
 
-  const allSelected = displayFindings.length > 0 && selected.size === displayFindings.length;
-  const someSelected = selected.size > 0 && !allSelected;
+  const allSelected =
+    navigableFindings.length > 0 &&
+    navigableFindings.every((f) => selected.has(f.result_id));
+  const someSelected =
+    navigableFindings.some((f) => selected.has(f.result_id)) && !allSelected;
   const selectedFindings = useMemo(
     () => displayFindings.filter((f) => selected.has(f.result_id)),
     [displayFindings, selected],
@@ -1101,23 +1207,41 @@ export function MonitoringBoard({
                 {displayFindings.map((f) => {
                   const active = f.result_id === activeFinding?.result_id;
                   const rowDismissed = !!f.dismissed_at || dismissing.has(f.result_id);
+                  const rowCompleting = completingResultIds.has(f.result_id);
                   return (
                     <tr
                       key={f.result_id}
-                      onClick={() => setActiveFinding(f.result_id)}
-                      className={`group relative cursor-pointer transition-colors ${
-                        active ? "bg-blue-50/70" : "hover:bg-stone-50 focus-within:bg-stone-50"
-                      } ${rowDismissed ? "opacity-50" : ""}`}
+                      onClickCapture={(e) => {
+                        if (!rowCompleting) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={() => {
+                        if (!rowCompleting) setActiveFinding(f.result_id);
+                      }}
+                      aria-disabled={rowCompleting || undefined}
+                      className={`group relative transition-colors ${
+                        rowCompleting
+                          ? "cursor-wait bg-stone-50 opacity-50"
+                          : active
+                            ? "cursor-pointer bg-blue-50/70"
+                            : "cursor-pointer hover:bg-stone-50 focus-within:bg-stone-50"
+                      } ${rowDismissed && !rowCompleting ? "opacity-50" : ""}`}
                     >
                       <td
                         className="w-9 pl-2 pr-1 align-middle"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <label className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-stone-100 cursor-pointer">
+                        <label className={`inline-flex h-7 w-7 items-center justify-center rounded-md ${
+                          rowCompleting
+                            ? "cursor-not-allowed opacity-60"
+                            : "hover:bg-stone-100 cursor-pointer"
+                        }`}>
                           <input
                             type="checkbox"
                             aria-label="Select finding"
                             checked={selected.has(f.result_id)}
+                            disabled={rowCompleting}
                             onChange={() => toggleSelect(f.result_id)}
                             className="h-4 w-4"
                           />
@@ -1214,7 +1338,7 @@ function LastDecisionToasts({
 
   return (
     <div className="fixed bottom-4 left-4 z-50 flex max-h-[min(calc(100vh-2rem),32rem)] w-[min(calc(100vw-2rem),19rem)] flex-col gap-2 overflow-y-auto">
-      {actions.map((action) => {
+      {[...actions].reverse().map((action) => {
         const undoing = undoingIds.has(action.id);
         return (
           <div

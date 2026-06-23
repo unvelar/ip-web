@@ -1,4 +1,4 @@
-import { type MouseEvent, useMemo, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { allowIpFindingProductImage, type IpReviewFinding } from "../../../api";
 
 /** Modern "detected region" overlay: four rounded corner brackets in an
@@ -96,10 +96,12 @@ export function ListingCarousel({
   f,
   ipId,
   compact = false,
+  keyboardNavigation,
 }: {
   f: IpReviewFinding;
   ipId?: string;
   compact?: boolean;
+  keyboardNavigation?: boolean;
 }) {
   const scored = useMemo(() => f.gallery_scores ?? [], [f.gallery_scores]);
   const scoredByUrl = new Map(scored.map((s) => [s.url, s.similarity]));
@@ -140,7 +142,42 @@ export function ListingCarousel({
   // resets to 0 on its own — no reset effect needed.
   const [natural, setNatural] = useState<{ url: string; w: number; h: number } | null>(null);
 
-  const active = urls[Math.min(idx, urls.length - 1)];
+  const activeIdx = Math.min(idx, Math.max(0, urls.length - 1));
+  const active = urls[activeIdx];
+  const enableKeyboardNavigation = keyboardNavigation ?? !compact;
+
+  const moveSlide = useCallback((delta: number) => {
+    setIdx((current) => {
+      if (urls.length <= 1) return current;
+      return (current + delta + urls.length) % urls.length;
+    });
+    setZoomPos(null);
+  }, [urls.length]);
+
+  useEffect(() => {
+    setIdx((current) => Math.min(current, Math.max(0, urls.length - 1)));
+  }, [urls.length]);
+
+  useEffect(() => {
+    if (!enableKeyboardNavigation || urls.length <= 1) return;
+
+    function editableTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName.toLowerCase();
+      return target.isContentEditable || tag === "input" || tag === "textarea" || tag === "select";
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented || editableTarget(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      moveSlide(e.key === "ArrowRight" ? 1 : -1);
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [enableKeyboardNavigation, moveSlide, urls.length]);
 
   if (urls.length === 0) {
     return (
@@ -248,7 +285,7 @@ export function ListingCarousel({
         )}
         {urls.length > 1 && (
           <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-900/70 text-white">
-            {idx + 1} / {urls.length}
+            {activeIdx + 1} / {urls.length}
           </span>
         )}
         {canAllowImage && (
@@ -273,12 +310,12 @@ export function ListingCarousel({
         </div>
       )}
 
-      {/* Thumb strip — horizontal scroll on overflow, matched thumb framed emerald. */}
+      {/* Thumbnails wrap so all listing images remain visible without horizontal scrolling. */}
       {urls.length > 1 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        <div className="flex flex-wrap items-center gap-1.5">
           {urls.map((u, i) => {
             const sim = scoredByUrl.get(u);
-            const isActive = i === idx;
+            const isActive = i === activeIdx;
             const isBest = u === bestUrl;
             return (
               <button

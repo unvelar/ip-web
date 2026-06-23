@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL || "";
+const API = import.meta.env.DEV ? "" : import.meta.env.VITE_API_URL || "";
 
 let token: string | null = localStorage.getItem("auth_token");
 
