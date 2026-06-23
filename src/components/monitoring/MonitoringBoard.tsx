@@ -1057,7 +1057,7 @@ export function MonitoringBoard({
                   <SortHeader label="Platform" col="platform" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="hidden lg:table-cell" />
                   <th className="hidden sm:table-cell py-1.5 px-2 font-semibold">Status</th>
                   <SortHeader label="Price" col="price" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} align="right" className="hidden md:table-cell" />
-                  <SortHeader label="Days" col="days" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} align="right" />
+                  <SortHeader label="Updated" col="updated" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} align="right" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">

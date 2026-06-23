@@ -76,7 +76,8 @@ export function FindingRow({
   const market = estimatedMarket(f);
   const sb = findingStatusBadge(f);
   const foundAgo = formatAgo(f.found_at) ?? "—";
-  const updatedAgo = formatAgo(f.last_checked_at);
+  const updatedAgo = formatAgo(f.updated_at) ?? "—";
+  const checkedAgo = formatAgo(f.last_checked_at);
   const title = compactListingTitle(f);
   const sellerLine = f.seller_name || "—";
   // Show the USD-normalized price so the Price column reads monotonically when
@@ -183,12 +184,16 @@ export function FindingRow({
         {priceText ?? <span className="text-stone-300">—</span>}
       </td>
 
-      {/* Days — found relative; tooltip carries last-checked. */}
+      {/* Updated — reviewer-facing activity timestamp; tooltip carries context. */}
       <td
         className="py-1 px-2 align-middle text-right whitespace-nowrap text-[11px] text-stone-500 tabular-nums"
-        title={updatedAgo ? `Updated ${updatedAgo}` : undefined}
+        title={[
+          f.updated_at ? `Updated ${new Date(f.updated_at).toLocaleString()}` : null,
+          `Found ${foundAgo}`,
+          checkedAgo ? `Last checked ${checkedAgo}` : null,
+        ].filter(Boolean).join(" · ")}
       >
-        {foundAgo}
+        {updatedAgo}
       </td>
     </>
   );

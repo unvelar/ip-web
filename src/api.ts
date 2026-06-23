@@ -1029,6 +1029,7 @@ export interface IpReviewFinding {
   case_id: string | null;
   enforcement_priority: number;
   found_at: string;
+  updated_at: string;
   dismissed_at: string | null;
   availability: string | null;
   dismissal_reason: string | null;

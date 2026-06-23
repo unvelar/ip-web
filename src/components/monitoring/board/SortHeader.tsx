@@ -3,13 +3,13 @@ import type { MonitoringSortMode } from "../../../api";
 // Sortable table columns → their asc/desc server sort modes. Clicking a header
 // applies `desc` first, then toggles. `score_desc` (the default) mirrors the
 // backend ORDER BY (priority desc, found_at desc).
-type SortCol = "rate" | "seller" | "platform" | "price" | "days";
+type SortCol = "rate" | "seller" | "platform" | "price" | "updated";
 const SORT_COLS: Record<SortCol, { asc: MonitoringSortMode; desc: MonitoringSortMode }> = {
   rate: { desc: "score_desc", asc: "score_asc" },
   seller: { desc: "seller_desc", asc: "seller_asc" },
   platform: { desc: "platform_desc", asc: "platform_asc" },
   price: { desc: "price_desc", asc: "price_asc" },
-  days: { desc: "found_desc", asc: "found_asc" },
+  updated: { desc: "updated_desc", asc: "updated_asc" },
 };
 
 // Sortable column header. First click sorts desc, subsequent clicks toggle.
