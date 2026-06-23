@@ -1750,10 +1750,17 @@ export function discoverMonitoringCampaigns(opts: { lookback_days?: number; limi
   });
 }
 
-export function listMonitoringCampaigns(opts: { limit?: number; include_dismissed?: boolean } = {}) {
+export function listMonitoringCampaigns(opts: {
+  limit?: number;
+  include_dismissed?: boolean;
+  include_inactive?: boolean;
+  ip_id?: string | null;
+} = {}) {
   const params = new URLSearchParams();
   params.set("limit", String(opts.limit ?? 50));
   if (opts.include_dismissed) params.set("include_dismissed", "true");
+  if (opts.include_inactive) params.set("include_inactive", "true");
+  if (opts.ip_id) params.set("ip_id", opts.ip_id);
   return request<{ campaigns: MonitoringCampaignSummary[] }>(
     `/api/monitoring/campaigns?${params.toString()}`,
   );

@@ -17,6 +17,7 @@ import {
   dismissIpFinding,
   discoverMonitoringCampaigns,
   getMonitoringCampaign,
+  listTrademarks,
   listMonitoringCampaigns,
   markIpFindingEnforced,
   markIpFindingNeedsReview,
@@ -28,6 +29,7 @@ import {
   type MonitoringCampaignMember,
   type MonitoringReviewOutcome,
   type MonitoringCampaignSummary,
+  type Trademark,
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
@@ -753,6 +755,9 @@ export default function MonitoringCampaigns() {
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [discovering, setDiscovering] = useState(false);
+  const [ips, setIps] = useState<Trademark[]>([]);
+  const [selectedIpId, setSelectedIpId] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -762,14 +767,18 @@ export default function MonitoringCampaigns() {
     setLoadingList(true);
     setError("");
     try {
-      const { campaigns } = await listMonitoringCampaigns({ limit: 100 });
+      const { campaigns } = await listMonitoringCampaigns({
+        limit: 100,
+        ip_id: selectedIpId || null,
+        include_inactive: showInactive,
+      });
       setCampaigns(campaigns);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load campaigns");
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [selectedIpId, showInactive]);
 
   async function handleDiscoverCampaigns() {
     setDiscovering(true);
@@ -812,6 +821,22 @@ export default function MonitoringCampaigns() {
   }, [loadCampaigns]);
 
   useEffect(() => {
+    let cancelled = false;
+    listTrademarks()
+      .then(({ trademarks }) => {
+        if (!cancelled) {
+          setIps([...trademarks].sort((a, b) => a.name.localeCompare(b.name)));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setIps([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!activeCampaignId) {
       setCampaign(null);
       return;
@@ -827,7 +852,7 @@ export default function MonitoringCampaigns() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-stone-900">Campaigns</h1>
           <p className="mt-1 text-xs text-stone-500">
-            {campaigns.length} active campaign{campaigns.length === 1 ? "" : "s"}
+            {campaigns.length} {showInactive ? "" : "active "}campaign{campaigns.length === 1 ? "" : "s"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -864,7 +889,9 @@ export default function MonitoringCampaigns() {
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
         <div className="rounded-lg border border-stone-200 bg-white">
           <div className="flex items-center justify-between border-b border-stone-100 px-3 py-2">
-            <div className="text-xs font-bold uppercase tracking-wide text-stone-500">Active</div>
+            <div className="text-xs font-bold uppercase tracking-wide text-stone-500">
+              {showInactive ? "Campaigns" : "Active"}
+            </div>
             <button
               type="button"
               onClick={() => void loadCampaigns()}
@@ -875,10 +902,34 @@ export default function MonitoringCampaigns() {
               <RefreshCw size={13} />
             </button>
           </div>
+          <div className="space-y-2 border-b border-stone-100 px-3 py-3">
+            <select
+              value={selectedIpId}
+              onChange={(e) => setSelectedIpId(e.target.value)}
+              className="h-8 w-full rounded-md border border-stone-200 bg-white px-2 text-xs font-semibold text-stone-700 outline-none focus:border-blue-400"
+              aria-label="Filter campaigns by IP"
+            >
+              <option value="">All IPs</option>
+              {ips.map((ip) => (
+                <option key={ip.id} value={ip.id}>
+                  {ip.name}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)}
+                className="h-4 w-4 rounded border-stone-300 text-blue-600"
+              />
+              Show campaigns with no active cases
+            </label>
+          </div>
           {loadingList ? (
             <div className="px-3 py-8 text-center text-sm text-stone-400">Loading...</div>
           ) : campaigns.length === 0 ? (
-            <div className="px-3 py-8 text-center text-sm text-stone-400">No campaigns yet.</div>
+            <div className="px-3 py-8 text-center text-sm text-stone-400">No matching campaigns.</div>
           ) : (
             <div>
               {campaigns.map((item) => (
