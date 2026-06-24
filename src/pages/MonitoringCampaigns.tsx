@@ -505,6 +505,35 @@ function CampaignDetailPanel({
     setBatchResult(`Added ${openFindings.length} related finding${openFindings.length === 1 ? "" : "s"} to the campaign batch.`);
   }
 
+  useEffect(() => {
+    function editableTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName.toLowerCase();
+      return target.isContentEditable || tag === "input" || tag === "textarea" || tag === "select";
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (editableTarget(e.target)) return;
+      if (batchProgress || confirmAction || campaignBatchMembers.length === 0) return;
+
+      const action: BatchAction | null =
+        e.key === "1" ? "false_positive" :
+        e.key === "2" ? "second_hand" :
+        e.key === "3" ? "do_not_pursue" :
+        e.key.toLowerCase() === "r" ? "review" :
+        e.key.toLowerCase() === "t" ? "send" :
+        null;
+      if (!action) return;
+
+      e.preventDefault();
+      setConfirmAction(action);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [batchProgress, campaignBatchMembers.length, confirmAction]);
+
   function refreshAfterInspectorUpdate(opts?: { completed?: boolean }) {
     if (opts?.completed) setActiveMemberId(null);
     onReload();
