@@ -2,11 +2,11 @@ import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
 import {
+  actionabilityMeta,
   findingChips,
+  findingFlaggedReason,
   findingStatusBadge,
   formatAgo,
-  suggestionMeta,
-  suggestionTitle,
 } from "./utils";
 
 export function GridFindingCard({
@@ -47,14 +47,15 @@ export function GridFindingCard({
   onUpdated: (opts?: FindingUpdateOptions) => void;
 }) {
   const status = findingStatusBadge(f);
-  const suggestion = suggestionMeta(f.suggested_review_outcome);
+  const actionability = actionabilityMeta(f.actionability);
+  const whyFlagged = findingFlaggedReason(f);
   const chips = findingChips(f, showIp);
   const detailCount = [
     f.listing_title,
     f.description_summary,
     f.description_full,
-    f.match_explanation,
-    f.infringement_reasoning,
+    whyFlagged,
+    f.actionability?.reason,
     f.seller_name,
     f.price,
   ].filter(Boolean).length;
@@ -62,6 +63,8 @@ export function GridFindingCard({
     !!(f.seller_name || f.seller_url) &&
     !f.licensed_seller &&
     f.dismissal_reason !== "licensed";
+  const inactiveListing =
+    f.dismissal_reason?.startsWith("dead") || f.availability?.startsWith("dead");
 
   return (
     <div
@@ -91,14 +94,12 @@ export function GridFindingCard({
       </div>
       <div className="p-3 space-y-2 flex flex-col grow">
         <div className="flex items-center gap-1 flex-wrap min-h-6">
-          {suggestion && (
-            <span
-              className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${suggestion.cls}`}
-              title={suggestionTitle(f, suggestion.shortcut)}
-            >
-              {suggestion.label}
-            </span>
-          )}
+          <span
+            className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${actionability.cls}`}
+            title={actionability.reason}
+          >
+            {actionability.label}
+          </span>
           {f.manual_candidate_outcome && (
             <span
               className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700"
@@ -146,15 +147,30 @@ export function GridFindingCard({
                 {f.description_full}
               </p>
             )}
-            {(f.match_explanation || f.infringement_reasoning || f.vlm_reasoning) && (
+            {whyFlagged && (
               <p>
                 <span className="font-semibold text-stone-500">Why flagged: </span>
-                {f.match_explanation || f.infringement_reasoning || f.vlm_reasoning}
+                {whyFlagged}
+              </p>
+            )}
+            {f.actionability && (
+              <p className="space-y-1">
+                <span className="block">
+                  <span className="font-semibold text-stone-500">AI recommendation: </span>
+                  {actionability.label}
+                </span>
+                <span className="block">
+                  <span className="font-semibold text-stone-500">Why recommended: </span>
+                  {actionability.reason}
+                </span>
               </p>
             )}
             {(f.seller_name || f.seller_url || f.price || f.location) && (
               <p className="text-stone-500">
                 {[f.seller_name, f.price, f.location].filter(Boolean).join(" - ")}
+                {(f.seller_prior_enforcement_count ?? 0) > 0 && (
+                  <> - {f.seller_prior_enforcement_count} prior takedown/enforced</>
+                )}
                 {f.seller_url && (
                   <>
                     {" - "}
@@ -169,7 +185,13 @@ export function GridFindingCard({
               Open listing
             </a>
             {detailCount === 0 && (
-              <p className="italic text-stone-400">Listing details still being analysed.</p>
+              <p className="italic text-stone-400">
+                {inactiveListing
+                  ? "Listing is inactive."
+                  : f.enrichment_error
+                    ? `Listing details unavailable: ${f.enrichment_error}`
+                    : "Listing details still being analysed."}
+              </p>
             )}
           </div>
         </details>

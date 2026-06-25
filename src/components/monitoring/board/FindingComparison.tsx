@@ -4,7 +4,9 @@ import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
 import {
+  actionabilityMeta,
   dismissalBadge,
+  findingFlaggedReason,
   findingStatusBadge,
   formatAgo,
   formatMoney,
@@ -12,8 +14,6 @@ import {
   licenseStatusMeta,
   matchMethodChip,
   methodChip,
-  suggestionMeta,
-  suggestionTitle,
 } from "./utils";
 
 export function FindingComparison({
@@ -57,11 +57,17 @@ export function FindingComparison({
   // Enrichment hit a reCAPTCHA / bot-wall — the screenshot is the challenge
   // page, not the listing.
   const isChallenge = /recaptcha|bot-wall/i.test(f.enrichment_error || "");
+  const noListingDetails =
+    !f.listing_title && !f.seller_name && !f.match_explanation && !f.description_summary;
+  const inactiveListing =
+    f.dismissal_reason?.startsWith("dead") || f.availability?.startsWith("dead");
 
   const sb = findingStatusBadge(f);
-  const suggestion = suggestionMeta(f.suggested_review_outcome);
+  const actionability = actionabilityMeta(f.actionability);
   const infringement = infringementTypeMeta(f.infringement_type);
   const licenseStatus = licenseStatusMeta(f.license_status, { licensedSeller });
+  const sellerPriorEnforcement = f.seller_prior_enforcement_count ?? 0;
+  const whyFlagged = findingFlaggedReason(f);
 
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
@@ -77,14 +83,12 @@ export function FindingComparison({
           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sb.cls}`}>
             {sb.label}
           </span>
-          {suggestion && (
-            <span
-              className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${suggestion.cls}`}
-              title={suggestionTitle(f, suggestion.shortcut)}
-            >
-              {suggestion.label}
-            </span>
-          )}
+          <span
+            className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${actionability.cls}`}
+            title={actionability.reason}
+          >
+            {actionability.label}
+          </span>
           {f.manual_candidate_outcome && (
             <span
               className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700"
@@ -167,28 +171,12 @@ export function FindingComparison({
         {f.shipping_price && (
           <span className="text-stone-500" title="Shipping">+ {f.shipping_price}</span>
         )}
-        {infringement && (
-          <span
-            className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-700 font-semibold"
-            title={infringement.title}
-          >
-            {infringement.label}
-          </span>
-        )}
         {(f.country || f.location) && (
           <span
             className="text-stone-500"
             title={f.location && f.country && f.location !== f.country ? f.location : undefined}
           >
             📍 {f.country || f.location}
-          </span>
-        )}
-        {licenseStatus && (
-          <span
-            className={`px-1.5 py-0.5 rounded font-semibold ${licenseStatus.cls}`}
-            title={licenseStatus.title}
-          >
-            {licenseStatus.label}
           </span>
         )}
         {f.quantity_available != null && f.quantity_available > 0 && (
@@ -235,15 +223,25 @@ export function FindingComparison({
           {f.seller_years_active != null && f.seller_years_active > 0 && (
             <span>· {f.seller_years_active}y</span>
           )}
+          {sellerPriorEnforcement > 0 && (
+            <span className="font-semibold text-red-700">
+              · {sellerPriorEnforcement} prior takedown/enforced
+            </span>
+          )}
         </div>
       )}
 
-      {(f.match_explanation || f.infringement_reasoning || f.vlm_reasoning) && (
+      {whyFlagged && (
         <div className="text-sm text-stone-600 leading-relaxed border-l-2 border-amber-300 pl-2">
           <span className="font-semibold text-stone-500">Why flagged: </span>
-          {f.match_explanation || f.infringement_reasoning || f.vlm_reasoning}
+          {whyFlagged}
         </div>
       )}
+
+      <div className={`text-sm leading-relaxed border-l-2 pl-2 py-1 rounded-r ${actionability.subtleCls}`}>
+        <div><span className="font-semibold">AI recommendation: </span>{actionability.label}</div>
+        <div><span className="font-semibold">Why recommended: </span>{actionability.reason}</div>
+      </div>
 
       {f.description_summary && (
         <p className="text-sm text-stone-500 leading-relaxed">{f.description_summary}</p>
@@ -274,8 +272,14 @@ export function FindingComparison({
         </details>
       )}
 
-      {!f.listing_title && !f.seller_name && !f.match_explanation && !f.description_summary && (
-        <p className="text-sm text-stone-400 italic">Listing details still being analysed…</p>
+      {noListingDetails && (
+        <p className="text-sm text-stone-400 italic">
+          {inactiveListing
+            ? "Listing is inactive; no current listing details available."
+            : f.enrichment_error
+              ? `Listing details unavailable: ${f.enrichment_error}`
+              : "Listing details still being analysed…"}
+        </p>
       )}
 
       {/* Footer meta — reviewer-relevant timestamps + the listing link. */}
@@ -318,6 +322,19 @@ export function FindingComparison({
               vlm: {f.vlm_verdict}
               {f.vlm_confidence != null && `@${Math.round(f.vlm_confidence * 100)}%`}
             </span>
+          )}
+          {infringement && (
+            <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600" title={infringement.title}>
+              {infringement.label}
+            </span>
+          )}
+          {licenseStatus && (
+            <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600" title={licenseStatus.title}>
+              {licenseStatus.label}
+            </span>
+          )}
+          {f.license_reasoning && (
+            <span className="text-stone-500">· license: {f.license_reasoning}</span>
           )}
           {f.published_at && <span className="text-stone-400">· {f.published_at}</span>}
         </div>

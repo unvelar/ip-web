@@ -14,7 +14,7 @@ export const DISMISSAL_REASON_LABELS: Record<MonitoringDismissalReasonFilter, st
   second_hand: "Second hand / allowed",
   licensed: "Licensed",
   allowed_product: "Allowed product",
-  dead: "Dead link",
+  dead: "Dead / inactive",
   manual_cleared: "Manual clear",
 };
 

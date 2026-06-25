@@ -2,14 +2,13 @@ import { useState } from "react";
 import type { IpReviewFinding } from "../../../api";
 import {
   QTY_FALLBACK,
+  actionabilityMeta,
   compactListingTitle,
   estimatedMarket,
   findingChips,
   findingStatusBadge,
   formatAgo,
   formatMoney,
-  suggestionMeta,
-  suggestionTitle,
   tableImageUrls,
 } from "./utils";
 
@@ -87,7 +86,7 @@ export function FindingRow({
     f.price_value_usd != null ? formatMoney(Number(f.price_value_usd), "USD") : null;
   const priceText = priceUsd ?? f.price ?? null;
   const chips = findingChips(f, showIp);
-  const suggestion = suggestionMeta(f.suggested_review_outcome);
+  const actionability = actionabilityMeta(f.actionability);
 
   return (
     <>
@@ -114,20 +113,18 @@ export function FindingRow({
         <FindingTableThumbnail urls={thumbUrls} title={title} />
       </td>
 
-      {/* Listing — title + suggestion badge + chips on one non-wrapping line. */}
+      {/* Listing — title + actionability badge + chips on one non-wrapping line. */}
       <td className="py-1 px-2 align-middle max-w-0 w-full">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           <span className="font-semibold text-[13px] text-stone-900 truncate min-w-0">
             {title}
           </span>
-          {suggestion && (
-            <span
-              className={`shrink-0 px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none ${suggestion.cls}`}
-              title={suggestionTitle(f, suggestion.shortcut)}
-            >
-              {suggestion.label}
-            </span>
-          )}
+          <span
+            className={`shrink-0 px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none ${actionability.cls}`}
+            title={actionability.reason}
+          >
+            {actionability.label}
+          </span>
           {f.manual_candidate_outcome && (
             <span
               className="shrink-0 px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none bg-amber-100 text-amber-700"

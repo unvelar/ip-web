@@ -1047,6 +1047,7 @@ export interface IpReviewFinding {
   infringement_type: string | null;
   infringement_reasoning: string | null;
   license_status: string | null;
+  license_reasoning: string | null;
   /** True when the seller matches a saved IP x domain license rule. */
   licensed_seller: boolean;
   screenshot_url: string | null;
@@ -1078,6 +1079,7 @@ export interface IpReviewFinding {
     matched_ref_image_id?: string | null;
   }> | null;
   seller_sales: number | null;
+  seller_prior_enforcement_count: number | null;
   seller_years_active: number | null;
   seller_rating: number | null;
   seller_rating_count: number | null;
@@ -1103,6 +1105,7 @@ export interface IpReviewFinding {
     | "second_hand"
     | "none";
   suggested_review_reason: string | null;
+  actionability: MonitoringActionability;
   // Present on tenant-wide findings (GET /api/monitoring/findings) so a
   // multi-IP board can key per-finding actions off the finding's own IP and
   // render an IP chip. Absent on per-IP findings (the IP is implied).
@@ -1534,6 +1537,18 @@ export type MonitoringCandidateOutcome =
   | "takedown"
   | "second_hand"
   | "none";
+export type MonitoringActionabilityKey =
+  | "send_takedown"
+  | "allowed_resale"
+  | "licensed_seller"
+  | "false_positive"
+  | "needs_review";
+
+export interface MonitoringActionability {
+  key: MonitoringActionabilityKey;
+  label: string;
+  reason: string;
+}
 
 export type MonitoringRelatedBucketKey =
   | "same_seller"

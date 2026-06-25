@@ -26,7 +26,7 @@ function uniqueDefined(values: Array<string | null | undefined>) {
 export function selectedFindingSummary(findings: IpReviewFinding[]) {
   if (findings.length === 0) return [];
   const parts: string[] = [];
-  const takedownCount = findings.filter((f) => f.suggested_review_outcome === "takedown").length;
+  const takedownCount = findings.filter((f) => f.actionability?.key === "send_takedown").length;
   if (takedownCount === findings.length) parts.push("Takedown");
   else if (takedownCount > 0) parts.push(`${takedownCount} AI takedown recs`);
 
@@ -112,8 +112,11 @@ export function dismissalBadge(reason: string | null) {
     case "allowed_product":
       return { label: "allowed product", cls: "bg-teal-100 text-teal-700" };
     default:
-      return reason?.startsWith("dead_link")
-        ? { label: "dead link", cls: "bg-orange-100 text-orange-700" }
+      return reason?.startsWith("dead")
+        ? {
+            label: reason === "dead_listing_inactive" ? "inactive" : "dead link",
+            cls: "bg-orange-100 text-orange-700",
+          }
         : { label: "dismissed", cls: "bg-stone-200 text-stone-600" };
   }
 }
@@ -347,6 +350,45 @@ export function suggestionTitle(f: IpReviewFinding, shortcut: string) {
   ].filter(Boolean).join(" · ");
 }
 
+export function actionabilityMeta(actionability: IpReviewFinding["actionability"] | null | undefined) {
+  const value = actionability ?? {
+    key: "needs_review" as const,
+    label: "Needs review",
+    reason: "Evidence is not decisive enough for an automatic recommendation.",
+  };
+  switch (value.key) {
+    case "send_takedown":
+      return { ...value, cls: "bg-blue-700 text-white", subtleCls: "border-blue-300 bg-blue-50 text-blue-900" };
+    case "allowed_resale":
+      return { ...value, cls: "bg-purple-700 text-white", subtleCls: "border-purple-300 bg-purple-50 text-purple-900" };
+    case "licensed_seller":
+      return { ...value, cls: "bg-emerald-700 text-white", subtleCls: "border-emerald-300 bg-emerald-50 text-emerald-900" };
+    case "false_positive":
+      return { ...value, cls: "bg-stone-800 text-white", subtleCls: "border-stone-300 bg-stone-50 text-stone-800" };
+    case "needs_review":
+    default:
+      return { ...value, cls: "bg-amber-600 text-white", subtleCls: "border-amber-300 bg-amber-50 text-amber-900" };
+  }
+}
+
+export function findingFlaggedReason(
+  f: Pick<IpReviewFinding, "match_explanation" | "infringement_reasoning" | "vlm_reasoning">,
+) {
+  const seen = new Set<string>();
+  return [
+    f.match_explanation,
+    f.infringement_reasoning,
+    f.vlm_reasoning,
+  ]
+    .map((v) => v?.trim())
+    .filter((v): v is string => {
+      if (!v || seen.has(v)) return false;
+      seen.add(v);
+      return true;
+    })
+    .join(" ");
+}
+
 export function compactListingTitle(f: IpReviewFinding) {
   if (f.listing_title?.trim()) return f.listing_title.trim();
   try {
@@ -361,16 +403,12 @@ export function findingChips(f: IpReviewFinding, showIp?: boolean) {
   const priceUsd =
     f.price_value_usd != null ? formatMoney(Number(f.price_value_usd), "USD") : null;
   const priceText = priceUsd ?? f.price ?? null;
-  const infringement = infringementTypeMeta(f.infringement_type);
-  const condition = inferCondition(f);
   const category =
     detailValue(f.item_details, ["category", "type", "department"]) ||
-    infringement?.label ||
     null;
   return [
     showIp && f.ip_name ? f.ip_name : null,
     category,
-    condition ? `Condition: ${condition}` : null,
     priceText,
     f.domain,
   ].filter(Boolean) as string[];
