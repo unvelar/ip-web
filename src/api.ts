@@ -87,12 +87,15 @@ export interface BaselineConfig {
   canonical_proximity?: { k?: number; min_proximity?: number; calibration_percentile?: string };
 }
 
+export type MonitoringFrequency = "daily" | "weekly" | "monthly";
+
 export interface Trademark {
   id: string;
   name: string;
   description: string | null;
   /** Monitoring keywords proposed by the wizard's VLM step + user edits. */
   keywords: string[];
+  monitoring_frequency: MonitoringFrequency;
   image_count: number;
   indexed_count: number;
   centroid_dino: number[] | null;
@@ -200,12 +203,17 @@ export function updateTrademark(
     guidelines?: string | null;
     baseline_config?: BaselineConfig | null;
     keywords?: string[];
+    monitoring_frequency?: MonitoringFrequency;
   }
 ) {
   return request<{ trademark: Trademark }>(`/api/ip/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+}
+
+export function setIpMonitoringFrequency(ipId: string, frequency: MonitoringFrequency) {
+  return updateTrademark(ipId, { monitoring_frequency: frequency });
 }
 
 export async function uploadTrademarkImages(trademarkId: string, files: File[]) {
@@ -717,8 +725,6 @@ export function deleteAdminImage(id: string, imageId: string) {
 
 // --- Brand monitoring (scrape target sites for IP infringements) ---
 
-export type MonitoringFrequency = "daily" | "weekly";
-
 export interface MonitoredDomain {
   id: string;
   tenant_id: string;
@@ -758,7 +764,6 @@ export interface ReverseSearchRun {
 
 export interface MonitoringSettings {
   monitoring_enabled: boolean;
-  monitoring_frequency: MonitoringFrequency | string;
 }
 
 export function listMonitoredDomains() {
@@ -818,7 +823,6 @@ export function getMonitoringSettings() {
 
 export function updateMonitoringSettings(patch: {
   enabled?: boolean;
-  frequency?: MonitoringFrequency;
 }) {
   return request<{ settings: MonitoringSettings | null }>("/api/monitoring/settings", {
     method: "PATCH",
@@ -1834,6 +1838,7 @@ export interface MonitoredIpSummary {
   ip_id: string;
   ip_name: string;
   keywords: string[] | null;
+  monitoring_frequency: MonitoringFrequency;
   platforms: {
     id: string;
     domain: string;

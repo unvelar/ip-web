@@ -7,12 +7,24 @@ import {
   setIpMonitoringPlatformEnabled,
   setIpMonitoringPlatformCountry,
   removeIpMonitoringPlatform,
+  setIpMonitoringFrequency,
   triggerIpMonitoringRun,
   triggerIpMonitoringPlatformRun,
+  type MonitoringFrequency,
   type MonitoredDomain,
 } from "../../api";
 import { COUNTRIES, countryLabel } from "../../lib/countries";
 import { KNOWN_PLATFORMS } from "../../lib/platforms";
+
+const FREQUENCY_OPTIONS: { value: MonitoringFrequency; label: string }[] = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
+
+function isMonitoringFrequency(value: unknown): value is MonitoringFrequency {
+  return value === "daily" || value === "weekly" || value === "monthly";
+}
 
 /**
  * The watched-platforms panel for a single IP: list domains (with
@@ -27,23 +39,31 @@ import { KNOWN_PLATFORMS } from "../../lib/platforms";
 export function PlatformsPanel({
   ipId,
   keywords,
+  monitoringFrequency,
   onRunTriggered,
   onPlatformsChanged,
+  onMonitoringFrequencyChanged,
 }: {
   ipId: string;
   /** The IP's monitoring keywords — used only to gate the "add terms" hint. */
   keywords: string[] | null;
+  /** The IP's scheduled scan cadence. */
+  monitoringFrequency?: MonitoringFrequency | string | null;
   /** Fired after "Refresh now" enqueues a run (host can poll findings). */
   onRunTriggered?: () => void;
   /** Fired after platforms are added/removed/toggled. */
   onPlatformsChanged?: () => void;
+  /** Fired after the scheduled scan cadence changes. */
+  onMonitoringFrequencyChanged?: (frequency: MonitoringFrequency) => void;
 }) {
   const hasKeywords = (keywords ?? []).length > 0;
+  const currentFrequency = isMonitoringFrequency(monitoringFrequency) ? monitoringFrequency : "weekly";
 
   const [platforms, setPlatforms] = useState<MonitoredDomain[]>([]);
   const [newDomain, setNewDomain] = useState("");
   const [newCountry, setNewCountry] = useState("");
   const [adding, setAdding] = useState(false);
+  const [savingFrequency, setSavingFrequency] = useState<MonitoringFrequency | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingPlatformId, setRefreshingPlatformId] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -110,6 +130,20 @@ export function PlatformsPanel({
     }
   }
 
+  async function changeFrequency(frequency: MonitoringFrequency) {
+    if (savingFrequency || frequency === currentFrequency) return;
+    setSavingFrequency(frequency);
+    setErr("");
+    try {
+      const { trademark } = await setIpMonitoringFrequency(ipId, frequency);
+      onMonitoringFrequencyChanged?.(trademark.monitoring_frequency);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingFrequency(null);
+    }
+  }
+
   async function refreshNow() {
     if (refreshing) return;
     setRefreshing(true);
@@ -142,14 +176,34 @@ export function PlatformsPanel({
 
   return (
     <div className="rounded-xl border border-stone-200 bg-white px-5 py-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <label className="text-xs font-medium text-stone-400 uppercase tracking-wider">Monitoring</label>
           <p className="text-xs text-stone-500 mt-0.5">
             Watched platforms scraped for this IP's keywords. Findings appear below.
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <div className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5">
+            {FREQUENCY_OPTIONS.map((option) => {
+              const active = currentFrequency === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => void changeFrequency(option.value)}
+                  disabled={savingFrequency !== null}
+                  className={`min-w-[4.75rem] whitespace-nowrap px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all disabled:opacity-50 ${
+                    active
+                      ? "bg-white text-stone-900 shadow-sm"
+                      : "text-stone-500 hover:text-stone-900"
+                  }`}
+                >
+                  {savingFrequency === option.value ? "Saving…" : option.label}
+                </button>
+              );
+            })}
+          </div>
           <Link
             to={`/ips/${ipId}/audit`}
             className="text-xs text-blue-700 hover:underline"

@@ -7,7 +7,6 @@ import {
   updateMonitoringSettings,
   type ApiKey,
   type MonitoringSettings,
-  type MonitoringFrequency,
 } from "../api";
 
 const DOCS_URL = `${import.meta.env.VITE_API_URL || ""}/api/docs`;
@@ -201,9 +200,8 @@ export default function Settings() {
   );
 }
 
-// Tenant-global monitoring schedule. Per-IP platforms + findings live on the
-// IP detail page (/ips/:id); this just governs whether/when the
-// scheduler fans out runs.
+// Tenant-global monitoring scheduler gate. Per-IP cadence lives with each
+// IP's monitoring settings.
 function MonitoringSettingsSection() {
   const [settings, setSettings] = useState<MonitoringSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -225,22 +223,12 @@ function MonitoringSettingsSection() {
     }
   }
 
-  async function setFrequency(frequency: MonitoringFrequency) {
-    try {
-      const r = await updateMonitoringSettings({ frequency });
-      setSettings(r.settings);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
   return (
     <section className="space-y-3">
       <div>
         <h2 className="text-lg font-black text-stone-900 tracking-tight">Monitoring</h2>
         <p className="mt-1 text-sm text-stone-500">
-          When enabled, the scheduler fans out runs for every IP's watched
-          platforms on this cadence. Add platforms per-IP from Monitoring.
+          When enabled, the scheduler fans out runs for watched IP platforms.
         </p>
       </div>
 
@@ -271,26 +259,6 @@ function MonitoringSettingsSection() {
           >
             {settings?.monitoring_enabled ? "On" : "Off"}
           </button>
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-stone-500">Frequency:</span>
-          {(["daily", "weekly"] as MonitoringFrequency[]).map((f) => {
-            const active = settings?.monitoring_frequency === f;
-            return (
-              <button
-                key={f}
-                disabled={!settings}
-                onClick={() => setFrequency(f)}
-                className={`px-3 py-1 rounded-full font-semibold transition-all disabled:opacity-50 ${
-                  active
-                    ? "bg-stone-900 text-white"
-                    : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-                }`}
-              >
-                {f}
-              </button>
-            );
-          })}
         </div>
       </div>
     </section>

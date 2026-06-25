@@ -296,7 +296,12 @@ export default function RegistryDetail() {
       <AllowedProductImagesSection ipId={ip.id} />
 
       {/* Monitoring — watched platforms + findings board */}
-      <MonitoringSection ip={ip} />
+      <MonitoringSection
+        ip={ip}
+        onFrequencyChanged={(monitoring_frequency) =>
+          setIp((current) => (current ? { ...current, monitoring_frequency } : current))
+        }
+      />
 
       {/* Takedown signer — per-IP rights-holder + signatory details */}
       <IpTakedownSigner ipId={ip.id} />
@@ -632,8 +637,19 @@ function LicensesSection({ ipId }: { ipId: string }) {
 
 // IP-centric monitoring: which platforms are wired to this IP. Findings live
 // exclusively on the global /findings board (no duplication).
-function MonitoringSection({ ip }: { ip: Trademark }) {
+function MonitoringSection({
+  ip,
+  onFrequencyChanged,
+}: {
+  ip: Trademark;
+  onFrequencyChanged: (frequency: Trademark["monitoring_frequency"]) => void;
+}) {
   return (
-    <PlatformsPanel ipId={ip.id} keywords={ip.keywords} />
+    <PlatformsPanel
+      ipId={ip.id}
+      keywords={ip.keywords}
+      monitoringFrequency={ip.monitoring_frequency}
+      onMonitoringFrequencyChanged={onFrequencyChanged}
+    />
   );
 }

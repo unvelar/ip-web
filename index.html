@@ -13,6 +13,7 @@
         if (p) {
           // Strip legacy /ip-detection-web/ prefix from old cached URLs
           p = p.replace(/^\/ip-detection-web/, '');
+          if (!p.startsWith('/')) p = '/' + p;
           window.history.replaceState(null, '', p);
         }
       })();

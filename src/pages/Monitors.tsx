@@ -154,6 +154,8 @@ function MonitoredIpCard({
       <PlatformsPanel
         ipId={ip.ip_id}
         keywords={ip.keywords}
+        monitoringFrequency={ip.monitoring_frequency}
+        onMonitoringFrequencyChanged={onChanged}
         onPlatformsChanged={onChanged}
       />
     </div>
