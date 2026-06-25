@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <script>
-    // SPA redirect: rewrite path as query param so index.html can restore it
-    var path = window.location.pathname;
+    // SPA redirect: rewrite the full client route as a query param so
+    // index.html can restore it after GitHub Pages serves this 404 fallback.
+    var path = window.location.pathname + window.location.search + window.location.hash;
     window.location.replace(
       window.location.origin + '/?p=' + encodeURIComponent(path)
     );

@@ -13,12 +13,13 @@
         if (p) {
           // Strip legacy /ip-detection-web/ prefix from old cached URLs
           p = p.replace(/^\/ip-detection-web/, '');
+          if (!p.startsWith('/')) p = '/' + p;
           window.history.replaceState(null, '', p);
         }
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-D_lSlarV.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-nMrd6kjt.css">
+    <script type="module" crossorigin src="/assets/index-UC2VQILn.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-C6bkCHvY.css">
   </head>
   <body>
     <div id="root"></div>
