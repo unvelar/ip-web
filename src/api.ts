@@ -643,6 +643,29 @@ export const ADMIN_SOURCES = [
 ] as const;
 export type AdminSource = (typeof ADMIN_SOURCES)[number];
 
+export interface TenantUsageStats {
+  accounts: number;
+  ips: number;
+  ip_images: number;
+  cases: number;
+  case_comments: number;
+  jobs: number;
+  monitored_domains: number;
+  reverse_search_runs: number;
+  monitor_candidates: number;
+  monitor_audit: number;
+  ip_reviews: number;
+  takedown_requests: number;
+  visual_match_feedback: number;
+  api_keys: number;
+  ip_licenses: number;
+  cleared_listings: number;
+  allowed_product_images: number;
+  monitoring_campaigns: number;
+  monitoring_campaign_findings: number;
+  public_intakes: number;
+}
+
 export interface Tenant {
   id: string;
   name: string | null;
@@ -650,6 +673,8 @@ export interface Tenant {
   email_domain: string | null;
   owner_workos_user_id: string | null;
   created_at: string;
+  usage?: TenantUsageStats;
+  usage_total?: number;
 }
 
 /** Human label for a tenant in the admin switcher. */
@@ -658,8 +683,24 @@ export function tenantLabel(t: Tenant): string {
 }
 
 /** All tenants, for the admin "operate as any tenant" switcher. Admin-only. */
-export function listTenants() {
-  return request<{ tenants: Tenant[] }>(`/api/admin/tenants`);
+export function listTenants(opts: { includeUsage?: boolean } = {}) {
+  const qs = new URLSearchParams();
+  if (opts.includeUsage) qs.set("include_usage", "1");
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return request<{ tenants: Tenant[] }>(`/api/admin/tenants${suffix}`);
+}
+
+export function createTenant(name: string) {
+  return request<{ tenant: Tenant }>(`/api/admin/tenants`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteTenant(id: string) {
+  return request<{ ok: boolean }>(`/api/admin/tenants/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 // --- Public IP monitoring intake ---

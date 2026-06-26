@@ -1,7 +1,30 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import Nav from "../components/Nav";
+import { startPublicIntakeEmail } from "../api";
 
 export default function Landing() {
+  const navigate = useNavigate();
+  const [scanEmail, setScanEmail] = useState("");
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanError, setScanError] = useState("");
+
+  async function handleHeroScan(e: React.FormEvent) {
+    e.preventDefault();
+    if (!scanEmail.trim() || scanBusy) return;
+    setScanBusy(true);
+    setScanError("");
+    try {
+      const verification = await startPublicIntakeEmail(scanEmail.trim());
+      navigate("/monitor/start", { state: { verification } });
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScanBusy(false);
+    }
+  }
+
   return (
     <div className="relative bg-cream text-stone-900 font-[Inter,system-ui,sans-serif]">
       <Nav />
@@ -34,31 +57,35 @@ export default function Landing() {
               artwork — and clears new work before it ships. Purpose-built for
               legal and IP teams in film and gaming.
             </p>
-            <div className="mt-10 flex flex-wrap gap-3 justify-center">
-              <Link
-                to="/monitor/start"
-                className="group relative px-6 py-3 bg-stone-900 text-white rounded-full text-sm font-semibold overflow-hidden shadow-lg shadow-stone-900/20 hover:shadow-xl hover:shadow-stone-900/30 hover:-translate-y-0.5 transition-all"
+            <form
+              onSubmit={handleHeroScan}
+              className="mt-10 mx-auto max-w-xl rounded-full border border-stone-900/10 bg-white/75 backdrop-blur p-1.5 shadow-lg shadow-stone-900/10 flex flex-col sm:flex-row gap-2"
+            >
+              <input
+                type="email"
+                value={scanEmail}
+                onChange={(e) => setScanEmail(e.target.value)}
+                placeholder="name@company.com"
+                className="min-w-0 flex-1 h-11 rounded-full bg-transparent px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={scanBusy || !scanEmail.trim()}
+                className="h-11 rounded-full bg-stone-900 px-5 text-sm font-semibold text-white shadow-md shadow-stone-900/20 hover:bg-stone-800 disabled:opacity-45 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
               >
-                <span className="relative z-10 flex items-center gap-2">
-                  Start scan
-                  <svg
-                    className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M17 8l4 4m0 0l-4 4m4-4H3"
-                    />
-                  </svg>
+                {scanBusy && <Loader2 size={16} className="animate-spin" />}
+                Scan
+              </button>
+            </form>
+            <div className="mt-4 flex flex-wrap gap-3 justify-center items-center">
+              {scanError && (
+                <span className="text-sm font-semibold text-red-700 bg-red-50 border border-red-100 rounded-full px-3 py-1">
+                  {scanError}
                 </span>
-              </Link>
+              )}
               <a
                 href="#features"
-                className="px-6 py-3 border border-stone-300/80 bg-white/60 backdrop-blur text-stone-700 rounded-full text-sm font-semibold hover:bg-white hover:border-stone-400 transition-all"
+                className="px-4 py-2 border border-stone-300/80 bg-white/60 backdrop-blur text-stone-700 rounded-full text-xs font-semibold hover:bg-white hover:border-stone-400 transition-all"
               >
                 Explore the platform
               </a>

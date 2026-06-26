@@ -34,6 +34,7 @@ const INBOX_POLL_MS = 60_000;
 
 const MON_OPEN_KEY = "appshell.mon.open";
 const CLE_OPEN_KEY = "appshell.cle.open";
+const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
 
 /**
  * Application shell — left sidebar (lg+) / off-canvas drawer (below lg) +
@@ -64,10 +65,20 @@ export default function AppShell() {
       return;
     }
     let alive = true;
-    listTenants()
-      .then(({ tenants }) => alive && setTenants(tenants))
-      .catch(() => {/* non-fatal — switcher just stays empty */});
-    return () => { alive = false; };
+    async function refreshTenants() {
+      try {
+        const res = await listTenants();
+        if (alive) setTenants(res.tenants);
+      } catch {
+        // Non-fatal: the switcher just stays at the prior value.
+      }
+    }
+    void refreshTenants();
+    window.addEventListener(TENANTS_CHANGED_EVENT, refreshTenants);
+    return () => {
+      alive = false;
+      window.removeEventListener(TENANTS_CHANGED_EVENT, refreshTenants);
+    };
   }, [user]);
 
   const actingTenant = tenants.find((t) => t.id === actingTenantId) ?? null;

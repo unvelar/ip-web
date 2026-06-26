@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Building2, Inbox } from "lucide-react";
 import {
   ADMIN_SOURCES,
   searchAdminIps,
@@ -66,12 +67,22 @@ export default function Admin() {
             Search every IP across all catalogs. Open one to manage its reference images and caption.
           </p>
         </div>
-        <Link
-          to="/admin/intakes"
-          className="inline-flex items-center justify-center h-9 px-3 rounded-md bg-stone-900 text-white text-xs font-semibold hover:bg-stone-800"
-        >
-          Public intakes
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/admin/tenants"
+            className="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md bg-stone-900 text-white text-xs font-semibold hover:bg-stone-800"
+          >
+            <Building2 size={15} />
+            Tenants
+          </Link>
+          <Link
+            to="/admin/intakes"
+            className="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-stone-200 bg-white text-stone-700 text-xs font-semibold hover:bg-stone-50"
+          >
+            <Inbox size={15} />
+            Public intakes
+          </Link>
+        </div>
       </div>
 
       {error && (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, Check, ImagePlus, Loader2, Mail, ShieldCheck } from "lucide-react";
 import BrandMark from "../components/BrandMark";
 import {
@@ -10,11 +10,16 @@ import {
 } from "../api";
 
 type Step = "email" | "code" | "details" | "done";
+type PublicIntakeLocationState = {
+  verification?: PublicIntakeEmailStart;
+};
 
 export default function PublicIntake() {
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
-  const [verification, setVerification] = useState<PublicIntakeEmailStart | null>(null);
+  const { state } = useLocation();
+  const initialVerification = (state as PublicIntakeLocationState | null)?.verification ?? null;
+  const [step, setStep] = useState<Step>(initialVerification ? "code" : "email");
+  const [email, setEmail] = useState(initialVerification?.email ?? "");
+  const [verification, setVerification] = useState<PublicIntakeEmailStart | null>(initialVerification);
   const [verificationToken, setVerificationToken] = useState("");
   const [code, setCode] = useState("");
 
@@ -23,6 +28,7 @@ export default function PublicIntake() {
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<Array<{ file: File; url: string }>>([]);
+  const [dragActive, setDragActive] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -84,9 +90,31 @@ export default function PublicIntake() {
     }
   }
 
-  function handleFiles(next: FileList | null) {
+  function handleFiles(next: FileList | File[] | null) {
     if (!next) return;
-    setFiles(Array.from(next).slice(0, 5));
+    const incoming = Array.from(next).filter((file) => !file.type || file.type.startsWith("image/"));
+    setFiles((current) => {
+      const merged = [...current];
+      const seen = new Set(current.map(fileKey));
+      for (const file of incoming) {
+        const key = fileKey(file);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(file);
+        if (merged.length >= 5) break;
+      }
+      return merged;
+    });
+  }
+
+  function fileKey(file: File) {
+    return `${file.name}:${file.size}:${file.lastModified}`;
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setDragActive(false);
+    handleFiles(Array.from(e.dataTransfer.files));
   }
 
   useEffect(() => {
@@ -212,7 +240,7 @@ export default function PublicIntake() {
                     />
                   </label>
                 </div>
-                <label className="block">
+                <div className="block">
                   <span className="block text-xs font-bold text-stone-500 mb-1.5">Reference images</span>
                   <input
                     type="file"
@@ -224,14 +252,32 @@ export default function PublicIntake() {
                   />
                   <label
                     htmlFor="public-intake-images"
-                    className="min-h-28 rounded-md border border-dashed border-stone-300 bg-stone-50 hover:bg-stone-100 transition-colors cursor-pointer flex items-center justify-center text-sm font-semibold text-stone-600"
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      setDragActive(false);
+                    }}
+                    onDrop={handleDrop}
+                    className={[
+                      "min-h-28 rounded-md border border-dashed transition-colors cursor-pointer flex items-center justify-center text-sm font-semibold",
+                      dragActive
+                        ? "border-red-500 bg-red-50 text-red-700"
+                        : "border-stone-300 bg-stone-50 hover:bg-stone-100 text-stone-600",
+                    ].join(" ")}
                   >
                     <span className="inline-flex items-center gap-2">
                       <ImagePlus size={18} />
-                      Add images
+                      {dragActive ? "Drop images" : "Add images"}
                     </span>
                   </label>
-                </label>
+                </div>
                 {previews.length > 0 && (
                   <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                     {previews.map(({ file, url }) => (

@@ -25,6 +25,7 @@ import PublicIntake from "./pages/PublicIntake";
 import Admin from "./pages/Admin";
 import AdminIntakes from "./pages/AdminIntakes";
 import AdminIpDetail from "./pages/AdminIpDetail";
+import AdminTenants from "./pages/AdminTenants";
 import Settings from "./pages/Settings";
 
 function TrademarkRedirect() {
@@ -165,6 +166,7 @@ export default function App() {
       <Route element={<AdminRoute><AppShell /></AdminRoute>}>
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/intakes" element={<AdminIntakes />} />
+        <Route path="/admin/tenants" element={<AdminTenants />} />
         <Route path="/admin/ips/:id" element={<AdminIpDetail />} />
       </Route>
 
