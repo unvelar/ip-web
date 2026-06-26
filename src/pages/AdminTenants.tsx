@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle,
   Building2,
-  CheckCircle2,
   Loader2,
   Plus,
   RefreshCw,
@@ -16,42 +14,9 @@ import {
   listTenants,
   tenantLabel,
   type Tenant,
-  type TenantUsageStats,
 } from "../api";
 
 const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
-
-const ZERO_USAGE: TenantUsageStats = {
-  accounts: 0,
-  ips: 0,
-  ip_images: 0,
-  cases: 0,
-  case_comments: 0,
-  jobs: 0,
-  monitored_domains: 0,
-  reverse_search_runs: 0,
-  monitor_candidates: 0,
-  monitor_audit: 0,
-  ip_reviews: 0,
-  takedown_requests: 0,
-  visual_match_feedback: 0,
-  api_keys: 0,
-  ip_licenses: 0,
-  cleared_listings: 0,
-  allowed_product_images: 0,
-  monitoring_campaigns: 0,
-  monitoring_campaign_findings: 0,
-  public_intakes: 0,
-};
-
-const PRIMARY_USAGE: Array<[keyof TenantUsageStats, string]> = [
-  ["accounts", "accounts"],
-  ["ips", "IPs"],
-  ["cases", "cases"],
-  ["jobs", "jobs"],
-  ["monitored_domains", "monitors"],
-  ["ip_reviews", "reviews"],
-];
 
 export default function AdminTenants() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -85,7 +50,7 @@ export default function AdminTenants() {
     setLoading(true);
     setError("");
     try {
-      const res = await listTenants({ includeUsage: true });
+      const res = await listTenants();
       setTenants(res.tenants);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -115,15 +80,10 @@ export default function AdminTenants() {
   async function handleRemove(tenant: Tenant) {
     if (deletingId) return;
     const label = tenantLabel(tenant);
-    const total = usageTotal(tenant);
-    if (total > 0) {
-      const confirmation = window.prompt(
-        `Delete ${label} and all related tenant data? This will permanently remove ${formatUsageCount(total)} across accounts, IPs, monitors, jobs, cases, and related records.\n\nType DELETE to continue.`,
-      );
-      if (confirmation !== "DELETE") return;
-    } else if (!window.confirm(`Remove empty tenant ${label}? This cannot be undone.`)) {
-      return;
-    }
+    const confirmation = window.prompt(
+      `Delete ${label}? This will permanently remove this tenant and all related tenant data, including accounts, IPs, monitors, jobs, cases, and related records.\n\nType DELETE to continue.`,
+    );
+    if (confirmation !== "DELETE") return;
     setDeletingId(tenant.id);
     setError("");
     try {
@@ -151,10 +111,11 @@ export default function AdminTenants() {
         <button
           type="button"
           onClick={() => void load()}
-          className="h-9 w-9 rounded-md border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 inline-flex items-center justify-center"
+          disabled={loading}
+          className="h-9 w-9 rounded-md border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 inline-flex items-center justify-center disabled:opacity-45"
           title="Refresh"
         >
-          <RefreshCw size={16} />
+          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
         </button>
       </header>
 
@@ -214,7 +175,7 @@ export default function AdminTenants() {
           <div className="divide-y divide-stone-100">
             {filtered.map((tenant) => {
               return (
-                <div key={tenant.id} className="px-4 py-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] lg:items-center">
+                <div key={tenant.id} className="px-4 py-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <Building2 size={16} className="shrink-0 text-stone-400" />
@@ -227,8 +188,6 @@ export default function AdminTenants() {
                     </div>
                     <div className="mt-1 font-mono text-[11px] text-stone-400 truncate">{tenant.id}</div>
                   </div>
-
-                  <UsageSummary tenant={tenant} />
 
                   <button
                     type="button"
@@ -252,56 +211,6 @@ export default function AdminTenants() {
       </section>
     </div>
   );
-}
-
-function UsageSummary({ tenant }: { tenant: Tenant }) {
-  const usage = tenant.usage ?? ZERO_USAGE;
-  const total = usageTotal(tenant);
-  if (total === 0) {
-    return (
-      <div className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700">
-        <CheckCircle2 size={15} />
-        Empty
-      </div>
-    );
-  }
-
-  const shown = PRIMARY_USAGE.reduce((sum, [key]) => sum + usage[key], 0);
-  const other = Math.max(0, total - shown);
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {PRIMARY_USAGE.map(([key, label]) => (
-        usage[key] > 0 ? <UsagePill key={key} label={label} count={usage[key]} /> : null
-      ))}
-      {other > 0 && <UsagePill label="other" count={other} />}
-      <span
-        className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700"
-        title="Remove is available only after usage is zero"
-      >
-        <AlertTriangle size={13} />
-        {total.toLocaleString()} total
-      </span>
-    </div>
-  );
-}
-
-function UsagePill({ label, count }: { label: string; count: number }) {
-  return (
-    <span className="inline-flex items-center rounded-md bg-stone-100 px-2 py-1 text-[11px] font-semibold text-stone-600">
-      {count.toLocaleString()} {label}
-    </span>
-  );
-}
-
-function usageTotal(tenant: Tenant) {
-  if (typeof tenant.usage_total === "number") return tenant.usage_total;
-  const usage = tenant.usage ?? ZERO_USAGE;
-  return Object.values(usage).reduce((sum, value) => sum + value, 0);
-}
-
-function formatUsageCount(value: number) {
-  return `${value.toLocaleString()} related record${value === 1 ? "" : "s"}`;
 }
 
 function formatDate(value: string) {

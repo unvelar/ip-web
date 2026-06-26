@@ -99,6 +99,7 @@ export default function AppShell() {
   const clePathActive =
     pathname.startsWith("/clearance") ||
     pathname.startsWith("/ip-reviews/");
+  const adminPathActive = pathname === "/admin" || pathname.startsWith("/admin/");
 
   const [monOpen, setMonOpen] = useState<boolean>(() => loadOpen(MON_OPEN_KEY));
   const [cleOpen, setCleOpen] = useState<boolean>(() => loadOpen(CLE_OPEN_KEY));
@@ -126,6 +127,7 @@ export default function AppShell() {
       setMonitoringCount(0);
       return;
     }
+    if (adminPathActive) return;
     let alive = true;
     async function refresh() {
       try {
@@ -146,7 +148,7 @@ export default function AppShell() {
       alive = false;
       clearInterval(t);
     };
-  }, [user, pathname]);
+  }, [user, pathname, adminPathActive]);
 
   // Close mobile drawer on navigation.
   useEffect(() => {
