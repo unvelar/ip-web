@@ -20,6 +20,7 @@ import Dashboard from "./pages/Dashboard";
 import BrandsCatalog from "./pages/BrandsCatalog";
 import DesignsCatalog from "./pages/DesignsCatalog";
 import PopCultureCatalog from "./pages/PopCultureCatalog";
+import BrandSumup from "./pages/BrandSumup";
 import Admin from "./pages/Admin";
 import AdminIpDetail from "./pages/AdminIpDetail";
 import Settings from "./pages/Settings";
@@ -167,6 +168,7 @@ export default function App() {
       {/* Public: landing OR auth-aware dashboard switch */}
       <Route path="/" element={<HomeSwitch />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/brand-sumups/:tenantName/:ipName" element={<BrandSumup />} />
 
       {/* Redirects — preserve old URLs */}
       <Route path="/registry" element={<Navigate to="/ips" replace />} />

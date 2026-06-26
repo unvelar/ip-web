@@ -92,6 +92,8 @@ export type MonitoringFrequency = "daily" | "weekly" | "monthly";
 export interface Trademark {
   id: string;
   name: string;
+  public_slug: string | null;
+  tenant_public_slug: string | null;
   description: string | null;
   /** Monitoring keywords proposed by the wizard's VLM step + user edits. */
   keywords: string[];
@@ -644,6 +646,7 @@ export type AdminSource = (typeof ADMIN_SOURCES)[number];
 export interface Tenant {
   id: string;
   name: string | null;
+  public_slug: string | null;
   email_domain: string | null;
   owner_workos_user_id: string | null;
   created_at: string;
@@ -657,6 +660,48 @@ export function tenantLabel(t: Tenant): string {
 /** All tenants, for the admin "operate as any tenant" switcher. Admin-only. */
 export function listTenants() {
   return request<{ tenants: Tenant[] }>(`/api/admin/tenants`);
+}
+
+// --- Public brand sum-up pages ---
+
+export interface PublicBrandSumup {
+  tenant: { name: string; slug: string };
+  ip: { name: string; slug: string };
+  generated_at: string;
+  totals: {
+    analyzed_count: number;
+    triaged_count: number;
+    to_takedown_count: number;
+    potential_count?: number;
+    infringement_percentage: number;
+    potential_infringement_percentage?: number;
+    estimated_value_usd: number;
+    confirmed_value_usd?: number;
+    potential_value_usd?: number;
+  };
+  websites: Array<{
+    domain: string;
+    analyzed_count: number;
+    triaged_count: number;
+    to_takedown_count: number;
+    potential_count?: number;
+    infringement_percentage: number;
+    potential_infringement_percentage?: number;
+    estimated_value_usd: number;
+    confirmed_value_usd?: number;
+    potential_value_usd?: number;
+  }>;
+}
+
+export async function getPublicBrandSumup(tenantName: string, ipName: string) {
+  const res = await fetch(
+    `${API}/api/brand-sumups/${encodeURIComponent(tenantName)}/${encodeURIComponent(ipName)}`,
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json() as Promise<PublicBrandSumup>;
 }
 
 export function searchAdminIps(opts: {

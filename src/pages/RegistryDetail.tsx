@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Trash2 } from "lucide-react";
+import { Check, Copy, ExternalLink, Trash2 } from "lucide-react";
 import {
   getTrademark,
   deleteTrademark,
@@ -40,6 +40,7 @@ export default function RegistryDetail() {
   const [descDraft, setDescDraft] = useState("");
   const [savingDesc, setSavingDesc] = useState(false);
   const [keywordDraft, setKeywordDraft] = useState("");
+  const [copiedPublicLink, setCopiedPublicLink] = useState(false);
   const keywordSaveSeq = useRef(0);
 
   const indexJob = useJobPoller(indexJobId);
@@ -131,6 +132,16 @@ export default function RegistryDetail() {
     navigate("/ips");
   }
 
+  async function copyPublicSummaryLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedPublicLink(true);
+      setTimeout(() => setCopiedPublicLink(false), 1600);
+    } catch (e: unknown) {
+      setError(errorMessage(e));
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-16 flex justify-center">
@@ -141,11 +152,15 @@ export default function RegistryDetail() {
   if (!ip) return <p className="text-red-600 p-8">IP not found</p>;
 
   const pendingImages = images.filter((i) => i.status === "pending");
+  const publicSummaryUrl =
+    ip.tenant_public_slug && ip.public_slug
+      ? `${window.location.origin}/brand-sumups/${ip.tenant_public_slug}/${ip.public_slug}`
+      : null;
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12 space-y-8">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-stone-900 tracking-tight">{ip.name}</h1>
           <div className="mt-3 flex items-center gap-2 text-sm">
@@ -161,11 +176,39 @@ export default function RegistryDetail() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {publicSummaryUrl && (
+            <div className="flex items-center rounded-xl border border-stone-200 bg-white overflow-hidden">
+              <button
+                type="button"
+                onClick={() => void copyPublicSummaryLink(publicSummaryUrl)}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 transition-colors"
+                title="Copy public summary link"
+              >
+                {copiedPublicLink ? (
+                  <Check className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+                ) : (
+                  <Copy className="w-4 h-4" aria-hidden="true" />
+                )}
+                {copiedPublicLink ? "Copied" : "Copy public summary"}
+              </button>
+              <a
+                href={publicSummaryUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center w-10 self-stretch border-l border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors"
+                title="Open public summary"
+                aria-label="Open public summary"
+              >
+                <ExternalLink className="w-4 h-4" aria-hidden="true" />
+              </a>
+            </div>
+          )}
           <button
             onClick={handleDelete}
-            className="px-4 py-2 text-sm text-red-500 border border-red-100 rounded-xl hover:bg-red-50 transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm text-red-500 border border-red-100 rounded-xl hover:bg-red-50 transition-all"
           >
+            <Trash2 className="w-4 h-4" aria-hidden="true" />
             Delete
           </button>
         </div>
