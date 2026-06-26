@@ -372,13 +372,8 @@ export function MonitoringInboxView() {
 
       {!loaded ? (
         <div className="text-sm text-stone-400 py-8 text-center">Loading…</div>
-      ) : !facets || (facets.total === 0 && boardFindings.length === 0) ? (
-        <div className="rounded-2xl border border-stone-200 bg-white px-5 py-12 text-center">
-          <p className="text-sm text-stone-600">No findings yet</p>
-          <p className="text-xs text-stone-400 mt-1">
-            Add platforms under <span className="font-semibold">Monitoring</span>.
-          </p>
-        </div>
+      ) : !facets ? (
+        <div className="text-sm text-stone-400 py-8 text-center">No task data available.</div>
       ) : (
         <MonitoringBoard
           findings={boardFindings}

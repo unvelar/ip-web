@@ -415,13 +415,22 @@ export function MonitoringBoard({
 
   const undoReviewToast = useCallback(async (action: LastReviewAction) => {
     if (!action.undo || undoingToastIds.has(action.id)) return;
+    const undo = action.undo;
     setUndoingToastIds((prev) => new Set(prev).add(action.id));
     try {
-      if (action.undo.kind === "undismiss") {
-        await undismissIpFinding(action.undo.ipId, action.undo.resultId);
+      if (undo.kind === "undismiss") {
+        await undismissIpFinding(undo.ipId, undo.resultId);
       } else {
-        await reopenIpFinding(action.undo.ipId, action.undo.resultId);
+        await reopenIpFinding(undo.ipId, undo.resultId);
       }
+      setResultCompleting(undo.resultId, false);
+      setDismissing((prev) => {
+        if (!prev.has(undo.resultId)) return prev;
+        const next = new Set(prev);
+        next.delete(undo.resultId);
+        return next;
+      });
+      setActiveFinding(undo.resultId);
       dismissReviewToast(action.id);
       onRefresh();
     } catch (e) {
@@ -433,7 +442,13 @@ export function MonitoringBoard({
         return next;
       });
     }
-  }, [dismissReviewToast, onRefresh, undoingToastIds]);
+  }, [
+    dismissReviewToast,
+    onRefresh,
+    setActiveFinding,
+    setResultCompleting,
+    undoingToastIds,
+  ]);
 
   useEffect(() => {
     if (reviewToasts.length === 0) return;
