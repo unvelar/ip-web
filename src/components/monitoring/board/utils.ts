@@ -188,9 +188,9 @@ export function tableImageUrls(f: IpReviewFinding): string[] {
 }
 
 // Fallback quantity when the listing didn't expose stock — most marketplaces
-// hide it, so a flat 10 keeps the KPI honest as a rough upper bound rather
+// hide it, so a flat 150 keeps the KPI honest as a rough market estimate rather
 // than the per-listing `1` that systematically under-counts.
-export const QTY_FALLBACK = 10;
+export const QTY_FALLBACK = 150;
 
 // Per-row "Estimated unlicensed market" = USD unit price × quantity. Uses the
 // server-converted `price_value_usd` so every row reads in one currency (USD),
