@@ -113,9 +113,17 @@ export default function AdminTenants() {
   }
 
   async function handleRemove(tenant: Tenant) {
-    if (usageTotal(tenant) > 0 || deletingId) return;
+    if (deletingId) return;
     const label = tenantLabel(tenant);
-    if (!window.confirm(`Remove ${label}? This cannot be undone.`)) return;
+    const total = usageTotal(tenant);
+    if (total > 0) {
+      const confirmation = window.prompt(
+        `Delete ${label} and all related tenant data? This will permanently remove ${formatUsageCount(total)} across accounts, IPs, monitors, jobs, cases, and related records.\n\nType DELETE to continue.`,
+      );
+      if (confirmation !== "DELETE") return;
+    } else if (!window.confirm(`Remove empty tenant ${label}? This cannot be undone.`)) {
+      return;
+    }
     setDeletingId(tenant.id);
     setError("");
     try {
@@ -205,8 +213,6 @@ export default function AdminTenants() {
         ) : (
           <div className="divide-y divide-stone-100">
             {filtered.map((tenant) => {
-              const total = usageTotal(tenant);
-              const canRemove = total === 0;
               return (
                 <div key={tenant.id} className="px-4 py-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] lg:items-center">
                   <div className="min-w-0">
@@ -226,22 +232,17 @@ export default function AdminTenants() {
 
                   <button
                     type="button"
-                    disabled={!canRemove || deletingId === tenant.id}
+                    disabled={Boolean(deletingId)}
                     onClick={() => void handleRemove(tenant)}
-                    title={canRemove ? "Remove tenant" : "Only empty tenants can be removed"}
-                    className={[
-                      "h-9 px-3 rounded-md text-xs font-semibold inline-flex items-center justify-center gap-2 border transition-colors",
-                      canRemove
-                        ? "border-red-200 text-red-700 bg-white hover:bg-red-50"
-                        : "border-stone-200 text-stone-400 bg-stone-50 cursor-not-allowed",
-                    ].join(" ")}
+                    title="Delete tenant and all related tenant data"
+                    className="h-9 px-3 rounded-md text-xs font-semibold inline-flex items-center justify-center gap-2 border border-red-200 text-red-700 bg-white hover:bg-red-50 disabled:opacity-45 disabled:cursor-wait transition-colors"
                   >
                     {deletingId === tenant.id ? (
                       <Loader2 size={15} className="animate-spin" />
                     ) : (
                       <Trash2 size={15} />
                     )}
-                    {canRemove ? "Remove" : "In use"}
+                    Delete
                   </button>
                 </div>
               );
@@ -297,6 +298,10 @@ function usageTotal(tenant: Tenant) {
   if (typeof tenant.usage_total === "number") return tenant.usage_total;
   const usage = tenant.usage ?? ZERO_USAGE;
   return Object.values(usage).reduce((sum, value) => sum + value, 0);
+}
+
+function formatUsageCount(value: number) {
+  return `${value.toLocaleString()} related record${value === 1 ? "" : "s"}`;
 }
 
 function formatDate(value: string) {

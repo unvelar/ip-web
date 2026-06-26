@@ -698,7 +698,14 @@ export function createTenant(name: string) {
 }
 
 export function deleteTenant(id: string) {
-  return request<{ ok: boolean }>(`/api/admin/tenants/${encodeURIComponent(id)}`, {
+  return request<{
+    ok: boolean;
+    tenant: Tenant;
+    deleted: TenantUsageStats;
+    deleted_total: number;
+    storage_deleted: number;
+    storage_failed: number;
+  }>(`/api/admin/tenants/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
 }
