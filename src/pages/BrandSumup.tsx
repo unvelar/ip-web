@@ -188,7 +188,7 @@ function ValueSummary({ data }: { data: PublicBrandSumup }) {
             <h2 className="mt-3 text-3xl sm:text-4xl font-black text-stone-950 tabular-nums">
               {fmtUsd.format(confirmed)}
               <span className="block sm:inline sm:ml-2 text-xl sm:text-2xl text-stone-400">
-                confirmed out of {fmtUsd.format(potential)} potential
+                out of {fmtUsd.format(potential)} potential
               </span>
             </h2>
           </div>
@@ -261,7 +261,7 @@ function WebsiteBreakdown({ websites }: { websites: PublicBrandSumup["websites"]
         <div>
           <h2 className="text-base font-black text-stone-950">Website breakdown</h2>
           <p className="mt-1 text-xs text-stone-500">
-            Confirmed takedowns and potential exposure by marketplace.
+            Takedowns and potential exposure by marketplace.
           </p>
         </div>
         <Globe2 className="w-5 h-5 text-stone-400 shrink-0" aria-hidden="true" />
