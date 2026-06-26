@@ -2,9 +2,6 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import BrandMark from "./BrandMark";
 
-const DEMO_MAILTO =
-  "mailto:antonio.palma@unvelar.com?subject=Unvelar%20Demo%20Request";
-
 /**
  * Marketing-page navigation bar. Only rendered by `Landing.tsx` — the
  * signed-in shell has its own sidebar in `AppShell.tsx`.
@@ -29,12 +26,12 @@ export default function Nav() {
           ) : (
             // Sign in intentionally not surfaced — the portal is invite-only for
             // the current demo phase. /login still works as a direct URL.
-            <a
-              href={DEMO_MAILTO}
+            <Link
+              to="/monitor/start"
               className="px-4 py-1.5 bg-stone-900 text-white text-sm font-semibold rounded-full hover:bg-stone-800 transition-colors"
             >
-              Request a demo
-            </a>
+              Start scan
+            </Link>
           )}
         </div>
       </div>

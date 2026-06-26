@@ -1,9 +1,6 @@
 import { Link } from "react-router-dom";
 import Nav from "../components/Nav";
 
-const DEMO_MAILTO =
-  "mailto:antonio.palma@unvelar.com?subject=Unvelar%20Demo%20Request";
-
 export default function Landing() {
   return (
     <div className="relative bg-cream text-stone-900 font-[Inter,system-ui,sans-serif]">
@@ -38,12 +35,12 @@ export default function Landing() {
               legal and IP teams in film and gaming.
             </p>
             <div className="mt-10 flex flex-wrap gap-3 justify-center">
-              <a
-                href={DEMO_MAILTO}
+              <Link
+                to="/monitor/start"
                 className="group relative px-6 py-3 bg-stone-900 text-white rounded-full text-sm font-semibold overflow-hidden shadow-lg shadow-stone-900/20 hover:shadow-xl hover:shadow-stone-900/30 hover:-translate-y-0.5 transition-all"
               >
                 <span className="relative z-10 flex items-center gap-2">
-                  Request a demo
+                  Start scan
                   <svg
                     className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5"
                     fill="none"
@@ -58,7 +55,7 @@ export default function Landing() {
                     />
                   </svg>
                 </span>
-              </a>
+              </Link>
               <a
                 href="#features"
                 className="px-6 py-3 border border-stone-300/80 bg-white/60 backdrop-blur text-stone-700 rounded-full text-sm font-semibold hover:bg-white hover:border-stone-400 transition-all"
@@ -457,11 +454,11 @@ export default function Landing() {
             cases we surface.
           </p>
           <div className="mt-10 flex flex-wrap justify-center gap-3">
-            <a
-              href={DEMO_MAILTO}
+            <Link
+              to="/monitor/start"
               className="group relative inline-flex items-center gap-2 px-8 py-3.5 bg-white text-stone-900 rounded-full text-sm font-semibold shadow-2xl shadow-black/40 hover:-translate-y-0.5 transition-all"
             >
-              Contact us
+              Start scan
               <svg
                 className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5"
                 fill="none"
@@ -475,7 +472,7 @@ export default function Landing() {
                   d="M17 8l4 4m0 0l-4 4m4-4H3"
                 />
               </svg>
-            </a>
+            </Link>
             <a
               href="#how-it-works"
               className="inline-flex items-center gap-2 px-6 py-3.5 bg-white/5 border border-white/15 backdrop-blur-sm text-white/80 rounded-full text-sm font-semibold hover:bg-white/10 hover:border-white/25 transition-all"

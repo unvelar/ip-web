@@ -21,7 +21,9 @@ import BrandsCatalog from "./pages/BrandsCatalog";
 import DesignsCatalog from "./pages/DesignsCatalog";
 import PopCultureCatalog from "./pages/PopCultureCatalog";
 import BrandSumup from "./pages/BrandSumup";
+import PublicIntake from "./pages/PublicIntake";
 import Admin from "./pages/Admin";
+import AdminIntakes from "./pages/AdminIntakes";
 import AdminIpDetail from "./pages/AdminIpDetail";
 import Settings from "./pages/Settings";
 
@@ -162,12 +164,14 @@ export default function App() {
       {/* Admin (separate gate, same shell) */}
       <Route element={<AdminRoute><AppShell /></AdminRoute>}>
         <Route path="/admin" element={<Admin />} />
+        <Route path="/admin/intakes" element={<AdminIntakes />} />
         <Route path="/admin/ips/:id" element={<AdminIpDetail />} />
       </Route>
 
       {/* Public: landing OR auth-aware dashboard switch */}
       <Route path="/" element={<HomeSwitch />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/monitor/start" element={<PublicIntake />} />
       <Route path="/brand-sumups/:tenantName/:ipName" element={<BrandSumup />} />
 
       {/* Redirects — preserve old URLs */}

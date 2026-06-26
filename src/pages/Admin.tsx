@@ -59,11 +59,19 @@ export default function Admin() {
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12 space-y-8">
-      <div>
-        <h1 className="text-2xl font-black text-stone-900 tracking-tight">Admin · IP Catalog</h1>
-        <p className="mt-1 text-sm text-stone-500">
-          Search every IP across all catalogs. Open one to manage its reference images and caption.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-stone-900 tracking-tight">Admin · IP Catalog</h1>
+          <p className="mt-1 text-sm text-stone-500">
+            Search every IP across all catalogs. Open one to manage its reference images and caption.
+          </p>
+        </div>
+        <Link
+          to="/admin/intakes"
+          className="inline-flex items-center justify-center h-9 px-3 rounded-md bg-stone-900 text-white text-xs font-semibold hover:bg-stone-800"
+        >
+          Public intakes
+        </Link>
       </div>
 
       {error && (
