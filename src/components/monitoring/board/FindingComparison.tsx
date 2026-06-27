@@ -68,6 +68,8 @@ export function FindingComparison({
   const licenseStatus = licenseStatusMeta(f.license_status, { licensedSeller });
   const sellerPriorEnforcement = f.seller_prior_enforcement_count ?? 0;
   const whyFlagged = findingFlaggedReason(f);
+  const countryLabel = f.country || "Unknown";
+  const countryTitle = f.location && f.location !== f.country ? `Raw location: ${f.location}` : undefined;
 
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
@@ -171,14 +173,14 @@ export function FindingComparison({
         {f.shipping_price && (
           <span className="text-stone-500" title="Shipping">+ {f.shipping_price}</span>
         )}
-        {(f.country || f.location) && (
-          <span
-            className="text-stone-500"
-            title={f.location && f.country && f.location !== f.country ? f.location : undefined}
-          >
-            📍 {f.country || f.location}
-          </span>
-        )}
+        <span
+          className={`px-1.5 py-0.5 rounded font-semibold ${
+            f.country ? "bg-stone-100 text-stone-600" : "bg-amber-50 text-amber-700"
+          }`}
+          title={countryTitle}
+        >
+          Country: {countryLabel}
+        </span>
         {f.quantity_available != null && f.quantity_available > 0 && (
           f.quantity_available <= 5 ? (
             <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold" title="Stock left">
