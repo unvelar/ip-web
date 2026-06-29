@@ -19,8 +19,7 @@ import { useAuth } from "../context/AuthContext";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
 import {
-  listIpReviews,
-  needsAttention,
+  getIpReviewsAttentionCount,
   getMonitoringFindingsCount,
   listTenants,
   tenantLabel,
@@ -30,7 +29,7 @@ import {
 /** Inbox badge polling cadence. Cheap server-side aggregation + small payload,
  *  but no need to refetch every few seconds — the badge is a glanceable
  *  notification, not a live counter. */
-const INBOX_POLL_MS = 60_000;
+const INBOX_POLL_MS = 120_000;
 
 const MON_OPEN_KEY = "appshell.mon.open";
 const CLE_OPEN_KEY = "appshell.cle.open";
@@ -131,13 +130,13 @@ export default function AppShell() {
     let alive = true;
     async function refresh() {
       try {
-        const [{ reviews }, { count }] = await Promise.all([
-          listIpReviews({ mode: "clearance", limit: 200 }),
+        const [{ count: clearanceCount }, { count: monitoringCount }] = await Promise.all([
+          getIpReviewsAttentionCount(),
           getMonitoringFindingsCount(),
         ]);
         if (!alive) return;
-        setClearanceCount(reviews.filter(needsAttention).length);
-        setMonitoringCount(count);
+        setClearanceCount(clearanceCount);
+        setMonitoringCount(monitoringCount);
       } catch {
         // Non-fatal — badges just stay at the prior value.
       }

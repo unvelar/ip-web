@@ -1422,6 +1422,10 @@ export function listIpReviews(filter: { mode?: IpReviewMode; decision?: IpReview
   return request<{ reviews: IpReview[] }>(`/api/ip-reviews${qs ? `?${qs}` : ""}`);
 }
 
+export function getIpReviewsAttentionCount() {
+  return request<{ count: number }>("/api/ip-reviews/count");
+}
+
 export async function getIpReview(id: string) {
   const { review } = await request<{ review: IpReview }>(`/api/ip-reviews/${id}`);
   // Defensive: if any annotations row leaked through as a JSON-encoded
