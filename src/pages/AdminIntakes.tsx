@@ -8,7 +8,6 @@ import {
   listTenants,
   rejectPublicIpIntake,
   tenantLabel,
-  type MonitoringFrequency,
   type PublicIpIntakeAdminSummary,
   type PublicIpIntakeImage,
   type PublicIpIntakeStatus,
@@ -36,11 +35,8 @@ export default function AdminIntakes() {
   const [tenantId, setTenantId] = useState("");
   const [tenantName, setTenantName] = useState("");
   const [ipName, setIpName] = useState("");
-  const [targetDomain, setTargetDomain] = useState("");
   const [keywords, setKeywords] = useState("");
   const [description, setDescription] = useState("");
-  const [frequency, setFrequency] = useState<MonitoringFrequency>("weekly");
-  const [startMonitoring, setStartMonitoring] = useState(true);
   const [converting, setConverting] = useState(false);
 
   useEffect(() => {
@@ -75,11 +71,8 @@ export default function AdminIntakes() {
         setTenantId("");
         setTenantName("");
         setIpName(intake.product_name);
-        setTargetDomain(intake.target_domain);
         setKeywords(intake.product_name);
         setDescription(defaultDescription(intake));
-        setFrequency("weekly");
-        setStartMonitoring(true);
       })
       .catch((err) => {
         if (alive) setError(err instanceof Error ? err.message : String(err));
@@ -130,9 +123,6 @@ export default function AdminIntakes() {
         ip_name: ipName.trim(),
         description: description.trim(),
         keywords: keywordList,
-        monitoring_frequency: frequency,
-        start_monitoring: startMonitoring,
-        target_domain: targetDomain.trim(),
       });
       await loadList();
       setSelectedId(res.intake.id);
@@ -166,7 +156,6 @@ export default function AdminIntakes() {
   const page = Math.floor(offset / PAGE_SIZE) + 1;
   const canConvert = detail?.status === "pending" &&
     ipName.trim() &&
-    targetDomain.trim() &&
     (tenantMode !== "existing" || tenantId) &&
     (tenantMode !== "new" || tenantName.trim());
 
@@ -245,7 +234,7 @@ export default function AdminIntakes() {
                         {intake.product_name}
                       </div>
                       <div className="mt-0.5 text-xs text-stone-500 truncate">
-                        {intake.email} / {intake.target_domain}
+                        {intake.email}
                       </div>
                     </div>
                     <StatusBadge status={intake.status} />
@@ -301,7 +290,7 @@ export default function AdminIntakes() {
                     <StatusBadge status={detail.status} />
                   </div>
                   <div className="mt-1 text-sm text-stone-500">
-                    {detail.email} / {detail.target_domain}
+                    {detail.email}
                   </div>
                 </div>
                 {detail.status === "converted" && detail.converted_ip_catalog_id && (
@@ -336,22 +325,11 @@ export default function AdminIntakes() {
                 </div>
               )}
 
-              {detail.notes && (
-                <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600 whitespace-pre-wrap">
-                  {detail.notes}
-                </div>
-              )}
-
               {detail.status === "pending" ? (
                 <div className="space-y-5">
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <Field label="IP name">
-                      <input value={ipName} onChange={(e) => setIpName(e.target.value)} className={inputClass} />
-                    </Field>
-                    <Field label="Monitoring domain">
-                      <input value={targetDomain} onChange={(e) => setTargetDomain(e.target.value)} className={inputClass} />
-                    </Field>
-                  </div>
+                  <Field label="IP name">
+                    <input value={ipName} onChange={(e) => setIpName(e.target.value)} className={inputClass} />
+                  </Field>
 
                   <div className="grid sm:grid-cols-[0.75fr_1.25fr] gap-4">
                     <Field label="Tenant">
@@ -404,27 +382,6 @@ export default function AdminIntakes() {
                       className={inputClass}
                     />
                   </Field>
-
-                  <div className="flex flex-wrap items-center gap-3">
-                    <select
-                      value={frequency}
-                      onChange={(e) => setFrequency(e.target.value as MonitoringFrequency)}
-                      className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm"
-                    >
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
-                    <label className="inline-flex items-center gap-2 text-sm font-semibold text-stone-700">
-                      <input
-                        type="checkbox"
-                        checked={startMonitoring}
-                        onChange={(e) => setStartMonitoring(e.target.checked)}
-                        className="h-4 w-4"
-                      />
-                      Start monitoring
-                    </label>
-                  </div>
 
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
@@ -516,9 +473,5 @@ function formatDate(value: string) {
 }
 
 function defaultDescription(intake: PublicIpIntakeAdminSummary) {
-  return [
-    `Public intake from ${intake.email}.`,
-    `Submitted target: ${intake.target_domain}.`,
-    intake.notes ? `Notes: ${intake.notes}` : "",
-  ].filter(Boolean).join("\n\n");
+  return `Public intake from ${intake.email}.`;
 }

@@ -9,23 +9,20 @@ import {
   type PublicIntakeEmailStart,
 } from "../api";
 
-type Step = "email" | "code" | "details" | "done";
+type Step = "details" | "email" | "code" | "done";
 type PublicIntakeLocationState = {
-  verification?: PublicIntakeEmailStart;
+  productName?: string;
 };
 
 export default function PublicIntake() {
   const { state } = useLocation();
-  const initialVerification = (state as PublicIntakeLocationState | null)?.verification ?? null;
-  const [step, setStep] = useState<Step>(initialVerification ? "code" : "email");
-  const [email, setEmail] = useState(initialVerification?.email ?? "");
-  const [verification, setVerification] = useState<PublicIntakeEmailStart | null>(initialVerification);
-  const [verificationToken, setVerificationToken] = useState("");
+  const initialProductName = (state as PublicIntakeLocationState | null)?.productName ?? "";
+  const [step, setStep] = useState<Step>("details");
+  const [email, setEmail] = useState("");
+  const [verification, setVerification] = useState<PublicIntakeEmailStart | null>(null);
   const [code, setCode] = useState("");
 
-  const [productName, setProductName] = useState("");
-  const [target, setTarget] = useState("");
-  const [notes, setNotes] = useState("");
+  const [productName, setProductName] = useState(initialProductName);
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<Array<{ file: File; url: string }>>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -33,6 +30,13 @@ export default function PublicIntake() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [intakeId, setIntakeId] = useState("");
+
+  function handleDetailsContinue(e: React.FormEvent) {
+    e.preventDefault();
+    if (!productName.trim() || files.length === 0) return;
+    setError("");
+    setStep("email");
+  }
 
   async function handleStartEmail(e: React.FormEvent) {
     e.preventDefault();
@@ -53,35 +57,18 @@ export default function PublicIntake() {
 
   async function handleVerifyCode(e: React.FormEvent) {
     e.preventDefault();
-    if (!verification || code.trim().length !== 6) return;
+    if (!verification || code.trim().length !== 6 || !productName.trim() || files.length === 0) return;
     setBusy(true);
     setError("");
     try {
       const res = await verifyPublicIntakeEmail(verification.verification_id, code.trim());
-      setVerificationToken(res.verification_token);
-      setStep("details");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!verification || !verificationToken || files.length === 0) return;
-    setBusy(true);
-    setError("");
-    try {
-      const res = await submitPublicIpIntake({
+      const submitRes = await submitPublicIpIntake({
         verification_id: verification.verification_id,
-        verification_token: verificationToken,
+        verification_token: res.verification_token,
         product_name: productName.trim(),
-        target: target.trim(),
-        notes: notes.trim(),
         images: files,
       });
-      setIntakeId(res.intake_id);
+      setIntakeId(submitRes.intake_id);
       setStep("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -151,7 +138,7 @@ export default function PublicIntake() {
               See where your IP is being copied.
             </h1>
             <p className="text-sm sm:text-base text-stone-600 leading-7 max-w-md">
-              Submit a company email, the property you want watched, and a few reference images.
+              Submit the property you want watched and a few reference images. We'll ask for a company email after that.
             </p>
             <StepRail current={step} />
           </aside>
@@ -176,10 +163,15 @@ export default function PublicIntake() {
                     autoFocus
                   />
                 </label>
-                <PrimaryButton disabled={busy || !email.trim()}>
-                  {busy ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
-                  Send code
-                </PrimaryButton>
+                <div className="flex items-center gap-2">
+                  <SecondaryButton type="button" onClick={() => setStep("details")}>
+                    Back
+                  </SecondaryButton>
+                  <PrimaryButton disabled={busy || !email.trim()}>
+                    {busy ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+                    Send code
+                  </PrimaryButton>
+                </div>
               </form>
             )}
 
@@ -211,35 +203,25 @@ export default function PublicIntake() {
                   </SecondaryButton>
                   <PrimaryButton disabled={busy || code.length !== 6}>
                     {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                    Verify
+                    Verify & submit
                   </PrimaryButton>
                 </div>
               </form>
             )}
 
             {step === "details" && (
-              <form onSubmit={handleSubmit} className="p-5 sm:p-7 space-y-5">
-                <FormHeader icon={<ImagePlus size={18} />} title="Monitoring request" />
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="block text-xs font-bold text-stone-500 mb-1.5">Product or IP</span>
-                    <input
-                      value={productName}
-                      onChange={(e) => setProductName(e.target.value)}
-                      placeholder="Character, brand, artwork"
-                      className="w-full h-11 px-3 rounded-md border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="block text-xs font-bold text-stone-500 mb-1.5">Website</span>
-                    <input
-                      value={target}
-                      onChange={(e) => setTarget(e.target.value)}
-                      placeholder="etsy.com"
-                      className="w-full h-11 px-3 rounded-md border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
-                    />
-                  </label>
-                </div>
+              <form onSubmit={handleDetailsContinue} className="p-5 sm:p-7 space-y-5">
+                <FormHeader icon={<ImagePlus size={18} />} title="Product references" />
+                <label className="block">
+                  <span className="block text-xs font-bold text-stone-500 mb-1.5">Product or IP</span>
+                  <input
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="Character, brand, artwork"
+                    className="w-full h-11 px-3 rounded-md border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
+                    autoFocus
+                  />
+                </label>
                 <div className="block">
                   <span className="block text-xs font-bold text-stone-500 mb-1.5">Reference images</span>
                   <input
@@ -287,19 +269,9 @@ export default function PublicIntake() {
                     ))}
                   </div>
                 )}
-                <label className="block">
-                  <span className="block text-xs font-bold text-stone-500 mb-1.5">Notes</span>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={4}
-                    placeholder="What should we know about this IP?"
-                    className="w-full px-3 py-2 rounded-md border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
-                  />
-                </label>
-                <PrimaryButton disabled={busy || !productName.trim() || !target.trim() || files.length === 0}>
-                  {busy ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                  Submit request
+                <PrimaryButton disabled={!productName.trim() || files.length === 0}>
+                  <ShieldCheck size={16} />
+                  Continue
                 </PrimaryButton>
               </form>
             )}
@@ -367,9 +339,9 @@ function SecondaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
 
 function StepRail({ current }: { current: Step }) {
   const steps = [
+    ["details", "Reference images"],
     ["email", "Company email"],
     ["code", "Verification"],
-    ["details", "Reference images"],
   ] as const;
   const index = steps.findIndex(([key]) => key === current);
   return (

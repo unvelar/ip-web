@@ -1,28 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
 import Nav from "../components/Nav";
-import { startPublicIntakeEmail } from "../api";
 
 export default function Landing() {
   const navigate = useNavigate();
-  const [scanEmail, setScanEmail] = useState("");
-  const [scanBusy, setScanBusy] = useState(false);
-  const [scanError, setScanError] = useState("");
+  const [scanProduct, setScanProduct] = useState("");
 
-  async function handleHeroScan(e: React.FormEvent) {
+  function handleHeroScan(e: React.FormEvent) {
     e.preventDefault();
-    if (!scanEmail.trim() || scanBusy) return;
-    setScanBusy(true);
-    setScanError("");
-    try {
-      const verification = await startPublicIntakeEmail(scanEmail.trim());
-      navigate("/monitor/start", { state: { verification } });
-    } catch (err) {
-      setScanError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setScanBusy(false);
-    }
+    const productName = scanProduct.trim();
+    if (!productName) return;
+    navigate("/monitor/start", { state: { productName } });
   }
 
   return (
@@ -62,27 +50,20 @@ export default function Landing() {
               className="mt-10 mx-auto max-w-xl rounded-full border border-stone-900/10 bg-white/75 backdrop-blur p-1.5 shadow-lg shadow-stone-900/10 flex flex-col sm:flex-row gap-2"
             >
               <input
-                type="email"
-                value={scanEmail}
-                onChange={(e) => setScanEmail(e.target.value)}
-                placeholder="name@company.com"
+                value={scanProduct}
+                onChange={(e) => setScanProduct(e.target.value)}
+                placeholder="Character, brand, artwork"
                 className="min-w-0 flex-1 h-11 rounded-full bg-transparent px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none"
               />
               <button
                 type="submit"
-                disabled={scanBusy || !scanEmail.trim()}
+                disabled={!scanProduct.trim()}
                 className="h-11 rounded-full bg-stone-900 px-5 text-sm font-semibold text-white shadow-md shadow-stone-900/20 hover:bg-stone-800 disabled:opacity-45 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
               >
-                {scanBusy && <Loader2 size={16} className="animate-spin" />}
                 Scan
               </button>
             </form>
             <div className="mt-4 flex flex-wrap gap-3 justify-center items-center">
-              {scanError && (
-                <span className="text-sm font-semibold text-red-700 bg-red-50 border border-red-100 rounded-full px-3 py-1">
-                  {scanError}
-                </span>
-              )}
               <a
                 href="#features"
                 className="px-4 py-2 border border-stone-300/80 bg-white/60 backdrop-blur text-stone-700 rounded-full text-xs font-semibold hover:bg-white hover:border-stone-400 transition-all"

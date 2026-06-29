@@ -754,16 +754,12 @@ export async function submitPublicIpIntake(input: {
   verification_id: string;
   verification_token: string;
   product_name: string;
-  target: string;
-  notes?: string;
   images: File[];
 }) {
   const form = new FormData();
   form.append("verification_id", input.verification_id);
   form.append("verification_token", input.verification_token);
   form.append("product_name", input.product_name);
-  form.append("target", input.target);
-  if (input.notes) form.append("notes", input.notes);
   for (const file of input.images) form.append("images", file);
 
   const res = await fetch(`${API}/api/public-intakes`, { method: "POST", body: form });
@@ -887,9 +883,6 @@ export interface PublicIpIntakeAdminSummary {
   email: string;
   email_domain: string;
   product_name: string;
-  target_url: string | null;
-  target_domain: string;
-  notes: string | null;
   status: PublicIpIntakeStatus;
   image_count: number;
   converted_tenant_id: string | null;
@@ -954,18 +947,12 @@ export function convertPublicIpIntake(id: string, input: {
   ip_name?: string;
   description?: string;
   keywords?: string[];
-  monitoring_frequency?: MonitoringFrequency;
-  start_monitoring?: boolean;
-  target_domain?: string;
-  country?: string | null;
 }) {
   return request<{
     intake: PublicIpIntakeAdminSummary;
     tenant: Tenant;
     trademark: Trademark;
     index_job_id: string | null;
-    platform: MonitoredDomain | null;
-    monitoring_jobs_enqueued: number;
   }>(`/api/admin/public-intakes/${encodeURIComponent(id)}/convert`, {
     method: "POST",
     body: JSON.stringify(input),
