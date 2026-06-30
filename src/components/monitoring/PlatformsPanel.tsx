@@ -26,10 +26,10 @@ const FREQUENCY_OPTIONS: { value: MonitoringFrequency; label: string }[] = [
 ];
 
 const DEFAULT_OPEN_WEB_SCOPES = [
-  "site:*.shop",
-  "site:*.store",
-  "site:*.com",
-  "site:myshopify.com",
+  "*.shop",
+  "*.store",
+  "*.com",
+  "myshopify.com",
 ];
 const DEFAULT_OPEN_WEB_SCOPE_TEXT = DEFAULT_OPEN_WEB_SCOPES.join("\n");
 
@@ -38,13 +38,41 @@ function sameScopes(a: string[], b: string[]) {
 }
 
 function scopeFromTemplate(template: string) {
-  return template.replace(/\s+["']?\{(?:query|keyword)\}["']?/gi, "").trim();
+  return normalizeScope(
+    template.replace(/\s+["']?\{(?:query|keyword)\}["']?/gi, ""),
+  );
+}
+
+function normalizeScope(scope: string) {
+  return scope
+    .trim()
+    .replace(/^site:/i, "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .split(/[/?#\s]/, 1)[0]
+    .replace(/\/+$/g, "")
+    .toLowerCase();
+}
+
+function uniqueScopes(scopes: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of scopes) {
+    const scope = normalizeScope(raw);
+    if (!scope || seen.has(scope)) continue;
+    seen.add(scope);
+    out.push(scope);
+  }
+  return out;
 }
 
 function openWebConfig(source?: MonitoredDomain | null): OpenWebSearchConfig {
   const raw = source?.source_config ?? {};
   const storedScopes = Array.isArray(raw.search_scopes)
-    ? raw.search_scopes.filter((s): s is string => typeof s === "string")
+    ? raw.search_scopes
+        .filter((s): s is string => typeof s === "string")
+        .map(normalizeScope)
+        .filter(Boolean)
     : [];
   const legacyTemplateScopes = storedScopes.length === 0 && Array.isArray(raw.query_templates)
     ? raw.query_templates
@@ -52,7 +80,7 @@ function openWebConfig(source?: MonitoredDomain | null): OpenWebSearchConfig {
         .map(scopeFromTemplate)
         .filter(Boolean)
     : [];
-  const scopes = storedScopes.length > 0 ? storedScopes : legacyTemplateScopes;
+  const scopes = uniqueScopes(storedScopes.length > 0 ? storedScopes : legacyTemplateScopes);
   const customScopes = scopes.length > 0 && !sameScopes(scopes, DEFAULT_OPEN_WEB_SCOPES)
     ? scopes
     : [];
@@ -223,10 +251,7 @@ export function PlatformsPanel({
 
   async function saveOpenWeb() {
     if (savingOpenWeb) return;
-    const scopes = openWebScopes
-      .split(/\r?\n/)
-      .map((t) => t.trim())
-      .filter(Boolean);
+    const scopes = uniqueScopes(openWebScopes.split(/\r?\n/));
     setSavingOpenWeb(true);
     setErr("");
     try {
@@ -470,7 +495,7 @@ export function PlatformsPanel({
         </div>
 
         <label className="block space-y-1">
-          <span className="text-[10px] text-stone-400 uppercase tracking-wide">Search scopes (optional)</span>
+          <span className="text-[10px] text-stone-400 uppercase tracking-wide">Domain patterns (optional)</span>
           <textarea
             value={openWebScopes}
             onChange={(e) => setOpenWebScopes(e.target.value)}
@@ -483,7 +508,7 @@ export function PlatformsPanel({
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="text-[11px] text-stone-400 flex items-center gap-1.5">
             <Search className="size-3.5" aria-hidden="true" />
-            <span>{openWebScopes.trim() ? "Custom scopes are combined with this IP's keywords." : "Blank uses default shopping scopes with this IP's keywords."}</span>
+            <span>{openWebScopes.trim() ? "Custom domain patterns are combined with this IP's keywords." : "Blank uses default shopping domain patterns with this IP's keywords."}</span>
           </div>
           <button
             onClick={() => void saveOpenWeb()}
