@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import {
   listIpMonitoringPlatforms,
   addIpMonitoringPlatform,
@@ -10,8 +10,11 @@ import {
   setIpMonitoringFrequency,
   triggerIpMonitoringRun,
   triggerIpMonitoringPlatformRun,
+  upsertIpOpenWebSearch,
+  updateIpOpenWebSearch,
   type MonitoringFrequency,
   type MonitoredDomain,
+  type OpenWebSearchConfig,
 } from "../../api";
 import { COUNTRIES, countryLabel } from "../../lib/countries";
 import { KNOWN_PLATFORMS } from "../../lib/platforms";
@@ -21,6 +24,37 @@ const FREQUENCY_OPTIONS: { value: MonitoringFrequency; label: string }[] = [
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
 ];
+
+const OPEN_WEB_ENGINES = [
+  { id: "google_serper", label: "Google" },
+  { id: "brave", label: "Brave" },
+  { id: "bing_searchapi", label: "Bing" },
+  { id: "duckduckgo_searchapi", label: "DuckDuckGo" },
+];
+
+const DEFAULT_OPEN_WEB_TEMPLATES = [
+  'site:*.shop "{query}"',
+  'site:*.store "{query}"',
+  'site:*.com "{query}"',
+  'site:myshopify.com "{query}"',
+];
+
+function openWebConfig(source?: MonitoredDomain | null): OpenWebSearchConfig {
+  const raw = source?.source_config ?? {};
+  const engines = Array.isArray(raw.engines)
+    ? raw.engines.filter((e): e is string => typeof e === "string")
+    : OPEN_WEB_ENGINES.map((e) => e.id);
+  const queryTemplates = Array.isArray(raw.query_templates)
+    ? raw.query_templates.filter((t): t is string => typeof t === "string")
+    : DEFAULT_OPEN_WEB_TEMPLATES;
+  return {
+    engines: engines.length > 0 ? engines : OPEN_WEB_ENGINES.map((e) => e.id),
+    query_templates: queryTemplates.length > 0 ? queryTemplates : DEFAULT_OPEN_WEB_TEMPLATES,
+    max_candidates: typeof raw.max_candidates === "number" ? raw.max_candidates : 200,
+    per_query_limit: typeof raw.per_query_limit === "number" ? raw.per_query_limit : 30,
+    strict_gate: true,
+  };
+}
 
 function isMonitoringFrequency(value: unknown): value is MonitoringFrequency {
   return value === "daily" || value === "weekly" || value === "monthly";
@@ -63,6 +97,9 @@ export function PlatformsPanel({
   const [newDomain, setNewDomain] = useState("");
   const [newCountry, setNewCountry] = useState("");
   const [adding, setAdding] = useState(false);
+  const [openWebEngines, setOpenWebEngines] = useState<string[]>(OPEN_WEB_ENGINES.map((e) => e.id));
+  const [openWebTemplates, setOpenWebTemplates] = useState(DEFAULT_OPEN_WEB_TEMPLATES.join("\n"));
+  const [savingOpenWeb, setSavingOpenWeb] = useState(false);
   const [savingFrequency, setSavingFrequency] = useState<MonitoringFrequency | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingPlatformId, setRefreshingPlatformId] = useState<string | null>(null);
@@ -72,6 +109,10 @@ export function PlatformsPanel({
     try {
       const { platforms } = await listIpMonitoringPlatforms(ipId);
       setPlatforms(platforms);
+      const web = platforms.find((p) => p.source_type === "web_search");
+      const cfg = openWebConfig(web);
+      setOpenWebEngines(cfg.engines);
+      setOpenWebTemplates(cfg.query_templates.join("\n"));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -120,7 +161,7 @@ export function PlatformsPanel({
   }
 
   async function remove(p: MonitoredDomain) {
-    if (!confirm(`Stop monitoring ${p.domain}?`)) return;
+    if (!confirm(`Stop monitoring ${p.display_name || p.domain}?`)) return;
     try {
       await removeIpMonitoringPlatform(ipId, p.id);
       await loadPlatforms();
@@ -174,13 +215,69 @@ export function PlatformsPanel({
     }
   }
 
+  async function saveOpenWeb() {
+    if (savingOpenWeb) return;
+    const templates = openWebTemplates
+      .split(/\r?\n/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (openWebEngines.length === 0 || templates.length === 0) {
+      setErr("Choose at least one search engine and one query pattern.");
+      return;
+    }
+    setSavingOpenWeb(true);
+    setErr("");
+    try {
+      const config = {
+        engines: openWebEngines,
+        query_templates: templates,
+        max_candidates: 200,
+        per_query_limit: 30,
+        strict_gate: true,
+      };
+      const existing = platforms.find((p) => p.source_type === "web_search");
+      if (existing) {
+        await updateIpOpenWebSearch(ipId, existing.id, { enabled: true, config });
+      } else {
+        await upsertIpOpenWebSearch(ipId, config);
+      }
+      await loadPlatforms();
+      onPlatformsChanged?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingOpenWeb(false);
+    }
+  }
+
+  async function toggleOpenWeb(source: MonitoredDomain) {
+    try {
+      await updateIpOpenWebSearch(ipId, source.id, { enabled: !source.enabled });
+      await loadPlatforms();
+      onPlatformsChanged?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function toggleOpenWebEngine(engine: string) {
+    setOpenWebEngines((current) =>
+      current.includes(engine)
+        ? current.filter((e) => e !== engine)
+        : [...current, engine],
+    );
+  }
+
+  const domainPlatforms = platforms.filter((p) => (p.source_type ?? "domain") === "domain");
+  const openWebSource = platforms.find((p) => p.source_type === "web_search") ?? null;
+
   return (
     <div className="rounded-xl border border-stone-200 bg-white px-5 py-4 space-y-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <label className="text-xs font-medium text-stone-400 uppercase tracking-wider">Monitoring</label>
           <p className="text-xs text-stone-500 mt-0.5">
-            Watched platforms scraped for this IP's keywords. Findings appear below.
+            Specific platforms and open-web searches for this IP's keywords.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -228,11 +325,18 @@ export function PlatformsPanel({
 
       {err && <div className="text-xs text-red-600">{err}</div>}
 
-      {platforms.length === 0 ? (
+      <div className="pt-1">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div>
+            <h3 className="text-xs font-semibold text-stone-700">Specific platforms</h3>
+            <p className="text-[11px] text-stone-400">Direct scans on known domains with per-domain scrape plans.</p>
+          </div>
+        </div>
+      {domainPlatforms.length === 0 ? (
         <div className="text-xs text-stone-400 italic">No platforms yet — add one below.</div>
       ) : (
         <div className="divide-y divide-stone-100 border border-stone-100 rounded-lg">
-          {platforms.map((p) => (
+          {domainPlatforms.map((p) => (
             <div key={p.id} className="flex items-center gap-3 px-3 py-2 text-xs">
               <button
                 onClick={() => toggle(p)}
@@ -289,6 +393,7 @@ export function PlatformsPanel({
           ))}
         </div>
       )}
+      </div>
 
       <div className="flex items-end gap-2 flex-wrap">
         <div className="flex flex-col flex-1 min-w-[12rem]">
@@ -335,6 +440,85 @@ export function PlatformsPanel({
         >
           {adding ? "Adding…" : "Add platform"}
         </button>
+      </div>
+
+      <div className="border-t border-stone-100 pt-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-xs font-semibold text-stone-700">Open web search</h3>
+            <p className="text-[11px] text-stone-400">
+              Search engines run these query patterns, then findings are gated more strictly.
+            </p>
+          </div>
+          {openWebSource && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void toggleOpenWeb(openWebSource)}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                  openWebSource.enabled ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-500"
+                }`}
+              >
+                {openWebSource.enabled ? "On" : "Off"}
+              </button>
+              <button
+                onClick={() => void refreshPlatform(openWebSource)}
+                disabled={refreshing || refreshingPlatformId !== null || !openWebSource.enabled || !hasKeywords}
+                className="grid size-7 place-items-center rounded-md border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-300 disabled:opacity-40"
+                title={openWebSource.enabled ? "Refresh open web search" : "Enable open web search before refreshing"}
+              >
+                <RefreshCw
+                  className={`size-3.5 ${refreshingPlatformId === openWebSource.id ? "animate-spin" : ""}`}
+                  aria-hidden="true"
+                />
+                <span className="sr-only">Refresh open web search</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {OPEN_WEB_ENGINES.map((engine) => {
+            const checked = openWebEngines.includes(engine.id);
+            return (
+              <button
+                key={engine.id}
+                type="button"
+                onClick={() => toggleOpenWebEngine(engine.id)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  checked
+                    ? "bg-stone-900 text-white border-stone-900"
+                    : "bg-white text-stone-600 border-stone-200 hover:border-stone-300"
+                }`}
+              >
+                {engine.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <label className="block space-y-1">
+          <span className="text-[10px] text-stone-400 uppercase tracking-wide">Query patterns</span>
+          <textarea
+            value={openWebTemplates}
+            onChange={(e) => setOpenWebTemplates(e.target.value)}
+            rows={4}
+            className="px-2.5 py-2 rounded-lg border border-stone-200 text-xs w-full font-mono"
+          />
+        </label>
+
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="text-[11px] text-stone-400 flex items-center gap-1.5">
+            <Search className="size-3.5" aria-hidden="true" />
+            <span>{openWebSource ? "Configured as an additional monitored source." : "Adds an additional monitored source."}</span>
+          </div>
+          <button
+            onClick={() => void saveOpenWeb()}
+            disabled={savingOpenWeb || !hasKeywords}
+            className="px-3 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-semibold disabled:opacity-50"
+          >
+            {savingOpenWeb ? "Saving…" : openWebSource ? "Save search" : "Add open web search"}
+          </button>
+        </div>
       </div>
     </div>
   );

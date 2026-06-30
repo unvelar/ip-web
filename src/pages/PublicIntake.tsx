@@ -224,6 +224,9 @@ export default function PublicIntake() {
                 </label>
                 <div className="block">
                   <span className="block text-xs font-bold text-stone-500 mb-1.5">Reference images</span>
+                  <p className="mb-2 text-xs leading-5 text-stone-500">
+                    Add different variations of the same IP, such as angles, poses, packaging, or product shots. More varied references help us match copies more accurately.
+                  </p>
                   <input
                     type="file"
                     accept="image/*"
@@ -256,7 +259,7 @@ export default function PublicIntake() {
                   >
                     <span className="inline-flex items-center gap-2">
                       <ImagePlus size={18} />
-                      {dragActive ? "Drop images" : "Add images"}
+                      {dragActive ? "Drop images" : "Add varied images"}
                     </span>
                   </label>
                 </div>

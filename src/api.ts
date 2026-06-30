@@ -965,6 +965,9 @@ export interface MonitoredDomain {
   id: string;
   tenant_id: string;
   domain: string;
+  source_type: "domain" | "web_search";
+  display_name: string | null;
+  source_config: Record<string, unknown>;
   /** Linked IP — keywords for the scrape come from the IP, not this row. */
   ip_catalog_id: string | null;
   /** Convenience fields surfaced by GET /api/monitoring/domains (JOINed). */
@@ -1558,6 +1561,32 @@ export function addIpMonitoringPlatform(ipId: string, domain: string, country?: 
   );
 }
 
+export interface OpenWebSearchConfig {
+  engines: string[];
+  query_templates: string[];
+  max_candidates?: number;
+  per_query_limit?: number;
+  strict_gate?: boolean;
+}
+
+export function upsertIpOpenWebSearch(ipId: string, config: Partial<OpenWebSearchConfig>) {
+  return request<{ source: MonitoredDomain; jobs_enqueued: number }>(
+    `/api/ip/${ipId}/monitoring/open-web-search`,
+    { method: "POST", body: JSON.stringify({ config }) },
+  );
+}
+
+export function updateIpOpenWebSearch(
+  ipId: string,
+  sourceId: string,
+  patch: { enabled?: boolean; config?: Partial<OpenWebSearchConfig> },
+) {
+  return request<{ source: MonitoredDomain }>(
+    `/api/ip/${ipId}/monitoring/open-web-search/${sourceId}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+}
+
 export function setIpMonitoringPlatformEnabled(
   ipId: string,
   domainId: string,
@@ -2082,6 +2111,9 @@ export interface MonitoredIpSummary {
   platforms: {
     id: string;
     domain: string;
+    source_type: "domain" | "web_search";
+    display_name: string | null;
+    source_config: Record<string, unknown>;
     enabled: boolean;
     last_run_at: string | null;
   }[];
