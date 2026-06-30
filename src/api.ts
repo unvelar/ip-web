@@ -1562,8 +1562,8 @@ export function addIpMonitoringPlatform(ipId: string, domain: string, country?: 
 }
 
 export interface OpenWebSearchConfig {
-  engines: string[];
-  query_templates: string[];
+  search_scopes?: string[];
+  query_templates?: string[];
   max_candidates?: number;
   per_query_limit?: number;
   strict_gate?: boolean;

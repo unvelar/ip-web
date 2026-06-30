@@ -25,31 +25,39 @@ const FREQUENCY_OPTIONS: { value: MonitoringFrequency; label: string }[] = [
   { value: "monthly", label: "Monthly" },
 ];
 
-const OPEN_WEB_ENGINES = [
-  { id: "google_serper", label: "Google" },
-  { id: "brave", label: "Brave" },
-  { id: "bing_searchapi", label: "Bing" },
-  { id: "duckduckgo_searchapi", label: "DuckDuckGo" },
+const DEFAULT_OPEN_WEB_SCOPES = [
+  "site:*.shop",
+  "site:*.store",
+  "site:*.com",
+  "site:myshopify.com",
 ];
+const DEFAULT_OPEN_WEB_SCOPE_TEXT = DEFAULT_OPEN_WEB_SCOPES.join("\n");
 
-const DEFAULT_OPEN_WEB_TEMPLATES = [
-  'site:*.shop "{query}"',
-  'site:*.store "{query}"',
-  'site:*.com "{query}"',
-  'site:myshopify.com "{query}"',
-];
+function sameScopes(a: string[], b: string[]) {
+  return a.length === b.length && a.every((scope, i) => scope === b[i]);
+}
+
+function scopeFromTemplate(template: string) {
+  return template.replace(/\s+["']?\{(?:query|keyword)\}["']?/gi, "").trim();
+}
 
 function openWebConfig(source?: MonitoredDomain | null): OpenWebSearchConfig {
   const raw = source?.source_config ?? {};
-  const engines = Array.isArray(raw.engines)
-    ? raw.engines.filter((e): e is string => typeof e === "string")
-    : OPEN_WEB_ENGINES.map((e) => e.id);
-  const queryTemplates = Array.isArray(raw.query_templates)
-    ? raw.query_templates.filter((t): t is string => typeof t === "string")
-    : DEFAULT_OPEN_WEB_TEMPLATES;
+  const storedScopes = Array.isArray(raw.search_scopes)
+    ? raw.search_scopes.filter((s): s is string => typeof s === "string")
+    : [];
+  const legacyTemplateScopes = storedScopes.length === 0 && Array.isArray(raw.query_templates)
+    ? raw.query_templates
+        .filter((t): t is string => typeof t === "string")
+        .map(scopeFromTemplate)
+        .filter(Boolean)
+    : [];
+  const scopes = storedScopes.length > 0 ? storedScopes : legacyTemplateScopes;
+  const customScopes = scopes.length > 0 && !sameScopes(scopes, DEFAULT_OPEN_WEB_SCOPES)
+    ? scopes
+    : [];
   return {
-    engines: engines.length > 0 ? engines : OPEN_WEB_ENGINES.map((e) => e.id),
-    query_templates: queryTemplates.length > 0 ? queryTemplates : DEFAULT_OPEN_WEB_TEMPLATES,
+    search_scopes: customScopes,
     max_candidates: typeof raw.max_candidates === "number" ? raw.max_candidates : 200,
     per_query_limit: typeof raw.per_query_limit === "number" ? raw.per_query_limit : 30,
     strict_gate: true,
@@ -97,8 +105,7 @@ export function PlatformsPanel({
   const [newDomain, setNewDomain] = useState("");
   const [newCountry, setNewCountry] = useState("");
   const [adding, setAdding] = useState(false);
-  const [openWebEngines, setOpenWebEngines] = useState<string[]>(OPEN_WEB_ENGINES.map((e) => e.id));
-  const [openWebTemplates, setOpenWebTemplates] = useState(DEFAULT_OPEN_WEB_TEMPLATES.join("\n"));
+  const [openWebScopes, setOpenWebScopes] = useState("");
   const [savingOpenWeb, setSavingOpenWeb] = useState(false);
   const [savingFrequency, setSavingFrequency] = useState<MonitoringFrequency | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -111,8 +118,7 @@ export function PlatformsPanel({
       setPlatforms(platforms);
       const web = platforms.find((p) => p.source_type === "web_search");
       const cfg = openWebConfig(web);
-      setOpenWebEngines(cfg.engines);
-      setOpenWebTemplates(cfg.query_templates.join("\n"));
+      setOpenWebScopes((cfg.search_scopes ?? []).join("\n"));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -217,20 +223,15 @@ export function PlatformsPanel({
 
   async function saveOpenWeb() {
     if (savingOpenWeb) return;
-    const templates = openWebTemplates
+    const scopes = openWebScopes
       .split(/\r?\n/)
       .map((t) => t.trim())
       .filter(Boolean);
-    if (openWebEngines.length === 0 || templates.length === 0) {
-      setErr("Choose at least one search engine and one query pattern.");
-      return;
-    }
     setSavingOpenWeb(true);
     setErr("");
     try {
       const config = {
-        engines: openWebEngines,
-        query_templates: templates,
+        search_scopes: scopes,
         max_candidates: 200,
         per_query_limit: 30,
         strict_gate: true,
@@ -258,14 +259,6 @@ export function PlatformsPanel({
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
-  }
-
-  function toggleOpenWebEngine(engine: string) {
-    setOpenWebEngines((current) =>
-      current.includes(engine)
-        ? current.filter((e) => e !== engine)
-        : [...current, engine],
-    );
   }
 
   const domainPlatforms = platforms.filter((p) => (p.source_type ?? "domain") === "domain");
@@ -447,7 +440,7 @@ export function PlatformsPanel({
           <div>
             <h3 className="text-xs font-semibold text-stone-700">Open web search</h3>
             <p className="text-[11px] text-stone-400">
-              Search engines run these query patterns, then findings are gated more strictly.
+              Globally enabled search engines use this IP's keywords automatically, then findings are gated more strictly.
             </p>
           </div>
           {openWebSource && (
@@ -476,40 +469,21 @@ export function PlatformsPanel({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          {OPEN_WEB_ENGINES.map((engine) => {
-            const checked = openWebEngines.includes(engine.id);
-            return (
-              <button
-                key={engine.id}
-                type="button"
-                onClick={() => toggleOpenWebEngine(engine.id)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  checked
-                    ? "bg-stone-900 text-white border-stone-900"
-                    : "bg-white text-stone-600 border-stone-200 hover:border-stone-300"
-                }`}
-              >
-                {engine.label}
-              </button>
-            );
-          })}
-        </div>
-
         <label className="block space-y-1">
-          <span className="text-[10px] text-stone-400 uppercase tracking-wide">Query patterns</span>
+          <span className="text-[10px] text-stone-400 uppercase tracking-wide">Search scopes (optional)</span>
           <textarea
-            value={openWebTemplates}
-            onChange={(e) => setOpenWebTemplates(e.target.value)}
+            value={openWebScopes}
+            onChange={(e) => setOpenWebScopes(e.target.value)}
             rows={4}
-            className="px-2.5 py-2 rounded-lg border border-stone-200 text-xs w-full font-mono"
+            placeholder={DEFAULT_OPEN_WEB_SCOPE_TEXT}
+            className="px-2.5 py-2 rounded-lg border border-stone-200 text-xs w-full font-mono placeholder:text-stone-300"
           />
         </label>
 
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="text-[11px] text-stone-400 flex items-center gap-1.5">
             <Search className="size-3.5" aria-hidden="true" />
-            <span>{openWebSource ? "Configured as an additional monitored source." : "Adds an additional monitored source."}</span>
+            <span>{openWebScopes.trim() ? "Custom scopes are combined with this IP's keywords." : "Blank uses default shopping scopes with this IP's keywords."}</span>
           </div>
           <button
             onClick={() => void saveOpenWeb()}
