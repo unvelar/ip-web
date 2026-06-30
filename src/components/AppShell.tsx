@@ -263,7 +263,7 @@ export default function AppShell() {
   );
 
   return (
-    <div className="min-h-screen bg-cream text-stone-900 font-[Inter,system-ui,sans-serif]">
+    <div className="min-h-dvh bg-cream text-stone-900 font-[Inter,system-ui,sans-serif] lg:fixed lg:inset-0 lg:overflow-hidden">
       {/* Mobile topbar */}
       <div className="lg:hidden sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 flex items-center px-3 gap-3">
         <button
@@ -283,9 +283,9 @@ export default function AppShell() {
         </div>
       </div>
 
-      <div className="flex">
+      <div className="flex lg:h-full">
         {/* Desktop sidebar */}
-        <div className="hidden lg:block lg:w-64 lg:h-screen lg:sticky lg:top-0 lg:shrink-0">
+        <div className="hidden lg:block lg:w-64 lg:h-full lg:sticky lg:top-0 lg:shrink-0">
           {sidebar}
         </div>
 
@@ -312,7 +312,7 @@ export default function AppShell() {
         )}
 
         {/* Main */}
-        <main className="flex-1 min-w-0 lg:h-screen lg:overflow-y-auto">
+        <main className="flex-1 min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain">
           {isActingAsOther && (
             <ActingTenantBanner
               label={actingTenant ? tenantLabel(actingTenant) : (actingTenantId ?? "")}
