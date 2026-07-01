@@ -46,12 +46,9 @@ export function FindingComparison({
   onUpdated: (opts?: FindingUpdateOptions) => void;
 }) {
   const similarity = f.similarity_score ?? f.enforcement_priority;
-  const similarityCls =
-    similarity >= 0.75
-      ? "text-red-700"
-      : similarity >= 0.5
-        ? "text-amber-700"
-        : "text-stone-700";
+  const similarityLabel = Number.isFinite(similarity)
+    ? `${Math.round(similarity * 100)}% sim`
+    : "sim unknown";
   const licensedSeller = !!f.licensed_seller || f.dismissal_reason === "licensed";
   const canLicense = !!ipId && (!!f.seller_name || !!f.seller_url) && !licensedSeller;
   // Enrichment hit a reCAPTCHA / bot-wall — the screenshot is the challenge
@@ -70,18 +67,22 @@ export function FindingComparison({
   const whyFlagged = findingFlaggedReason(f);
   const countryLabel = f.country || "Unknown";
   const countryTitle = f.location && f.location !== f.country ? `Raw location: ${f.location}` : undefined;
+  const unitPriceUsd = f.price_value_usd == null ? null : Number(f.price_value_usd);
+  const priceUsd =
+    unitPriceUsd != null && Number.isFinite(unitPriceUsd)
+      ? formatMoney(unitPriceUsd, "USD")
+      : null;
+  const primaryPrice = priceUsd ?? f.price ?? null;
+  const nativePrice = priceUsd && f.price ? f.price : null;
 
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
     // monitors (which left short text lines + the comment box floating in white).
     <div className="space-y-2.5 max-w-6xl mx-auto">
-      {/* Top meta strip — similarity · status · IP · source · key flags on the
-          left; the state-driven action group pinned right. Merges what used to
-          be a header row + a separate score/method chip strip. */}
+      {/* Top meta strip — status · IP · source · key flags. Similarity remains
+          available, but review decisions should lead with listing economics. */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex items-center gap-x-2 gap-y-1 flex-wrap">
-          <span className={`text-base font-bold ${similarityCls}`}>{Math.round(similarity * 100)}%</span>
-          <span className="text-[9px] uppercase tracking-wider text-stone-400">similarity</span>
           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sb.cls}`}>
             {sb.label}
           </span>
@@ -107,6 +108,12 @@ export function FindingComparison({
           <span className="text-[11px] text-stone-500 truncate">
             <span className="uppercase tracking-wide text-stone-400">on </span>
             <span className="font-semibold text-stone-700">{f.domain}</span>
+          </span>
+          <span
+            className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-500 text-[10px] font-semibold tabular-nums"
+            title="Visual/text similarity"
+          >
+            {similarityLabel}
           </span>
           {isChallenge && (
             <span
@@ -161,17 +168,30 @@ export function FindingComparison({
         <h3 className="text-base font-bold text-stone-900 leading-snug">{f.listing_title}</h3>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap text-sm">
-        {(f.price_value_usd != null || f.price) && (
-          <span className="px-1.5 py-0.5 rounded bg-stone-900 text-white font-semibold">
-            {f.price_value_usd != null ? formatMoney(Number(f.price_value_usd), "USD") : f.price}
-            {f.price_value_usd != null && f.price && (
-              <span className="ml-1 font-normal text-stone-400">({f.price})</span>
+      {primaryPrice && (
+        <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
+          <div className="text-[10px] uppercase font-semibold text-stone-400">Listing price</div>
+          <div className="mt-0.5 flex items-baseline gap-x-2 gap-y-1 flex-wrap">
+            <span className="text-2xl font-bold tabular-nums text-stone-950 leading-none">
+              {primaryPrice}
+            </span>
+            {nativePrice && (
+              <span className="text-sm text-stone-500">
+                listed {nativePrice}
+              </span>
             )}
-          </span>
-        )}
-        {f.shipping_price && (
-          <span className="text-stone-500" title="Shipping">+ {f.shipping_price}</span>
+          </div>
+          {f.shipping_price && (
+            <div className="mt-1 text-sm text-stone-500">
+              + {f.shipping_price} delivery
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap text-sm">
+        {!primaryPrice && f.shipping_price && (
+          <span className="text-stone-500" title="Shipping">Shipping: {f.shipping_price}</span>
         )}
         <span
           className={`px-1.5 py-0.5 rounded font-semibold ${

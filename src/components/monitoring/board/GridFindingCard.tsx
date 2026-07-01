@@ -7,6 +7,7 @@ import {
   findingFlaggedReason,
   findingStatusBadge,
   formatAgo,
+  formatMoney,
 } from "./utils";
 
 export function GridFindingCard({
@@ -50,6 +51,16 @@ export function GridFindingCard({
   const actionability = actionabilityMeta(f.actionability);
   const whyFlagged = findingFlaggedReason(f);
   const chips = findingChips(f, showIp);
+  const similarity = f.similarity_score ?? f.enforcement_priority;
+  const similarityText = Number.isFinite(similarity)
+    ? `${Math.round(similarity * 100)}% similarity`
+    : null;
+  const unitPriceUsd = f.price_value_usd == null ? null : Number(f.price_value_usd);
+  const priceUsd =
+    unitPriceUsd != null && Number.isFinite(unitPriceUsd)
+      ? formatMoney(unitPriceUsd, "USD")
+      : null;
+  const priceText = priceUsd ?? f.price ?? null;
   const detailCount = [
     f.listing_title,
     f.description_summary,
@@ -58,6 +69,7 @@ export function GridFindingCard({
     f.actionability?.reason,
     f.seller_name,
     f.price,
+    similarityText,
   ].filter(Boolean).length;
   const canLicense = !!ipId &&
     !!(f.seller_name || f.seller_url) &&
@@ -83,9 +95,11 @@ export function GridFindingCard({
             className="h-4 w-4"
           />
         </label>
-        <span className="absolute right-5 top-5 rounded-md bg-white/90 px-2 py-1 text-[11px] font-bold text-stone-800 shadow-sm">
-          {f.enforcement_priority.toFixed(2)}
-        </span>
+        {priceText && (
+          <span className="absolute right-5 top-5 max-w-[9rem] truncate rounded-md bg-white/95 px-2 py-1 text-[11px] font-bold tabular-nums text-stone-900 shadow-sm">
+            {priceText}
+          </span>
+        )}
         {active && (
           <span className="absolute left-16 top-5 rounded-md bg-blue-600 px-2 py-1 text-[10px] font-bold uppercase text-white shadow-sm">
             Active
@@ -122,7 +136,9 @@ export function GridFindingCard({
           </span>
         </div>
         <div className="text-[11px] text-stone-500 truncate">
-          {f.seller_name || "Unknown seller"} - found {formatAgo(f.found_at) ?? "-"}
+          {[f.seller_name || "Unknown seller", priceText, `found ${formatAgo(f.found_at) ?? "-"}`]
+            .filter(Boolean)
+            .join(" - ")}
         </div>
         <details className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-600">
           <summary className="cursor-pointer select-none font-semibold text-stone-700">
@@ -151,6 +167,12 @@ export function GridFindingCard({
               <p>
                 <span className="font-semibold text-stone-500">Why flagged: </span>
                 {whyFlagged}
+              </p>
+            )}
+            {similarityText && (
+              <p>
+                <span className="font-semibold text-stone-500">Similarity: </span>
+                {similarityText}
               </p>
             )}
             {f.actionability && (

@@ -65,12 +65,6 @@ export function FindingRow({
   showIp?: boolean;
 }) {
   const similarity = f.similarity_score ?? f.enforcement_priority;
-  const scoreBg =
-    similarity >= 0.75
-      ? "bg-red-100 text-red-700"
-      : similarity >= 0.5
-        ? "bg-amber-100 text-amber-700"
-        : "bg-stone-100 text-stone-600";
   const thumbUrls = tableImageUrls(f);
   const market = estimatedMarket(f);
   const sb = findingStatusBadge(f);
@@ -90,7 +84,7 @@ export function FindingRow({
 
   return (
     <>
-      {/* Similarity — active marker + colored visual/text match pill. */}
+      {/* Similarity — secondary evidence; active marker owns row focus. */}
       <td className="py-1 px-2 align-middle whitespace-nowrap">
         <span className="inline-flex items-center gap-1.5">
           <span
@@ -100,7 +94,7 @@ export function FindingRow({
             ▸
           </span>
           <span
-            className={`text-[10px] font-bold tabular-nums rounded px-1 py-0.5 ${scoreBg}`}
+            className="text-[10px] font-semibold tabular-nums rounded px-1 py-0.5 bg-stone-100 text-stone-500"
             title="Visual/text similarity"
           >
             {Number.isFinite(similarity) ? `${Math.round(similarity * 100)}%` : "—"}
