@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { Check, Copy, ExternalLink } from "lucide-react";
 import { listTrademarks, type Trademark } from "../api";
 import BulkIngest from "../components/BulkIngest";
+import { publicSummaryUrlForIp } from "../lib/publicSummary";
 
+const COPY_FEEDBACK_MS = 1600;
 
 export default function Registry() {
   const [ips, setIps] = useState<Trademark[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedPublicSummaryIp, setCopiedPublicSummaryIp] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -18,6 +22,21 @@ export default function Registry() {
   }
 
   useEffect(() => { load(); }, []);
+
+  async function copyPublicSummaryLink(ip: Trademark) {
+    const url = publicSummaryUrlForIp(ip);
+    if (!url) return;
+
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedPublicSummaryIp(ip.id);
+      window.setTimeout(() => {
+        setCopiedPublicSummaryIp((current) => (current === ip.id ? null : current));
+      }, COPY_FEEDBACK_MS);
+    } catch (error) {
+      console.error("Unable to copy public summary link", error);
+    }
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12 space-y-10">
@@ -64,28 +83,93 @@ export default function Registry() {
         ) : (
           <div className="grid gap-4">
             {ips.map((ip) => (
-              <Link
+              <IpListCard
                 key={ip.id}
-                to={`/ips/${ip.id}`}
-                className="group bg-white rounded-2xl border border-stone-200 p-5 hover:border-stone-300 hover:shadow-lg hover:shadow-stone-100 transition-all block"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold text-stone-900 group-hover:text-red-700 transition-colors">{ip.name}</h3>
-                    {ip.description && <p className="text-sm text-stone-500 mt-1">{ip.description}</p>}
-                  </div>
-                  <div className="text-right text-sm space-y-1">
-                    <p className="text-stone-500">
-                      {ip.image_count} ref{ip.image_count !== 1 ? "s" : ""}
-                    </p>
-                    <StatusBadge ip={ip} />
-                  </div>
-                </div>
-              </Link>
+                ip={ip}
+                copied={copiedPublicSummaryIp === ip.id}
+                onCopy={() => void copyPublicSummaryLink(ip)}
+              />
             ))}
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function IpListCard({
+  ip,
+  copied,
+  onCopy,
+}: {
+  ip: Trademark;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  const publicSummaryUrl = publicSummaryUrlForIp(ip);
+
+  return (
+    <article className="group relative bg-white rounded-2xl border border-stone-200 p-5 hover:border-stone-300 hover:shadow-lg hover:shadow-stone-100 transition-all">
+      <Link
+        to={`/ips/${ip.id}`}
+        className="absolute inset-0 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-900 focus-visible:ring-offset-2"
+        aria-label={`Open ${ip.name}`}
+      />
+      <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pointer-events-none">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-bold text-stone-900 group-hover:text-red-700 transition-colors">{ip.name}</h3>
+          {ip.description && <p className="text-sm text-stone-500 mt-1 line-clamp-2">{ip.description}</p>}
+          {publicSummaryUrl && (
+            <div className="mt-3 pointer-events-auto">
+              <PublicSummaryActions url={publicSummaryUrl} copied={copied} onCopy={onCopy} />
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 text-sm space-y-1 sm:text-right">
+          <p className="text-stone-500">
+            {ip.image_count} ref{ip.image_count !== 1 ? "s" : ""}
+          </p>
+          <StatusBadge ip={ip} />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function PublicSummaryActions({
+  url,
+  copied,
+  onCopy,
+}: {
+  url: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="inline-flex max-w-full items-stretch rounded-xl border border-stone-200 bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={onCopy}
+        className="inline-flex min-w-0 items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold text-stone-700 hover:bg-stone-50 transition-colors"
+        title="Copy public summary link"
+      >
+        {copied ? (
+          <Check className="w-4 h-4 shrink-0 text-emerald-600" aria-hidden="true" />
+        ) : (
+          <Copy className="w-4 h-4 shrink-0" aria-hidden="true" />
+        )}
+        <span className="truncate">{copied ? "Copied" : "Copy public summary"}</span>
+      </button>
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex w-10 shrink-0 items-center justify-center border-l border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors"
+        title="Open public summary"
+        aria-label="Open public summary"
+      >
+        <ExternalLink className="w-4 h-4" aria-hidden="true" />
+      </a>
     </div>
   );
 }

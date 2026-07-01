@@ -22,6 +22,7 @@ import ImageUploader from "../components/ImageUploader";
 import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
 import IpTakedownSigner from "../components/IpTakedownSigner";
 import { consumeCommittedKeywords, mergeKeywords } from "../lib/keywords";
+import { publicSummaryUrlForIp } from "../lib/publicSummary";
 
 function errorMessage(e: unknown) {
   return e instanceof Error ? e.message : String(e);
@@ -152,10 +153,7 @@ export default function RegistryDetail() {
   if (!ip) return <p className="text-red-600 p-8">IP not found</p>;
 
   const pendingImages = images.filter((i) => i.status === "pending");
-  const publicSummaryUrl =
-    ip.tenant_public_slug && ip.public_slug
-      ? `${window.location.origin}/brand-sumups/${ip.tenant_public_slug}/${ip.public_slug}`
-      : null;
+  const publicSummaryUrl = publicSummaryUrlForIp(ip);
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12 space-y-8">
