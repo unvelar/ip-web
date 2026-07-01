@@ -48,8 +48,8 @@ function parseFilters(params: URLSearchParams): InboxFilters {
     status:
       status === "all"
         ? null
-        : status === "pending" || status === "review" || status === "takedown_sent" ||
-            status === "enforced" || status === "dismissed"
+        : status === "preparing" || status === "pending" || status === "review" ||
+            status === "takedown_sent" || status === "enforced" || status === "dismissed"
           ? status
           : status === null
             ? "pending"
@@ -327,7 +327,9 @@ export function MonitoringInboxView() {
     if (!facets) return "Loading…";
     const count = facets.total;
     const statusLabel =
-      filters.status === "pending"
+      filters.status === "preparing"
+        ? "preparing"
+        : filters.status === "pending"
         ? "to triage"
         : filters.status === "review"
           ? "in review"

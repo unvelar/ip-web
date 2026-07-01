@@ -1,5 +1,6 @@
-// Slim status pipeline pills. `null` is rendered as "pending".
+// Slim status pipeline pills. `null` is the aggregate "All open" bucket.
 const STATUS_FILTERS: Array<{ key: string; label: string }> = [
+  { key: "preparing", label: "Preparing" },
   { key: "pending", label: "To triage" },
   { key: "review", label: "Review" },
   { key: "takedown_sent", label: "Takedown sent" },
@@ -59,6 +60,7 @@ export function StatusTabs({
   onSelect: (s: string | null) => void;
 }) {
   const total =
+    (counts.preparing ?? 0) +
     (counts.pending ?? 0) +
     (counts.review ?? 0) +
     (counts.takedown_sent ?? 0) +

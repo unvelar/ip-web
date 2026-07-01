@@ -1795,7 +1795,7 @@ export type MonitoringSortMode =
 
 export type MonitoringPriorityBand = "high" | "med" | "low";
 export type MonitoringStatusFilter =
-  | "pending" | "review" | "takedown_sent" | "enforced" | "dismissed";
+  | "preparing" | "pending" | "review" | "takedown_sent" | "enforced" | "dismissed";
 export type MonitoringDismissalReasonFilter =
   | "false_positive"
   | "do_not_pursue"
