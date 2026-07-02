@@ -218,9 +218,6 @@ export function GridFindingCard({
                 )}
               </p>
             )}
-            <a href={f.page_url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">
-              Open listing
-            </a>
             {detailCount === 0 && (
               <p className="italic text-stone-400">
                 {inactiveListing

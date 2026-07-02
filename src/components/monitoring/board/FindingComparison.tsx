@@ -327,7 +327,7 @@ export function FindingComparison({
         </p>
       )}
 
-      {/* Footer meta — reviewer-relevant timestamps + the listing link. */}
+      {/* Footer meta — reviewer-relevant timestamps. */}
       <div className="flex items-center gap-2 flex-wrap text-xs text-stone-400">
         <span>found {new Date(f.found_at).toLocaleDateString()}</span>
         {f.last_checked_at && (
@@ -335,9 +335,6 @@ export function FindingComparison({
             · last visit {formatAgo(f.last_checked_at)}
           </span>
         )}
-        <a href={f.page_url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all">
-          · open listing ↗
-        </a>
       </div>
 
       {/* Signals — developer-facing match diagnostics, collapsed by default so
