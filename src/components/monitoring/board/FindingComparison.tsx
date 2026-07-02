@@ -1,3 +1,4 @@
+import { ExternalLink } from "lucide-react";
 import TakedownPanel from "../../TakedownPanel";
 import CaseComments from "../../CaseComments";
 import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
@@ -131,6 +132,16 @@ export function FindingComparison({
             </span>
           )}
         </div>
+        <a
+          href={f.page_url}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+          title="Open listing"
+        >
+          <ExternalLink size={13} aria-hidden="true" />
+          Open listing
+        </a>
       </div>
 
       {/* Primary triage actions — keep them immediately below the opened table

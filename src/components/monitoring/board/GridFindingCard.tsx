@@ -1,3 +1,4 @@
+import { ExternalLink } from "lucide-react";
 import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
 import { ActionabilityBadge } from "./ActionabilityBadge";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
@@ -137,6 +138,17 @@ export function GridFindingCard({
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${status.cls}`}>
             {status.label}
           </span>
+          <a
+            href={f.page_url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-stone-200 bg-white text-stone-500 hover:bg-stone-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+            title="Open listing"
+            aria-label="Open listing"
+          >
+            <ExternalLink size={12} aria-hidden="true" />
+          </a>
         </div>
         <div className="text-[11px] text-stone-500 truncate">
           {[f.seller_name || "Unknown seller", priceText, `found ${formatAgo(f.found_at) ?? "-"}`]
