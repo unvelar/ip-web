@@ -117,7 +117,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               persistActingTenant(null);
             }
             setUser(user);
-            if (justSignedIn && returnTo) navigate(returnTo, { replace: true });
+            if (justSignedIn) {
+              navigate(returnTo ?? "/dashboard", { replace: true });
+            }
           } else {
             setToken(null);
           }
@@ -137,11 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (tenantId === actingTenantId) return; // already operating on this tenant
     // Selecting the home tenant clears the override entirely.
     persistActingTenant(user && tenantId === user.tenant_id ? null : tenantId);
-    // Hard navigate to the SPA root (not reload()): reloading a deep client
-    // route like /dashboard asks the static host for a file that doesn't exist
-    // (404 on GitHub Pages). Loading "/" always serves index.html, boots fresh
-    // in the new tenant scope, and HomeSwitch routes back to the dashboard.
-    window.location.assign("/");
+    // Hard navigate so every view re-fetches in the new tenant scope. The
+    // GitHub Pages 404 fallback rewrites deep SPA routes back to index.html.
+    window.location.assign("/dashboard");
   }
 
   function signIn() {

@@ -7,9 +7,9 @@ export default function Login() {
   const navigate = useNavigate();
 
   // If we're already signed in (e.g. landed here directly), bounce to the
-  // dashboard.
+  // client portal.
   useEffect(() => {
-    if (user) navigate("/");
+    if (user) navigate("/dashboard");
   }, [user, navigate]);
 
   return (

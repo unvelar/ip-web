@@ -174,7 +174,7 @@ export default function AppShell() {
           to="/dashboard"
           icon={<Home size={18} />}
           label="Dashboard"
-          active={pathname === "/" || pathname === "/dashboard"}
+          active={pathname === "/dashboard"}
         />
 
         <NavGroup

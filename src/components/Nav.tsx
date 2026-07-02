@@ -18,10 +18,10 @@ export default function Nav() {
         <div className="flex items-center gap-4">
           {user ? (
             <Link
-              to="/"
+              to="/dashboard"
               className="px-4 py-1.5 bg-stone-900 text-white text-sm font-semibold rounded-full hover:bg-stone-800 transition-colors"
             >
-              Open app
+              Client portal
             </Link>
           ) : (
             // Sign in intentionally not surfaced — the portal is invite-only for

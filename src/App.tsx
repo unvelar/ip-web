@@ -107,28 +107,6 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/**
- * `/` is special: signed-in users see the Dashboard (inside the app shell);
- * everyone else sees the marketing Landing page. We split it as two route
- * branches keyed on auth — the protected branch keeps the same AppShell as
- * every other authed route, no extra redirect hop.
- */
-function HomeSwitch() {
-  const { user, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-  if (user) {
-    // Defer to the authed AppShell — the layout route handles rendering.
-    return <Navigate to="/dashboard" replace />;
-  }
-  return <Landing />;
-}
-
 export default function App() {
   return (
     <Routes>
@@ -170,8 +148,8 @@ export default function App() {
         <Route path="/admin/ips/:id" element={<AdminIpDetail />} />
       </Route>
 
-      {/* Public: landing OR auth-aware dashboard switch */}
-      <Route path="/" element={<HomeSwitch />} />
+      {/* Public */}
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/monitor/start" element={<PublicIntake />} />
       <Route path="/brand-sumups/:tenantName/:ipName" element={<BrandSumup />} />
