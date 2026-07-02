@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { IpReviewFinding } from "../../../api";
+import { ActionabilityBadge } from "./ActionabilityBadge";
 import {
   QTY_FALLBACK,
   actionabilityMeta,
@@ -113,12 +114,14 @@ export function FindingRow({
           <span className="font-semibold text-[13px] text-stone-900 truncate min-w-0">
             {title}
           </span>
-          <span
-            className={`shrink-0 px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none ${actionability.cls}`}
-            title={actionability.reason}
-          >
-            {actionability.label}
-          </span>
+          <ActionabilityBadge
+            label={actionability.label}
+            reason={actionability.reason}
+            className="shrink-0 gap-0.5"
+            badgeClassName={`px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none ${actionability.cls}`}
+            iconClassName="h-3 w-3"
+            iconSize={11}
+          />
           {f.manual_candidate_outcome && (
             <span
               className="shrink-0 px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none bg-amber-100 text-amber-700"

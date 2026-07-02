@@ -1,4 +1,5 @@
 import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
+import { ActionabilityBadge } from "./ActionabilityBadge";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
 import {
@@ -108,12 +109,14 @@ export function GridFindingCard({
       </div>
       <div className="p-3 space-y-2 flex flex-col grow">
         <div className="flex items-center gap-1 flex-wrap min-h-6">
-          <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${actionability.cls}`}
-            title={actionability.reason}
-          >
-            {actionability.label}
-          </span>
+          <ActionabilityBadge
+            label={actionability.label}
+            reason={actionability.reason}
+            className="shrink-0 gap-1"
+            badgeClassName={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${actionability.cls}`}
+            iconClassName="h-3.5 w-3.5"
+            iconSize={12}
+          />
           {f.manual_candidate_outcome && (
             <span
               className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700"

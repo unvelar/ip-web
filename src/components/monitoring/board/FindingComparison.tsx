@@ -1,6 +1,7 @@
 import TakedownPanel from "../../TakedownPanel";
 import CaseComments from "../../CaseComments";
 import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
+import { ActionabilityBadge } from "./ActionabilityBadge";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
 import {
@@ -86,12 +87,13 @@ export function FindingComparison({
           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sb.cls}`}>
             {sb.label}
           </span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${actionability.cls}`}
-            title={actionability.reason}
-          >
-            {actionability.label}
-          </span>
+          <ActionabilityBadge
+            label={actionability.label}
+            reason={actionability.reason}
+            className="shrink-0 gap-1"
+            badgeClassName={`px-2 py-0.5 rounded-full text-[11px] font-bold ${actionability.cls}`}
+            iconClassName="h-4 w-4"
+          />
           {f.manual_candidate_outcome && (
             <span
               className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700"
@@ -253,17 +255,27 @@ export function FindingComparison({
         </div>
       )}
 
-      {whyFlagged && (
-        <div className="text-sm text-stone-600 leading-relaxed border-l-2 border-amber-300 pl-2">
-          <span className="font-semibold text-stone-500">Why flagged: </span>
-          {whyFlagged}
-        </div>
+      {(whyFlagged || actionability.reason) && (
+        <details className="text-sm text-stone-500">
+          <summary className="cursor-pointer text-stone-400 hover:text-stone-600 select-none">
+            Rationale
+          </summary>
+          <div className="mt-1.5 space-y-1.5 leading-relaxed">
+            {whyFlagged && (
+              <p>
+                <span className="font-semibold text-stone-500">Why flagged: </span>
+                {whyFlagged}
+              </p>
+            )}
+            {actionability.reason && (
+              <p>
+                <span className="font-semibold text-stone-500">Why recommended: </span>
+                {actionability.reason}
+              </p>
+            )}
+          </div>
+        </details>
       )}
-
-      <div className={`text-sm leading-relaxed border-l-2 pl-2 py-1 rounded-r ${actionability.subtleCls}`}>
-        <div><span className="font-semibold">AI recommendation: </span>{actionability.label}</div>
-        <div><span className="font-semibold">Why recommended: </span>{actionability.reason}</div>
-      </div>
 
       {f.description_summary && (
         <p className="text-sm text-stone-500 leading-relaxed">{f.description_summary}</p>
