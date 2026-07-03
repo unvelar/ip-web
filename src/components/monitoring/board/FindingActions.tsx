@@ -411,16 +411,6 @@ export function FindingActions({
             {utilityButtons}
           </div>
         )}
-        {!compact && refreshBtn && (
-          <details className="relative shrink-0 ml-auto">
-            <summary className="h-7 px-2 rounded-md text-xs font-medium leading-none text-stone-500 hover:bg-stone-50 hover:text-stone-700 cursor-pointer select-none list-none flex items-center">
-              Advanced
-            </summary>
-            <div className="absolute z-10 mt-1 right-0 rounded-md border border-stone-200 bg-white p-1 shadow-sm">
-              {refreshBtn}
-            </div>
-          </details>
-        )}
       </div>
       {compact && (utilityButtons || refreshBtn) && (
         <div

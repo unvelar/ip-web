@@ -1,7 +1,12 @@
+import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import TakedownPanel from "../../TakedownPanel";
 import CaseComments from "../../CaseComments";
-import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
+import {
+  reenrichIpFinding,
+  type IpReviewFinding,
+  type MonitoringReviewOutcome,
+} from "../../../api";
 import { ActionabilityBadge } from "./ActionabilityBadge";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
@@ -47,6 +52,7 @@ export function FindingComparison({
   onLicensed: (dismissedCount: number) => void;
   onUpdated: (opts?: FindingUpdateOptions) => void;
 }) {
+  const [refreshing, setRefreshing] = useState(false);
   const similarity = f.similarity_score ?? f.enforcement_priority;
   const similarityLabel = Number.isFinite(similarity)
     ? `${Math.round(similarity * 100)}% sim`
@@ -76,6 +82,35 @@ export function FindingComparison({
       : null;
   const primaryPrice = priceUsd ?? f.price ?? null;
   const nativePrice = priceUsd && f.price ? f.price : null;
+  const advancedMenu = ipId ? (
+    <details className="relative shrink-0">
+      <summary className="inline-flex cursor-pointer select-none list-none items-center rounded-md border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-500 hover:bg-stone-50 hover:text-stone-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300">
+        Advanced
+      </summary>
+      <div className="absolute right-0 z-10 mt-1 rounded-md border border-stone-200 bg-white p-1 shadow-sm">
+        <button
+          type="button"
+          disabled={refreshing}
+          title="Re-scrape the listing and re-run enrichment + bbox localization"
+          onClick={async () => {
+            if (refreshing || !ipId) return;
+            setRefreshing(true);
+            try {
+              await reenrichIpFinding(ipId, f.result_id);
+              onUpdated();
+            } catch (e) {
+              alert(e instanceof Error ? e.message : "Failed to refresh finding");
+            } finally {
+              setRefreshing(false);
+            }
+          }}
+          className="h-7 whitespace-nowrap rounded-md border border-stone-200 bg-white px-2.5 text-xs font-medium leading-none text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+        >
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+    </details>
+  ) : null;
 
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
@@ -132,16 +167,19 @@ export function FindingComparison({
             </span>
           )}
         </div>
-        <a
-          href={f.page_url}
-          target="_blank"
-          rel="noreferrer"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
-          title="Open listing"
-        >
-          <ExternalLink size={13} aria-hidden="true" />
-          Open listing
-        </a>
+        <div className="shrink-0 flex items-center gap-1.5">
+          <a
+            href={f.page_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+            title="Open listing"
+          >
+            <ExternalLink size={13} aria-hidden="true" />
+            Open listing
+          </a>
+          {advancedMenu}
+        </div>
       </div>
 
       {/* Primary triage actions — keep them immediately below the opened table
