@@ -358,7 +358,7 @@ export function FindingActions({
       </>
     );
     utilityButtons = (
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
         {licenseBtn}
         {reopenBtn("Move to triage")}
       </div>
@@ -404,10 +404,10 @@ export function FindingActions({
           : "min-w-0"
       }
     >
-      <div className={compact ? "grid grid-cols-2 gap-1.5" : "flex items-center gap-1.5 flex-nowrap whitespace-nowrap"}>
+      <div className={compact ? "grid grid-cols-2 gap-1.5" : "flex min-w-0 max-w-full flex-wrap items-center gap-1.5"}>
         {buttons}
         {!compact && utilityButtons && (
-          <div className="ml-1 pl-2 border-l border-stone-200 flex items-center">
+          <div className="ml-1 flex min-w-0 flex-wrap items-center gap-1.5 border-l border-stone-200 pl-2">
             {utilityButtons}
           </div>
         )}
