@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { DollarSign, Globe2, SearchCheck, ShieldAlert, ShieldCheck } from "lucide-react";
 import BrandMark from "../components/BrandMark";
 import { getPublicBrandSumup, type PublicBrandSumup } from "../api";
@@ -80,11 +80,10 @@ function BrandSumupShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-stone-50 text-stone-950">
       <header className="border-b border-stone-200 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-3" aria-label="Go to Unvelar home">
             <BrandMark className="w-8 h-8" />
             <div className="text-sm font-black">Unvelar</div>
-          </div>
-          <div className="text-xs font-semibold text-stone-500">Public monitoring summary</div>
+          </Link>
         </div>
       </header>
       {children}
