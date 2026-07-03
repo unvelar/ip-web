@@ -2,6 +2,22 @@ const API = import.meta.env.VITE_API_URL || "";
 
 let token: string | null = localStorage.getItem("auth_token");
 
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+
+  constructor(status: number, message: string, body: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+export function isApiError(error: unknown, status?: number): error is ApiError {
+  return error instanceof ApiError && (status == null || error.status === status);
+}
+
 export function getToken() {
   return token;
 }
@@ -42,7 +58,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, { ...init, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
+    throw new ApiError(res.status, err.error || res.statusText, err);
   }
   return res.json();
 }
@@ -2010,6 +2026,12 @@ export function listMonitoringFindingsGlobal(
 export function getMonitoringFinding(resultId: string) {
   return request<{ finding: IpReviewFinding }>(
     `/api/monitoring/findings/${encodeURIComponent(resultId)}`,
+  );
+}
+
+export function resolveMonitoringFindingTenant(resultId: string) {
+  return request<{ tenant_id: string }>(
+    `/api/monitoring/findings/${encodeURIComponent(resultId)}/tenant`,
   );
 }
 

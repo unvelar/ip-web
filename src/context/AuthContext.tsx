@@ -21,9 +21,9 @@ interface AuthContextType {
   actingTenantId: string | null;
   /** True when an admin is operating on a tenant other than their own. */
   isActingAsOther: boolean;
-  /** Admin-only: switch the acting tenant (pass the home tenant id to clear the
+  /** Switch the effective tenant (pass the home tenant id to clear the
    *  override). Persists and reloads so every view re-fetches in the new scope. */
-  switchTenant: (tenantId: string) => void;
+  switchTenant: (tenantId: string, redirectTo?: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -135,13 +135,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isActingAsOther =
     !!user && actingTenantId != null && actingTenantId !== user.tenant_id;
 
-  function switchTenant(tenantId: string) {
+  function switchTenant(tenantId: string, redirectTo = "/dashboard") {
     if (tenantId === actingTenantId) return; // already operating on this tenant
     // Selecting the home tenant clears the override entirely.
     persistActingTenant(user && tenantId === user.tenant_id ? null : tenantId);
     // Hard navigate so every view re-fetches in the new tenant scope. The
     // GitHub Pages 404 fallback rewrites deep SPA routes back to index.html.
-    window.location.assign("/dashboard");
+    window.location.assign(isSafePath(redirectTo) ? redirectTo : "/dashboard");
   }
 
   function signIn() {

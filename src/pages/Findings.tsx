@@ -3,7 +3,9 @@ import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "
 import {
   getMonitoringCampaign,
   getMonitoringFinding,
+  isApiError,
   listMonitoringFindingsGlobal,
+  resolveMonitoringFindingTenant,
   type IpReviewFinding,
   type MonitoringCandidateOutcome,
   type MonitoringFacets,
@@ -14,6 +16,7 @@ import {
   type MonitoringStatusFilter,
 } from "../api";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
+import { useAuth } from "../context/AuthContext";
 
 /** Legacy route — redirects to the canonical Monitoring Tasks page. */
 export default function Findings() {
@@ -121,6 +124,7 @@ export function MonitoringInboxView() {
   const { taskId } = useParams<{ taskId?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { actingTenantId, switchTenant } = useAuth();
   const filters = parseFilters(params);
   const campaignBatchId = params.get("campaign_batch");
 
@@ -194,10 +198,26 @@ export function MonitoringInboxView() {
       setLinkedFinding(finding);
     } catch (e) {
       if (linkedReqSeq.current !== seq) return;
+      if (isApiError(e, 404)) {
+        try {
+          const { tenant_id } = await resolveMonitoringFindingTenant(id);
+          if (linkedReqSeq.current !== seq) return;
+          if (tenant_id !== actingTenantId) {
+            setLinkedErr("Switching tenant…");
+            switchTenant(
+              tenant_id,
+              `${location.pathname}${location.search}${location.hash}`,
+            );
+            return;
+          }
+        } catch {
+          // Preserve the original 404 message for absent or unauthorized tasks.
+        }
+      }
       setLinkedFinding(null);
       setLinkedErr(e instanceof Error ? e.message : String(e));
     }
-  }, []);
+  }, [actingTenantId, location.hash, location.pathname, location.search, switchTenant]);
 
   // Refetch on any filter/sort change. URL params are the dependency — they
   // change synchronously via setParams, so this fires exactly when needed.
