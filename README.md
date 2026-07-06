@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## Brand assets
+
+`public/logo/logo.svg` is the source of truth for the Unvelar mark. `npm run build`,
+`bun run build`, and `npm run assets:generate` generate the favicon, touch icons,
+web manifest icons, and social preview image from that SVG.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
