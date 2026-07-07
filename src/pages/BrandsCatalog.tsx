@@ -44,9 +44,9 @@ export default function BrandsCatalog() {
         setItems(r.items);
         setTotal(r.total);
       })
-      .catch((e: any) => {
+      .catch((e: unknown) => {
         if (reqIdRef.current !== myReq) return;
-        setError(e?.message ?? "Failed to load");
+        setError(e instanceof Error ? e.message : "Failed to load");
       })
       .finally(() => {
         if (reqIdRef.current === myReq) setLoading(false);
@@ -66,8 +66,8 @@ export default function BrandsCatalog() {
       if (reqIdRef.current !== myReq) return;
       setItems((prev) => [...prev, ...r.items]);
       setTotal(r.total);
-    } catch (e: any) {
-      if (reqIdRef.current === myReq) setError(e?.message ?? "Failed to load more");
+    } catch (e: unknown) {
+      if (reqIdRef.current === myReq) setError(e instanceof Error ? e.message : "Failed to load more");
     } finally {
       if (reqIdRef.current === myReq) setLoadingMore(false);
     }

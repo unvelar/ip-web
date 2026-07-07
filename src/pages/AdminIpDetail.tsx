@@ -47,8 +47,8 @@ export default function AdminIpDetailPage() {
       setGuidelines(detail.guidelines ?? "");
       setCaption(detail.caption_text ?? "");
       setDirty(false);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Request failed");
     } finally {
       setLoading(false);
     }
@@ -66,8 +66,8 @@ export default function AdminIpDetailPage() {
     try {
       await uploadAdminImages(id, files);
       await load();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Request failed");
     } finally {
       setUploading(false);
     }
@@ -81,8 +81,8 @@ export default function AdminIpDetailPage() {
     try {
       await deleteAdminImage(id, img.image_id);
       await load();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Request failed");
     } finally {
       setDeletingImageId(null);
     }
@@ -96,8 +96,8 @@ export default function AdminIpDetailPage() {
     try {
       await deleteAdminIp(id);
       navigate("/admin");
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Request failed");
       setDeletingAll(false);
     }
   }
@@ -114,8 +114,8 @@ export default function AdminIpDetailPage() {
       });
       setDirty(false);
       await load();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Request failed");
     } finally {
       setSaving(false);
     }
