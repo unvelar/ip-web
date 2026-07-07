@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Check, Copy, ExternalLink, Trash2 } from "lucide-react";
 import {
@@ -86,7 +86,7 @@ export default function RegistryDetail() {
     void saveKeywords(next);
   }
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!id) return;
     try {
       const data = await getTrademark(id);
@@ -95,16 +95,16 @@ export default function RegistryDetail() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
     if (indexJob?.status === "completed" || indexJob?.status === "failed") {
       load();
       if (indexJob.status === "completed") setIndexJobId(null);
     }
-  }, [indexJob?.status]);
+  }, [indexJob?.status, load]);
 
   async function handleUpload(files: File[]) {
     if (!id) return;

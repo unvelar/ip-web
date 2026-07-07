@@ -6,10 +6,7 @@ export function useJobPoller(jobId: string | null, interval = 3000) {
   const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => {
-    if (!jobId) {
-      setJob(null);
-      return;
-    }
+    if (!jobId) return;
 
     let active = true;
 
@@ -35,5 +32,5 @@ export function useJobPoller(jobId: string | null, interval = 3000) {
     };
   }, [jobId, interval]);
 
-  return job;
+  return jobId ? job : null;
 }

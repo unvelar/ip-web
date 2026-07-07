@@ -11,6 +11,7 @@ import {
 const SIM_THRESHOLD = 0.72;
 
 // Friendly name for an anti-bot marker string (from _detect_captcha/_challenge).
+// eslint-disable-next-line react-refresh/only-export-components
 export function antibotLabel(marker: string): string {
   const m = marker.toLowerCase();
   if (m.includes("recaptcha") || m.includes("i'm not a robot")) return "reCAPTCHA";

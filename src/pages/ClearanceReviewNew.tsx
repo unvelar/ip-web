@@ -50,7 +50,7 @@ const MAX_INSPIRATION = 12;
 export default function ClearanceReviewNew() {
   const navigate = useNavigate();
   const [assetFile, setAssetFile] = useState<File | null>(null);
-  const [assetPreview, setAssetPreview] = useState<string>("");
+  const assetPreview = useMemo(() => (assetFile ? URL.createObjectURL(assetFile) : ""), [assetFile]);
 
   const [assetType, setAssetType] = useState<string>("");
   const [intendedUse, setIntendedUse] = useState("");
@@ -66,14 +66,9 @@ export default function ClearanceReviewNew() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!assetFile) {
-      setAssetPreview("");
-      return;
-    }
-    const url = URL.createObjectURL(assetFile);
-    setAssetPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [assetFile]);
+    if (!assetPreview) return;
+    return () => URL.revokeObjectURL(assetPreview);
+  }, [assetPreview]);
 
   const step1Done = !!assetFile;
   const step2Done = step1Done && !!assetType;
