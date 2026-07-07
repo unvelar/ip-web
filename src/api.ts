@@ -346,6 +346,22 @@ export type CaseReviewStatus =
   | "enforced"
   | "dismissed";
 
+export type SaleType =
+  | "fixed_price"
+  | "auction"
+  | "flash_sale"
+  | "limited_stock"
+  | "unknown";
+
+export type SaleUrgencyBand =
+  | "critical"
+  | "urgent"
+  | "soon"
+  | "time_bound"
+  | "limited_stock"
+  | "expired"
+  | "none";
+
 export interface CaseComment {
   id: string;
   case_id: string;
@@ -1344,6 +1360,13 @@ export interface IpReviewFinding {
   seller_rating_count: number | null;
   quantity_available: number | null;
   quantity_in_carts: number | null;
+  sale_type: SaleType | null;
+  sale_ends_at: string | null;
+  sale_urgency_source: string | null;
+  sale_urgency_confidence: number | null;
+  sale_urgency: SaleUrgencyBand;
+  sale_urgency_rank: number;
+  sale_seconds_remaining: number | null;
   /** Canonical English country derived server-side from `location` (e.g.
    *  "Sold from Sweden" → "Sweden"). Null when location is empty or doesn't
    *  match any known country. */

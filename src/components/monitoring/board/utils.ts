@@ -72,6 +72,34 @@ export function formatAgo(iso: string | null): string | null {
   return months < 12 ? `${months}mo ago` : `${Math.round(months / 12)}y ago`;
 }
 
+function formatTimeLeft(seconds: number | null | undefined) {
+  if (seconds == null || !Number.isFinite(seconds)) return null;
+  const secs = Math.max(0, Math.round(seconds));
+  if (secs < 60) return "<1m";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs}h`;
+  return `${Math.round(hrs / 24)}d`;
+}
+
+function saleTypeLabel(f: IpReviewFinding) {
+  if (f.sale_type === "auction") return "Auction";
+  if (f.sale_type === "flash_sale") return "Deal";
+  if (f.sale_type === "limited_stock") return "Limited stock";
+  return null;
+}
+
+function saleUrgencyChip(f: IpReviewFinding) {
+  if (!f.sale_type || f.sale_urgency === "none") return null;
+  const label = saleTypeLabel(f);
+  if (!label) return null;
+  if (f.sale_urgency === "limited_stock") return label;
+  if (f.sale_urgency === "expired") return `Expired ${label.toLowerCase()}`;
+  const timeLeft = formatTimeLeft(f.sale_seconds_remaining);
+  return timeLeft ? `${label} ${timeLeft} left` : label;
+}
+
 export function statusBadge(s: CaseReviewStatus | null | undefined) {
   const status = (s ?? "pending") as CaseReviewStatus | "pending";
   switch (status) {
@@ -407,6 +435,7 @@ export function findingChips(f: IpReviewFinding, showIp?: boolean) {
     detailValue(f.item_details, ["category", "type", "department"]) ||
     null;
   return [
+    saleUrgencyChip(f),
     showIp && f.ip_name ? f.ip_name : null,
     category,
     priceText,
