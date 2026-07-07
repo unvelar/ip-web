@@ -96,6 +96,12 @@ function isMonitoringFrequency(value: unknown): value is MonitoringFrequency {
   return value === "daily" || value === "weekly" || value === "monthly";
 }
 
+function platformLabel(platform: MonitoredDomain) {
+  const displayUrl = platform.source_config?.display_url;
+  if (typeof displayUrl === "string" && displayUrl.trim()) return displayUrl.trim();
+  return platform.display_name || platform.domain;
+}
+
 /**
  * The watched-platforms panel for a single IP: list domains (with
  * enable/disable + remove), an add-platform input, and "Refresh now".
@@ -195,7 +201,7 @@ export function PlatformsPanel({
   }
 
   async function remove(p: MonitoredDomain) {
-    if (!confirm(`Stop monitoring ${p.display_name || p.domain}?`)) return;
+    if (!confirm(`Stop monitoring ${platformLabel(p)}?`)) return;
     try {
       await removeIpMonitoringPlatform(ipId, p.id);
       await loadPlatforms();
@@ -354,61 +360,66 @@ export function PlatformsPanel({
         <div className="text-xs text-stone-400 italic">No platforms yet — add one below.</div>
       ) : (
         <div className="divide-y divide-stone-100 border border-stone-100 rounded-lg">
-          {domainPlatforms.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 px-3 py-2 text-xs">
-              <button
-                onClick={() => toggle(p)}
-                title={p.enabled ? "Enabled — click to pause" : "Paused — click to enable"}
-                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
-                  p.enabled ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-500"
-                }`}
-              >
-                {p.enabled ? "On" : "Off"}
-              </button>
-              <span className="font-mono text-stone-700 flex-1 min-w-0 truncate">{p.domain}</span>
-              <select
-                value={p.country ?? ""}
-                onChange={(e) => void changeCountry(p, e.target.value)}
-                title="See the platform as a shopper in this country would"
-                className="shrink-0 px-1.5 py-0.5 rounded-md border border-stone-200 bg-white text-[11px] text-stone-600 max-w-[9rem]"
-              >
-                <option value="">🌐 Anywhere</option>
-                {COUNTRIES.map((cn) => (
-                  <option key={cn.code} value={cn.code}>
-                    {countryLabel(cn.code)}
-                  </option>
-                ))}
-              </select>
-              <span className="text-stone-400 shrink-0">
-                {p.last_run_at ? `last run ${new Date(p.last_run_at).toLocaleDateString()}` : "never run"}
-              </span>
-              <button
-                onClick={() => void refreshPlatform(p)}
-                disabled={refreshing || refreshingPlatformId !== null || !p.enabled || !hasKeywords}
-                className="grid size-7 place-items-center rounded-md border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-300 disabled:opacity-40 disabled:hover:text-stone-500 disabled:hover:border-stone-200 shrink-0"
-                title={
-                  !hasKeywords
-                    ? "Add monitoring keywords before refreshing"
-                    : p.enabled
-                      ? "Refresh this platform"
-                      : "Enable this platform before refreshing"
-                }
-              >
-                <RefreshCw
-                  className={`size-3.5 ${refreshingPlatformId === p.id ? "animate-spin" : ""}`}
-                  aria-hidden="true"
-                />
-                <span className="sr-only">Refresh {p.domain}</span>
-              </button>
-              <button
-                onClick={() => remove(p)}
-                className="text-stone-400 hover:text-red-600 font-bold shrink-0"
-                title="Remove"
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          {domainPlatforms.map((p) => {
+            const label = platformLabel(p);
+            return (
+              <div key={p.id} className="flex items-center gap-3 px-3 py-2 text-xs">
+                <button
+                  onClick={() => toggle(p)}
+                  title={p.enabled ? "Enabled — click to pause" : "Paused — click to enable"}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                    p.enabled ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-500"
+                  }`}
+                >
+                  {p.enabled ? "On" : "Off"}
+                </button>
+                <span className="font-mono text-stone-700 flex-1 min-w-0 truncate" title={label}>
+                  {label}
+                </span>
+                <select
+                  value={p.country ?? ""}
+                  onChange={(e) => void changeCountry(p, e.target.value)}
+                  title="See the platform as a shopper in this country would"
+                  className="shrink-0 px-1.5 py-0.5 rounded-md border border-stone-200 bg-white text-[11px] text-stone-600 max-w-[9rem]"
+                >
+                  <option value="">🌐 Anywhere</option>
+                  {COUNTRIES.map((cn) => (
+                    <option key={cn.code} value={cn.code}>
+                      {countryLabel(cn.code)}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-stone-400 shrink-0">
+                  {p.last_run_at ? `last run ${new Date(p.last_run_at).toLocaleDateString()}` : "never run"}
+                </span>
+                <button
+                  onClick={() => void refreshPlatform(p)}
+                  disabled={refreshing || refreshingPlatformId !== null || !p.enabled || !hasKeywords}
+                  className="grid size-7 place-items-center rounded-md border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-300 disabled:opacity-40 disabled:hover:text-stone-500 disabled:hover:border-stone-200 shrink-0"
+                  title={
+                    !hasKeywords
+                      ? "Add monitoring keywords before refreshing"
+                      : p.enabled
+                        ? "Refresh this platform"
+                        : "Enable this platform before refreshing"
+                  }
+                >
+                  <RefreshCw
+                    className={`size-3.5 ${refreshingPlatformId === p.id ? "animate-spin" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <span className="sr-only">Refresh {label}</span>
+                </button>
+                <button
+                  onClick={() => remove(p)}
+                  className="text-stone-400 hover:text-red-600 font-bold shrink-0"
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
       </div>
