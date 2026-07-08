@@ -15,7 +15,7 @@ interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   signIn: () => void;
-  logout: () => Promise<boolean>;
+  logout: () => Promise<void>;
   /** Effective tenant the UI is operating on. Equals the home tenant unless an
    *  admin has switched. */
   actingTenantId: string | null;
@@ -172,10 +172,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    let logoutUrl: string | undefined;
     try {
-      const result = await apiLogout();
-      logoutUrl = result.logout_url;
+      await apiLogout();
     } catch {
       // Local state still needs to be cleared if the API is unavailable.
     }
@@ -183,14 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistActingTenant(null);
     clearStashedReturnTo();
     markForceReauthForNextSignIn();
-
-    if (logoutUrl) {
-      window.location.assign(logoutUrl);
-      return true;
-    }
-
-    setUser(null);
-    return false;
+    window.location.assign("/");
   }
 
   return (

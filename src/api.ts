@@ -90,10 +90,7 @@ export function getMe() {
 
 export async function logout() {
   try {
-    return await request<{ ok: boolean; logout_url?: string }>("/api/auth/logout", {
-      method: "POST",
-      body: JSON.stringify({ origin: window.location.origin }),
-    });
+    return await request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
   } finally {
     setToken(null);
   }

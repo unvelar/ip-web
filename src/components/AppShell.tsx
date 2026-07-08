@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import {
   Home,
   Library,
@@ -82,7 +82,6 @@ export default function AppShell() {
   }, [user]);
 
   const actingTenant = tenants.find((t) => t.id === actingTenantId) ?? null;
-  const navigate = useNavigate();
   const { pathname } = useLocation();
   const [clearanceCount, setClearanceCount] = useState(0);
   const [monitoringCount, setMonitoringCount] = useState(0);
@@ -256,10 +255,7 @@ export default function AppShell() {
             actingTenantId={actingTenantId}
             isActingAsOther={isActingAsOther}
             onSwitchTenant={switchTenant}
-            onLogout={async () => {
-              const redirected = await logout();
-              if (!redirected) navigate("/");
-            }}
+            onLogout={logout}
           />
         )}
       </div>
