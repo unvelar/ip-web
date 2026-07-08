@@ -77,9 +77,10 @@ export interface AuthUser {
 /** URL the browser navigates to in order to start a WorkOS AuthKit sign-in.
  *  Optional `returnTo` is a same-origin path the backend will echo back to
  *  the SPA as `?next=…` after the OAuth round-trip succeeds. */
-export function workosLoginUrl(returnTo?: string): string {
+export function workosLoginUrl(returnTo?: string, options: { forceReauth?: boolean } = {}): string {
   const params = new URLSearchParams({ origin: window.location.origin });
   if (returnTo) params.set("return_to", returnTo);
+  if (options.forceReauth) params.set("prompt", "login");
   return `${API}/api/auth/workos/start?${params.toString()}`;
 }
 
@@ -89,7 +90,10 @@ export function getMe() {
 
 export async function logout() {
   try {
-    await request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
+    return await request<{ ok: boolean; logout_url?: string }>("/api/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ origin: window.location.origin }),
+    });
   } finally {
     setToken(null);
   }

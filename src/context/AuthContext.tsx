@@ -15,7 +15,7 @@ interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   signIn: () => void;
-  logout: () => Promise<void>;
+  logout: () => Promise<boolean>;
   /** Effective tenant the UI is operating on. Equals the home tenant unless an
    *  admin has switched. */
   actingTenantId: string | null;
@@ -43,6 +43,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 //      against storage being wiped, since it travels in the OAuth round-trip
 //      itself.
 const RETURN_TO_KEY = "auth_return_to";
+const FORCE_REAUTH_KEY = "auth_force_reauth";
 
 function isSafePath(p: string | null | undefined): p is string {
   if (!p || !p.startsWith("/") || p.startsWith("//")) return false;
@@ -74,6 +75,24 @@ function clearStashedReturnTo() {
     sessionStorage.removeItem(RETURN_TO_KEY);
   } catch {
     /* noop */
+  }
+}
+
+function markForceReauthForNextSignIn() {
+  try {
+    sessionStorage.setItem(FORCE_REAUTH_KEY, "1");
+  } catch {
+    /* noop */
+  }
+}
+
+function consumeForceReauthForNextSignIn() {
+  try {
+    const shouldForce = sessionStorage.getItem(FORCE_REAUTH_KEY) === "1";
+    sessionStorage.removeItem(FORCE_REAUTH_KEY);
+    return shouldForce;
+  } catch {
+    return false;
   }
 }
 
@@ -148,13 +167,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // OAuth state and back to us as `?next=…`. Full-page navigation — WorkOS
     // hosted UI takes over from here.
     const returnTo = readStashedReturnTo() ?? undefined;
-    window.location.href = workosLoginUrl(returnTo);
+    const forceReauth = consumeForceReauthForNextSignIn();
+    window.location.href = workosLoginUrl(returnTo, { forceReauth });
   }
 
   async function logout() {
-    await apiLogout();
+    let logoutUrl: string | undefined;
+    try {
+      const result = await apiLogout();
+      logoutUrl = result.logout_url;
+    } catch {
+      // Local state still needs to be cleared if the API is unavailable.
+    }
+
     persistActingTenant(null);
+    clearStashedReturnTo();
+    markForceReauthForNextSignIn();
+
+    if (logoutUrl) {
+      window.location.assign(logoutUrl);
+      return true;
+    }
+
     setUser(null);
+    return false;
   }
 
   return (

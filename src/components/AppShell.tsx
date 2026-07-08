@@ -256,7 +256,10 @@ export default function AppShell() {
             actingTenantId={actingTenantId}
             isActingAsOther={isActingAsOther}
             onSwitchTenant={switchTenant}
-            onLogout={async () => { await logout(); navigate("/"); }}
+            onLogout={async () => {
+              const redirected = await logout();
+              if (!redirected) navigate("/");
+            }}
           />
         )}
       </div>
