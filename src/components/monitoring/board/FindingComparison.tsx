@@ -203,22 +203,22 @@ export function FindingComparison({
         {/* LEFT — single image carousel. Page screenshot is the first slide
             when captured; product photos follow (best-matched marked).
             min-w-0 so the thumb strip scrolls instead of widening the track. */}
-        <div className="lg:sticky lg:top-4 min-w-0 space-y-2.5">
+        <div className="lg:sticky lg:top-4 min-w-0">
           <ListingCarousel f={f} ipId={ipId} />
-          <a
-            href={f.page_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
-            title="Open listing"
-          >
-            <ExternalLink size={14} aria-hidden="true" />
-            Open listing
-          </a>
         </div>
 
         {/* RIGHT — enrichment data. */}
         <div className="flex flex-col space-y-2.5 min-w-0">
+          <a
+            href={f.page_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2"
+            title="Open listing"
+          >
+            <ExternalLink size={16} aria-hidden="true" />
+            Open listing
+          </a>
 
       {/* Listing context (from VLM enrichment) — what's on sale, type, where */}
       {f.listing_title && (
