@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation, useParams } from "react-router-do
 import { useAuth } from "./context/AuthContext";
 import { stashReturnTo } from "./context/AuthContext";
 import AppShell from "./components/AppShell";
+import DeploymentUpdatePrompt from "./components/DeploymentUpdatePrompt";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Registry from "./pages/Registry";
@@ -109,61 +110,64 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <Routes>
-      {/* Signed-in routes (AppShell layout) */}
-      <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/ips" element={<Registry />} />
-        <Route path="/ips/new" element={<RegistryWizard />} />
-        <Route path="/ips/:id" element={<RegistryDetail />} />
-        <Route path="/ips/:id/audit" element={<RegistryAudit />} />
-        {/* Canonical task/admin entrypoints for each pipeline. */}
-        <Route path="/monitoring/tasks" element={<MonitoringTasks />} />
-        <Route path="/monitoring/tasks/:taskId" element={<MonitoringTasks />} />
-        <Route path="/monitoring/campaigns" element={<MonitoringCampaigns />} />
-        <Route path="/monitoring/campaigns/:campaignId" element={<MonitoringCampaigns />} />
-        <Route path="/monitoring/new" element={<MonitoringNew />} />
-        <Route path="/monitoring/settings" element={<Monitors />} />
-        <Route path="/clearance/tasks" element={<ClearanceTasks />} />
-        <Route path="/clearance/tasks/:id" element={<IpReviewDetail />} />
-        <Route path="/clearance/new" element={<ClearanceReviewNew />} />
-        {/* Legacy routes — kept so dashboard KPI deep links + bookmarks keep
-            landing somewhere; the components redirect to the canonical paths. */}
-        <Route path="/findings" element={<Findings />} />
-        <Route path="/monitors" element={<Navigate to="/monitoring/settings" replace />} />
-        <Route path="/clearance" element={<Navigate to="/clearance/tasks" replace />} />
-        <Route path="/ip-reviews/new" element={<Navigate to="/clearance/new" replace />} />
-        <Route path="/ip-reviews/:id" element={<IpReviewRedirect />} />
-        <Route path="/clearance/brands/catalog" element={<BrandsCatalog />} />
-        <Route path="/clearance/designs/catalog" element={<DesignsCatalog />} />
-        <Route path="/clearance/pop/catalog" element={<PopCultureCatalog />} />
-        <Route path="/settings" element={<Settings />} />
-      </Route>
+    <>
+      <DeploymentUpdatePrompt />
+      <Routes>
+        {/* Signed-in routes (AppShell layout) */}
+        <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/ips" element={<Registry />} />
+          <Route path="/ips/new" element={<RegistryWizard />} />
+          <Route path="/ips/:id" element={<RegistryDetail />} />
+          <Route path="/ips/:id/audit" element={<RegistryAudit />} />
+          {/* Canonical task/admin entrypoints for each pipeline. */}
+          <Route path="/monitoring/tasks" element={<MonitoringTasks />} />
+          <Route path="/monitoring/tasks/:taskId" element={<MonitoringTasks />} />
+          <Route path="/monitoring/campaigns" element={<MonitoringCampaigns />} />
+          <Route path="/monitoring/campaigns/:campaignId" element={<MonitoringCampaigns />} />
+          <Route path="/monitoring/new" element={<MonitoringNew />} />
+          <Route path="/monitoring/settings" element={<Monitors />} />
+          <Route path="/clearance/tasks" element={<ClearanceTasks />} />
+          <Route path="/clearance/tasks/:id" element={<IpReviewDetail />} />
+          <Route path="/clearance/new" element={<ClearanceReviewNew />} />
+          {/* Legacy routes — kept so dashboard KPI deep links + bookmarks keep
+              landing somewhere; the components redirect to the canonical paths. */}
+          <Route path="/findings" element={<Findings />} />
+          <Route path="/monitors" element={<Navigate to="/monitoring/settings" replace />} />
+          <Route path="/clearance" element={<Navigate to="/clearance/tasks" replace />} />
+          <Route path="/ip-reviews/new" element={<Navigate to="/clearance/new" replace />} />
+          <Route path="/ip-reviews/:id" element={<IpReviewRedirect />} />
+          <Route path="/clearance/brands/catalog" element={<BrandsCatalog />} />
+          <Route path="/clearance/designs/catalog" element={<DesignsCatalog />} />
+          <Route path="/clearance/pop/catalog" element={<PopCultureCatalog />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
 
-      {/* Admin (separate gate, same shell) */}
-      <Route element={<AdminRoute><AppShell /></AdminRoute>}>
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/admin/intakes" element={<AdminIntakes />} />
-        <Route path="/admin/tenants" element={<AdminTenants />} />
-        <Route path="/admin/ips/:id" element={<AdminIpDetail />} />
-      </Route>
+        {/* Admin (separate gate, same shell) */}
+        <Route element={<AdminRoute><AppShell /></AdminRoute>}>
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/intakes" element={<AdminIntakes />} />
+          <Route path="/admin/tenants" element={<AdminTenants />} />
+          <Route path="/admin/ips/:id" element={<AdminIpDetail />} />
+        </Route>
 
-      {/* Public */}
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/monitor/start" element={<PublicIntake />} />
-      <Route path="/brand-sumups/:tenantName/:ipName" element={<BrandSumup />} />
+        {/* Public */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/monitor/start" element={<PublicIntake />} />
+        <Route path="/brand-sumups/:tenantName/:ipName" element={<BrandSumup />} />
 
-      {/* Redirects — preserve old URLs */}
-      <Route path="/registry" element={<Navigate to="/ips" replace />} />
-      <Route path="/registry/new" element={<Navigate to="/ips/new" replace />} />
-      <Route path="/registry/:id" element={<RegistryRedirect />} />
-      <Route path="/registry/:id/audit" element={<RegistryAuditRedirect />} />
-      <Route path="/monitoring" element={<Navigate to="/monitoring/tasks" replace />} />
-      <Route path="/inbox" element={<InboxRedirect />} />
-      <Route path="/trademarks" element={<Navigate to="/ips" replace />} />
-      <Route path="/trademarks/:id" element={<TrademarkRedirect />} />
-      <Route path="/ip-reviews" element={<Navigate to="/clearance/tasks" replace />} />
-    </Routes>
+        {/* Redirects — preserve old URLs */}
+        <Route path="/registry" element={<Navigate to="/ips" replace />} />
+        <Route path="/registry/new" element={<Navigate to="/ips/new" replace />} />
+        <Route path="/registry/:id" element={<RegistryRedirect />} />
+        <Route path="/registry/:id/audit" element={<RegistryAuditRedirect />} />
+        <Route path="/monitoring" element={<Navigate to="/monitoring/tasks" replace />} />
+        <Route path="/inbox" element={<InboxRedirect />} />
+        <Route path="/trademarks" element={<Navigate to="/ips" replace />} />
+        <Route path="/trademarks/:id" element={<TrademarkRedirect />} />
+        <Route path="/ip-reviews" element={<Navigate to="/clearance/tasks" replace />} />
+      </Routes>
+    </>
   );
 }

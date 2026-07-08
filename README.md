@@ -6,6 +6,13 @@
 `bun run build`, and `npm run assets:generate` generate the favicon, touch icons,
 web manifest icons, and social preview image from that SVG.
 
+## Deploy freshness
+
+The GitHub Pages workflow injects `VITE_BUILD_SHA` and a UTC `VITE_BUILD_TIME`
+captured immediately before `bun run build`. The Vite build also emits
+`build.json` with the same values so open tabs can detect when a newer deployment
+is live and offer a reload instead of staying on a stale cached bundle.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
