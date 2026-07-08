@@ -37,7 +37,7 @@ export default function Landing() {
             <h1 className="text-4xl sm:text-5xl lg:text-[3.75rem] font-black tracking-[-0.035em] leading-[1.05] text-stone-900 text-balance">
               Find and take down{" "}
               <span className="text-gradient-red">visual IP infringement</span>{" "}
-              across the web.
+              across the web
             </h1>
             <p className="mt-7 text-lg text-stone-500 max-w-2xl mx-auto leading-relaxed text-balance">
               Unvelar continuously monitors marketplaces, social platforms, and
