@@ -819,6 +819,7 @@ export interface PublicBrandSumup {
     estimated_value_usd: number;
     confirmed_value_usd?: number;
     potential_value_usd?: number;
+    monitored_value_usd?: number;
   };
   websites: Array<{
     domain: string;
@@ -2187,7 +2188,9 @@ export interface DashboardSummary {
     high_risk: number;
     ips_monitored: number;
     platforms_monitored: number;
-    /** SUM over open findings of (qty × price_usd). Pitch headline. */
+    /** SUM over active monitored listings of (qty × price_usd). */
+    total_monitored_market_usd?: number;
+    /** @deprecated Backward-compatible alias for total_monitored_market_usd. */
     total_unlicensed_market_usd?: number;
   };
   sellers: Array<{
@@ -2203,6 +2206,8 @@ export interface DashboardSummary {
     ip_name: string;
     findings: number;
     enforced: number;
+    monitored_market_usd?: number;
+    /** @deprecated Backward-compatible alias for monitored_market_usd. */
     unlicensed_market_usd?: number;
   }>;
   timeseries: Array<{ day: string; findings: number }>;
@@ -2239,12 +2244,14 @@ export interface DashboardGroups {
     high_risk: number;
     ips_monitored: number;
     platforms_monitored: number;
-    unlicensed_market_usd: number;
+    monitored_market_usd?: number;
+    /** @deprecated Backward-compatible alias for monitored_market_usd. */
+    unlicensed_market_usd?: number;
   }>;
   timeseries: Array<{ day: string; counts: Record<string, number> }>;
   platforms: Array<{ domain: string; counts: Record<string, number> }>;
   countries: Array<{ country: string; counts: Record<string, number> }>;
-  // Unlicensed $ market (USD) per country, broken down by IP — the money twin
+  // Monitored $ market (USD) per country, broken down by IP — the money twin
   // of `countries`, used by the market card's country view.
   marketByCountry: Array<{ country: string; counts: Record<string, number> }>;
   sellers: Array<{

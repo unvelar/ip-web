@@ -39,6 +39,7 @@ const EMPTY_KPIS: DashboardGroups["kpis"] = {
   high_risk: 0,
   ips_monitored: 0,
   platforms_monitored: 0,
+  total_monitored_market_usd: 0,
   total_unlicensed_market_usd: 0,
 };
 
@@ -134,7 +135,9 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <UnlicensedMarketHero totalUsd={scopedKpis.total_unlicensed_market_usd ?? 0} />
+          <MonitoredMarketHero
+            totalUsd={scopedKpis.total_monitored_market_usd ?? scopedKpis.total_unlicensed_market_usd ?? 0}
+          />
           <KpiRow kpis={scopedKpis} ipId={activeIpId} />
           <FindingsOverTimeCard timeseries={data.timeseries ?? []} ips={scopedIps} colors={colors} />
           <MarketCard marketByCountry={scopedMarketByCountry} ips={scopedIps} colors={colors} />
@@ -179,7 +182,8 @@ function kpisForIp(ip: Ip): DashboardGroups["kpis"] {
     high_risk: ip.high_risk ?? 0,
     ips_monitored: ip.ips_monitored ?? 1,
     platforms_monitored: ip.platforms_monitored ?? 0,
-    total_unlicensed_market_usd: ip.unlicensed_market_usd ?? 0,
+    total_monitored_market_usd: ip.monitored_market_usd ?? ip.unlicensed_market_usd ?? 0,
+    total_unlicensed_market_usd: ip.monitored_market_usd ?? ip.unlicensed_market_usd ?? 0,
   };
 }
 
@@ -248,15 +252,15 @@ const fmtUsdCompact = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
-function UnlicensedMarketHero({ totalUsd }: { totalUsd: number }) {
+function MonitoredMarketHero({ totalUsd }: { totalUsd: number }) {
   return (
     <div className="rounded-2xl bg-white border border-stone-200 px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
       <div>
         <div className="text-[11px] uppercase tracking-[0.14em] font-semibold text-stone-500">
-          Active Monitored Infringements
+          Active monitored market
         </div>
         <p className="text-xs text-stone-400 mt-0.5 max-w-md">
-          Sum of price × quantity across open infringement findings.
+          Estimated value of priced listings currently being monitored.
           Excludes dismissed and already-enforced cases.
         </p>
       </div>
@@ -463,8 +467,8 @@ function StackedDimensionCard({
   );
 }
 
-/** Unlicensed $ market as horizontal bars, with a Country/IP toggle. The IP
- *  view reads each IP's own `unlicensed_market_usd` (one bar per IP, its own
+/** Monitored $ market as horizontal bars, with a Country/IP toggle. The IP
+ *  view reads each IP's own `monitored_market_usd` (one bar per IP, its own
  *  color); the country view stacks the per-country money by IP. Same shape and
  *  colors as the findings breakdowns, but valued in USD. */
 function MarketCard({
@@ -484,17 +488,20 @@ function MarketCard({
     }
     // By IP: one bar per IP, keyed by its own id so ipBars colors it correctly.
     return ips
-      .filter((ip) => (ip.unlicensed_market_usd ?? 0) > 0)
-      .map((ip) => ({ label: ip.ip_name ?? "Unnamed IP", [ip.ip_id]: ip.unlicensed_market_usd }));
+      .filter((ip) => (ip.monitored_market_usd ?? ip.unlicensed_market_usd ?? 0) > 0)
+      .map((ip) => ({
+        label: ip.ip_name ?? "Unnamed IP",
+        [ip.ip_id]: ip.monitored_market_usd ?? ip.unlicensed_market_usd ?? 0,
+      }));
   }, [view, marketByCountry, ips]);
 
   return (
     <div className="rounded-2xl border border-stone-200 bg-white p-5 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-stone-900">Unlicensed market</h2>
+          <h2 className="text-sm font-bold text-stone-900">Monitored market</h2>
           <p className="text-xs text-stone-400 mt-0.5">
-            Estimated open-infringement value, by {view === "ip" ? "IP" : "shipping country"}.
+            Estimated active monitored listing value, by {view === "ip" ? "IP" : "shipping country"}.
           </p>
         </div>
         <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 shrink-0">

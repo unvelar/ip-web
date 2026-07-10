@@ -101,6 +101,7 @@ function BrandSumupShell({ children }: { children: React.ReactNode }) {
 function Hero({ data }: { data: PublicBrandSumup }) {
   const confirmed = confirmedUsd(data.totals);
   const potential = potentialUsd(data.totals);
+  const monitored = monitoredUsd(data.totals);
 
   return (
     <section className="bg-white border-b border-stone-200">
@@ -128,13 +129,13 @@ function Hero({ data }: { data: PublicBrandSumup }) {
 
           <div className="rounded-xl border border-stone-200 bg-stone-50 p-5 sm:p-6">
             <div className="text-[11px] uppercase tracking-[0.14em] font-bold text-stone-400">
-              Confirmed exposure
+              Active monitored market
             </div>
             <div className="mt-2 text-4xl sm:text-5xl font-black text-stone-950 tabular-nums">
-              {fmtUsd.format(confirmed)}
+              {fmtUsd.format(monitored)}
             </div>
             <div className="mt-2 text-sm font-semibold text-stone-500 tabular-nums">
-              of {fmtUsd.format(potential)} potential exposure
+              {fmtUsd.format(potential)} potential exposure · {fmtUsd.format(confirmed)} confirmed
             </div>
             <Link
               to="/monitor/start"
@@ -203,12 +204,15 @@ function KpiGrid({ data }: { data: PublicBrandSumup }) {
 function ValueSummary({ data }: { data: PublicBrandSumup }) {
   const confirmed = confirmedUsd(data.totals);
   const potential = potentialUsd(data.totals);
+  const monitored = monitoredUsd(data.totals);
   const unconfirmed = Math.max(potential - confirmed, 0);
+  const remaining = Math.max(monitored - potential, 0);
   const potentialListings = potentialCount(data.totals);
-  const chartData = [{ label: "Exposure", confirmed, awaiting: unconfirmed }];
-  const chartDescription = `${fmtUsd.format(confirmed)} confirmed exposure and ${fmtUsd.format(unconfirmed)} awaiting confirmation, out of ${fmtUsd.format(potential)} total potential exposure.`;
-  const showConfirmedLabel = potential > 0 && confirmed / potential >= 0.15;
-  const showAwaitingLabel = potential > 0 && unconfirmed / potential >= 0.15;
+  const chartData = [{ label: "Market", confirmed, awaiting: unconfirmed, remaining }];
+  const chartDescription = `${fmtUsd.format(monitored)} active monitored market: ${fmtUsd.format(confirmed)} confirmed exposure, ${fmtUsd.format(unconfirmed)} awaiting confirmation, and ${fmtUsd.format(remaining)} in other monitored listings.`;
+  const showConfirmedLabel = monitored > 0 && confirmed / monitored >= 0.15;
+  const showAwaitingLabel = monitored > 0 && unconfirmed / monitored >= 0.15;
+  const showRemainingLabel = monitored > 0 && remaining / monitored >= 0.15;
 
   return (
     <section className="rounded-lg border border-stone-200 bg-white overflow-hidden">
@@ -216,38 +220,42 @@ function ValueSummary({ data }: { data: PublicBrandSumup }) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-[11px] uppercase tracking-[0.14em] font-bold text-stone-400">
-              Exposure breakdown
+              Monitored market breakdown
             </div>
             <h2 className="mt-2 text-xl sm:text-2xl font-black text-stone-950 tabular-nums">
-              {fmtUsd.format(potential)} potential exposure
+              {fmtUsd.format(monitored)} active monitored market
             </h2>
             <p className="mt-1 text-xs leading-5 text-stone-500">
-              Estimated listing value split by review outcome.
+              Estimated listing value split by review and infringement status.
             </p>
           </div>
           <DollarSign className="w-5 h-5 text-emerald-700 shrink-0" aria-hidden="true" />
         </div>
 
-        {potential > 0 ? (
+        {monitored > 0 ? (
           <div className="mt-6" role="img" aria-label={chartDescription}>
             <div className="h-24 w-full" aria-hidden="true">
               <ResponsiveContainer>
                 <BarChart data={chartData} layout="vertical" margin={{ top: 8, right: 0, bottom: 8, left: 0 }}>
-                  <XAxis type="number" hide domain={[0, potential]} />
+                  <XAxis type="number" hide domain={[0, monitored]} />
                   <YAxis type="category" dataKey="label" hide />
                   <Tooltip
                     contentStyle={TOOLTIP_STYLE}
                     cursor={{ fill: "#f5f5f4" }}
                     formatter={(value, name) => [
                       fmtUsd.format(Number(value)),
-                      name === "confirmed" ? "Confirmed exposure" : "Awaiting confirmation",
+                      name === "confirmed"
+                        ? "Confirmed exposure"
+                        : name === "awaiting"
+                          ? "Awaiting confirmation"
+                          : "Other monitored listings",
                     ]}
                   />
                   <Bar
                     dataKey="confirmed"
                     stackId="exposure"
                     fill="#b91c1c"
-                    radius={unconfirmed > 0 ? [8, 0, 0, 8] : [8, 8, 8, 8]}
+                    radius={unconfirmed > 0 || remaining > 0 ? [8, 0, 0, 8] : [8, 8, 8, 8]}
                     isAnimationActive={false}
                   >
                     {showConfirmedLabel && (
@@ -266,7 +274,7 @@ function ValueSummary({ data }: { data: PublicBrandSumup }) {
                       dataKey="awaiting"
                       stackId="exposure"
                       fill="#d97706"
-                      radius={[0, 8, 8, 0]}
+                      radius={remaining > 0 ? [0, 0, 0, 0] : [0, 8, 8, 0]}
                       isAnimationActive={false}
                     >
                       {showAwaitingLabel && (
@@ -281,11 +289,31 @@ function ValueSummary({ data }: { data: PublicBrandSumup }) {
                       )}
                     </Bar>
                   )}
+                  {remaining > 0 && (
+                    <Bar
+                      dataKey="remaining"
+                      stackId="exposure"
+                      fill="#78716c"
+                      radius={confirmed > 0 || unconfirmed > 0 ? [0, 8, 8, 0] : [8, 8, 8, 8]}
+                      isAnimationActive={false}
+                    >
+                      {showRemainingLabel && (
+                        <LabelList
+                          dataKey="remaining"
+                          position="center"
+                          fill="#ffffff"
+                          fontSize={12}
+                          fontWeight={700}
+                          formatter={(value: number | string) => fmtUsd.format(Number(value))}
+                        />
+                      )}
+                    </Bar>
+                  )}
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <ExposureLegend
                 color="bg-red-700"
                 label="Confirmed exposure"
@@ -298,11 +326,17 @@ function ValueSummary({ data }: { data: PublicBrandSumup }) {
                 value={fmtUsd.format(unconfirmed)}
                 detail={`${fmtNumber.format(Math.max(potentialListings - data.totals.to_takedown_count, 0))} pending or review-stage listings`}
               />
+              <ExposureLegend
+                color="bg-stone-500"
+                label="Other monitored listings"
+                value={fmtUsd.format(remaining)}
+                detail="Active priced listings outside potential exposure"
+              />
             </div>
           </div>
         ) : (
           <p className="mt-6 rounded-lg bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">
-            No estimated exposure value is available yet.
+            No monitored market value is available yet.
           </p>
         )}
       </div>
@@ -478,6 +512,7 @@ type BrandSumupValueFields = {
   estimated_value_usd: number;
   confirmed_value_usd?: number;
   potential_value_usd?: number;
+  monitored_value_usd?: number;
 };
 
 function confirmedUsd(values: BrandSumupValueFields): number {
@@ -486,6 +521,10 @@ function confirmedUsd(values: BrandSumupValueFields): number {
 
 function potentialUsd(values: BrandSumupValueFields): number {
   return Math.max(confirmedUsd(values), values.potential_value_usd ?? confirmedUsd(values));
+}
+
+function monitoredUsd(values: BrandSumupValueFields): number {
+  return Math.max(potentialUsd(values), values.monitored_value_usd ?? potentialUsd(values));
 }
 
 function potentialCount(values: BrandSumupValueFields): number {
