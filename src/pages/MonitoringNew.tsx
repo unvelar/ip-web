@@ -6,22 +6,23 @@ import {
   listTrademarks,
   type Trademark,
 } from "../api";
+import { PlatformSelector } from "../components/monitoring/PlatformSelector";
 import { COUNTRIES, countryLabel } from "../lib/countries";
-import { KNOWN_PLATFORMS } from "../lib/platforms";
 
 /**
  * Start monitoring a registered IP. Picks an IP not already watched and seeds
- * it with a first platform — that POST creates the monitored-domain link. On
- * success, lands on the Monitoring settings page where the new IP appears.
+ * it with one or more selected platforms. Adding the first platform creates
+ * the monitored-domain link. On success, lands on Monitoring settings.
  */
 export default function MonitoringNew() {
   const navigate = useNavigate();
   const [all, setAll] = useState<Trademark[] | null>(null);
   const [monitoredIds, setMonitoredIds] = useState<string[]>([]);
   const [picked, setPicked] = useState("");
-  const [platform, setPlatform] = useState("");
+  const [platforms, setPlatforms] = useState<string[]>([]);
   const [pickedCountry, setPickedCountry] = useState("");
   const [busy, setBusy] = useState(false);
+  const [completed, setCompleted] = useState(0);
   const [err, setErr] = useState("");
 
   useEffect(() => {
@@ -42,17 +43,44 @@ export default function MonitoringNew() {
   );
 
   async function add() {
-    const domain = platform.trim();
-    if (!picked || !domain || busy) return;
+    if (!picked || platforms.length === 0 || busy) return;
     setBusy(true);
+    setCompleted(0);
     setErr("");
-    try {
-      await addIpMonitoringPlatform(picked, domain, pickedCountry || null);
+
+    const failures: { source: string; error: string }[] = [];
+    let nextIndex = 0;
+    const workers = Array.from(
+      { length: Math.min(4, platforms.length) },
+      async () => {
+        while (nextIndex < platforms.length) {
+          const source = platforms[nextIndex++];
+          try {
+            await addIpMonitoringPlatform(picked, source, pickedCountry || null);
+          } catch (e) {
+            failures.push({ source, error: e instanceof Error ? e.message : String(e) });
+          } finally {
+            setCompleted((current) => current + 1);
+          }
+        }
+      },
+    );
+    await Promise.all(workers);
+
+    if (failures.length === 0) {
       navigate("/monitoring/settings");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-      setBusy(false);
+      return;
     }
+
+    const failedSources = failures.map((failure) => failure.source);
+    const addedCount = platforms.length - failedSources.length;
+    setPlatforms(failedSources);
+    setErr(
+      `${addedCount > 0 ? `Added ${addedCount} source${addedCount === 1 ? "" : "s"}. ` : ""}` +
+      `Could not add ${failures.map((failure) => `${failure.source}: ${failure.error}`).join("; ")}`,
+    );
+    setBusy(false);
+    setCompleted(0);
   }
 
   return (
@@ -60,7 +88,7 @@ export default function MonitoringNew() {
       <div>
         <h1 className="text-2xl font-black text-stone-900 tracking-tight">Monitor a new IP</h1>
         <p className="mt-1 text-sm text-stone-500">
-          Pick a registered IP and seed it with a first platform to watch.
+          Pick a registered IP and choose the sources you want to watch.
         </p>
       </div>
 
@@ -80,6 +108,7 @@ export default function MonitoringNew() {
           <>
             <Field label="IP">
               <select
+                aria-label="IP"
                 value={picked}
                 onChange={(e) => setPicked(e.target.value)}
                 className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-sm bg-white text-stone-700 w-full"
@@ -93,47 +122,13 @@ export default function MonitoringNew() {
               </select>
             </Field>
 
-            <Field label="First platform">
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {KNOWN_PLATFORMS.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setPlatform(p)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                        platform === p
-                          ? "bg-stone-900 text-white border-stone-900"
-                          : "bg-white text-stone-600 border-stone-200 hover:border-stone-300"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  list="known-platforms"
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void add();
-                    }
-                  }}
-                  placeholder="etsy.com or https://www.etsy.com/search?q=…"
-                  className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-sm w-full"
-                />
-                <datalist id="known-platforms">
-                  {KNOWN_PLATFORMS.map((p) => (
-                    <option key={p} value={p} />
-                  ))}
-                </datalist>
-              </div>
+            <Field label="Sources">
+              <PlatformSelector value={platforms} onChange={setPlatforms} disabled={busy} />
             </Field>
 
-            <Field label="Target country (optional)">
+            <Field label="Target country for selected sources (optional)">
               <select
+                aria-label="Target country for selected sources"
                 value={pickedCountry}
                 onChange={(e) => setPickedCountry(e.target.value)}
                 title="See the platform as a shopper in this country would — optional"
@@ -152,10 +147,12 @@ export default function MonitoringNew() {
               <button
                 type="button"
                 onClick={add}
-                disabled={!picked || !platform.trim() || busy}
+                disabled={!picked || platforms.length === 0 || busy}
                 className="px-4 py-2 rounded-lg bg-stone-900 text-white text-sm font-semibold hover:bg-stone-800 disabled:opacity-50"
               >
-                {busy ? "Adding…" : "Start monitoring"}
+                {busy
+                  ? `Adding ${completed} of ${platforms.length}…`
+                  : `Start monitoring${platforms.length > 0 ? ` ${platforms.length} source${platforms.length === 1 ? "" : "s"}` : ""}`}
               </button>
             </div>
           </>
@@ -167,9 +164,9 @@ export default function MonitoringNew() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block space-y-1">
+    <div className="space-y-1">
       <span className="text-[10px] text-stone-400 uppercase tracking-wide">{label}</span>
       {children}
-    </label>
+    </div>
   );
 }
