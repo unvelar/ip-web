@@ -140,7 +140,7 @@ function Hero({ data }: { data: PublicBrandSumup }) {
               to="/monitor/start"
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-stone-950 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-stone-800 sm:w-auto"
             >
-              Start your scan
+              Start monitoring your IP
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
