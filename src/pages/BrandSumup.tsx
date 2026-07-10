@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { DollarSign, Globe2, SearchCheck, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ArrowRight, DollarSign, Globe2, SearchCheck, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Bar, BarChart, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import BrandMark from "../components/BrandMark";
 import { getPublicBrandSumup, type PublicBrandSumup } from "../api";
 
@@ -11,6 +12,12 @@ const fmtUsd = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 1,
 });
+
+const TOOLTIP_STYLE = {
+  fontSize: 12,
+  border: "1px solid #e7e5e4",
+  borderRadius: 8,
+} as const;
 
 export default function BrandSumup() {
   const { tenantName = "", ipName = "" } = useParams();
@@ -92,26 +99,50 @@ function BrandSumupShell({ children }: { children: React.ReactNode }) {
 }
 
 function Hero({ data }: { data: PublicBrandSumup }) {
+  const confirmed = confirmedUsd(data.totals);
+  const potential = potentialUsd(data.totals);
+
   return (
     <section className="bg-white border-b border-stone-200">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
-        <div className="max-w-4xl">
-          <div className="text-[11px] uppercase tracking-[0.16em] font-bold text-red-700">
-            {data.tenant.name}
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.65fr)] lg:items-center">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.16em] font-bold text-red-700">
+              {data.tenant.name}
+            </div>
+            <h1 className="mt-3 text-4xl sm:text-5xl font-black text-stone-950 leading-none">
+              {data.ip.name}
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm sm:text-base text-stone-600 leading-7">
+              Public result summary from marketplace monitoring and triage.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+              <span className="inline-flex items-center h-7 px-3 rounded-md bg-stone-100 border border-stone-200">
+                {data.websites.length} websites
+              </span>
+              <span className="inline-flex items-center h-7 px-3 rounded-md bg-stone-100 border border-stone-200">
+                Generated {formatDateTime(data.generated_at)}
+              </span>
+            </div>
           </div>
-          <h1 className="mt-3 text-4xl sm:text-5xl font-black text-stone-950 leading-none">
-            {data.ip.name}
-          </h1>
-          <p className="mt-4 max-w-2xl text-sm sm:text-base text-stone-600 leading-7">
-            Public result summary from marketplace monitoring and triage.
-          </p>
-          <div className="mt-6 flex flex-wrap items-center gap-2 text-xs text-stone-500">
-            <span className="inline-flex items-center h-7 px-3 rounded-md bg-stone-100 border border-stone-200">
-              {data.websites.length} websites
-            </span>
-            <span className="inline-flex items-center h-7 px-3 rounded-md bg-stone-100 border border-stone-200">
-              Generated {formatDateTime(data.generated_at)}
-            </span>
+
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-5 sm:p-6">
+            <div className="text-[11px] uppercase tracking-[0.14em] font-bold text-stone-400">
+              Confirmed exposure
+            </div>
+            <div className="mt-2 text-4xl sm:text-5xl font-black text-stone-950 tabular-nums">
+              {fmtUsd.format(confirmed)}
+            </div>
+            <div className="mt-2 text-sm font-semibold text-stone-500 tabular-nums">
+              of {fmtUsd.format(potential)} potential exposure
+            </div>
+            <Link
+              to="/monitor/start"
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-stone-950 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-stone-800 sm:w-auto"
+            >
+              Start your scan
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
           </div>
         </div>
       </div>
@@ -173,8 +204,11 @@ function ValueSummary({ data }: { data: PublicBrandSumup }) {
   const confirmed = confirmedUsd(data.totals);
   const potential = potentialUsd(data.totals);
   const unconfirmed = Math.max(potential - confirmed, 0);
-  const confirmedPct = potential > 0 ? Math.min((confirmed / potential) * 100, 100) : 0;
   const potentialListings = potentialCount(data.totals);
+  const chartData = [{ label: "Exposure", confirmed, awaiting: unconfirmed }];
+  const chartDescription = `${fmtUsd.format(confirmed)} confirmed exposure and ${fmtUsd.format(unconfirmed)} awaiting confirmation, out of ${fmtUsd.format(potential)} total potential exposure.`;
+  const showConfirmedLabel = potential > 0 && confirmed / potential >= 0.15;
+  const showAwaitingLabel = potential > 0 && unconfirmed / potential >= 0.15;
 
   return (
     <section className="rounded-lg border border-stone-200 bg-white overflow-hidden">
@@ -182,60 +216,118 @@ function ValueSummary({ data }: { data: PublicBrandSumup }) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-[11px] uppercase tracking-[0.14em] font-bold text-stone-400">
-              Estimated value
+              Exposure breakdown
             </div>
-            <h2 className="mt-3 text-3xl sm:text-4xl font-black text-stone-950 tabular-nums">
-              {fmtUsd.format(confirmed)}
-              <span className="block sm:inline sm:ml-2 text-xl sm:text-2xl text-stone-400">
-                out of {fmtUsd.format(potential)} potential
-              </span>
+            <h2 className="mt-2 text-xl sm:text-2xl font-black text-stone-950 tabular-nums">
+              {fmtUsd.format(potential)} potential exposure
             </h2>
+            <p className="mt-1 text-xs leading-5 text-stone-500">
+              Estimated listing value split by review outcome.
+            </p>
           </div>
           <DollarSign className="w-5 h-5 text-emerald-700 shrink-0" aria-hidden="true" />
         </div>
 
-        <div className="mt-5 h-3 rounded bg-stone-100 overflow-hidden">
-          <div
-            className="h-full rounded bg-emerald-600"
-            style={{ width: `${confirmedPct}%` }}
-          />
-        </div>
+        {potential > 0 ? (
+          <div className="mt-6" role="img" aria-label={chartDescription}>
+            <div className="h-24 w-full" aria-hidden="true">
+              <ResponsiveContainer>
+                <BarChart data={chartData} layout="vertical" margin={{ top: 8, right: 0, bottom: 8, left: 0 }}>
+                  <XAxis type="number" hide domain={[0, potential]} />
+                  <YAxis type="category" dataKey="label" hide />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    cursor={{ fill: "#f5f5f4" }}
+                    formatter={(value, name) => [
+                      fmtUsd.format(Number(value)),
+                      name === "confirmed" ? "Confirmed exposure" : "Awaiting confirmation",
+                    ]}
+                  />
+                  <Bar
+                    dataKey="confirmed"
+                    stackId="exposure"
+                    fill="#b91c1c"
+                    radius={unconfirmed > 0 ? [8, 0, 0, 8] : [8, 8, 8, 8]}
+                    isAnimationActive={false}
+                  >
+                    {showConfirmedLabel && (
+                      <LabelList
+                        dataKey="confirmed"
+                        position="center"
+                        fill="#ffffff"
+                        fontSize={12}
+                        fontWeight={700}
+                        formatter={(value: number | string) => fmtUsd.format(Number(value))}
+                      />
+                    )}
+                  </Bar>
+                  {unconfirmed > 0 && (
+                    <Bar
+                      dataKey="awaiting"
+                      stackId="exposure"
+                      fill="#d97706"
+                      radius={[0, 8, 8, 0]}
+                      isAnimationActive={false}
+                    >
+                      {showAwaitingLabel && (
+                        <LabelList
+                          dataKey="awaiting"
+                          position="center"
+                          fill="#ffffff"
+                          fontSize={12}
+                          fontWeight={700}
+                          formatter={(value: number | string) => fmtUsd.format(Number(value))}
+                        />
+                      )}
+                    </Bar>
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-3 md:divide-x md:divide-stone-200">
-          <ValueMetric
-            label="Confirmed value"
-            value={fmtUsd.format(confirmed)}
-            detail={`${fmtNumber.format(data.totals.to_takedown_count)} listings marked for takedown`}
-          />
-          <ValueMetric
-            label="Potential exposure"
-            value={fmtUsd.format(potential)}
-            detail={`${fmtNumber.format(potentialListings)} confirmed or still under review`}
-          />
-          <ValueMetric
-            label="Awaiting confirmation"
-            value={fmtUsd.format(unconfirmed)}
-            detail="Pending and review-stage listings"
-          />
-        </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <ExposureLegend
+                color="bg-red-700"
+                label="Confirmed exposure"
+                value={fmtUsd.format(confirmed)}
+                detail={`${fmtNumber.format(data.totals.to_takedown_count)} listings marked for takedown`}
+              />
+              <ExposureLegend
+                color="bg-amber-600"
+                label="Awaiting confirmation"
+                value={fmtUsd.format(unconfirmed)}
+                detail={`${fmtNumber.format(Math.max(potentialListings - data.totals.to_takedown_count, 0))} pending or review-stage listings`}
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="mt-6 rounded-lg bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">
+            No estimated exposure value is available yet.
+          </p>
+        )}
       </div>
     </section>
   );
 }
 
-function ValueMetric({
+function ExposureLegend({
+  color,
   label,
   value,
   detail,
 }: {
+  color: string;
   label: string;
   value: string;
   detail: string;
 }) {
   return (
-    <div className="md:px-5 first:md:pl-0 last:md:pr-0">
-      <div className="text-[11px] uppercase tracking-[0.12em] font-bold text-stone-400">
-        {label}
+    <div className="rounded-lg border border-stone-200 p-4">
+      <div className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${color}`} aria-hidden="true" />
+        <div className="text-[11px] uppercase tracking-[0.12em] font-bold text-stone-500">
+          {label}
+        </div>
       </div>
       <div className="mt-2 text-xl font-black text-stone-950 tabular-nums">{value}</div>
       <div className="mt-1 text-xs leading-5 text-stone-500">{detail}</div>
