@@ -1867,7 +1867,6 @@ export interface MonitoringActionability {
 export type MonitoringRelatedBucketKey =
   | "same_seller"
   | "similar_product_images"
-  | "similar_text"
   | "past_decisions"
   | "cross_site_matches";
 
@@ -1875,8 +1874,6 @@ export type MonitoringRelatedReason =
   | "same_seller"
   | "same_product_image"
   | "image_only_unverified"
-  | "similar_title"
-  | "similar_listing_text"
   | "prior_takedown"
   | "prior_enforced"
   | "prior_dismissal"

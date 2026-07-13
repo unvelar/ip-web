@@ -22,10 +22,6 @@ function reasonLabel(reason: MonitoringRelatedReason) {
       return "same product image";
     case "image_only_unverified":
       return "image overlap";
-    case "similar_title":
-      return "similar title";
-    case "similar_listing_text":
-      return "similar text";
     case "prior_takedown":
       return "prior takedown";
     case "prior_enforced":
