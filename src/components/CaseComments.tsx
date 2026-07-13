@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { MessageSquare } from "lucide-react";
 import {
   listCaseComments,
   postCaseComment,
@@ -27,10 +28,16 @@ export default function CaseComments({
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setComments([]);
+    setDraft("");
+    setError("");
+    setExpanded(false);
     listCaseComments(caseId)
       .then((r) => alive && setComments(r.comments))
       .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)))
@@ -39,6 +46,10 @@ export default function CaseComments({
       alive = false;
     };
   }, [caseId]);
+
+  useEffect(() => {
+    if (expanded) textareaRef.current?.focus();
+  }, [expanded]);
 
   async function post(e: React.FormEvent) {
     e.preventDefault();
@@ -67,6 +78,29 @@ export default function CaseComments({
     }
   }
 
+  if (loading) return null;
+
+  if (comments.length === 0 && !expanded) {
+    return (
+      <section className="space-y-3">
+        {error && (
+          <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">
+            {error}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          aria-expanded="false"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-stone-500 hover:text-stone-900 transition-colors"
+        >
+          <MessageSquare size={15} aria-hidden="true" />
+          Write a comment
+        </button>
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-3">
       {compact ? (
@@ -88,54 +122,45 @@ export default function CaseComments({
         </div>
       )}
 
-      {loading ? (
-        <div className="py-4 flex justify-center">
-          <div className="w-5 h-5 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : (
-        <>
-          {comments.length === 0 ? (
-            <p className="text-sm text-stone-400">No comments yet.</p>
-          ) : (
-            <ul className="space-y-3">
-              {comments.map((c) => (
-                <CommentRow
-                  key={c.id}
-                  comment={c}
-                  isAuthor={!!user && user.id === c.author.id}
-                  onDelete={() => remove(c.id)}
-                />
-              ))}
-            </ul>
-          )}
-
-          <form onSubmit={post} className="flex gap-3 items-start pt-1">
-            <Avatar
-              pictureUrl={user?.picture_url ?? null}
-              name={user?.display_name ?? user?.email ?? null}
-              size={32}
+      {comments.length > 0 && (
+        <ul className="space-y-3">
+          {comments.map((c) => (
+            <CommentRow
+              key={c.id}
+              comment={c}
+              isAuthor={!!user && user.id === c.author.id}
+              onDelete={() => remove(c.id)}
             />
-            <div className="flex-1 space-y-2">
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                rows={2}
-                placeholder="Add a comment — visible to everyone in your workspace."
-                className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all resize-y"
-              />
-              <div className="flex items-center justify-end">
-                <button
-                  type="submit"
-                  disabled={posting || !draft.trim()}
-                  className="px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-semibold hover:bg-stone-800 disabled:opacity-50 transition-all"
-                >
-                  {posting ? "Posting…" : "Post comment"}
-                </button>
-              </div>
-            </div>
-          </form>
-        </>
+          ))}
+        </ul>
       )}
+
+      <form onSubmit={post} className="flex gap-3 items-start pt-1">
+        <Avatar
+          pictureUrl={user?.picture_url ?? null}
+          name={user?.display_name ?? user?.email ?? null}
+          size={32}
+        />
+        <div className="flex-1 space-y-2">
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={2}
+            placeholder="Add a comment — visible to everyone in your workspace."
+            className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all resize-y"
+          />
+          <div className="flex items-center justify-end">
+            <button
+              type="submit"
+              disabled={posting || !draft.trim()}
+              className="px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-semibold hover:bg-stone-800 disabled:opacity-50 transition-all"
+            >
+              {posting ? "Posting…" : "Post comment"}
+            </button>
+          </div>
+        </div>
+      </form>
     </section>
   );
 }

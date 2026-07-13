@@ -433,7 +433,7 @@ export function FindingComparison({
           thread, and case comments live with the finding instead of on a separate
           case page. Triage sends the first takedown straight from the row header
           (Send takedown); this panel surfaces the thread once a request exists.
-          Comments show whenever a case exists. */}
+          Existing comments stay visible; empty threads collapse to a write action. */}
       {f.case_id && (
         <div className="border-t border-stone-200 pt-3 space-y-4">
           {["takedown_sent", "enforced"].includes(
