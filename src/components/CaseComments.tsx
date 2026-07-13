@@ -91,10 +91,10 @@ export default function CaseComments({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          aria-expanded="false"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-stone-500 hover:text-stone-900 transition-colors"
+          aria-expanded={expanded}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800"
         >
-          <MessageSquare size={15} aria-hidden="true" />
+          <MessageSquare size={14} aria-hidden="true" />
           Write a comment
         </button>
       </section>
@@ -103,18 +103,16 @@ export default function CaseComments({
 
   return (
     <section className="space-y-3">
-      {compact ? (
-        <h3 className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-          Discussion{comments.length > 0 && ` · ${comments.length}`}
+      {comments.length > 0 && (compact ? (
+        <h3 className="text-xs font-semibold text-stone-700">
+          Comments <span className="font-normal text-stone-400">· {comments.length}</span>
         </h3>
       ) : (
         <h2 className="text-lg font-black text-stone-900 tracking-tight">
           Comments
-          {comments.length > 0 && (
-            <span className="ml-2 text-sm font-semibold text-stone-400">{comments.length}</span>
-          )}
+          <span className="ml-2 text-sm font-semibold text-stone-400">{comments.length}</span>
         </h2>
-      )}
+      ))}
 
       {error && (
         <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">
@@ -135,32 +133,44 @@ export default function CaseComments({
         </ul>
       )}
 
-      <form onSubmit={post} className="flex gap-3 items-start pt-1">
-        <Avatar
-          pictureUrl={user?.picture_url ?? null}
-          name={user?.display_name ?? user?.email ?? null}
-          size={32}
-        />
-        <div className="flex-1 space-y-2">
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={2}
-            placeholder="Add a comment — visible to everyone in your workspace."
-            className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all resize-y"
+      {expanded ? (
+        <form onSubmit={post} className="flex gap-3 items-start pt-1">
+          <Avatar
+            pictureUrl={user?.picture_url ?? null}
+            name={user?.display_name ?? user?.email ?? null}
+            size={32}
           />
-          <div className="flex items-center justify-end">
-            <button
-              type="submit"
-              disabled={posting || !draft.trim()}
-              className="px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-semibold hover:bg-stone-800 disabled:opacity-50 transition-all"
-            >
-              {posting ? "Posting…" : "Post comment"}
-            </button>
+          <div className="flex-1 space-y-2">
+            <textarea
+              ref={textareaRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={2}
+              placeholder="Add a comment — visible to everyone in your workspace."
+              className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all resize-y"
+            />
+            <div className="flex items-center justify-end">
+              <button
+                type="submit"
+                disabled={posting || !draft.trim()}
+                className="px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-semibold hover:bg-stone-800 disabled:opacity-50 transition-all"
+              >
+                {posting ? "Posting…" : "Post comment"}
+              </button>
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          aria-expanded={expanded}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800"
+        >
+          <MessageSquare size={14} aria-hidden="true" />
+          Reply
+        </button>
+      )}
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
-import { FindingComparison } from "./FindingComparison";
+import CaseComments from "../../CaseComments";
+import { FindingComparison, FindingTechnicalDetails } from "./FindingComparison";
 import type { FindingUpdateOptions } from "./FindingActions";
 import { RelatedItemsPanel } from "./RelatedItemsPanel";
 import { compactListingTitle } from "./utils";
@@ -81,11 +82,17 @@ export function FindingInspector({
             onUpdated={onUpdated}
           />
           {showRelatedItems && (
-            <RelatedItemsPanel
-              finding={f}
-              onAddToBatch={onAddRelatedToBatch}
-            />
+            <div className="mt-4 border-t border-stone-200 pt-4">
+              <RelatedItemsPanel
+                finding={f}
+                onAddToBatch={onAddRelatedToBatch}
+              />
+            </div>
           )}
+          <div className="mt-4 space-y-3 border-t border-stone-200 pt-3">
+            <FindingTechnicalDetails f={f} />
+            {f.case_id && <CaseComments caseId={f.case_id} compact />}
+          </div>
         </div>
       </aside>
     </div>

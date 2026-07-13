@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ExternalLink, MoreHorizontal } from "lucide-react";
 import TakedownPanel from "../../TakedownPanel";
-import CaseComments from "../../CaseComments";
 import {
   reenrichIpFinding,
   type IpReviewFinding,
@@ -22,6 +21,72 @@ import {
   matchMethodChip,
   methodChip,
 } from "./utils";
+
+export function FindingTechnicalDetails({ f }: { f: IpReviewFinding }) {
+  const licensedSeller = !!f.licensed_seller || f.dismissal_reason === "licensed";
+  const infringement = infringementTypeMeta(f.infringement_type);
+  const licenseStatus = licenseStatusMeta(f.license_status, { licensedSeller });
+
+  return (
+    <details className="text-xs text-stone-400">
+      <summary className="w-fit cursor-pointer select-none text-[11px] font-medium hover:text-stone-600">
+        Technical details
+      </summary>
+      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+        <span className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
+          sim {Math.round((f.similarity_score ?? 0) * 100)}%
+        </span>
+        {f.inliers != null && (
+          <span className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
+            inliers {f.inliers}
+          </span>
+        )}
+        {f.source_method && (
+          <span
+            className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase ${methodChip(f.source_method).cls}`}
+            title={`Found via ${f.source_method}`}
+          >
+            {methodChip(f.source_method).label}
+          </span>
+        )}
+        {f.match_method && (
+          <span
+            className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase ${matchMethodChip(f.match_method).cls}`}
+            title={matchMethodChip(f.match_method).title}
+          >
+            {matchMethodChip(f.match_method).label}
+          </span>
+        )}
+        {f.vlm_verdict && (
+          <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600">
+            vlm: {f.vlm_verdict}
+            {f.vlm_confidence != null && `@${Math.round(f.vlm_confidence * 100)}%`}
+          </span>
+        )}
+        {infringement && (
+          <span
+            className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600"
+            title={infringement.title}
+          >
+            {infringement.label}
+          </span>
+        )}
+        {licenseStatus && (
+          <span
+            className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600"
+            title={licenseStatus.title}
+          >
+            {licenseStatus.label}
+          </span>
+        )}
+        {f.license_reasoning && (
+          <span className="text-stone-500">· license: {f.license_reasoning}</span>
+        )}
+        {f.published_at && <span className="text-stone-400">· {f.published_at}</span>}
+      </div>
+    </details>
+  );
+}
 
 export function FindingComparison({
   f,
@@ -69,8 +134,6 @@ export function FindingComparison({
 
   const sb = findingStatusBadge(f);
   const actionability = actionabilityMeta(f.actionability);
-  const infringement = infringementTypeMeta(f.infringement_type);
-  const licenseStatus = licenseStatusMeta(f.license_status, { licensedSeller });
   const sellerPriorEnforcement = f.seller_prior_enforcement_count ?? 0;
   const whyFlagged = findingFlaggedReason(f);
   const countryLabel = f.country || "Unknown";
@@ -381,73 +444,22 @@ export function FindingComparison({
         )}
       </div>
 
-      {/* Signals — developer-facing match diagnostics, collapsed by default so
-          they don't crowd the reviewer's primary scan. */}
-      <details className="text-xs text-stone-400">
-        <summary className="cursor-pointer hover:text-stone-600 select-none">Signals</summary>
-        <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-          <span className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">sim {Math.round((f.similarity_score ?? 0) * 100)}%</span>
-          {f.inliers != null && (
-            <span className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">inliers {f.inliers}</span>
-          )}
-          {f.source_method && (
-            <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase ${methodChip(f.source_method).cls}`} title={`Found via ${f.source_method}`}>
-              {methodChip(f.source_method).label}
-            </span>
-          )}
-          {f.match_method && (
-            <span
-              className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase ${matchMethodChip(f.match_method).cls}`}
-              title={matchMethodChip(f.match_method).title}
-            >
-              {matchMethodChip(f.match_method).label}
-            </span>
-          )}
-          {f.vlm_verdict && (
-            <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600">
-              vlm: {f.vlm_verdict}
-              {f.vlm_confidence != null && `@${Math.round(f.vlm_confidence * 100)}%`}
-            </span>
-          )}
-          {infringement && (
-            <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600" title={infringement.title}>
-              {infringement.label}
-            </span>
-          )}
-          {licenseStatus && (
-            <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600" title={licenseStatus.title}>
-              {licenseStatus.label}
-            </span>
-          )}
-          {f.license_reasoning && (
-            <span className="text-stone-500">· license: {f.license_reasoning}</span>
-          )}
-          {f.published_at && <span className="text-stone-400">· {f.published_at}</span>}
-        </div>
-      </details>
-
         </div>
       </div>
 
-      {/* Takedown thread + discussion — inlined here so the email flow, reply
-          thread, and case comments live with the finding instead of on a separate
-          case page. Triage sends the first takedown straight from the row header
-          (Send takedown); this panel surfaces the thread once a request exists.
-          Existing comments stay visible; empty threads collapse to a write action. */}
-      {f.case_id && (
+      {/* Triage sends the first takedown from the row header; surface its thread
+          here once a request exists. */}
+      {f.case_id && ["takedown_sent", "enforced"].includes(
+        (f.dismissed_at ? "dismissed" : f.review_status) ?? "",
+      ) && (
         <div className="border-t border-stone-200 pt-3 space-y-4">
-          {["takedown_sent", "enforced"].includes(
-            (f.dismissed_at ? "dismissed" : f.review_status) ?? "",
-          ) && (
-            <TakedownPanel
-              caseId={f.case_id}
-              ipId={f.ip_id}
-              platform={f.domain}
-              compact
-              onStatusChange={onUpdated}
-            />
-          )}
-          <CaseComments caseId={f.case_id} compact />
+          <TakedownPanel
+            caseId={f.case_id}
+            ipId={f.ip_id}
+            platform={f.domain}
+            compact
+            onStatusChange={onUpdated}
+          />
         </div>
       )}
     </div>

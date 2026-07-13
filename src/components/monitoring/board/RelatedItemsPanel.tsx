@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Check, ExternalLink, GitBranch, Loader2, Plus } from "lucide-react";
+import { Check, ExternalLink, GitBranch, Info, Loader2, Plus } from "lucide-react";
 import {
   createMonitoringCampaign,
   getMonitoringFindingRelated,
@@ -68,9 +68,12 @@ function outcomeLabel(key: string) {
 }
 
 function relatedPreviewText(f: MonitoringRelatedFinding) {
-  return [f.seller_name, f.domain, f.found_at ? `found ${formatAgo(f.found_at) ?? ""}` : null]
+  const title = compactListingTitle(f).toLowerCase();
+  const domain = f.domain && !title.includes(f.domain.toLowerCase()) ? f.domain : null;
+  const foundAgo = f.found_at ? formatAgo(f.found_at) : null;
+  return [f.seller_name, domain, foundAgo ? `found ${foundAgo}` : null]
     .filter(Boolean)
-    .join(" - ");
+    .join(" · ");
 }
 
 function relatedOpenItems(bucket: MonitoringRelatedBucket) {
@@ -169,21 +172,22 @@ function CampaignSuggestionRow({
 function RelatedFindingRow({ item }: { item: MonitoringRelatedFinding }) {
   const status = findingStatusBadge(item);
   const score = scoreLabel(item.relation_score);
+  const preview = relatedPreviewText(item);
   return (
-    <div className="rounded-md border border-stone-200 bg-white px-2.5 py-2">
-      <div className="flex items-start gap-2">
+    <div className="rounded-lg border border-stone-200 bg-stone-50/30 px-2.5 py-2">
+      <div className="flex items-center gap-2.5">
         {item.image_url ? (
           <img
             src={item.image_url}
             alt=""
-            className="h-12 w-12 shrink-0 rounded-md border border-stone-200 object-cover"
+            className="h-11 w-11 shrink-0 rounded-md border border-stone-200 object-cover"
             loading="lazy"
           />
         ) : (
-          <div className="h-12 w-12 shrink-0 rounded-md border border-dashed border-stone-200 bg-stone-50" />
+          <div className="h-11 w-11 shrink-0 rounded-md border border-dashed border-stone-200 bg-stone-50" />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex min-w-0 items-center justify-between gap-2">
             <span className="truncate text-xs font-semibold text-stone-900">
               {compactListingTitle(item)}
             </span>
@@ -191,9 +195,9 @@ function RelatedFindingRow({ item }: { item: MonitoringRelatedFinding }) {
               {status.label}
             </span>
           </div>
-          <div className="mt-0.5 truncate text-[11px] text-stone-500">{relatedPreviewText(item)}</div>
+          {preview && <div className="mt-0.5 truncate text-[11px] text-stone-500">{preview}</div>}
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            {item.relation_reasons.map((reason) => (
+            {item.relation_reasons.map((reason, index) => (
               <span
                 key={reason}
                 className={
@@ -203,9 +207,12 @@ function RelatedFindingRow({ item }: { item: MonitoringRelatedFinding }) {
                 }
               >
                 {reasonLabel(reason)}
+                {index === 0 && score && ` · ${score}`}
               </span>
             ))}
-            {score && <span className="text-[10px] text-stone-400">{score}</span>}
+            {item.relation_reasons.length === 0 && score && (
+              <span className="text-[10px] text-stone-400">{score}</span>
+            )}
           </div>
         </div>
         <a
@@ -238,11 +245,11 @@ function RelatedBucketSection({
   if (!hasContent) return null;
 
   return (
-    <section className="space-y-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h4 className="text-xs font-bold uppercase tracking-wide text-stone-500">{bucket.label}</h4>
-          <p className="mt-0.5 text-[11px] text-stone-400">{bucket.summary}</p>
+    <section className="space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-baseline gap-1.5">
+          <h4 className="shrink-0 text-xs font-semibold text-stone-700">{bucket.label}</h4>
+          <span className="truncate text-[11px] text-stone-400">· {bucket.summary}</span>
         </div>
         {openItems.length > 0 && (
           <button
@@ -268,7 +275,7 @@ function RelatedBucketSection({
         </div>
       )}
 
-      <div className="grid gap-1.5">
+      <div className="grid gap-2">
         {bucket.items.slice(0, 5).map((item) => (
           <RelatedFindingRow key={item.result_id} item={item} />
         ))}
@@ -389,7 +396,7 @@ export function RelatedItemsPanel({
 
   if (loading) {
     return (
-      <div className="border-t border-stone-200 pt-3 text-sm text-stone-400">
+      <div className="text-sm text-stone-400">
         Loading related items...
       </div>
     );
@@ -397,7 +404,7 @@ export function RelatedItemsPanel({
 
   if (error) {
     return (
-      <div className="border-t border-stone-200 pt-3 text-sm text-red-600">
+      <div className="text-sm text-red-600">
         {error}
       </div>
     );
@@ -413,13 +420,15 @@ export function RelatedItemsPanel({
   );
 
   return (
-    <div className="border-t border-stone-200 pt-3">
-      <div className="mb-2 flex items-start justify-between gap-3">
+    <div>
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-stone-900">Related items</h3>
           <div className="mt-0.5 flex items-start gap-1.5 text-[11px] leading-4 text-stone-500">
-            <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-500" aria-hidden />
-            <span>{related.logo_only_notice}</span>
+            <Info size={12} className="mt-0.5 shrink-0 text-stone-400" aria-hidden />
+            <span title={related.logo_only_notice}>
+              Logo-only matches are evidence, but aren&apos;t grouped into campaigns.
+            </span>
           </div>
         </div>
       </div>
