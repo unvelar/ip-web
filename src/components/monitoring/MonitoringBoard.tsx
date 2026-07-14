@@ -221,7 +221,7 @@ export function MonitoringBoard({
 
   // Selection is keyed by result_id. Related-items can add rows that are not
   // currently loaded in the visible page, so keep their full finding payloads
-  // in a small side map and float selected rows to the top of the queue.
+  // in a small side map without reordering the visible page.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionExtras, setSelectionExtras] = useState<Map<string, IpReviewFinding>>(new Map());
   const appliedSeedKey = useRef<string | null>(null);
@@ -238,22 +238,16 @@ export function MonitoringBoard({
       ? [activeFinding, ...filteredFindings]
       : filteredFindings;
 
-    if (selected.size === 0) return baseFindings;
+    if (selectionExtras.size === 0) return baseFindings;
 
-    const selectedFindings: IpReviewFinding[] = [];
-    const unselectedFindings: IpReviewFinding[] = [];
-    const seen = new Set<string>();
-    for (const f of baseFindings) {
-      seen.add(f.result_id);
-      if (selected.has(f.result_id)) selectedFindings.push(f);
-      else unselectedFindings.push(f);
-    }
+    const seen = new Set(baseFindings.map((f) => f.result_id));
+    const extraFindings: IpReviewFinding[] = [];
     for (const f of selectionExtras.values()) {
       if (!selected.has(f.result_id) || seen.has(f.result_id)) continue;
       seen.add(f.result_id);
-      selectedFindings.push(f);
+      extraFindings.push(f);
     }
-    return [...selectedFindings, ...unselectedFindings];
+    return extraFindings.length > 0 ? [...baseFindings, ...extraFindings] : baseFindings;
   }, [activeId, completingResultIds, filteredFindings, findings, selected, selectionExtras]);
 
   // If filters/refetches remove the active row, the inspector naturally closes

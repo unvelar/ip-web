@@ -337,9 +337,14 @@ export function MonitoringInboxView() {
       seen.add(finding.result_id);
       out.push(finding);
     };
-    add(linkedFinding);
-    for (const finding of campaignBatchFindings) add(finding);
+
+    // Preserve the API/page order for visible findings. Route-linked and
+    // campaign findings are retained for detail/batch flows, but they should
+    // not promote a clicked row above the current table order when the URL
+    // changes to /monitoring/tasks/:taskId.
     for (const finding of findings) add(finding);
+    for (const finding of campaignBatchFindings) add(finding);
+    add(linkedFinding);
     return out;
   }, [campaignBatchFindings, findings, linkedFinding]);
 
