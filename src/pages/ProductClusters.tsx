@@ -8,7 +8,7 @@ import {
   type ProductClusterProfile,
   type ProductClusterScope,
 } from "../api";
-import ProductClusterGraphView from "../components/product-clusters/ProductClusterGraph";
+import ProductSimilarityRadial from "../components/product-clusters/ProductSimilarityRadial";
 import {
   profileTitle,
   scoreFor,
@@ -18,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 
 const MAX_NODES = 80;
 const MAX_EDGES = 400;
+type LabView = "similarity" | "groups";
 
 export default function ProductClusters() {
   const { actingTenantId } = useAuth();
@@ -25,7 +26,9 @@ export default function ProductClusters() {
   const [selectedIpId, setSelectedIpId] = useState("");
   const [graph, setGraph] = useState<ProductClusterGraph | null>(null);
   const [mode, setMode] = useState<RelationshipMode>("same");
+  const [view, setView] = useState<LabView>("similarity");
   const [threshold, setThreshold] = useState(0.3);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [scopesLoadedKey, setScopesLoadedKey] = useState<string | null>(null);
@@ -73,6 +76,7 @@ export default function ProductClusters() {
       .then((nextGraph) => {
         if (!alive) return;
         setGraph(nextGraph);
+        setError(null);
       })
       .catch((caught: unknown) => {
         if (!alive) return;
@@ -93,24 +97,34 @@ export default function ProductClusters() {
       .filter((edge) => scoreFor(edge, mode) >= threshold)
       .sort((left, right) => scoreFor(right, mode) - scoreFor(left, mode));
   }, [graph, mode, threshold]);
-
   const profileById = useMemo(
     () => new Map(graph?.profiles.map((profile) => [profile.id, profile]) ?? []),
     [graph],
   );
-  const effectiveSelectedEdgeId = visibleEdges.some(
-    (edge) => edge.id === selectedEdgeId,
-  )
+  const effectiveProfileId = selectedProfileId && profileById.has(selectedProfileId)
+    ? selectedProfileId
+    : graph?.profiles[0]?.id ?? null;
+  const reference = effectiveProfileId ? profileById.get(effectiveProfileId) ?? null : null;
+  const referenceEdges = useMemo(
+    () => effectiveProfileId
+      ? visibleEdges.filter((edge) =>
+        edge.left_profile_id === effectiveProfileId || edge.right_profile_id === effectiveProfileId
+      )
+      : [],
+    [effectiveProfileId, visibleEdges],
+  );
+  const effectiveSelectedEdgeId = referenceEdges.some((edge) => edge.id === selectedEdgeId)
     ? selectedEdgeId
-    : visibleEdges[0]?.id ?? null;
-  const selectedEdge =
-    visibleEdges.find((edge) => edge.id === effectiveSelectedEdgeId) ?? null;
-  const selectedLeft = selectedEdge
-    ? profileById.get(selectedEdge.left_profile_id) ?? null
+    : referenceEdges[0]?.id ?? null;
+  const selectedEdge = referenceEdges.find((edge) => edge.id === effectiveSelectedEdgeId) ?? null;
+  const comparisonProfile = selectedEdge && effectiveProfileId
+    ? profileById.get(otherProfileId(selectedEdge, effectiveProfileId)) ?? null
     : null;
-  const selectedRight = selectedEdge
-    ? profileById.get(selectedEdge.right_profile_id) ?? null
-    : null;
+
+  function selectReference(profileId: string, edgeId: string | null = null) {
+    setSelectedProfileId(profileId);
+    setSelectedEdgeId(edgeId);
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-6">
@@ -125,8 +139,7 @@ export default function ProductClusters() {
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Explore listings that the model considers the same product or closely related.
-            Nothing you do here changes monitoring decisions.
+            Compare listings with each other. These scores do not measure similarity to the IP itself.
           </p>
         </div>
         <button
@@ -157,6 +170,8 @@ export default function ProductClusters() {
               onChange={(event) => {
                 setError(null);
                 setSelectedIpId(event.target.value);
+                setSelectedProfileId(null);
+                setSelectedEdgeId(null);
               }}
               disabled={loadingScopes || scopes.length === 0}
               className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 disabled:bg-stone-50"
@@ -164,7 +179,7 @@ export default function ProductClusters() {
               {scopes.length === 0 && <option value="">No profiles available</option>}
               {scopes.map((scope) => (
                 <option value={scope.ip_id} key={scope.ip_id}>
-                  {scope.ip_name} · {scope.profile_count} products · {scope.pair_count} pairs
+                  {scope.ip_name} · {scope.profile_count} listings · {scope.pair_count} pairs
                 </option>
               ))}
             </select>
@@ -172,7 +187,7 @@ export default function ProductClusters() {
 
           <div>
             <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">
-              Relationship
+              Relationship score
             </span>
             <div className="inline-flex rounded-lg border border-stone-300 bg-stone-50 p-1">
               <ModeButton active={mode === "same"} onClick={() => setMode("same")}>
@@ -203,11 +218,11 @@ export default function ProductClusters() {
 
         {graph && (
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-stone-100 pt-3 text-xs text-stone-500">
-            <span><strong className="text-stone-800">{graph.profiles.length}</strong> listings shown</span>
-            <span><strong className="text-stone-800">{visibleEdges.length}</strong> visible relationships</span>
+            <span><strong className="text-stone-800">{graph.profiles.length}</strong> listings loaded</span>
+            <span><strong className="text-stone-800">{visibleEdges.length}</strong> relationships above threshold</span>
             <span><strong className="text-stone-800">{graph.scope.pair_count}</strong> scored pairs total</span>
             {graph.truncated && (
-              <span className="text-amber-700">Showing the strongest bounded subset for readability</span>
+              <span className="text-amber-700">Showing the strongest bounded subset</span>
             )}
           </div>
         )}
@@ -219,104 +234,173 @@ export default function ProductClusters() {
         </div>
       )}
 
+      {graph && (
+        <div className="mt-5 flex border-b border-stone-200" role="tablist" aria-label="Clustering lab view">
+          <ViewTab
+            active={view === "similarity"}
+            onClick={() => setView("similarity")}
+          >
+            Similarity from one listing
+          </ViewTab>
+          <ViewTab active={view === "groups"} onClick={() => setView("groups")}>
+            Product groups
+          </ViewTab>
+        </div>
+      )}
+
       {loadingScopes ? (
         <LoadingState />
       ) : scopes.length === 0 ? (
         <EmptyState />
       ) : loadingGraph && !graph ? (
         <LoadingState />
-      ) : graph ? (
-        <>
-          <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className={loadingGraph ? "min-w-0 opacity-60" : "min-w-0"}>
-              <ProductClusterGraphView
-                profiles={graph.profiles}
-                edges={visibleEdges}
-                layoutEdges={graph.edges}
-                mode={mode}
-                selectedEdgeId={effectiveSelectedEdgeId}
-              />
-            </div>
-            <RankedPairs
-              edges={visibleEdges}
-              mode={mode}
-              profileById={profileById}
-              selectedEdgeId={effectiveSelectedEdgeId}
-              onSelect={setSelectedEdgeId}
-            />
-          </div>
-
-          {selectedEdge && selectedLeft && selectedRight && (
-            <PairInspector
-              edge={selectedEdge}
-              left={selectedLeft}
-              right={selectedRight}
-            />
-          )}
-        </>
+      ) : graph && reference ? (
+        view === "similarity" ? (
+          <SimilarityView
+            graph={graph}
+            reference={reference}
+            referenceEdges={referenceEdges}
+            profileById={profileById}
+            mode={mode}
+            selectedEdgeId={effectiveSelectedEdgeId}
+            selectedEdge={selectedEdge}
+            comparisonProfile={comparisonProfile}
+            loading={loadingGraph}
+            onSelectReference={selectReference}
+          />
+        ) : (
+          <ProductGroupsOverview
+            profiles={graph.profiles}
+            edges={visibleEdges}
+            mode={mode}
+            threshold={threshold}
+            onSelectReference={(profileId) => {
+              selectReference(profileId);
+              setView("similarity");
+            }}
+          />
+        )
       ) : null}
     </div>
   );
 }
 
-function ModeButton({
-  active,
-  onClick,
-  children,
+function SimilarityView({
+  graph,
+  reference,
+  referenceEdges,
+  profileById,
+  mode,
+  selectedEdgeId,
+  selectedEdge,
+  comparisonProfile,
+  loading,
+  onSelectReference,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  graph: ProductClusterGraph;
+  reference: ProductClusterProfile;
+  referenceEdges: ProductClusterEdge[];
+  profileById: Map<string, ProductClusterProfile>;
+  mode: RelationshipMode;
+  selectedEdgeId: string | null;
+  selectedEdge: ProductClusterEdge | null;
+  comparisonProfile: ProductClusterProfile | null;
+  loading: boolean;
+  onSelectReference: (profileId: string, edgeId?: string | null) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
-        active
-          ? "bg-stone-900 text-white shadow-sm"
-          : "text-stone-600 hover:bg-white hover:text-stone-900"
-      }`}
-    >
-      {children}
-    </button>
+    <>
+      <div className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+        <label className="block max-w-2xl">
+          <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">
+            Reference listing shown in the center
+          </span>
+          <select
+            value={reference.id}
+            onChange={(event) => onSelectReference(event.target.value)}
+            className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+          >
+            {graph.profiles.map((profile) => (
+              <option value={profile.id} key={profile.id}>
+                {profileTitle(profile)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="mt-2 text-xs text-stone-500">
+          Every distance is calculated only from this listing. Select another node to make it the new reference.
+        </p>
+      </div>
+
+      <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className={loading ? "min-w-0 opacity-60" : "min-w-0"}>
+          <ProductSimilarityRadial
+            reference={reference}
+            edges={referenceEdges}
+            profileById={profileById}
+            mode={mode}
+            selectedEdgeId={selectedEdgeId}
+            onSelectNeighbor={onSelectReference}
+          />
+        </div>
+        <NearestListings
+          referenceId={reference.id}
+          edges={referenceEdges}
+          mode={mode}
+          profileById={profileById}
+          selectedEdgeId={selectedEdgeId}
+          onSelect={onSelectReference}
+        />
+      </div>
+
+      {selectedEdge && comparisonProfile && (
+        <PairInspector
+          edge={selectedEdge}
+          reference={reference}
+          comparison={comparisonProfile}
+        />
+      )}
+    </>
   );
 }
 
-function RankedPairs({
+function NearestListings({
+  referenceId,
   edges,
   mode,
   profileById,
   selectedEdgeId,
   onSelect,
 }: {
+  referenceId: string;
   edges: ProductClusterEdge[];
   mode: RelationshipMode;
   profileById: Map<string, ProductClusterProfile>;
   selectedEdgeId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (profileId: string, edgeId: string) => void;
 }) {
   return (
     <aside className="min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
       <div className="border-b border-stone-100 px-4 py-3">
-        <h2 className="text-sm font-bold text-stone-900">Closest pairs</h2>
-        <p className="mt-0.5 text-xs text-stone-500">Ranked by exact combined score</p>
+        <h2 className="text-sm font-bold text-stone-900">Most similar to the reference</h2>
+        <p className="mt-0.5 text-xs text-stone-500">Select one to move it into the center</p>
       </div>
-      <div className="max-h-[472px] overflow-y-auto p-2">
+      <div className="max-h-[512px] overflow-y-auto p-2">
         {edges.length === 0 ? (
           <p className="px-3 py-10 text-center text-sm text-stone-500">
-            No pairs meet this confidence. Lower the threshold to reveal more.
+            No direct relationships meet this confidence. Lower the threshold to reveal more.
           </p>
         ) : (
           edges.slice(0, 50).map((edge, index) => {
-            const left = profileById.get(edge.left_profile_id);
-            const right = profileById.get(edge.right_profile_id);
+            const profileId = otherProfileId(edge, referenceId);
+            const profile = profileById.get(profileId);
+            if (!profile) return null;
             const selected = edge.id === selectedEdgeId;
             return (
               <button
                 type="button"
                 key={edge.id}
-                onClick={() => onSelect(edge.id)}
+                onClick={() => onSelect(profileId, edge.id)}
                 className={`mb-1 w-full rounded-xl border px-3 py-2.5 text-left transition last:mb-0 ${
                   selected
                     ? "border-red-200 bg-red-50"
@@ -326,21 +410,15 @@ function RankedPairs({
                 <div className="flex items-center gap-2">
                   <span className="w-5 shrink-0 text-[10px] font-bold text-stone-400">#{index + 1}</span>
                   <span className="min-w-0 flex-1 truncate text-xs font-medium text-stone-800">
-                    {left ? profileTitle(left) : "Unknown listing"}
+                    {profileTitle(profile)}
                   </span>
                   <span className="font-mono text-xs font-bold text-red-800">
                     {scoreFor(edge, mode).toFixed(3)}
                   </span>
                 </div>
-                <div className="mt-1 flex items-center gap-2 pl-7">
-                  <span className="min-w-0 flex-1 truncate text-xs text-stone-500">
-                    ↔ {right ? profileTitle(right) : "Unknown listing"}
-                  </span>
-                  {edge.price_ratio != null && (
-                    <span className="shrink-0 text-[10px] text-stone-400">
-                      {edge.price_ratio.toFixed(2)}× price
-                    </span>
-                  )}
+                <div className="mt-1 flex items-center justify-between gap-2 pl-7 text-[10px] text-stone-400">
+                  <span>{profile.platform || "Unknown platform"}</span>
+                  {edge.price_ratio != null && <span>{edge.price_ratio.toFixed(2)}× price ratio</span>}
                 </div>
               </button>
             );
@@ -351,23 +429,139 @@ function RankedPairs({
   );
 }
 
+function ProductGroupsOverview({
+  profiles,
+  edges,
+  mode,
+  threshold,
+  onSelectReference,
+}: {
+  profiles: ProductClusterProfile[];
+  edges: ProductClusterEdge[];
+  mode: RelationshipMode;
+  threshold: number;
+  onSelectReference: (profileId: string) => void;
+}) {
+  const { groups, unconnected } = useMemo(
+    () => buildProductGroups(profiles, edges, mode),
+    [profiles, edges, mode],
+  );
+  const groupLabel = mode === "same" ? "Potential product group" : "Related family";
+
+  return (
+    <div className="mt-5">
+      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        In each {mode === "same" ? "product group" : "related family"}, every listing has a direct stored score of at least {threshold.toFixed(2)} with every other member.
+        These are strict review candidates, not confirmed products, and they do not measure similarity to the IP.
+      </div>
+
+      {groups.length === 0 ? (
+        <div className="mt-5 rounded-2xl border border-dashed border-stone-300 bg-white px-6 py-14 text-center">
+          <h2 className="text-base font-bold text-stone-900">No multi-listing groups at this threshold</h2>
+          <p className="mt-2 text-sm text-stone-500">Lower the minimum confidence to connect more listings.</p>
+        </div>
+      ) : (
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          {groups.map((group, index) => (
+            <section key={group.id} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-stone-500">
+                    {groupLabel} {index + 1}
+                  </p>
+                  <h2 className="mt-1 line-clamp-1 text-sm font-bold text-stone-900">
+                    {profileTitle(group.profiles[0])}
+                  </h2>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-bold text-stone-900">{group.profiles.length} listings</p>
+                  <p className="mt-0.5 text-[10px] text-stone-500">
+                    Avg visible link {group.averageScore.toFixed(3)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {group.profiles.slice(0, 8).map((profile) => (
+                  <ListingTile
+                    key={profile.id}
+                    profile={profile}
+                    onClick={() => onSelectReference(profile.id)}
+                  />
+                ))}
+              </div>
+              {group.profiles.length > 8 && (
+                <p className="mt-3 text-xs text-stone-500">+{group.profiles.length - 8} more listings in this group</p>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
+
+      {unconnected.length > 0 && (
+        <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-bold text-stone-900">
+            Not grouped at this threshold · {unconnected.length}
+          </h2>
+          <p className="mt-1 text-xs text-stone-500">
+            These listings could not be placed in a strict group where every member clears {threshold.toFixed(2)} with every other member.
+          </p>
+          <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-10">
+            {unconnected.slice(0, 20).map((profile) => (
+              <ListingTile
+                key={profile.id}
+                profile={profile}
+                onClick={() => onSelectReference(profile.id)}
+              />
+            ))}
+          </div>
+          {unconnected.length > 20 && (
+            <p className="mt-3 text-xs text-stone-500">+{unconnected.length - 20} more unconnected listings</p>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ListingTile({ profile, onClick }: { profile: ProductClusterProfile; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Use as reference: ${profileTitle(profile)}`}
+      className="min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-left transition hover:border-red-300 hover:bg-red-50"
+    >
+      <span className="block aspect-square overflow-hidden rounded-md bg-stone-100">
+        {profile.image_url ? (
+          <img src={profile.image_url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full items-center justify-center text-sm font-bold text-stone-400">
+            {profileTitle(profile).slice(0, 1).toUpperCase()}
+          </span>
+        )}
+      </span>
+      <span className="mt-1.5 block truncate text-[10px] font-semibold text-stone-700">
+        {profileTitle(profile)}
+      </span>
+    </button>
+  );
+}
+
 function PairInspector({
   edge,
-  left,
-  right,
+  reference,
+  comparison,
 }: {
   edge: ProductClusterEdge;
-  left: ProductClusterProfile;
-  right: ProductClusterProfile;
+  reference: ProductClusterProfile;
+  comparison: ProductClusterProfile;
 }) {
   return (
     <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Pair evidence</p>
-          <h2 className="mt-1 text-lg font-black text-stone-900">
-            Why these listings are connected
-          </h2>
+          <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Selected relationship</p>
+          <h2 className="mt-1 text-lg font-black text-stone-900">Pair evidence</h2>
         </div>
         <div className="grid grid-cols-3 gap-x-5 gap-y-2 sm:grid-cols-6">
           <Metric label="Same" value={edge.same_product_score} />
@@ -380,8 +574,16 @@ function PairInspector({
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <ListingCard profile={left} cheaper={edge.cheaper_profile_id === left.id} />
-        <ListingCard profile={right} cheaper={edge.cheaper_profile_id === right.id} />
+        <ListingCard
+          profile={reference}
+          label="Reference listing"
+          cheaper={edge.cheaper_profile_id === reference.id}
+        />
+        <ListingCard
+          profile={comparison}
+          label="Compared listing"
+          cheaper={edge.cheaper_profile_id === comparison.id}
+        />
       </div>
     </section>
   );
@@ -389,9 +591,11 @@ function PairInspector({
 
 function ListingCard({
   profile,
+  label,
   cheaper,
 }: {
   profile: ProductClusterProfile;
+  label: string;
   cheaper: boolean;
 }) {
   return (
@@ -399,11 +603,7 @@ function ListingCard({
       <div className="flex min-h-40">
         <div className="h-40 w-36 shrink-0 bg-stone-100 sm:w-44">
           {profile.image_url ? (
-            <img
-              src={profile.image_url}
-              alt=""
-              className="h-full w-full object-cover"
-            />
+            <img src={profile.image_url} alt="" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center px-4 text-center text-xs text-stone-400">
               No image available
@@ -412,19 +612,16 @@ function ListingCard({
         </div>
         <div className="min-w-0 flex-1 p-4">
           <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-stone-500">
+            <span className="text-red-800">{label}</span>
             <span>{profile.platform || "Unknown platform"}</span>
             {cheaper && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">
-                Cheaper listing
-              </span>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">Cheaper listing</span>
             )}
           </div>
           <h3 className="mt-1.5 line-clamp-2 text-sm font-bold text-stone-900">
             {profileTitle(profile)}
           </h3>
-          <p className="mt-2 text-sm font-semibold text-stone-800">
-            {formatPrice(profile)}
-          </p>
+          <p className="mt-2 text-sm font-semibold text-stone-800">{formatPrice(profile)}</p>
           {profile.description_summary && (
             <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-500">
               {profile.description_summary}
@@ -443,9 +640,7 @@ function ListingCard({
         </div>
       </div>
       <details className="border-t border-stone-200 px-4 py-3">
-        <summary className="cursor-pointer text-xs font-semibold text-stone-600">
-          View model product profile
-        </summary>
+        <summary className="cursor-pointer text-xs font-semibold text-stone-600">View model product profile</summary>
         <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap font-sans text-xs leading-5 text-stone-600">
           {profile.profile_text}
         </pre>
@@ -454,20 +649,48 @@ function ListingCard({
   );
 }
 
-function Metric({
-  label,
-  value,
-  suffix = "",
+function ModeButton({
+  active,
+  onClick,
+  children,
 }: {
-  label: string;
-  value: number | null;
-  suffix?: string;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+        active ? "bg-stone-900 text-white shadow-sm" : "text-stone-600 hover:bg-white hover:text-stone-900"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ViewTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+        active ? "border-red-800 text-red-900" : "border-transparent text-stone-500 hover:text-stone-900"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Metric({ label, value, suffix = "" }: { label: string; value: number | null; suffix?: string }) {
+  return (
     <div>
-      <p className="whitespace-nowrap text-[10px] font-bold uppercase tracking-wide text-stone-400">
-        {label}
-      </p>
+      <p className="whitespace-nowrap text-[10px] font-bold uppercase tracking-wide text-stone-400">{label}</p>
       <p className="mt-0.5 font-mono text-sm font-bold text-stone-800">
         {value == null ? "—" : `${value.toFixed(3)}${suffix}`}
       </p>
@@ -495,6 +718,97 @@ function EmptyState() {
       </p>
     </div>
   );
+}
+
+interface ProductGroup {
+  id: string;
+  profiles: ProductClusterProfile[];
+  averageScore: number;
+}
+
+function buildProductGroups(
+  profiles: ProductClusterProfile[],
+  edges: ProductClusterEdge[],
+  mode: RelationshipMode,
+): { groups: ProductGroup[]; unconnected: ProductClusterProfile[] } {
+  const edgeByPair = new Map(
+    edges.map((edge) => [pairKey(edge.left_profile_id, edge.right_profile_id), edge]),
+  );
+  const clusters = profiles.map((profile) => [profile.id]);
+  while (clusters.length > 1) {
+    let bestLeft = -1;
+    let bestRight = -1;
+    let bestMergeScore = -1;
+    for (let left = 0; left < clusters.length; left += 1) {
+      for (let right = left + 1; right < clusters.length; right += 1) {
+        let mergeScore = 1;
+        let completeLink = true;
+        for (const leftId of clusters[left]) {
+          for (const rightId of clusters[right]) {
+            const edge = edgeByPair.get(pairKey(leftId, rightId));
+            if (!edge) {
+              completeLink = false;
+              break;
+            }
+            mergeScore = Math.min(mergeScore, scoreFor(edge, mode));
+          }
+          if (!completeLink) break;
+        }
+        if (completeLink && mergeScore > bestMergeScore) {
+          bestLeft = left;
+          bestRight = right;
+          bestMergeScore = mergeScore;
+        }
+      }
+    }
+    if (bestLeft < 0 || bestRight < 0) break;
+    clusters[bestLeft] = [...clusters[bestLeft], ...clusters[bestRight]];
+    clusters.splice(bestRight, 1);
+  }
+
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const groups: ProductGroup[] = [];
+  const unconnected: ProductClusterProfile[] = [];
+  for (const cluster of clusters) {
+    const groupProfiles = cluster
+      .map((id) => profileById.get(id))
+      .filter((profile): profile is ProductClusterProfile => profile != null);
+    if (cluster.length === 1) {
+      unconnected.push(groupProfiles[0]);
+      continue;
+    }
+    const ids = new Set(groupProfiles.map((profile) => profile.id));
+    const groupEdges = edges.filter((edge) =>
+      ids.has(edge.left_profile_id) && ids.has(edge.right_profile_id)
+    );
+    const weights = new Map(groupProfiles.map((profile) => [profile.id, 0]));
+    for (const edge of groupEdges) {
+      const score = scoreFor(edge, mode);
+      weights.set(edge.left_profile_id, (weights.get(edge.left_profile_id) ?? 0) + score);
+      weights.set(edge.right_profile_id, (weights.get(edge.right_profile_id) ?? 0) + score);
+    }
+    groupProfiles.sort((left, right) =>
+      (weights.get(right.id) ?? 0) - (weights.get(left.id) ?? 0)
+    );
+    groups.push({
+      id: cluster.slice().sort().join(":"),
+      profiles: groupProfiles,
+      averageScore: groupEdges.reduce((sum, edge) => sum + scoreFor(edge, mode), 0) /
+        Math.max(1, groupEdges.length),
+    });
+  }
+  groups.sort((left, right) =>
+    right.profiles.length - left.profiles.length || right.averageScore - left.averageScore
+  );
+  return { groups, unconnected };
+}
+
+function pairKey(left: string, right: string) {
+  return left < right ? `${left}:${right}` : `${right}:${left}`;
+}
+
+function otherProfileId(edge: ProductClusterEdge, profileId: string) {
+  return edge.left_profile_id === profileId ? edge.right_profile_id : edge.left_profile_id;
 }
 
 function formatPrice(profile: ProductClusterProfile) {
