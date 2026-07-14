@@ -2270,3 +2270,68 @@ export function getDashboardGroups(days?: number) {
     `/api/monitoring/dashboard/groups${qs ? `?${qs}` : ""}`,
   );
 }
+
+// --- Product clustering lab ---
+
+export interface ProductClusterScope {
+  ip_id: string;
+  ip_name: string;
+  profile_count: number;
+  pair_count: number;
+  latest_profile_at: string;
+}
+
+export interface ProductClusterProfile {
+  id: string;
+  case_id: string;
+  listing_title: string | null;
+  platform: string | null;
+  source_url: string | null;
+  description_summary: string | null;
+  profile_text: string;
+  price_value: number | null;
+  price_currency: string | null;
+  image_count: number;
+  image_url: string | null;
+  updated_at: string;
+}
+
+export interface ProductClusterEdge {
+  id: string;
+  left_profile_id: string;
+  right_profile_id: string;
+  vector_similarity: number;
+  exact_reranker_score: number;
+  related_reranker_score: number;
+  same_product_score: number;
+  related_product_score: number;
+  price_ratio: number | null;
+  price_similarity: number | null;
+  cheaper_profile_id: string | null;
+  too_cheap_signal: number | null;
+  scored_at: string;
+}
+
+export interface ProductClusterGraph {
+  scope: ProductClusterScope;
+  profiles: ProductClusterProfile[];
+  edges: ProductClusterEdge[];
+  truncated: boolean;
+}
+
+export function listProductClusterScopes() {
+  return request<{ scopes: ProductClusterScope[] }>("/api/product-clusters/scopes");
+}
+
+export function getProductClusterGraph(
+  ipId: string,
+  options: { maxNodes?: number; maxEdges?: number } = {},
+) {
+  const params = new URLSearchParams();
+  if (options.maxNodes) params.set("max_nodes", String(options.maxNodes));
+  if (options.maxEdges) params.set("max_edges", String(options.maxEdges));
+  const qs = params.toString();
+  return request<ProductClusterGraph>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}${qs ? `?${qs}` : ""}`,
+  );
+}

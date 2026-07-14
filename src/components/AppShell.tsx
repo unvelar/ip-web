@@ -14,6 +14,7 @@ import {
   X,
   Building2,
   GitBranch,
+  Network,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "./Avatar";
@@ -195,6 +196,12 @@ export default function AppShell() {
             icon={<GitBranch size={18} />}
             label="Campaigns"
             active={isActive("/monitoring/campaigns")}
+          />
+          <NavItem
+            to="/monitoring/products"
+            icon={<Network size={18} />}
+            label="Product lab"
+            active={isActive("/monitoring/products")}
           />
           <NavItem
             to="/monitoring/new"

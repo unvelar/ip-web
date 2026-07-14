@@ -15,6 +15,7 @@ import IpReviewDetail from "./pages/IpReviewDetail";
 import Findings from "./pages/Findings";
 import MonitoringTasks from "./pages/MonitoringTasks";
 import MonitoringCampaigns from "./pages/MonitoringCampaigns";
+import ProductClusters from "./pages/ProductClusters";
 import MonitoringNew from "./pages/MonitoringNew";
 import Monitors from "./pages/Monitors";
 import Dashboard from "./pages/Dashboard";
@@ -125,6 +126,7 @@ export default function App() {
           <Route path="/monitoring/tasks/:taskId" element={<MonitoringTasks />} />
           <Route path="/monitoring/campaigns" element={<MonitoringCampaigns />} />
           <Route path="/monitoring/campaigns/:campaignId" element={<MonitoringCampaigns />} />
+          <Route path="/monitoring/products" element={<ProductClusters />} />
           <Route path="/monitoring/new" element={<MonitoringNew />} />
           <Route path="/monitoring/settings" element={<Monitors />} />
           <Route path="/clearance/tasks" element={<ClearanceTasks />} />
