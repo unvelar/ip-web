@@ -272,17 +272,6 @@ export function FindingComparison({
 
         {/* RIGHT — enrichment data. */}
         <div className="flex flex-col space-y-2.5 min-w-0">
-          <a
-            href={f.page_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2"
-            title="Open listing"
-          >
-            <ExternalLink size={16} aria-hidden="true" />
-            Open listing
-          </a>
-
       {/* Listing context (from VLM enrichment) — what's on sale, type, where */}
       {f.listing_title && (
         <h3 className="text-base font-bold text-stone-900 leading-snug">{f.listing_title}</h3>
@@ -372,6 +361,17 @@ export function FindingComparison({
           )}
         </div>
       )}
+
+      <a
+        href={f.page_url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2"
+        title="Open listing"
+      >
+        <ExternalLink size={16} aria-hidden="true" />
+        Open listing
+      </a>
 
       {(whyFlagged || actionability.reason) && (
         <details className="text-sm text-stone-500">
