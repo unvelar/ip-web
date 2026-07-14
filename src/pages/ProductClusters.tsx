@@ -26,7 +26,7 @@ export default function ProductClusters() {
   const [selectedIpId, setSelectedIpId] = useState("");
   const [graph, setGraph] = useState<ProductClusterGraph | null>(null);
   const [mode, setMode] = useState<RelationshipMode>("same");
-  const [view, setView] = useState<LabView>("similarity");
+  const [view, setView] = useState<LabView>("groups");
   const [threshold, setThreshold] = useState(0.3);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
