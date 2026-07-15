@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { ExternalLink, ListFilter, RefreshCw } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   getProductClusterGraph,
+  getPersistedProductGroups,
   listProductClusterScopes,
+  refreshPersistedProductGroups,
+  type PersistedProductGroupOverview,
   type ProductClusterEdge,
   type ProductClusterGraph,
   type ProductClusterProfile,
@@ -25,6 +29,7 @@ export default function ProductClusters() {
   const [scopes, setScopes] = useState<ProductClusterScope[]>([]);
   const [selectedIpId, setSelectedIpId] = useState("");
   const [graph, setGraph] = useState<ProductClusterGraph | null>(null);
+  const [groupOverview, setGroupOverview] = useState<PersistedProductGroupOverview | null>(null);
   const [mode, setMode] = useState<RelationshipMode>("same");
   const [view, setView] = useState<LabView>("groups");
   const [threshold, setThreshold] = useState(0.3);
@@ -33,11 +38,15 @@ export default function ProductClusters() {
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [scopesLoadedKey, setScopesLoadedKey] = useState<string | null>(null);
   const [graphLoadedKey, setGraphLoadedKey] = useState<string | null>(null);
+  const [groupsLoadedKey, setGroupsLoadedKey] = useState<string | null>(null);
+  const [refreshingGroups, setRefreshingGroups] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const graphRequestKey = `${scopesRequestKey}:${selectedIpId}`;
+  const groupsRequestKey = `${graphRequestKey}:${mode}`;
   const loadingScopes = scopesLoadedKey !== scopesRequestKey;
   const loadingGraph = Boolean(selectedIpId) && graphLoadedKey !== graphRequestKey;
+  const loadingGroups = Boolean(selectedIpId) && groupsLoadedKey !== groupsRequestKey;
 
   useEffect(() => {
     let alive = true;
@@ -49,13 +58,17 @@ export default function ProductClusters() {
           if (nextScopes.some((scope) => scope.ip_id === current)) return current;
           return nextScopes[0]?.ip_id ?? "";
         });
-        if (nextScopes.length === 0) setGraph(null);
+        if (nextScopes.length === 0) {
+          setGraph(null);
+          setGroupOverview(null);
+        }
       })
       .catch((caught: unknown) => {
         if (!alive) return;
         setScopes([]);
         setSelectedIpId("");
         setGraph(null);
+        setGroupOverview(null);
         setError(errorMessage(caught));
       })
       .finally(() => {
@@ -90,6 +103,29 @@ export default function ProductClusters() {
       alive = false;
     };
   }, [selectedIpId, refreshVersion, actingTenantId, graphRequestKey]);
+
+  useEffect(() => {
+    if (!selectedIpId) return;
+    let alive = true;
+    setGroupOverview(null);
+    void getPersistedProductGroups(selectedIpId, mode)
+      .then((overview) => {
+        if (!alive) return;
+        setGroupOverview(overview);
+        setError(null);
+      })
+      .catch((caught: unknown) => {
+        if (!alive) return;
+        setGroupOverview(null);
+        setError(errorMessage(caught));
+      })
+      .finally(() => {
+        if (alive) setGroupsLoadedKey(groupsRequestKey);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedIpId, mode, refreshVersion, actingTenantId, groupsRequestKey]);
 
   const visibleEdges = useMemo(() => {
     if (!graph) return [];
@@ -126,6 +162,21 @@ export default function ProductClusters() {
     setSelectedEdgeId(edgeId);
   }
 
+  async function refreshAll() {
+    setError(null);
+    if (selectedIpId && view === "groups") {
+      setRefreshingGroups(true);
+      try {
+        setGroupOverview(await refreshPersistedProductGroups(selectedIpId, mode));
+      } catch (caught: unknown) {
+        setError(errorMessage(caught));
+      } finally {
+        setRefreshingGroups(false);
+      }
+    }
+    setRefreshVersion((version) => version + 1);
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -144,16 +195,13 @@ export default function ProductClusters() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            setError(null);
-            setRefreshVersion((version) => version + 1);
-          }}
-          disabled={loadingScopes || loadingGraph}
+          onClick={() => void refreshAll()}
+          disabled={loadingScopes || loadingGraph || loadingGroups || refreshingGroups}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             size={15}
-            className={loadingScopes || loadingGraph ? "animate-spin" : ""}
+            className={loadingScopes || loadingGraph || loadingGroups || refreshingGroups ? "animate-spin" : ""}
           />
           Refresh
         </button>
@@ -199,30 +247,50 @@ export default function ProductClusters() {
             </div>
           </div>
 
-          <label className="block">
-            <span className="mb-1.5 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-stone-500">
-              Minimum confidence
-              <span className="font-mono text-stone-900">{threshold.toFixed(2)}</span>
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={threshold}
-              onChange={(event) => setThreshold(Number(event.target.value))}
-              className="h-2 w-full cursor-pointer accent-red-700"
-            />
-          </label>
+          {view === "similarity" ? (
+            <label className="block">
+              <span className="mb-1.5 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-stone-500">
+                Minimum confidence
+                <span className="font-mono text-stone-900">{threshold.toFixed(2)}</span>
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={threshold}
+                onChange={(event) => setThreshold(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer accent-red-700"
+              />
+            </label>
+          ) : (
+            <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+              <span className="block text-xs font-bold uppercase tracking-wide text-stone-500">
+                Stored grouping policy
+              </span>
+              <span className="mt-1 block text-sm font-semibold text-stone-900">
+                Strict pairwise score ≥ {(groupOverview?.threshold ?? 0.3).toFixed(2)}
+              </span>
+            </div>
+          )}
         </div>
 
         {graph && (
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-stone-100 pt-3 text-xs text-stone-500">
-            <span><strong className="text-stone-800">{graph.profiles.length}</strong> listings loaded</span>
-            <span><strong className="text-stone-800">{visibleEdges.length}</strong> relationships above threshold</span>
+            <span><strong className="text-stone-800">{
+              view === "groups" ? groupOverview?.scope.profile_count ?? graph.scope.profile_count : graph.profiles.length
+            }</strong> {view === "groups" ? "listings grouped on the backend" : "listings loaded"}</span>
+            {view === "groups" ? (
+              <span><strong className="text-stone-800">{groupOverview?.group_count ?? 0}</strong> persistent groups</span>
+            ) : (
+              <span><strong className="text-stone-800">{visibleEdges.length}</strong> relationships above threshold</span>
+            )}
             <span><strong className="text-stone-800">{graph.scope.pair_count}</strong> scored pairs total</span>
-            {graph.truncated && (
+            {view === "similarity" && graph.truncated && (
               <span className="text-amber-700">Showing the strongest bounded subset</span>
+            )}
+            {view === "groups" && groupOverview?.dirty && (
+              <span className="text-amber-700">A newer snapshot is being rebuilt</span>
             )}
           </div>
         )}
@@ -252,10 +320,9 @@ export default function ProductClusters() {
         <LoadingState />
       ) : scopes.length === 0 ? (
         <EmptyState />
-      ) : loadingGraph && !graph ? (
+      ) : (loadingGraph && !graph) || (view === "groups" && loadingGroups && !groupOverview) ? (
         <LoadingState />
-      ) : graph && reference ? (
-        view === "similarity" ? (
+      ) : view === "similarity" && graph && reference ? (
           <SimilarityView
             graph={graph}
             reference={reference}
@@ -268,18 +335,16 @@ export default function ProductClusters() {
             loading={loadingGraph}
             onSelectReference={selectReference}
           />
-        ) : (
+      ) : view === "groups" && groupOverview ? (
           <ProductGroupsOverview
-            profiles={graph.profiles}
-            edges={visibleEdges}
+            overview={groupOverview}
             mode={mode}
-            threshold={threshold}
             onSelectReference={(profileId) => {
               selectReference(profileId);
               setView("similarity");
             }}
+            canSelectReference={(profileId) => profileById.has(profileId)}
           />
-        )
       ) : null}
     </div>
   );
@@ -430,92 +495,130 @@ function NearestListings({
 }
 
 function ProductGroupsOverview({
-  profiles,
-  edges,
+  overview,
   mode,
-  threshold,
   onSelectReference,
+  canSelectReference,
 }: {
-  profiles: ProductClusterProfile[];
-  edges: ProductClusterEdge[];
+  overview: PersistedProductGroupOverview;
   mode: RelationshipMode;
-  threshold: number;
   onSelectReference: (profileId: string) => void;
+  canSelectReference: (profileId: string) => boolean;
 }) {
-  const { groups, unconnected } = useMemo(
-    () => buildProductGroups(profiles, edges, mode),
-    [profiles, edges, mode],
-  );
   const groupLabel = mode === "same" ? "Potential product group" : "Related family";
+  const generatedAt = overview.generated_at
+    ? new Date(overview.generated_at).toLocaleString()
+    : null;
 
   return (
     <div className="mt-5">
       <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        In each {mode === "same" ? "product group" : "related family"}, every listing has a direct stored score of at least {threshold.toFixed(2)} with every other member.
-        These are strict review candidates, not confirmed products, and they do not measure similarity to the IP.
+        These groups are stored on the backend across the full IP corpus. In each {mode === "same" ? "product group" : "related family"}, every listing has a direct stored score of at least {overview.threshold.toFixed(2)} with every other member.
+        They remain review candidates, not confirmed products, and they do not measure similarity to the IP.
+        {generatedAt && <span className="ml-1 text-blue-700">Snapshot: {generatedAt}.</span>}
       </div>
 
-      {groups.length === 0 ? (
+      {overview.dirty && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          New product evidence arrived after this snapshot. A refreshed backend grouping is queued.
+        </div>
+      )}
+      {overview.last_error && (
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          The latest automatic group refresh failed: {overview.last_error}
+        </div>
+      )}
+
+      {overview.groups.length === 0 ? (
         <div className="mt-5 rounded-2xl border border-dashed border-stone-300 bg-white px-6 py-14 text-center">
-          <h2 className="text-base font-bold text-stone-900">No multi-listing groups at this threshold</h2>
-          <p className="mt-2 text-sm text-stone-500">Lower the minimum confidence to connect more listings.</p>
+          <h2 className="text-base font-bold text-stone-900">
+            {overview.dirty ? "Building the first persistent snapshot" : "No multi-listing groups in this snapshot"}
+          </h2>
+          <p className="mt-2 text-sm text-stone-500">
+            {overview.dirty
+              ? "The backend will publish groups after the queued refresh completes."
+              : "The remaining listings are stored as one-listing product candidates."}
+          </p>
         </div>
       ) : (
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
-          {groups.map((group, index) => (
+          {overview.groups.map((group, index) => (
             <section key={group.id} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs font-bold uppercase tracking-wide text-stone-500">
                     {groupLabel} {index + 1}
                   </p>
                   <h2 className="mt-1 line-clamp-1 text-sm font-bold text-stone-900">
-                    {profileTitle(group.profiles[0])}
+                    {group.display_name}
                   </h2>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-bold text-stone-900">{group.profiles.length} listings</p>
+                  <p className="text-sm font-bold text-stone-900">{group.member_count} listings</p>
                   <p className="mt-0.5 text-[10px] text-stone-500">
-                    Avg visible link {group.averageScore.toFixed(3)}
+                    Avg stored link {group.average_score?.toFixed(3) ?? "—"}
                   </p>
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {group.profiles.slice(0, 8).map((profile) => (
+                {group.members.map((profile) => (
                   <ListingTile
                     key={profile.id}
                     profile={profile}
-                    onClick={() => onSelectReference(profile.id)}
+                    onClick={canSelectReference(profile.id)
+                      ? () => onSelectReference(profile.id)
+                      : undefined}
                   />
                 ))}
               </div>
-              {group.profiles.length > 8 && (
-                <p className="mt-3 text-xs text-stone-500">+{group.profiles.length - 8} more listings in this group</p>
-              )}
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="text-xs text-stone-500">
+                  {group.member_count > group.members.length
+                    ? `+${group.member_count - group.members.length} more listings`
+                    : `Minimum link ${group.minimum_score?.toFixed(3) ?? "—"}`}
+                </p>
+                <Link
+                  to={`/monitoring/tasks?ip_id=${encodeURIComponent(overview.scope.ip_id)}&product_group_id=${encodeURIComponent(group.id)}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-800 transition hover:border-red-300 hover:bg-red-100"
+                >
+                  <ListFilter size={13} />
+                  Open tasks
+                </Link>
+              </div>
             </section>
           ))}
         </div>
       )}
 
-      {unconnected.length > 0 && (
+      {overview.truncated && (
+        <p className="mt-3 text-xs text-amber-700">
+          Showing 200 of {overview.group_count} persistent groups. Tasks can still filter every stored group.
+        </p>
+      )}
+
+      {overview.ungrouped_count > 0 && (
         <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-bold text-stone-900">
-            Not grouped at this threshold · {unconnected.length}
+            One-listing product candidates · {overview.ungrouped_count}
           </h2>
           <p className="mt-1 text-xs text-stone-500">
-            These listings could not be placed in a strict group where every member clears {threshold.toFixed(2)} with every other member.
+            These are persisted too, but no second listing has enough complete pairwise evidence to join them yet.
           </p>
           <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-10">
-            {unconnected.slice(0, 20).map((profile) => (
+            {overview.ungrouped.map((profile) => (
               <ListingTile
                 key={profile.id}
                 profile={profile}
-                onClick={() => onSelectReference(profile.id)}
+                onClick={canSelectReference(profile.id)
+                  ? () => onSelectReference(profile.id)
+                  : undefined}
               />
             ))}
           </div>
-          {unconnected.length > 20 && (
-            <p className="mt-3 text-xs text-stone-500">+{unconnected.length - 20} more unconnected listings</p>
+          {overview.ungrouped_count > overview.ungrouped.length && (
+            <p className="mt-3 text-xs text-stone-500">
+              +{overview.ungrouped_count - overview.ungrouped.length} more one-listing candidates
+            </p>
           )}
         </section>
       )}
@@ -523,13 +626,20 @@ function ProductGroupsOverview({
   );
 }
 
-function ListingTile({ profile, onClick }: { profile: ProductClusterProfile; onClick: () => void }) {
+function ListingTile({
+  profile,
+  onClick,
+}: {
+  profile: ProductClusterProfile;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      title={`Use as reference: ${profileTitle(profile)}`}
-      className="min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-left transition hover:border-red-300 hover:bg-red-50"
+      disabled={!onClick}
+      title={onClick ? `Use as reference: ${profileTitle(profile)}` : profileTitle(profile)}
+      className="min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-left transition enabled:hover:border-red-300 enabled:hover:bg-red-50 disabled:cursor-default"
     >
       <span className="block aspect-square overflow-hidden rounded-md bg-stone-100">
         {profile.image_url ? (
@@ -718,93 +828,6 @@ function EmptyState() {
       </p>
     </div>
   );
-}
-
-interface ProductGroup {
-  id: string;
-  profiles: ProductClusterProfile[];
-  averageScore: number;
-}
-
-function buildProductGroups(
-  profiles: ProductClusterProfile[],
-  edges: ProductClusterEdge[],
-  mode: RelationshipMode,
-): { groups: ProductGroup[]; unconnected: ProductClusterProfile[] } {
-  const edgeByPair = new Map(
-    edges.map((edge) => [pairKey(edge.left_profile_id, edge.right_profile_id), edge]),
-  );
-  const clusters = profiles.map((profile) => [profile.id]);
-  while (clusters.length > 1) {
-    let bestLeft = -1;
-    let bestRight = -1;
-    let bestMergeScore = -1;
-    for (let left = 0; left < clusters.length; left += 1) {
-      for (let right = left + 1; right < clusters.length; right += 1) {
-        let mergeScore = 1;
-        let completeLink = true;
-        for (const leftId of clusters[left]) {
-          for (const rightId of clusters[right]) {
-            const edge = edgeByPair.get(pairKey(leftId, rightId));
-            if (!edge) {
-              completeLink = false;
-              break;
-            }
-            mergeScore = Math.min(mergeScore, scoreFor(edge, mode));
-          }
-          if (!completeLink) break;
-        }
-        if (completeLink && mergeScore > bestMergeScore) {
-          bestLeft = left;
-          bestRight = right;
-          bestMergeScore = mergeScore;
-        }
-      }
-    }
-    if (bestLeft < 0 || bestRight < 0) break;
-    clusters[bestLeft] = [...clusters[bestLeft], ...clusters[bestRight]];
-    clusters.splice(bestRight, 1);
-  }
-
-  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-  const groups: ProductGroup[] = [];
-  const unconnected: ProductClusterProfile[] = [];
-  for (const cluster of clusters) {
-    const groupProfiles = cluster
-      .map((id) => profileById.get(id))
-      .filter((profile): profile is ProductClusterProfile => profile != null);
-    if (cluster.length === 1) {
-      unconnected.push(groupProfiles[0]);
-      continue;
-    }
-    const ids = new Set(groupProfiles.map((profile) => profile.id));
-    const groupEdges = edges.filter((edge) =>
-      ids.has(edge.left_profile_id) && ids.has(edge.right_profile_id)
-    );
-    const weights = new Map(groupProfiles.map((profile) => [profile.id, 0]));
-    for (const edge of groupEdges) {
-      const score = scoreFor(edge, mode);
-      weights.set(edge.left_profile_id, (weights.get(edge.left_profile_id) ?? 0) + score);
-      weights.set(edge.right_profile_id, (weights.get(edge.right_profile_id) ?? 0) + score);
-    }
-    groupProfiles.sort((left, right) =>
-      (weights.get(right.id) ?? 0) - (weights.get(left.id) ?? 0)
-    );
-    groups.push({
-      id: cluster.slice().sort().join(":"),
-      profiles: groupProfiles,
-      averageScore: groupEdges.reduce((sum, edge) => sum + scoreFor(edge, mode), 0) /
-        Math.max(1, groupEdges.length),
-    });
-  }
-  groups.sort((left, right) =>
-    right.profiles.length - left.profiles.length || right.averageScore - left.averageScore
-  );
-  return { groups, unconnected };
-}
-
-function pairKey(left: string, right: string) {
-  return left < right ? `${left}:${right}` : `${right}:${left}`;
 }
 
 function otherProfileId(edge: ProductClusterEdge, profileId: string) {

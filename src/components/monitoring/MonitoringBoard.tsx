@@ -43,6 +43,7 @@ export interface BoardFilters {
   status: MonitoringStatusFilter | null;
   priority: MonitoringPriorityBand | null;
   ip_id: string | null;
+  product_group_id: string | null;
   platform: string | null;
   seller: string | null;
   dismissal_reason: MonitoringDismissalReasonFilter | null;
@@ -872,7 +873,7 @@ export function MonitoringBoard({
                 label="All"
                 count={facets.total}
                 active={!filters.ip_id}
-                onClick={() => onFiltersChange({ ip_id: null })}
+                onClick={() => onFiltersChange({ ip_id: null, product_group_id: null })}
               />
               {facets.ips.map((ip) => (
                 <FilterPill
@@ -883,12 +884,43 @@ export function MonitoringBoard({
                   onClick={() =>
                     onFiltersChange({
                       ip_id: filters.ip_id === ip.ip_id ? null : ip.ip_id,
+                      product_group_id: null,
                     })
                   }
                   title={`${ip.name ?? "Unnamed IP"} · ${ip.n} finding${ip.n === 1 ? "" : "s"}`}
                   className="max-w-[9rem]"
                 />
               ))}
+            </div>
+          )}
+          {((facets.product_groups?.length ?? 0) > 0 || filters.product_group_id) && (
+            <div className="flex items-center gap-2 px-3 py-2">
+              <span className={filterHeaderLabel}>
+                Product
+              </span>
+              <select
+                value={filters.product_group_id ?? "all"}
+                onChange={(event) =>
+                  onFiltersChange({
+                    product_group_id: event.target.value === "all" ? null : event.target.value,
+                  })
+                }
+                aria-label="Filter by persistent product group"
+                title="Filter tasks by backend product group"
+                className={`${FILTER_SELECT} max-w-sm`}
+              >
+                <option value="all">All products</option>
+                {filters.product_group_id && !(facets.product_groups ?? []).some(
+                  (group) => group.product_group_id === filters.product_group_id,
+                ) && (
+                  <option value={filters.product_group_id}>Selected product (0)</option>
+                )}
+                {(facets.product_groups ?? []).map((group) => (
+                  <option key={group.product_group_id} value={group.product_group_id}>
+                    {group.name} ({group.n})
+                  </option>
+                ))}
+              </select>
             </div>
           )}
           {facets.platforms.length > 1 && (

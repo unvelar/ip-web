@@ -29,6 +29,7 @@ interface InboxFilters {
   status: MonitoringStatusFilter | null;
   priority: MonitoringPriorityBand | null;
   ip_id: string | null;
+  product_group_id: string | null;
   platform: string | null;
   seller: string | null;
   dismissal_reason: MonitoringDismissalReasonFilter | null;
@@ -59,6 +60,7 @@ function parseFilters(params: URLSearchParams): InboxFilters {
             : null,
     priority: null,
     ip_id: params.get("ip_id"),
+    product_group_id: params.get("product_group_id"),
     platform: params.get("platform"),
     seller: seller && seller.trim() ? seller.trim() : null,
     dismissal_reason:
@@ -105,6 +107,7 @@ function writeFilters(base: URLSearchParams, f: InboxFilters): URLSearchParams {
   setOrDel("status", f.status === "pending" ? null : f.status ?? "all");
   setOrDel("priority", f.priority);
   setOrDel("ip_id", f.ip_id);
+  setOrDel("product_group_id", f.product_group_id);
   setOrDel("platform", f.platform);
   setOrDel("seller", f.seller);
   setOrDel("dismissal_reason", f.dismissal_reason);
@@ -369,8 +372,15 @@ export function MonitoringInboxView() {
       filters.ip_id
         ? facets.ips.find((ip) => ip.ip_id === filters.ip_id)?.name ?? "selected IP"
         : "all monitored IPs";
-    return `${count} finding${count === 1 ? "" : "s"} ${statusLabel} · ${ipName}.`;
-  }, [facets, filters.ip_id, filters.status]);
+    const productName = filters.product_group_id
+      ? facets.product_groups.find((group) =>
+        group.product_group_id === filters.product_group_id
+      )?.name ?? "selected product"
+      : null;
+    return `${count} finding${count === 1 ? "" : "s"} ${statusLabel} · ${ipName}${
+      productName ? ` · ${productName}` : ""
+    }.`;
+  }, [facets, filters.ip_id, filters.product_group_id, filters.status]);
 
   return (
     <div className="space-y-4">

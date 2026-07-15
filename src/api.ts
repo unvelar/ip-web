@@ -1990,6 +1990,7 @@ export interface MonitoringFacets {
   priorities: { high: number; med: number; low: number };
   platforms: Array<{ domain: string; n: number }>;
   ips: Array<{ ip_id: string; name: string | null; n: number }>;
+  product_groups: Array<{ product_group_id: string; name: string; n: number }>;
   /** Top-50 sellers (by finding count). Server-capped. */
   sellers: Array<{ seller_name: string; n: number }>;
   dismissal_reasons: Record<string, number>;
@@ -2008,6 +2009,7 @@ export interface MonitoringFindingsQuery {
   priority?: MonitoringPriorityBand | null;
   status?: MonitoringStatusFilter | null;
   ip_id?: string | null;
+  product_group_id?: string | null;
   platform?: string | null;
   seller?: string | null;
   dismissal_reason?: MonitoringDismissalReasonFilter | null;
@@ -2031,6 +2033,7 @@ export function listMonitoringFindingsGlobal(
   if (opts.priority)     params.set("priority", opts.priority);
   if (opts.status)       params.set("status", opts.status);
   if (opts.ip_id)        params.set("ip_id", opts.ip_id);
+  if (opts.product_group_id) params.set("product_group_id", opts.product_group_id);
   if (opts.platform)     params.set("platform", opts.platform);
   if (opts.seller)       params.set("seller", opts.seller);
   if (opts.dismissal_reason) params.set("dismissal_reason", opts.dismissal_reason);
@@ -2319,6 +2322,33 @@ export interface ProductClusterGraph {
   truncated: boolean;
 }
 
+export interface PersistedProductGroup {
+  id: string;
+  display_name: string;
+  member_count: number;
+  average_score: number | null;
+  minimum_score: number | null;
+  threshold: number;
+  algorithm_version: string;
+  generated_at: string;
+  members: ProductClusterProfile[];
+}
+
+export interface PersistedProductGroupOverview {
+  scope: ProductClusterScope;
+  relationship_type: "same_product" | "related_product";
+  threshold: number;
+  algorithm_version: string;
+  generated_at: string | null;
+  dirty: boolean;
+  last_error: string | null;
+  groups: PersistedProductGroup[];
+  group_count: number;
+  ungrouped_count: number;
+  ungrouped: ProductClusterProfile[];
+  truncated: boolean;
+}
+
 export function listProductClusterScopes() {
   return request<{ scopes: ProductClusterScope[] }>("/api/product-clusters/scopes");
 }
@@ -2333,5 +2363,24 @@ export function getProductClusterGraph(
   const qs = params.toString();
   return request<ProductClusterGraph>(
     `/api/product-clusters/${encodeURIComponent(ipId)}${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function getPersistedProductGroups(
+  ipId: string,
+  relationship: "same" | "related",
+) {
+  return request<PersistedProductGroupOverview>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups?relationship=${relationship}`,
+  );
+}
+
+export function refreshPersistedProductGroups(
+  ipId: string,
+  relationship: "same" | "related",
+) {
+  return request<PersistedProductGroupOverview>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?relationship=${relationship}`,
+    { method: "POST" },
   );
 }
