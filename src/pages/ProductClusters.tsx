@@ -921,6 +921,16 @@ function ProductGroupCard({
   const referenceByImageId = new Map(
     visualEvidence?.references.map((reference) => [reference.image_id, reference]) ?? [],
   );
+  const primaryVisualEvidenceByProfileId = new Map(
+    visualEvidence?.members.flatMap((member) => {
+      const primaryImage = member.images.reduce(
+        (current, image) =>
+          current == null || image.position < current.position ? image : current,
+        null as ProductGroupVisualEvidence["members"][number]["images"][number] | null,
+      );
+      return primaryImage ? [[member.profile_id, primaryImage] as const] : [];
+    }) ?? [],
+  );
   const manualReferenceCount = visualEvidence?.references.filter(
     (reference) => reference.selection_source === "manual",
   ).length ?? 0;
@@ -1062,17 +1072,23 @@ function ProductGroupCard({
             <button
               type="button"
               disabled={loadingVisualEvidence}
-              onClick={() => {
-                setManaging(true);
-                void loadVisualEvidence();
-              }}
+              onClick={() => void loadVisualEvidence()}
               className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 transition hover:border-indigo-300 hover:bg-indigo-100 disabled:opacity-50"
             >
               <Images size={14} />
-              {loadingVisualEvidence ? "Calculating…" : "Image scores"}
+              {loadingVisualEvidence
+                ? "Calculating…"
+                : visualEvidence
+                  ? "Refresh image scores"
+                  : "Show image scores"}
             </button>
           )}
         </div>
+      )}
+      {!managing && visualEvidenceError && (
+        <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-800">
+          {visualEvidenceError}
+        </p>
       )}
 
       {canConfirm && editingName && (
@@ -1608,29 +1624,45 @@ function ProductGroupCard({
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
-        {group.members.map((profile) => (
-          <div key={profile.id} className="group/member relative min-w-0">
-            <ListingTile
-              profile={profile}
-              onClick={canSelectReference(profile.id)
-                ? () => onSelectReference(profile.id)
-                : undefined}
-            />
-            {canConfirm && confirmed && managing && group.member_count > 1 && (
-              <button
-                type="button"
-                aria-label={`Remove ${profileTitle(profile)} from this product`}
-                title="This listing is not this product"
-                disabled={Boolean(savingCorrectionProfileId)}
-                onClick={() => setCorrectingProfileId(profile.id)}
-                className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/80 bg-white/90 text-stone-500 opacity-0 shadow-sm transition hover:bg-red-50 hover:text-red-700 focus:opacity-100 disabled:opacity-40 group-hover/member:opacity-100"
-              >
-                <CircleX size={15} />
-              </button>
-            )}
-          </div>
-        ))}
+      {visualEvidence && (
+        <p className="mt-4 text-[10px] text-indigo-700">
+          Visual scores below compare the displayed image with the closest product
+          reference image from another listing. They are raw similarity scores, not
+          authenticity probabilities.
+        </p>
+      )}
+      <div className={`${visualEvidence ? "mt-2" : "mt-4"} grid grid-cols-3 gap-2 sm:grid-cols-4`}>
+        {group.members.map((profile) => {
+          const primaryVisualEvidence = primaryVisualEvidenceByProfileId.get(profile.id);
+          const matchedReferenceRank = primaryVisualEvidence?.matched_reference_image_id
+            ? referenceRankByImageId.get(primaryVisualEvidence.matched_reference_image_id)
+            : null;
+          return (
+            <div key={profile.id} className="group/member relative min-w-0">
+              <ListingTile
+                profile={profile}
+                visualSupportScore={primaryVisualEvidence?.visual_support_score}
+                visualSupportReferenceRank={matchedReferenceRank}
+                visualSupportIsReference={primaryVisualEvidence?.is_reference}
+                onClick={canSelectReference(profile.id)
+                  ? () => onSelectReference(profile.id)
+                  : undefined}
+              />
+              {canConfirm && confirmed && managing && group.member_count > 1 && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${profileTitle(profile)} from this product`}
+                  title="This listing is not this product"
+                  disabled={Boolean(savingCorrectionProfileId)}
+                  onClick={() => setCorrectingProfileId(profile.id)}
+                  className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/80 bg-white/90 text-stone-500 opacity-0 shadow-sm transition hover:bg-red-50 hover:text-red-700 focus:opacity-100 disabled:opacity-40 group-hover/member:opacity-100"
+                >
+                  <CircleX size={15} />
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
       {correctingProfile && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
@@ -1697,24 +1729,54 @@ function ProductGroupCard({
 function ListingTile({
   profile,
   onClick,
+  visualSupportScore,
+  visualSupportReferenceRank,
+  visualSupportIsReference = false,
 }: {
   profile: ProductClusterProfile;
   onClick?: () => void;
+  visualSupportScore?: number | null;
+  visualSupportReferenceRank?: number | null;
+  visualSupportIsReference?: boolean;
 }) {
+  const hasVisualSupport = visualSupportScore !== undefined;
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      title={onClick ? `Use as reference: ${profileTitle(profile)}` : profileTitle(profile)}
+      title={onClick ? `Inspect similarity from: ${profileTitle(profile)}` : profileTitle(profile)}
       className="w-full min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-left transition enabled:hover:border-red-300 enabled:hover:bg-red-50 disabled:cursor-default"
     >
-      <span className="block aspect-square overflow-hidden rounded-md bg-stone-100">
+      <span className="relative block aspect-square overflow-hidden rounded-md bg-stone-100">
         {profile.image_url ? (
           <img src={profile.image_url} alt="" className="h-full w-full object-cover" />
         ) : (
           <span className="flex h-full items-center justify-center text-sm font-bold text-stone-400">
             {profileTitle(profile).slice(0, 1).toUpperCase()}
+          </span>
+        )}
+        {hasVisualSupport && (
+          <span
+            className="absolute right-1.5 top-1.5 rounded-md border border-indigo-100 bg-white/95 px-1.5 py-1 font-mono text-[10px] font-bold text-indigo-900 shadow-sm"
+            title={
+              visualSupportScore == null
+                ? "No reference image from another listing was available"
+                : `Raw image similarity to ${
+                  visualSupportReferenceRank
+                    ? `product reference #${visualSupportReferenceRank}`
+                    : "the closest product reference"
+                }`
+            }
+          >
+            {visualSupportScore == null
+              ? "Visual —"
+              : `Visual ${visualSupportScore.toFixed(2)}`}
+          </span>
+        )}
+        {visualSupportIsReference && (
+          <span className="absolute bottom-1.5 left-1.5 rounded bg-indigo-900/85 px-1.5 py-0.5 text-[9px] font-bold text-white">
+            Reference
           </span>
         )}
       </span>
