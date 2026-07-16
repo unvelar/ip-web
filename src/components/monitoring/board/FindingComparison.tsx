@@ -5,6 +5,7 @@ import {
   reenrichIpFinding,
   type IpReviewFinding,
   type MonitoringReviewOutcome,
+  type ProductGroupCorrectionReason,
 } from "../../../api";
 import { ActionabilityBadge } from "./ActionabilityBadge";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
@@ -101,6 +102,8 @@ export function FindingComparison({
   onEnforced,
   onLicensed,
   onUpdated,
+  productGroupId,
+  onCorrectProductGroup,
 }: {
   f: IpReviewFinding;
   /** Resolved IP id for this finding (`f.ip_id ?? boardIpId`). */
@@ -116,8 +119,11 @@ export function FindingComparison({
   onEnforced: () => void;
   onLicensed: (dismissedCount: number) => void;
   onUpdated: (opts?: FindingUpdateOptions) => void;
+  productGroupId?: string;
+  onCorrectProductGroup?: (reason: ProductGroupCorrectionReason) => Promise<void>;
 }) {
   const [refreshing, setRefreshing] = useState(false);
+  const [correctingProduct, setCorrectingProduct] = useState(false);
   const similarity = f.similarity_score ?? f.enforcement_priority;
   const similarityLabel = Number.isFinite(similarity)
     ? `${Math.round(similarity * 100)}% sim`
@@ -175,6 +181,43 @@ export function FindingComparison({
         >
           {refreshing ? "Refreshing…" : "Refresh"}
         </button>
+        {productGroupId && f.case_id && onCorrectProductGroup && (
+          <div className="mt-1 border-t border-stone-100 pt-1">
+            <p className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-stone-400">
+              Correct product
+            </p>
+            <button
+              type="button"
+              disabled={correctingProduct}
+              onClick={async () => {
+                setCorrectingProduct(true);
+                try {
+                  await onCorrectProductGroup("wrong_product");
+                } finally {
+                  setCorrectingProduct(false);
+                }
+              }}
+              className="block h-7 w-full whitespace-nowrap rounded-md px-2.5 text-left text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              Not this product
+            </button>
+            <button
+              type="button"
+              disabled={correctingProduct}
+              onClick={async () => {
+                setCorrectingProduct(true);
+                try {
+                  await onCorrectProductGroup("different_variant");
+                } finally {
+                  setCorrectingProduct(false);
+                }
+              }}
+              className="block h-7 w-full whitespace-nowrap rounded-md px-2.5 text-left text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+            >
+              Different variant
+            </button>
+          </div>
+        )}
       </div>
     </details>
   ) : null;

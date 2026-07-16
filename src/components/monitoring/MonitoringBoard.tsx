@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleCheck, X } from "lucide-react";
 import {
   dismissIpFinding,
+  excludePersistedProductGroupMember,
   markIpFindingNeedsReview,
   markIpFindingEnforced,
   markTakedownSentWithoutEmail,
   resortMonitoringFindings,
   reopenIpFinding,
+  restorePersistedProductGroupMember,
   undismissIpFinding,
   autoSendTakedown,
   type CaseReviewStatus,
@@ -18,6 +20,7 @@ import {
   type MonitoringReviewOutcome,
   type MonitoringSortMode,
   type MonitoringStatusFilter,
+  type ProductGroupCorrectionReason,
 } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { BatchConfirmModal } from "./board/batch";
@@ -58,9 +61,11 @@ type LastReviewAction = {
   label: string;
   detail?: string;
   undo?: {
-    kind: "undismiss" | "reopen";
+    kind: "undismiss" | "reopen" | "product_group_correction";
     ipId: string;
     resultId: string;
+    groupId?: string;
+    correctionId?: string;
   };
 };
 
@@ -152,6 +157,7 @@ export function MonitoringBoard({
   // Optimistically-dismissed result_ids — the next refetch replaces these
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
+  const [productCorrectedResultIds, setProductCorrectedResultIds] = useState<Set<string>>(new Set());
   const queueRef = useRef<HTMLDivElement | null>(null);
   const [completingResultIds, setCompletingResultIds] = useState<Set<string>>(new Set());
   const completingResultIdsRef = useRef<Set<string>>(new Set());
@@ -205,9 +211,8 @@ export function MonitoringBoard({
   // from the page are harmless — they're never queried after the row goes
   // away — so we don't bother clearing them on each refetch.
 
-  const filteredFindings = useMemo(
-    () =>
-      filters.status === "pending"
+  const filteredFindings = useMemo(() => {
+    const statusFiltered = filters.status === "pending"
         ? findings.filter(
             (f) =>
               f.ready_for_review &&
@@ -216,9 +221,11 @@ export function MonitoringBoard({
               !f.licensed_seller &&
               (f.review_status ?? "pending") === "pending",
           )
-        : findings,
-    [filters.status, findings],
-  );
+        : findings;
+    return filters.product_group_id
+      ? statusFiltered.filter((f) => !productCorrectedResultIds.has(f.result_id))
+      : statusFiltered;
+  }, [filters.product_group_id, filters.status, findings, productCorrectedResultIds]);
 
   // Selection is keyed by result_id. Related-items can add rows that are not
   // currently loaded in the visible page, so keep their full finding payloads
@@ -346,7 +353,9 @@ export function MonitoringBoard({
         detail: compactListingTitle(f),
         undo: { kind: "undismiss", ipId: fipId, resultId: f.result_id },
       });
-      onRefresh(f.result_id);
+      setProductCorrectedResultIds((current) => new Set(current).add(f.result_id));
+      setResultCompleting(f.result_id, false);
+      onRefresh();
     } catch (e) {
       setResultCompleting(f.result_id, false);
       setDismissing((prev) => {
@@ -408,6 +417,54 @@ export function MonitoringBoard({
     });
   }, [recordLastAction]);
 
+  const correctProductMembership = useCallback(async (
+    f: IpReviewFinding,
+    reason: ProductGroupCorrectionReason,
+  ) => {
+    const groupId = filters.product_group_id;
+    const fipId = f.ip_id ?? ipId;
+    if (!groupId || !fipId || !f.case_id) {
+      alert("This finding does not have a stored product membership to correct.");
+      return;
+    }
+    if (completingResultIdsRef.current.has(f.result_id)) return;
+
+    setResultCompleting(f.result_id, true);
+    advanceAfterAction(f.result_id);
+    try {
+      const { correction } = await excludePersistedProductGroupMember(fipId, groupId, {
+        case_id: f.case_id,
+        reason,
+      });
+      recordLastAction({
+        label: reason === "different_variant"
+          ? "Moved out as a different variant"
+          : "Removed from product",
+        detail: compactListingTitle(f),
+        undo: {
+          kind: "product_group_correction",
+          ipId: fipId,
+          resultId: f.result_id,
+          groupId,
+          correctionId: correction.id,
+        },
+      });
+      onRefresh(f.result_id);
+    } catch (e) {
+      setResultCompleting(f.result_id, false);
+      setActiveFinding(f.result_id);
+      alert(e instanceof Error ? e.message : "Failed to correct product membership");
+    }
+  }, [
+    advanceAfterAction,
+    filters.product_group_id,
+    ipId,
+    onRefresh,
+    recordLastAction,
+    setActiveFinding,
+    setResultCompleting,
+  ]);
+
   const undoReviewToast = useCallback(async (action: LastReviewAction) => {
     if (!action.undo || undoingToastIds.has(action.id)) return;
     const undo = action.undo;
@@ -415,10 +472,25 @@ export function MonitoringBoard({
     try {
       if (undo.kind === "undismiss") {
         await undismissIpFinding(undo.ipId, undo.resultId);
-      } else {
+      } else if (undo.kind === "reopen") {
         await reopenIpFinding(undo.ipId, undo.resultId);
+      } else {
+        if (!undo.groupId || !undo.correctionId) {
+          throw new Error("Product correction details are missing");
+        }
+        await restorePersistedProductGroupMember(
+          undo.ipId,
+          undo.groupId,
+          undo.correctionId,
+        );
       }
       setResultCompleting(undo.resultId, false);
+      setProductCorrectedResultIds((current) => {
+        if (!current.has(undo.resultId)) return current;
+        const next = new Set(current);
+        next.delete(undo.resultId);
+        return next;
+      });
       setDismissing((prev) => {
         if (!prev.has(undo.resultId)) return prev;
         const next = new Set(prev);
@@ -472,6 +544,7 @@ export function MonitoringBoard({
   useEffect(() => {
     setSelected(new Set());
     setSelectionExtras(new Map());
+    setProductCorrectedResultIds(new Set());
     setBatchResult(null);
     appliedSeedKey.current = null;
   }, [filterKey]);
@@ -1178,6 +1251,8 @@ export function MonitoringBoard({
           onLicensed={(dismissedCount) => rememberLicensedAction(activeFinding, dismissedCount)}
           onUpdated={(opts) => refreshAfterFindingUpdate(activeFinding.result_id, opts)}
           onAddRelatedToBatch={addRelatedToBatch}
+          productGroupId={filters.product_group_id ?? undefined}
+          onCorrectProductGroup={(reason) => correctProductMembership(activeFinding, reason)}
         />
       )}
 

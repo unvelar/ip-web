@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ExternalLink, ListFilter, Pencil, RefreshCw } from "lucide-react";
+import { CheckCircle2, CircleX, ExternalLink, ListFilter, Pencil, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   confirmPersistedProductGroup,
+  excludePersistedProductGroupMember,
   getProductClusterGraph,
   getPersistedProductGroups,
   listProductClusterScopes,
@@ -13,6 +14,7 @@ import {
   type ProductClusterGraph,
   type ProductClusterProfile,
   type ProductClusterScope,
+  type ProductGroupCorrectionReason,
 } from "../api";
 import ProductSimilarityRadial from "../components/product-clusters/ProductSimilarityRadial";
 import {
@@ -43,6 +45,7 @@ export default function ProductClusters() {
   const [groupsLoadedKey, setGroupsLoadedKey] = useState<string | null>(null);
   const [refreshingGroups, setRefreshingGroups] = useState(false);
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
+  const [savingCorrectionProfileId, setSavingCorrectionProfileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const graphRequestKey = `${scopesRequestKey}:${selectedIpId}`;
@@ -204,6 +207,28 @@ export default function ProductClusters() {
     }
   }
 
+  async function correctGroupMember(
+    groupId: string,
+    profileId: string,
+    reason: ProductGroupCorrectionReason,
+  ) {
+    if (!selectedIpId) return;
+    setError(null);
+    setSavingCorrectionProfileId(profileId);
+    try {
+      await excludePersistedProductGroupMember(selectedIpId, groupId, {
+        profile_id: profileId,
+        reason,
+      });
+      setGroupOverview(await getPersistedProductGroups(selectedIpId, mode));
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    } finally {
+      setSavingCorrectionProfileId(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -213,7 +238,7 @@ export default function ProductClusters() {
               Product Clustering Lab
             </h1>
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-              Review only
+              Beta
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
@@ -372,7 +397,9 @@ export default function ProductClusters() {
             }}
             canSelectReference={(profileId) => profileById.has(profileId)}
             savingGroupId={savingGroupId}
+            savingCorrectionProfileId={savingCorrectionProfileId}
             onConfirmGroup={confirmGroup}
+            onCorrectGroupMember={correctGroupMember}
           />
       ) : null}
     </div>
@@ -529,14 +556,22 @@ function ProductGroupsOverview({
   onSelectReference,
   canSelectReference,
   savingGroupId,
+  savingCorrectionProfileId,
   onConfirmGroup,
+  onCorrectGroupMember,
 }: {
   overview: PersistedProductGroupOverview;
   mode: RelationshipMode;
   onSelectReference: (profileId: string) => void;
   canSelectReference: (profileId: string) => boolean;
   savingGroupId: string | null;
+  savingCorrectionProfileId: string | null;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
+  onCorrectGroupMember: (
+    groupId: string,
+    profileId: string,
+    reason: ProductGroupCorrectionReason,
+  ) => Promise<void>;
 }) {
   const generatedAt = overview.generated_at
     ? new Date(overview.generated_at).toLocaleString()
@@ -547,7 +582,7 @@ function ProductGroupsOverview({
       <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         These groups are stored on the backend across the full IP corpus. In each {mode === "same" ? "product group" : "related family"}, every listing has a direct stored score of at least {overview.threshold.toFixed(2)} with every other member.
         {mode === "same"
-          ? " Groups start as review candidates; once checked, confirm one and give it a durable product name."
+          ? " New listings are assigned automatically. You can optionally name a product or remove a mistaken member while you encounter it; removals become durable constraints for future rebuilds."
           : " Related families remain review candidates and cannot be confirmed as one product."}
         {" "}These relationships do not measure similarity to the IP.
         {generatedAt && <span className="ml-1 text-blue-700">Snapshot: {generatedAt}.</span>}
@@ -585,7 +620,9 @@ function ProductGroupsOverview({
               ipId={overview.scope.ip_id}
               mode={mode}
               saving={savingGroupId === group.id}
+              savingCorrectionProfileId={savingCorrectionProfileId}
               onConfirmGroup={onConfirmGroup}
+              onCorrectGroupMember={onCorrectGroupMember}
               onSelectReference={onSelectReference}
               canSelectReference={canSelectReference}
             />
@@ -635,7 +672,9 @@ function ProductGroupCard({
   ipId,
   mode,
   saving,
+  savingCorrectionProfileId,
   onConfirmGroup,
+  onCorrectGroupMember,
   onSelectReference,
   canSelectReference,
 }: {
@@ -644,15 +683,23 @@ function ProductGroupCard({
   ipId: string;
   mode: RelationshipMode;
   saving: boolean;
+  savingCorrectionProfileId: string | null;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
+  onCorrectGroupMember: (
+    groupId: string,
+    profileId: string,
+    reason: ProductGroupCorrectionReason,
+  ) => Promise<void>;
   onSelectReference: (profileId: string) => void;
   canSelectReference: (profileId: string) => boolean;
 }) {
   const [editingName, setEditingName] = useState(false);
+  const [correctingProfileId, setCorrectingProfileId] = useState<string | null>(null);
   const [name, setName] = useState(group.display_name);
   const confirmed = group.confirmation_status === "confirmed";
   const canConfirm = mode === "same";
   const trimmedName = name.trim();
+  const correctingProfile = group.members.find((profile) => profile.id === correctingProfileId) ?? null;
 
   async function saveName() {
     if (!trimmedName) return;
@@ -757,15 +804,72 @@ function ProductGroupCard({
 
       <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
         {group.members.map((profile) => (
-          <ListingTile
-            key={profile.id}
-            profile={profile}
-            onClick={canSelectReference(profile.id)
-              ? () => onSelectReference(profile.id)
-              : undefined}
-          />
+          <div key={profile.id} className="group/member relative min-w-0">
+            <ListingTile
+              profile={profile}
+              onClick={canSelectReference(profile.id)
+                ? () => onSelectReference(profile.id)
+                : undefined}
+            />
+            {canConfirm && group.member_count > 1 && (
+              <button
+                type="button"
+                aria-label={`Remove ${profileTitle(profile)} from this product`}
+                title="This listing is not this product"
+                disabled={Boolean(savingCorrectionProfileId)}
+                onClick={() => setCorrectingProfileId(profile.id)}
+                className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/80 bg-white/90 text-stone-500 opacity-0 shadow-sm transition hover:bg-red-50 hover:text-red-700 focus:opacity-100 disabled:opacity-40 group-hover/member:opacity-100"
+              >
+                <CircleX size={15} />
+              </button>
+            )}
+          </div>
         ))}
       </div>
+      {correctingProfile && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-bold text-amber-950">
+            Remove “{profileTitle(correctingProfile)}” from this product?
+          </p>
+          <p className="mt-1 text-[11px] text-amber-800">
+            It will be categorized automatically again, but it will not be placed back with these same members.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={Boolean(savingCorrectionProfileId)}
+              onClick={() => {
+                void onCorrectGroupMember(group.id, correctingProfile.id, "wrong_product")
+                  .then(() => setCorrectingProfileId(null))
+                  .catch(() => undefined);
+              }}
+              className="rounded-lg bg-amber-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-950 disabled:opacity-50"
+            >
+              Not this product
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(savingCorrectionProfileId)}
+              onClick={() => {
+                void onCorrectGroupMember(group.id, correctingProfile.id, "different_variant")
+                  .then(() => setCorrectingProfileId(null))
+                  .catch(() => undefined);
+              }}
+              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50"
+            >
+              Different variant
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(savingCorrectionProfileId)}
+              onClick={() => setCorrectingProfileId(null)}
+              className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <div className="mt-3 flex items-center justify-between gap-3">
         <p className="text-xs text-stone-500">
           {group.member_count > group.members.length
@@ -797,7 +901,7 @@ function ListingTile({
       onClick={onClick}
       disabled={!onClick}
       title={onClick ? `Use as reference: ${profileTitle(profile)}` : profileTitle(profile)}
-      className="min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-left transition enabled:hover:border-red-300 enabled:hover:bg-red-50 disabled:cursor-default"
+      className="w-full min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-left transition enabled:hover:border-red-300 enabled:hover:bg-red-50 disabled:cursor-default"
     >
       <span className="block aspect-square overflow-hidden rounded-md bg-stone-100">
         {profile.image_url ? (

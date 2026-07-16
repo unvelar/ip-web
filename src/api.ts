@@ -2352,6 +2352,17 @@ export interface PersistedProductGroupOverview {
   truncated: boolean;
 }
 
+export type ProductGroupCorrectionReason = "wrong_product" | "different_variant";
+
+export interface ProductGroupMemberCorrection {
+  id: string;
+  source_group_id: string;
+  removed_profile_id: string;
+  removed_case_id: string;
+  reason: ProductGroupCorrectionReason;
+  created_at: string;
+}
+
 export function listProductClusterScopes() {
   return request<{ scopes: ProductClusterScope[] }>("/api/product-clusters/scopes");
 }
@@ -2404,5 +2415,38 @@ export function confirmPersistedProductGroup(
       method: "PATCH",
       body: JSON.stringify({ display_name: displayName }),
     },
+  );
+}
+
+export function excludePersistedProductGroupMember(
+  ipId: string,
+  groupId: string,
+  input: {
+    profile_id?: string;
+    case_id?: string;
+    reason: ProductGroupCorrectionReason;
+    note?: string | null;
+  },
+) {
+  return request<{
+    correction: ProductGroupMemberCorrection;
+    regrouped: boolean;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/corrections`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function restorePersistedProductGroupMember(
+  ipId: string,
+  groupId: string,
+  correctionId: string,
+) {
+  return request<{
+    correction: ProductGroupMemberCorrection;
+    regrouped: boolean;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/corrections/${encodeURIComponent(correctionId)}`,
+    { method: "DELETE" },
   );
 }

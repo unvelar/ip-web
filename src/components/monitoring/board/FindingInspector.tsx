@@ -1,5 +1,9 @@
 import { X } from "lucide-react";
-import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
+import type {
+  IpReviewFinding,
+  MonitoringReviewOutcome,
+  ProductGroupCorrectionReason,
+} from "../../../api";
 import CaseComments from "../../CaseComments";
 import { FindingComparison, FindingTechnicalDetails } from "./FindingComparison";
 import type { FindingUpdateOptions } from "./FindingActions";
@@ -21,6 +25,8 @@ export function FindingInspector({
   onLicensed,
   onUpdated,
   onAddRelatedToBatch,
+  productGroupId,
+  onCorrectProductGroup,
   showRelatedItems = true,
 }: {
   f: IpReviewFinding;
@@ -37,6 +43,8 @@ export function FindingInspector({
   onLicensed: (dismissedCount: number) => void;
   onUpdated: (opts?: FindingUpdateOptions) => void;
   onAddRelatedToBatch: (findings: IpReviewFinding[]) => void;
+  productGroupId?: string;
+  onCorrectProductGroup?: (reason: ProductGroupCorrectionReason) => Promise<void>;
   showRelatedItems?: boolean;
 }) {
   return (
@@ -80,6 +88,8 @@ export function FindingInspector({
             onEnforced={onEnforced}
             onLicensed={onLicensed}
             onUpdated={onUpdated}
+            productGroupId={productGroupId}
+            onCorrectProductGroup={onCorrectProductGroup}
           />
           {showRelatedItems && (
             <div className="mt-4 border-t border-stone-200 pt-4">
