@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, ListFilter, RefreshCw } from "lucide-react";
+import { CheckCircle2, ExternalLink, ListFilter, Pencil, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
+  confirmPersistedProductGroup,
   getProductClusterGraph,
   getPersistedProductGroups,
   listProductClusterScopes,
   refreshPersistedProductGroups,
+  type PersistedProductGroup,
   type PersistedProductGroupOverview,
   type ProductClusterEdge,
   type ProductClusterGraph,
@@ -40,6 +42,7 @@ export default function ProductClusters() {
   const [graphLoadedKey, setGraphLoadedKey] = useState<string | null>(null);
   const [groupsLoadedKey, setGroupsLoadedKey] = useState<string | null>(null);
   const [refreshingGroups, setRefreshingGroups] = useState(false);
+  const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const graphRequestKey = `${scopesRequestKey}:${selectedIpId}`;
@@ -175,6 +178,30 @@ export default function ProductClusters() {
       }
     }
     setRefreshVersion((version) => version + 1);
+  }
+
+  async function confirmGroup(groupId: string, displayName: string) {
+    if (!selectedIpId) return;
+    setError(null);
+    setSavingGroupId(groupId);
+    try {
+      const { group } = await confirmPersistedProductGroup(
+        selectedIpId,
+        groupId,
+        displayName,
+      );
+      setGroupOverview((current) => current ? {
+        ...current,
+        groups: current.groups.map((candidate) =>
+          candidate.id === group.id ? { ...candidate, ...group } : candidate
+        ),
+      } : current);
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    } finally {
+      setSavingGroupId(null);
+    }
   }
 
   return (
@@ -344,6 +371,8 @@ export default function ProductClusters() {
               setView("similarity");
             }}
             canSelectReference={(profileId) => profileById.has(profileId)}
+            savingGroupId={savingGroupId}
+            onConfirmGroup={confirmGroup}
           />
       ) : null}
     </div>
@@ -499,13 +528,16 @@ function ProductGroupsOverview({
   mode,
   onSelectReference,
   canSelectReference,
+  savingGroupId,
+  onConfirmGroup,
 }: {
   overview: PersistedProductGroupOverview;
   mode: RelationshipMode;
   onSelectReference: (profileId: string) => void;
   canSelectReference: (profileId: string) => boolean;
+  savingGroupId: string | null;
+  onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
 }) {
-  const groupLabel = mode === "same" ? "Potential product group" : "Related family";
   const generatedAt = overview.generated_at
     ? new Date(overview.generated_at).toLocaleString()
     : null;
@@ -514,7 +546,10 @@ function ProductGroupsOverview({
     <div className="mt-5">
       <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         These groups are stored on the backend across the full IP corpus. In each {mode === "same" ? "product group" : "related family"}, every listing has a direct stored score of at least {overview.threshold.toFixed(2)} with every other member.
-        They remain review candidates, not confirmed products, and they do not measure similarity to the IP.
+        {mode === "same"
+          ? " Groups start as review candidates; once checked, confirm one and give it a durable product name."
+          : " Related families remain review candidates and cannot be confirmed as one product."}
+        {" "}These relationships do not measure similarity to the IP.
         {generatedAt && <span className="ml-1 text-blue-700">Snapshot: {generatedAt}.</span>}
       </div>
 
@@ -543,49 +578,17 @@ function ProductGroupsOverview({
       ) : (
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           {overview.groups.map((group, index) => (
-            <section key={group.id} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase tracking-wide text-stone-500">
-                    {groupLabel} {index + 1}
-                  </p>
-                  <h2 className="mt-1 line-clamp-1 text-sm font-bold text-stone-900">
-                    {group.display_name}
-                  </h2>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-sm font-bold text-stone-900">{group.member_count} listings</p>
-                  <p className="mt-0.5 text-[10px] text-stone-500">
-                    Avg stored link {group.average_score?.toFixed(3) ?? "—"}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {group.members.map((profile) => (
-                  <ListingTile
-                    key={profile.id}
-                    profile={profile}
-                    onClick={canSelectReference(profile.id)
-                      ? () => onSelectReference(profile.id)
-                      : undefined}
-                  />
-                ))}
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-xs text-stone-500">
-                  {group.member_count > group.members.length
-                    ? `+${group.member_count - group.members.length} more listings`
-                    : `Minimum link ${group.minimum_score?.toFixed(3) ?? "—"}`}
-                </p>
-                <Link
-                  to={`/monitoring/tasks?ip_id=${encodeURIComponent(overview.scope.ip_id)}&product_group_id=${encodeURIComponent(group.id)}`}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-800 transition hover:border-red-300 hover:bg-red-100"
-                >
-                  <ListFilter size={13} />
-                  Open tasks
-                </Link>
-              </div>
-            </section>
+            <ProductGroupCard
+              key={group.id}
+              group={group}
+              index={index}
+              ipId={overview.scope.ip_id}
+              mode={mode}
+              saving={savingGroupId === group.id}
+              onConfirmGroup={onConfirmGroup}
+              onSelectReference={onSelectReference}
+              canSelectReference={canSelectReference}
+            />
           ))}
         </div>
       )}
@@ -623,6 +626,161 @@ function ProductGroupsOverview({
         </section>
       )}
     </div>
+  );
+}
+
+function ProductGroupCard({
+  group,
+  index,
+  ipId,
+  mode,
+  saving,
+  onConfirmGroup,
+  onSelectReference,
+  canSelectReference,
+}: {
+  group: PersistedProductGroup;
+  index: number;
+  ipId: string;
+  mode: RelationshipMode;
+  saving: boolean;
+  onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
+  onSelectReference: (profileId: string) => void;
+  canSelectReference: (profileId: string) => boolean;
+}) {
+  const [editingName, setEditingName] = useState(false);
+  const [name, setName] = useState(group.display_name);
+  const confirmed = group.confirmation_status === "confirmed";
+  const canConfirm = mode === "same";
+  const trimmedName = name.trim();
+
+  async function saveName() {
+    if (!trimmedName) return;
+    try {
+      await onConfirmGroup(group.id, trimmedName);
+      setEditingName(false);
+    } catch {
+      // The parent keeps the editor open and displays the API error.
+    }
+  }
+
+  return (
+    <section className={`rounded-2xl border bg-white p-4 shadow-sm ${
+      confirmed ? "border-emerald-200" : "border-stone-200"
+    }`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide ${
+            confirmed ? "text-emerald-700" : "text-stone-500"
+          }`}>
+            {confirmed && <CheckCircle2 size={13} />}
+            {confirmed
+              ? "Confirmed product"
+              : mode === "same"
+                ? `Potential product group ${index + 1}`
+                : `Related family ${index + 1}`}
+          </p>
+          <h2 className="mt-1 line-clamp-2 text-sm font-bold text-stone-900">
+            {group.display_name}
+          </h2>
+          {confirmed && group.confirmed_at && (
+            <p className="mt-1 text-[10px] text-emerald-700">
+              Confirmed {new Date(group.confirmed_at).toLocaleString()}
+            </p>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-bold text-stone-900">{group.member_count} listings</p>
+          <p className="mt-0.5 text-[10px] text-stone-500">
+            Avg stored link {group.average_score?.toFixed(3) ?? "—"}
+          </p>
+        </div>
+      </div>
+
+      {canConfirm && !editingName && (
+        <button
+          type="button"
+          onClick={() => {
+            setName(group.display_name);
+            setEditingName(true);
+          }}
+          className={`mt-3 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+            confirmed
+              ? "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100"
+          }`}
+        >
+          {confirmed ? <Pencil size={13} /> : <CheckCircle2 size={13} />}
+          {confirmed ? "Edit name" : "Confirm & name"}
+        </button>
+      )}
+
+      {canConfirm && editingName && (
+        <form
+          className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveName();
+          }}
+        >
+          <label className="block">
+            <span className="text-xs font-bold text-emerald-900">Product name</span>
+            <input
+              autoFocus
+              type="text"
+              value={name}
+              maxLength={200}
+              onChange={(event) => setName(event.target.value)}
+              className="mt-1.5 w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => setEditingName(false)}
+              className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-stone-600 hover:bg-white disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !trimmedName || (confirmed && trimmedName === group.display_name)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <CheckCircle2 size={13} />
+              {saving ? "Saving…" : confirmed ? "Save name" : "Confirm product"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {group.members.map((profile) => (
+          <ListingTile
+            key={profile.id}
+            profile={profile}
+            onClick={canSelectReference(profile.id)
+              ? () => onSelectReference(profile.id)
+              : undefined}
+          />
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <p className="text-xs text-stone-500">
+          {group.member_count > group.members.length
+            ? `+${group.member_count - group.members.length} more listings`
+            : `Minimum link ${group.minimum_score?.toFixed(3) ?? "—"}`}
+        </p>
+        <Link
+          to={`/monitoring/tasks?ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-800 transition hover:border-red-300 hover:bg-red-100"
+        >
+          <ListFilter size={13} />
+          Open tasks
+        </Link>
+      </div>
+    </section>
   );
 }
 

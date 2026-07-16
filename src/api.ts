@@ -2325,6 +2325,9 @@ export interface ProductClusterGraph {
 export interface PersistedProductGroup {
   id: string;
   display_name: string;
+  name_source: "auto" | "manual";
+  confirmation_status: "candidate" | "confirmed";
+  confirmed_at: string | null;
   member_count: number;
   average_score: number | null;
   minimum_score: number | null;
@@ -2382,5 +2385,24 @@ export function refreshPersistedProductGroups(
   return request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?relationship=${relationship}`,
     { method: "POST" },
+  );
+}
+
+export function confirmPersistedProductGroup(
+  ipId: string,
+  groupId: string,
+  displayName: string,
+) {
+  return request<{
+    group: Pick<
+      PersistedProductGroup,
+      "id" | "display_name" | "name_source" | "confirmation_status" | "confirmed_at"
+    >;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ display_name: displayName }),
+    },
   );
 }
