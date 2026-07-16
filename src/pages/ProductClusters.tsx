@@ -374,7 +374,8 @@ export default function ProductClusters() {
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Compare listings with each other. These scores do not measure similarity to the IP itself.
+            Compare listing-to-listing product evidence. Image similarity, multimodal
+            similarity, and relationship scores do not measure similarity to the IP itself.
           </p>
         </div>
         <button
@@ -419,7 +420,7 @@ export default function ProductClusters() {
 
           <div>
             <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">
-              Relationship score
+              Final relationship score
             </span>
             <div className="inline-flex rounded-lg border border-stone-300 bg-stone-50 p-1">
               <ModeButton active={mode === "same"} onClick={() => setMode("same")}>
@@ -434,7 +435,7 @@ export default function ProductClusters() {
           {view === "similarity" ? (
             <label className="block">
               <span className="mb-1.5 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-stone-500">
-                Minimum confidence
+                Minimum relationship score
                 <span className="font-mono text-stone-900">{threshold.toFixed(2)}</span>
               </span>
               <input
@@ -450,10 +451,11 @@ export default function ProductClusters() {
           ) : (
             <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
               <span className="block text-xs font-bold uppercase tracking-wide text-stone-500">
-                Stored grouping policy
+                Final grouping policy
               </span>
               <span className="mt-1 block text-sm font-semibold text-stone-900">
-                Strict pairwise score ≥ {(groupOverview?.threshold ?? 0.3).toFixed(2)}
+                Strict pairwise {mode === "same" ? "same-product" : "related-product"} score ≥{" "}
+                {(groupOverview?.threshold ?? 0.3).toFixed(2)}
               </span>
             </div>
           )}
@@ -467,7 +469,7 @@ export default function ProductClusters() {
             {view === "groups" ? (
               <span><strong className="text-stone-800">{groupOverview?.group_count ?? 0}</strong> persistent groups</span>
             ) : (
-              <span><strong className="text-stone-800">{visibleEdges.length}</strong> relationships above threshold</span>
+              <span><strong className="text-stone-800">{visibleEdges.length}</strong> relationships above score filter</span>
             )}
             <span><strong className="text-stone-800">{graph.scope.pair_count}</strong> scored pairs total</span>
             {view === "similarity" && graph.truncated && (
@@ -645,7 +647,7 @@ function NearestListings({
       <div className="max-h-[512px] overflow-y-auto p-2">
         {edges.length === 0 ? (
           <p className="px-3 py-10 text-center text-sm text-stone-500">
-            No direct relationships meet this confidence. Lower the threshold to reveal more.
+            No direct relationships meet this score filter. Lower it to reveal more.
           </p>
         ) : (
           edges.slice(0, 50).map((edge, index) => {
@@ -740,9 +742,9 @@ function ProductGroupsOverview({
   return (
     <div className="mt-5">
       <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        These groups are stored on the backend across the full IP corpus. In each {mode === "same" ? "product group" : "related family"}, every listing has a direct stored score of at least {overview.threshold.toFixed(2)} with every other member.
+        These groups are stored on the backend across the full IP corpus. In each {mode === "same" ? "product group" : "related family"}, every listing has a final pairwise {mode === "same" ? "same-product" : "related-product"} score of at least {overview.threshold.toFixed(2)} with every other member.
         {mode === "same"
-          ? " New listings are assigned automatically. Open Manage product on any confirmed product to rename it, tune its embedding candidate threshold, add automatic membership rules, or remove a mistaken member."
+          ? " New listings are assigned automatically. Image similarity is explanatory only. A listing must pass the product’s multimodal candidate gate; rules and the final pairwise same-product score then decide membership. Open Manage product to configure the gate, references, rules, or corrections."
           : " Related families remain review candidates and cannot be confirmed as one product."}
         {" "}These relationships do not measure similarity to the IP.
         {generatedAt && <span className="ml-1 text-blue-700">Snapshot: {generatedAt}.</span>}
@@ -1030,7 +1032,8 @@ function ProductGroupCard({
         <div className="shrink-0 text-right">
           <p className="text-sm font-bold text-stone-900">{group.member_count} listings</p>
           <p className="mt-0.5 text-[10px] text-stone-500">
-            Avg stored link {group.average_score?.toFixed(3) ?? "—"}
+            Avg {mode === "same" ? "same-product" : "related-product"} score{" "}
+            {group.average_score?.toFixed(3) ?? "—"}
           </p>
           {confirmed && (
             <>
@@ -1039,7 +1042,7 @@ function ProductGroupCard({
               </p>
               {group.embedding_match_threshold != null && (
                 <p className="mt-0.5 text-[10px] font-semibold text-violet-700">
-                  Embedding ≥ {group.embedding_match_threshold.toFixed(2)}
+                  Multimodal gate ≥ {group.embedding_match_threshold.toFixed(2)}
                 </p>
               )}
             </>
@@ -1079,8 +1082,8 @@ function ProductGroupCard({
               {loadingVisualEvidence
                 ? "Calculating…"
                 : visualEvidence
-                  ? "Refresh image scores"
-                  : "Show image scores"}
+                  ? "Refresh image similarity"
+                  : "Show image similarity"}
             </button>
           )}
         </div>
@@ -1140,7 +1143,8 @@ function ProductGroupCard({
                 Product settings
               </p>
               <p className="mt-1 text-[11px] text-blue-700">
-                Rename the product, tune its embedding candidate gate, define automatic membership rules, or remove a listing below.
+                Rename the product, tune its multimodal candidate gate, manage
+                representative images and rules, or remove a listing below.
               </p>
             </div>
             <button
@@ -1185,15 +1189,16 @@ function ProductGroupCard({
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-bold text-stone-900">
                   <Images size={14} />
-                  Image-level visual support
+                  Image similarity
                 </p>
                 <p className="mt-0.5 text-[11px] leading-4 text-stone-600">
                   Compare every stored listing image with this product’s persisted
                   reference images from other listings in the group. Each number is
-                  raw image-to-image cosine similarity to the closest reference—not
-                  authenticity probability and not the overall product match. Pin
-                  authoritative views, or remove an unsuitable reference to suppress
-                  it from automatic selection.
+                  raw image-to-image cosine similarity to the closest reference.
+                  It is explanatory only: it does not control group membership,
+                  indicate authenticity probability, or represent the final
+                  same-product score. Pin authoritative views, or remove an
+                  unsuitable reference to suppress it from automatic selection.
                 </p>
               </div>
               <button
@@ -1205,8 +1210,8 @@ function ProductGroupCard({
                 {loadingVisualEvidence
                   ? "Calculating…"
                   : visualEvidence
-                    ? "Refresh scores"
-                    : "Show image scores"}
+                    ? "Refresh similarity"
+                    : "Show image similarity"}
               </button>
             </div>
 
@@ -1327,8 +1332,8 @@ function ProductGroupCard({
                                 title="Raw cosine similarity to the closest product reference image"
                               >
                                 {image.visual_support_score == null
-                                  ? "Visual —"
-                                  : `Visual ${image.visual_support_score.toFixed(2)}`}
+                                  ? "Image sim —"
+                                  : `Image sim ${image.visual_support_score.toFixed(2)}`}
                               </span>
                               {image.is_reference && (
                                 <span className={`absolute bottom-1 left-1 rounded px-1.5 py-0.5 text-[9px] font-bold text-white ${
@@ -1397,14 +1402,16 @@ function ProductGroupCard({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold text-stone-900">
-                  Embedding matching threshold
+                  Multimodal candidate gate
                 </p>
                 <p className="mt-0.5 text-[11px] leading-4 text-stone-600">
-                  Require the initial image, title, and description embedding match
-                  to reach this value before the listing is sent to the exact-product
-                  reranker and product rules. It may still be recognized as a related
-                  product. This is an early candidate filter, not the final same-product
-                  confidence. Higher is stricter.
+                  Require the whole-listing embedding—up to six images plus title,
+                  description and product attributes—to reach this raw cosine
+                  similarity against another listing before exact-product reranking
+                  and rules are applied. Passing the gate does not add a listing to
+                  the product; the final same-product score still decides membership.
+                  A failed pair may still be recognized as a related product. Higher
+                  is stricter.
                 </p>
               </div>
               <span className="shrink-0 rounded-full bg-white px-2 py-1 font-mono text-[10px] font-bold text-violet-800">
@@ -1424,7 +1431,7 @@ function ProductGroupCard({
                 }}
                 className="h-4 w-4 rounded border-stone-300 text-violet-700 focus:ring-violet-200"
               />
-              Use a product-specific minimum embedding match
+              Use a product-specific multimodal candidate gate
             </label>
 
             <div className={`mt-3 ${embeddingThresholdEnabled ? "" : "opacity-45"}`}>
@@ -1440,7 +1447,7 @@ function ProductGroupCard({
                   setEmbeddingThresholdNotice(null);
                 }}
                 className="w-full accent-violet-700"
-                aria-label="Minimum embedding similarity"
+                aria-label="Minimum multimodal listing similarity"
               />
               <div className="mt-1 flex justify-between font-mono text-[10px] text-stone-500">
                 <span>0.00 broad</span>
@@ -1450,7 +1457,8 @@ function ProductGroupCard({
 
             <div className="mt-2 flex items-center justify-between gap-3">
               <p className="text-[10px] text-stone-500">
-                Turning this off preserves the normal top-candidate retrieval behavior.
+                Turning this off removes this extra gate; normal embedding retrieval,
+                reranking and final same-product scoring still run.
               </p>
               <button
                 type="button"
@@ -1626,9 +1634,10 @@ function ProductGroupCard({
 
       {visualEvidence && (
         <p className="mt-4 text-[10px] text-indigo-700">
-          Visual scores below compare the displayed image with the closest product
-          reference image from another listing. They are raw similarity scores, not
-          authenticity probabilities.
+          Image similarity compares the displayed image with the closest product
+          reference image from another listing. It is explanatory only—not an
+          authenticity probability, multimodal candidate score, or final
+          same-product score.
         </p>
       )}
       <div className={`${visualEvidence ? "mt-2" : "mt-4"} grid grid-cols-3 gap-2 sm:grid-cols-4`}>
@@ -1712,7 +1721,9 @@ function ProductGroupCard({
         <p className="text-xs text-stone-500">
           {group.member_count > group.members.length
             ? `+${group.member_count - group.members.length} more listings`
-            : `Minimum link ${group.minimum_score?.toFixed(3) ?? "—"}`}
+            : `Minimum ${mode === "same" ? "same-product" : "related-product"} score ${
+              group.minimum_score?.toFixed(3) ?? "—"
+            }`}
         </p>
         <Link
           to={`/monitoring/tasks?ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}`}
@@ -1770,8 +1781,8 @@ function ListingTile({
             }
           >
             {visualSupportScore == null
-              ? "Visual —"
-              : `Visual ${visualSupportScore.toFixed(2)}`}
+              ? "Image sim —"
+              : `Image sim ${visualSupportScore.toFixed(2)}`}
           </span>
         )}
         {visualSupportIsReference && (
@@ -1802,14 +1813,19 @@ function PairInspector({
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Selected relationship</p>
           <h2 className="mt-1 text-lg font-black text-stone-900">Pair evidence</h2>
+          <p className="mt-1 max-w-xl text-xs leading-5 text-stone-500">
+            The final product scores combine whole-listing multimodal similarity,
+            exact-product model evidence and, when available, price evidence.
+            Per-image similarity is separate and explanatory only.
+          </p>
         </div>
         <div className="grid grid-cols-3 gap-x-5 gap-y-2 sm:grid-cols-6">
-          <Metric label="Same" value={edge.same_product_score} />
-          <Metric label="Related" value={edge.related_product_score} />
-          <Metric label="Vector" value={edge.vector_similarity} />
-          <Metric label="Exact" value={edge.exact_reranker_score} />
+          <Metric label="Same-product" value={edge.same_product_score} />
+          <Metric label="Related-product" value={edge.related_product_score} />
+          <Metric label="Multimodal listing" value={edge.vector_similarity} />
+          <Metric label="Exact-product model" value={edge.exact_reranker_score} />
           <Metric label="Price ratio" value={edge.price_ratio} suffix="×" />
-          <Metric label="Too cheap" value={edge.too_cheap_signal} />
+          <Metric label="Low-price signal" value={edge.too_cheap_signal} />
         </div>
       </div>
 

@@ -146,7 +146,7 @@ export default function ProductSimilarityRadial({
 
       {neighbors.length === 0 && (
         <p className="absolute bottom-12 left-1/2 w-64 -translate-x-1/2 text-center text-sm text-stone-500">
-          No direct relationships meet the current confidence threshold.
+          No direct relationships meet the current relationship-score filter.
         </p>
       )}
 
