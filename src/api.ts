@@ -2349,6 +2349,46 @@ export interface ProductGroupRule {
   updated_at: string;
 }
 
+export interface ProductGroupVisualReference {
+  id: string;
+  image_id: string;
+  source_profile_id: string;
+  reference_rank: number;
+  selection_source: "auto" | "manual";
+  position: number;
+  listing_title: string | null;
+  image_url: string | null;
+}
+
+export interface ProductGroupVisualEvidenceImage {
+  image_id: string;
+  profile_id: string;
+  case_id: string;
+  position: number;
+  visual_support_score: number | null;
+  matched_reference_image_id: string | null;
+  is_reference: boolean;
+  image_url: string | null;
+}
+
+export interface ProductGroupVisualEvidenceMember {
+  profile_id: string;
+  case_id: string;
+  listing_title: string | null;
+  platform: string | null;
+  member_rank: number;
+  images: ProductGroupVisualEvidenceImage[];
+}
+
+export interface ProductGroupVisualEvidence {
+  group_id: string;
+  display_name: string;
+  member_count: number;
+  references: ProductGroupVisualReference[];
+  members: ProductGroupVisualEvidenceMember[];
+  truncated: boolean;
+}
+
 export interface PersistedProductGroupOverview {
   scope: ProductClusterScope;
   relationship_type: "same_product" | "related_product";
@@ -2468,6 +2508,48 @@ export function updatePersistedProductGroupEmbeddingSettings(
         embedding_match_threshold: embeddingMatchThreshold,
       }),
     },
+  );
+}
+
+export function calculatePersistedProductGroupVisualEvidence(
+  ipId: string,
+  groupId: string,
+) {
+  return request<ProductGroupVisualEvidence>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/visual-evidence`,
+    { method: "POST" },
+  );
+}
+
+export function pinPersistedProductGroupReferenceImage(
+  ipId: string,
+  groupId: string,
+  imageId: string,
+) {
+  return request<ProductGroupVisualEvidence>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/visual-references`,
+    { method: "POST", body: JSON.stringify({ image_id: imageId }) },
+  );
+}
+
+export function removePersistedProductGroupReferenceImage(
+  ipId: string,
+  groupId: string,
+  imageId: string,
+) {
+  return request<ProductGroupVisualEvidence>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/visual-references/${encodeURIComponent(imageId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function resetPersistedProductGroupReferenceImages(
+  ipId: string,
+  groupId: string,
+) {
+  return request<ProductGroupVisualEvidence>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/visual-references`,
+    { method: "DELETE" },
   );
 }
 

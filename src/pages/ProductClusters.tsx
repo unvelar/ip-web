@@ -3,15 +3,20 @@ import {
   CheckCircle2,
   CircleX,
   ExternalLink,
+  Images,
   ListFilter,
   Pencil,
+  Pin,
   Plus,
   RefreshCw,
+  RotateCcw,
   Settings2,
   Trash2,
+  X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
+  calculatePersistedProductGroupVisualEvidence,
   confirmPersistedProductGroup,
   createPersistedProductGroupRule,
   deletePersistedProductGroupRule,
@@ -19,7 +24,10 @@ import {
   getProductClusterGraph,
   getPersistedProductGroups,
   listProductClusterScopes,
+  pinPersistedProductGroupReferenceImage,
   refreshPersistedProductGroups,
+  removePersistedProductGroupReferenceImage,
+  resetPersistedProductGroupReferenceImages,
   updatePersistedProductGroupEmbeddingSettings,
   updatePersistedProductGroupRule,
   type PersistedProductGroup,
@@ -30,6 +38,7 @@ import {
   type ProductClusterScope,
   type ProductGroupCorrectionReason,
   type ProductGroupRule,
+  type ProductGroupVisualEvidence,
 } from "../api";
 import ProductSimilarityRadial from "../components/product-clusters/ProductSimilarityRadial";
 import {
@@ -889,6 +898,11 @@ function ProductGroupCard({
   );
   const [savingEmbeddingThreshold, setSavingEmbeddingThreshold] = useState(false);
   const [embeddingThresholdNotice, setEmbeddingThresholdNotice] = useState<string | null>(null);
+  const [visualEvidence, setVisualEvidence] = useState<ProductGroupVisualEvidence | null>(null);
+  const [loadingVisualEvidence, setLoadingVisualEvidence] = useState(false);
+  const [visualEvidenceError, setVisualEvidenceError] = useState<string | null>(null);
+  const [savingReferenceImageId, setSavingReferenceImageId] = useState<string | null>(null);
+  const [resettingReferences, setResettingReferences] = useState(false);
   const confirmed = group.confirmation_status === "confirmed";
   const canConfirm = mode === "same";
   const trimmedName = name.trim();
@@ -898,6 +912,18 @@ function ProductGroupCard({
     : null;
   const embeddingThresholdChanged =
     nextEmbeddingThreshold !== group.embedding_match_threshold;
+  const referenceRankByImageId = new Map(
+    visualEvidence?.references.map((reference) => [
+      reference.image_id,
+      reference.reference_rank,
+    ]) ?? [],
+  );
+  const referenceByImageId = new Map(
+    visualEvidence?.references.map((reference) => [reference.image_id, reference]) ?? [],
+  );
+  const manualReferenceCount = visualEvidence?.references.filter(
+    (reference) => reference.selection_source === "manual",
+  ).length ?? 0;
 
   async function saveName() {
     if (!trimmedName) return;
@@ -907,6 +933,62 @@ function ProductGroupCard({
       setManaging(true);
     } catch {
       // The parent keeps the editor open and displays the API error.
+    }
+  }
+
+  async function loadVisualEvidence() {
+    setLoadingVisualEvidence(true);
+    setVisualEvidenceError(null);
+    try {
+      setVisualEvidence(
+        await calculatePersistedProductGroupVisualEvidence(ipId, group.id),
+      );
+    } catch (caught: unknown) {
+      setVisualEvidenceError(errorMessage(caught));
+    } finally {
+      setLoadingVisualEvidence(false);
+    }
+  }
+
+  async function pinReferenceImage(imageId: string) {
+    setSavingReferenceImageId(imageId);
+    setVisualEvidenceError(null);
+    try {
+      setVisualEvidence(
+        await pinPersistedProductGroupReferenceImage(ipId, group.id, imageId),
+      );
+    } catch (caught: unknown) {
+      setVisualEvidenceError(errorMessage(caught));
+    } finally {
+      setSavingReferenceImageId(null);
+    }
+  }
+
+  async function removeReferenceImage(imageId: string) {
+    setSavingReferenceImageId(imageId);
+    setVisualEvidenceError(null);
+    try {
+      setVisualEvidence(
+        await removePersistedProductGroupReferenceImage(ipId, group.id, imageId),
+      );
+    } catch (caught: unknown) {
+      setVisualEvidenceError(errorMessage(caught));
+    } finally {
+      setSavingReferenceImageId(null);
+    }
+  }
+
+  async function resetReferenceImages() {
+    setResettingReferences(true);
+    setVisualEvidenceError(null);
+    try {
+      setVisualEvidence(
+        await resetPersistedProductGroupReferenceImages(ipId, group.id),
+      );
+    } catch (caught: unknown) {
+      setVisualEvidenceError(errorMessage(caught));
+    } finally {
+      setResettingReferences(false);
     }
   }
 
@@ -956,25 +1038,41 @@ function ProductGroupCard({
       </div>
 
       {canConfirm && !editingName && (
-        <button
-          type="button"
-          onClick={() => {
-            setName(group.display_name);
-            if (confirmed) {
-              setManaging((current) => !current);
-            } else {
-              setEditingName(true);
-            }
-          }}
-          className={`mt-3 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
-            confirmed
-              ? "border-blue-200 bg-blue-50 text-blue-800 hover:border-blue-300 hover:bg-blue-100"
-              : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100"
-          }`}
-        >
-          {confirmed ? <Settings2 size={14} /> : <CheckCircle2 size={14} />}
-          {confirmed ? (managing ? "Close product settings" : "Manage product") : "Confirm & manage"}
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setName(group.display_name);
+              if (confirmed) {
+                setManaging((current) => !current);
+              } else {
+                setEditingName(true);
+              }
+            }}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+              confirmed
+                ? "border-blue-200 bg-blue-50 text-blue-800 hover:border-blue-300 hover:bg-blue-100"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100"
+            }`}
+          >
+            {confirmed ? <Settings2 size={14} /> : <CheckCircle2 size={14} />}
+            {confirmed ? (managing ? "Close product settings" : "Manage product") : "Confirm & manage"}
+          </button>
+          {confirmed && !managing && (
+            <button
+              type="button"
+              disabled={loadingVisualEvidence}
+              onClick={() => {
+                setManaging(true);
+                void loadVisualEvidence();
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 transition hover:border-indigo-300 hover:bg-indigo-100 disabled:opacity-50"
+            >
+              <Images size={14} />
+              {loadingVisualEvidence ? "Calculating…" : "Image scores"}
+            </button>
+          )}
+        </div>
       )}
 
       {canConfirm && editingName && (
@@ -1065,6 +1163,219 @@ function ProductGroupCard({
               </div>
             </label>
           </form>
+
+          <div className="mt-4 border-t border-blue-200 pt-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-bold text-stone-900">
+                  <Images size={14} />
+                  Image-level visual support
+                </p>
+                <p className="mt-0.5 text-[11px] leading-4 text-stone-600">
+                  Compare every stored listing image with this product’s persisted
+                  reference images from other listings in the group. Each number is
+                  raw image-to-image cosine similarity to the closest reference—not
+                  authenticity probability and not the overall product match. Pin
+                  authoritative views, or remove an unsuitable reference to suppress
+                  it from automatic selection.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={loadingVisualEvidence}
+                onClick={() => void loadVisualEvidence()}
+                className="shrink-0 rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-50 disabled:opacity-50"
+              >
+                {loadingVisualEvidence
+                  ? "Calculating…"
+                  : visualEvidence
+                    ? "Refresh scores"
+                    : "Show image scores"}
+              </button>
+            </div>
+
+            {visualEvidenceError && (
+              <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-800">
+                {visualEvidenceError}
+              </p>
+            )}
+
+            {visualEvidence && (
+              <div className="mt-3 space-y-3">
+                <div className="rounded-lg border border-indigo-100 bg-white p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] font-bold text-stone-800">
+                        Product reference images
+                      </p>
+                      <p className="mt-0.5 text-[9px] text-stone-500">
+                        {manualReferenceCount} manual · automatic images fill the remaining slots
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={resettingReferences || Boolean(savingReferenceImageId)}
+                      onClick={() => void resetReferenceImages()}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-stone-600 hover:bg-stone-100 disabled:opacity-40"
+                    >
+                      <RotateCcw size={11} />
+                      {resettingReferences ? "Resetting…" : "Reset to automatic"}
+                    </button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                    {visualEvidence.references.map((reference) => (
+                      <div key={reference.id} className="min-w-0">
+                        <div className="relative aspect-square overflow-hidden rounded-md bg-stone-100">
+                          {reference.image_url ? (
+                            <img
+                              src={reference.image_url}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span className="flex h-full items-center justify-center text-[10px] text-stone-400">
+                              No image
+                            </span>
+                          )}
+                          <span className="absolute left-1 top-1 rounded bg-indigo-900/85 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                            Ref #{reference.reference_rank}
+                          </span>
+                          <button
+                            type="button"
+                            title="Remove and suppress this reference"
+                            aria-label={`Remove reference ${reference.reference_rank}`}
+                            disabled={Boolean(savingReferenceImageId) || resettingReferences}
+                            onClick={() => void removeReferenceImage(reference.image_id)}
+                            className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/95 text-stone-500 shadow-sm hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                          >
+                            <X size={11} />
+                          </button>
+                          <span className={`absolute bottom-1 left-1 rounded px-1.5 py-0.5 text-[9px] font-bold text-white ${
+                            reference.selection_source === "manual"
+                              ? "bg-emerald-700/90"
+                              : "bg-stone-700/85"
+                          }`}>
+                            {reference.selection_source === "manual" ? "Manual" : "Auto"}
+                          </span>
+                        </div>
+                        <p
+                          className="mt-1 truncate text-[9px] text-stone-500"
+                          title={reference.listing_title ?? undefined}
+                        >
+                          {reference.listing_title || `View ${reference.position + 1}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {visualEvidence.members.map((member) => (
+                  <div
+                    key={member.profile_id}
+                    className="rounded-lg border border-stone-200 bg-white p-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0 truncate text-[11px] font-bold text-stone-800">
+                        {member.listing_title || "Untitled listing"}
+                      </p>
+                      <span className="shrink-0 text-[9px] text-stone-500">
+                        {member.platform || `Listing #${member.member_rank}`}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      {member.images.map((image) => {
+                        const matchedReferenceRank = image.matched_reference_image_id
+                          ? referenceRankByImageId.get(image.matched_reference_image_id)
+                          : null;
+                        const reference = referenceByImageId.get(image.image_id);
+                        const savingThisReference = savingReferenceImageId === image.image_id;
+                        return (
+                          <div
+                            key={image.image_id}
+                            className="overflow-hidden rounded-md border border-stone-200 bg-stone-50"
+                          >
+                            <div className="relative aspect-square overflow-hidden bg-stone-100">
+                              {image.image_url ? (
+                                <img
+                                  src={image.image_url}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="flex h-full items-center justify-center text-[10px] text-stone-400">
+                                  No image
+                                </span>
+                              )}
+                              <span
+                                className="absolute right-1 top-1 rounded bg-white/95 px-1.5 py-0.5 font-mono text-[9px] font-bold text-indigo-900 shadow-sm"
+                                title="Raw cosine similarity to the closest product reference image"
+                              >
+                                {image.visual_support_score == null
+                                  ? "Visual —"
+                                  : `Visual ${image.visual_support_score.toFixed(2)}`}
+                              </span>
+                              {image.is_reference && (
+                                <span className={`absolute bottom-1 left-1 rounded px-1.5 py-0.5 text-[9px] font-bold text-white ${
+                                  reference?.selection_source === "manual"
+                                    ? "bg-emerald-700/90"
+                                    : "bg-indigo-900/85"
+                                }`}>
+                                  {reference?.selection_source === "manual"
+                                    ? "Manual reference"
+                                    : "Auto reference"}
+                                </span>
+                              )}
+                            </div>
+                            <div className="px-1.5 py-1.5">
+                              <p className="text-[9px] text-stone-500">
+                                {matchedReferenceRank
+                                  ? `Closest to ref #${matchedReferenceRank}`
+                                  : "No separate reference available"}
+                              </p>
+                              <div className="mt-1 flex gap-1">
+                                {reference?.selection_source !== "manual" && (
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(savingReferenceImageId) || resettingReferences}
+                                    onClick={() => void pinReferenceImage(image.image_id)}
+                                    className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-1 text-[9px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-40"
+                                  >
+                                    <Pin size={9} />
+                                    {savingThisReference
+                                      ? "Saving…"
+                                      : image.is_reference
+                                        ? "Make manual"
+                                        : "Use as reference"}
+                                  </button>
+                                )}
+                                {image.is_reference && (
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(savingReferenceImageId) || resettingReferences}
+                                    onClick={() => void removeReferenceImage(image.image_id)}
+                                    className="rounded bg-stone-100 px-1.5 py-1 text-[9px] font-semibold text-stone-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                                  >
+                                    {savingThisReference ? "Removing…" : "Remove"}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {visualEvidence.truncated && (
+                  <p className="text-[10px] text-stone-500">
+                    Showing image evidence for {visualEvidence.members.length} of{" "}
+                    {visualEvidence.member_count} listings.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="mt-4 border-t border-blue-200 pt-3">
             <div className="flex items-start justify-between gap-3">
