@@ -1,13 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, CircleX, ExternalLink, ListFilter, Pencil, RefreshCw } from "lucide-react";
+import {
+  CheckCircle2,
+  CircleX,
+  ExternalLink,
+  ListFilter,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Settings2,
+  Trash2,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   confirmPersistedProductGroup,
+  createPersistedProductGroupRule,
+  deletePersistedProductGroupRule,
   excludePersistedProductGroupMember,
   getProductClusterGraph,
   getPersistedProductGroups,
   listProductClusterScopes,
   refreshPersistedProductGroups,
+  updatePersistedProductGroupEmbeddingSettings,
+  updatePersistedProductGroupRule,
   type PersistedProductGroup,
   type PersistedProductGroupOverview,
   type ProductClusterEdge,
@@ -15,6 +29,7 @@ import {
   type ProductClusterProfile,
   type ProductClusterScope,
   type ProductGroupCorrectionReason,
+  type ProductGroupRule,
 } from "../api";
 import ProductSimilarityRadial from "../components/product-clusters/ProductSimilarityRadial";
 import {
@@ -229,6 +244,114 @@ export default function ProductClusters() {
     }
   }
 
+  async function updateGroupEmbeddingThreshold(
+    groupId: string,
+    embeddingMatchThreshold: number | null,
+  ) {
+    if (!selectedIpId) throw new Error("No product scope selected");
+    setError(null);
+    try {
+      const result = await updatePersistedProductGroupEmbeddingSettings(
+        selectedIpId,
+        groupId,
+        embeddingMatchThreshold,
+      );
+      setGroupOverview((current) => current ? {
+        ...current,
+        dirty: result.regrouping_queued || current.dirty,
+        groups: current.groups.map((group) =>
+          group.id === groupId ? { ...group, ...result.group } : group
+        ),
+      } : current);
+      return result;
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    }
+  }
+
+  async function createGroupRule(groupId: string, instruction: string) {
+    if (!selectedIpId) throw new Error("No product scope selected");
+    setError(null);
+    try {
+      const result = await createPersistedProductGroupRule(
+        selectedIpId,
+        groupId,
+        instruction,
+      );
+      setGroupOverview((current) => current ? {
+        ...current,
+        groups: current.groups.map((group) =>
+          group.id === groupId
+            ? { ...group, rules: [...group.rules, result.rule] }
+            : group
+        ),
+      } : current);
+      return result;
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    }
+  }
+
+  async function updateGroupRule(
+    groupId: string,
+    ruleId: string,
+    instruction: string,
+  ) {
+    if (!selectedIpId) throw new Error("No product scope selected");
+    setError(null);
+    try {
+      const result = await updatePersistedProductGroupRule(
+        selectedIpId,
+        groupId,
+        ruleId,
+        instruction,
+      );
+      setGroupOverview((current) => current ? {
+        ...current,
+        groups: current.groups.map((group) =>
+          group.id === groupId
+            ? {
+              ...group,
+              rules: group.rules.map((rule) =>
+                rule.id === result.rule.id ? result.rule : rule
+              ),
+            }
+            : group
+        ),
+      } : current);
+      return result;
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    }
+  }
+
+  async function deleteGroupRule(groupId: string, ruleId: string) {
+    if (!selectedIpId) throw new Error("No product scope selected");
+    setError(null);
+    try {
+      const result = await deletePersistedProductGroupRule(
+        selectedIpId,
+        groupId,
+        ruleId,
+      );
+      setGroupOverview((current) => current ? {
+        ...current,
+        groups: current.groups.map((group) =>
+          group.id === groupId
+            ? { ...group, rules: group.rules.filter((rule) => rule.id !== ruleId) }
+            : group
+        ),
+      } : current);
+      return result;
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -399,7 +522,11 @@ export default function ProductClusters() {
             savingGroupId={savingGroupId}
             savingCorrectionProfileId={savingCorrectionProfileId}
             onConfirmGroup={confirmGroup}
+            onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
             onCorrectGroupMember={correctGroupMember}
+            onCreateRule={createGroupRule}
+            onUpdateRule={updateGroupRule}
+            onDeleteRule={deleteGroupRule}
           />
       ) : null}
     </div>
@@ -558,7 +685,11 @@ function ProductGroupsOverview({
   savingGroupId,
   savingCorrectionProfileId,
   onConfirmGroup,
+  onUpdateEmbeddingThreshold,
   onCorrectGroupMember,
+  onCreateRule,
+  onUpdateRule,
+  onDeleteRule,
 }: {
   overview: PersistedProductGroupOverview;
   mode: RelationshipMode;
@@ -567,11 +698,31 @@ function ProductGroupsOverview({
   savingGroupId: string | null;
   savingCorrectionProfileId: string | null;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
+  onUpdateEmbeddingThreshold: (
+    groupId: string,
+    embeddingMatchThreshold: number | null,
+  ) => Promise<{
+    group: Pick<PersistedProductGroup, "id" | "embedding_match_threshold">;
+    regrouping_queued: boolean;
+  }>;
   onCorrectGroupMember: (
     groupId: string,
     profileId: string,
     reason: ProductGroupCorrectionReason,
   ) => Promise<void>;
+  onCreateRule: (
+    groupId: string,
+    instruction: string,
+  ) => Promise<{ rule: ProductGroupRule; rescore_jobs_enqueued: number }>;
+  onUpdateRule: (
+    groupId: string,
+    ruleId: string,
+    instruction: string,
+  ) => Promise<{ rule: ProductGroupRule; rescore_jobs_enqueued: number }>;
+  onDeleteRule: (
+    groupId: string,
+    ruleId: string,
+  ) => Promise<{ id: string; rescore_jobs_enqueued: number }>;
 }) {
   const generatedAt = overview.generated_at
     ? new Date(overview.generated_at).toLocaleString()
@@ -582,7 +733,7 @@ function ProductGroupsOverview({
       <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         These groups are stored on the backend across the full IP corpus. In each {mode === "same" ? "product group" : "related family"}, every listing has a direct stored score of at least {overview.threshold.toFixed(2)} with every other member.
         {mode === "same"
-          ? " New listings are assigned automatically. You can optionally name a product or remove a mistaken member while you encounter it; removals become durable constraints for future rebuilds."
+          ? " New listings are assigned automatically. Open Manage product on any confirmed product to rename it, tune its embedding candidate threshold, add automatic membership rules, or remove a mistaken member."
           : " Related families remain review candidates and cannot be confirmed as one product."}
         {" "}These relationships do not measure similarity to the IP.
         {generatedAt && <span className="ml-1 text-blue-700">Snapshot: {generatedAt}.</span>}
@@ -622,7 +773,11 @@ function ProductGroupsOverview({
               saving={savingGroupId === group.id}
               savingCorrectionProfileId={savingCorrectionProfileId}
               onConfirmGroup={onConfirmGroup}
+              onUpdateEmbeddingThreshold={onUpdateEmbeddingThreshold}
               onCorrectGroupMember={onCorrectGroupMember}
+              onCreateRule={onCreateRule}
+              onUpdateRule={onUpdateRule}
+              onDeleteRule={onDeleteRule}
               onSelectReference={onSelectReference}
               canSelectReference={canSelectReference}
             />
@@ -674,7 +829,11 @@ function ProductGroupCard({
   saving,
   savingCorrectionProfileId,
   onConfirmGroup,
+  onUpdateEmbeddingThreshold,
   onCorrectGroupMember,
+  onCreateRule,
+  onUpdateRule,
+  onDeleteRule,
   onSelectReference,
   canSelectReference,
 }: {
@@ -685,27 +844,67 @@ function ProductGroupCard({
   saving: boolean;
   savingCorrectionProfileId: string | null;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
+  onUpdateEmbeddingThreshold: (
+    groupId: string,
+    embeddingMatchThreshold: number | null,
+  ) => Promise<{
+    group: Pick<PersistedProductGroup, "id" | "embedding_match_threshold">;
+    regrouping_queued: boolean;
+  }>;
   onCorrectGroupMember: (
     groupId: string,
     profileId: string,
     reason: ProductGroupCorrectionReason,
   ) => Promise<void>;
+  onCreateRule: (
+    groupId: string,
+    instruction: string,
+  ) => Promise<{ rule: ProductGroupRule; rescore_jobs_enqueued: number }>;
+  onUpdateRule: (
+    groupId: string,
+    ruleId: string,
+    instruction: string,
+  ) => Promise<{ rule: ProductGroupRule; rescore_jobs_enqueued: number }>;
+  onDeleteRule: (
+    groupId: string,
+    ruleId: string,
+  ) => Promise<{ id: string; rescore_jobs_enqueued: number }>;
   onSelectReference: (profileId: string) => void;
   canSelectReference: (profileId: string) => boolean;
 }) {
   const [editingName, setEditingName] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [correctingProfileId, setCorrectingProfileId] = useState<string | null>(null);
   const [name, setName] = useState(group.display_name);
+  const [ruleDraft, setRuleDraft] = useState("");
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editingRuleText, setEditingRuleText] = useState("");
+  const [savingRule, setSavingRule] = useState(false);
+  const [ruleNotice, setRuleNotice] = useState<string | null>(null);
+  const [embeddingThresholdEnabled, setEmbeddingThresholdEnabled] = useState(
+    group.embedding_match_threshold != null,
+  );
+  const [embeddingThresholdDraft, setEmbeddingThresholdDraft] = useState(
+    group.embedding_match_threshold ?? 0.5,
+  );
+  const [savingEmbeddingThreshold, setSavingEmbeddingThreshold] = useState(false);
+  const [embeddingThresholdNotice, setEmbeddingThresholdNotice] = useState<string | null>(null);
   const confirmed = group.confirmation_status === "confirmed";
   const canConfirm = mode === "same";
   const trimmedName = name.trim();
   const correctingProfile = group.members.find((profile) => profile.id === correctingProfileId) ?? null;
+  const nextEmbeddingThreshold = embeddingThresholdEnabled
+    ? embeddingThresholdDraft
+    : null;
+  const embeddingThresholdChanged =
+    nextEmbeddingThreshold !== group.embedding_match_threshold;
 
   async function saveName() {
     if (!trimmedName) return;
     try {
       await onConfirmGroup(group.id, trimmedName);
       setEditingName(false);
+      setManaging(true);
     } catch {
       // The parent keeps the editor open and displays the API error.
     }
@@ -741,6 +940,18 @@ function ProductGroupCard({
           <p className="mt-0.5 text-[10px] text-stone-500">
             Avg stored link {group.average_score?.toFixed(3) ?? "—"}
           </p>
+          {confirmed && (
+            <>
+              <p className="mt-1 text-[10px] font-semibold text-blue-700">
+                {group.rules.length} active rule{group.rules.length === 1 ? "" : "s"}
+              </p>
+              {group.embedding_match_threshold != null && (
+                <p className="mt-0.5 text-[10px] font-semibold text-violet-700">
+                  Embedding ≥ {group.embedding_match_threshold.toFixed(2)}
+                </p>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -749,16 +960,20 @@ function ProductGroupCard({
           type="button"
           onClick={() => {
             setName(group.display_name);
-            setEditingName(true);
+            if (confirmed) {
+              setManaging((current) => !current);
+            } else {
+              setEditingName(true);
+            }
           }}
-          className={`mt-3 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+          className={`mt-3 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
             confirmed
-              ? "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+              ? "border-blue-200 bg-blue-50 text-blue-800 hover:border-blue-300 hover:bg-blue-100"
               : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100"
           }`}
         >
-          {confirmed ? <Pencil size={13} /> : <CheckCircle2 size={13} />}
-          {confirmed ? "Edit name" : "Confirm & name"}
+          {confirmed ? <Settings2 size={14} /> : <CheckCircle2 size={14} />}
+          {confirmed ? (managing ? "Close product settings" : "Manage product") : "Confirm & manage"}
         </button>
       )}
 
@@ -796,10 +1011,290 @@ function ProductGroupCard({
               className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckCircle2 size={13} />
-              {saving ? "Saving…" : confirmed ? "Save name" : "Confirm product"}
+              {saving ? "Saving…" : confirmed ? "Save name" : "Confirm & manage"}
             </button>
           </div>
         </form>
+      )}
+
+      {confirmed && managing && (
+        <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-blue-900">
+                <Settings2 size={14} />
+                Product settings
+              </p>
+              <p className="mt-1 text-[11px] text-blue-700">
+                Rename the product, tune its embedding candidate gate, define automatic membership rules, or remove a listing below.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setManaging(false)}
+              className="rounded-lg px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Done
+            </button>
+          </div>
+
+          <form
+            className="mt-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveName();
+            }}
+          >
+            <label className="block">
+              <span className="text-xs font-bold text-stone-800">Product name</span>
+              <div className="mt-1.5 flex gap-2">
+                <input
+                  type="text"
+                  value={name}
+                  maxLength={200}
+                  onChange={(event) => setName(event.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+                <button
+                  type="submit"
+                  disabled={saving || !trimmedName || trimmedName === group.display_name}
+                  className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-40"
+                >
+                  {saving ? "Saving…" : "Save name"}
+                </button>
+              </div>
+            </label>
+          </form>
+
+          <div className="mt-4 border-t border-blue-200 pt-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-stone-900">
+                  Embedding matching threshold
+                </p>
+                <p className="mt-0.5 text-[11px] leading-4 text-stone-600">
+                  Require the initial image, title, and description embedding match
+                  to reach this value before the listing is sent to the exact-product
+                  reranker and product rules. It may still be recognized as a related
+                  product. This is an early candidate filter, not the final same-product
+                  confidence. Higher is stricter.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-white px-2 py-1 font-mono text-[10px] font-bold text-violet-800">
+                {embeddingThresholdEnabled
+                  ? embeddingThresholdDraft.toFixed(2)
+                  : "Off"}
+              </span>
+            </div>
+
+            <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs font-semibold text-stone-800">
+              <input
+                type="checkbox"
+                checked={embeddingThresholdEnabled}
+                onChange={(event) => {
+                  setEmbeddingThresholdEnabled(event.target.checked);
+                  setEmbeddingThresholdNotice(null);
+                }}
+                className="h-4 w-4 rounded border-stone-300 text-violet-700 focus:ring-violet-200"
+              />
+              Use a product-specific minimum embedding match
+            </label>
+
+            <div className={`mt-3 ${embeddingThresholdEnabled ? "" : "opacity-45"}`}>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                disabled={!embeddingThresholdEnabled}
+                value={embeddingThresholdDraft}
+                onChange={(event) => {
+                  setEmbeddingThresholdDraft(Number(event.target.value));
+                  setEmbeddingThresholdNotice(null);
+                }}
+                className="w-full accent-violet-700"
+                aria-label="Minimum embedding similarity"
+              />
+              <div className="mt-1 flex justify-between font-mono text-[10px] text-stone-500">
+                <span>0.00 broad</span>
+                <span>1.00 strict</span>
+              </div>
+            </div>
+
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <p className="text-[10px] text-stone-500">
+                Turning this off preserves the normal top-candidate retrieval behavior.
+              </p>
+              <button
+                type="button"
+                disabled={savingEmbeddingThreshold || !embeddingThresholdChanged}
+                onClick={() => {
+                  setSavingEmbeddingThreshold(true);
+                  setEmbeddingThresholdNotice(null);
+                  void onUpdateEmbeddingThreshold(group.id, nextEmbeddingThreshold)
+                    .then(() => {
+                      setEmbeddingThresholdNotice(
+                        "Saved. Future candidates use this immediately; the stored group snapshot will rebuild in the background.",
+                      );
+                    })
+                    .catch(() => undefined)
+                    .finally(() => setSavingEmbeddingThreshold(false));
+                }}
+                className="shrink-0 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-40"
+              >
+                {savingEmbeddingThreshold ? "Saving…" : "Save threshold"}
+              </button>
+            </div>
+            {embeddingThresholdNotice && (
+              <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">
+                {embeddingThresholdNotice}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-4 border-t border-blue-200 pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-stone-900">Automatic membership rules</p>
+                <p className="mt-0.5 text-[11px] text-stone-600">
+                  The product reranker checks these instructions for new candidates. If evidence is not visible, it remains unknown.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-bold text-blue-800">
+                {group.rules.length} active
+              </span>
+            </div>
+
+            <div className="mt-2 space-y-2">
+              {group.rules.map((rule) => (
+                <div key={rule.id} className="rounded-lg border border-stone-200 bg-white p-2.5">
+                  {editingRuleId === rule.id ? (
+                    <>
+                      <textarea
+                        autoFocus
+                        value={editingRuleText}
+                        maxLength={1000}
+                        rows={3}
+                        onChange={(event) => setEditingRuleText(event.target.value)}
+                        className="w-full resize-y rounded-lg border border-stone-300 px-2.5 py-2 text-xs text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={savingRule}
+                          onClick={() => setEditingRuleId(null)}
+                          className="rounded-lg px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-100"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingRule || editingRuleText.trim().length < 10}
+                          onClick={() => {
+                            setSavingRule(true);
+                            void onUpdateRule(group.id, rule.id, editingRuleText.trim())
+                              .then((result) => {
+                                setEditingRuleId(null);
+                                setRuleNotice(rescoreNotice(result.rescore_jobs_enqueued));
+                              })
+                              .catch(() => undefined)
+                              .finally(() => setSavingRule(false));
+                          }}
+                          className="rounded-lg bg-blue-800 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-900 disabled:opacity-40"
+                        >
+                          Save rule
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <p className="min-w-0 flex-1 text-xs leading-5 text-stone-800">
+                        {rule.instruction}
+                      </p>
+                      <button
+                        type="button"
+                        title="Edit rule"
+                        onClick={() => {
+                          setEditingRuleId(rule.id);
+                          setEditingRuleText(rule.instruction);
+                        }}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove rule"
+                        disabled={savingRule}
+                        onClick={() => {
+                          setSavingRule(true);
+                          void onDeleteRule(group.id, rule.id)
+                            .then((result) => {
+                              setRuleNotice(rescoreNotice(result.rescore_jobs_enqueued));
+                            })
+                            .catch(() => undefined)
+                            .finally(() => setSavingRule(false));
+                        }}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {group.rules.length === 0 && (
+                <p className="rounded-lg border border-dashed border-stone-300 bg-white/70 px-3 py-3 text-xs text-stone-500">
+                  No product-specific rules yet. Add only characteristics that distinguish this exact product or variant.
+                </p>
+              )}
+            </div>
+
+            <form
+              className="mt-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const instruction = ruleDraft.trim();
+                if (instruction.length < 10) return;
+                setSavingRule(true);
+                void onCreateRule(group.id, instruction)
+                  .then((result) => {
+                    setRuleDraft("");
+                    setRuleNotice(rescoreNotice(result.rescore_jobs_enqueued));
+                  })
+                  .catch(() => undefined)
+                  .finally(() => setSavingRule(false));
+              }}
+            >
+              <textarea
+                value={ruleDraft}
+                maxLength={1000}
+                rows={3}
+                placeholder='Example: "For this exact product, the case should show a lot number in the bottom-right corner."'
+                onChange={(event) => setRuleDraft(event.target.value)}
+                className="w-full resize-y rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-[10px] text-stone-500">
+                  Rules are versioned; changes automatically queue this product for rescoring.
+                </p>
+                <button
+                  type="submit"
+                  disabled={savingRule || ruleDraft.trim().length < 10}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-900 disabled:opacity-40"
+                >
+                  <Plus size={13} />
+                  {savingRule ? "Saving…" : "Add rule"}
+                </button>
+              </div>
+            </form>
+            {ruleNotice && (
+              <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">
+                {ruleNotice}
+              </p>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -811,7 +1306,7 @@ function ProductGroupCard({
                 ? () => onSelectReference(profile.id)
                 : undefined}
             />
-            {canConfirm && group.member_count > 1 && (
+            {canConfirm && confirmed && managing && group.member_count > 1 && (
               <button
                 type="button"
                 aria-label={`Remove ${profileTitle(profile)} from this product`}
@@ -1115,4 +1610,11 @@ function formatPrice(profile: ProductClusterProfile) {
 
 function errorMessage(caught: unknown) {
   return caught instanceof Error ? caught.message : "Could not load product relationships.";
+}
+
+function rescoreNotice(count: number) {
+  if (count === 0) {
+    return "Rule saved. Future candidates will use it automatically.";
+  }
+  return `Rule saved. ${count} current listing${count === 1 ? "" : "s"} queued for automatic rescoring.`;
 }

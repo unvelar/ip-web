@@ -2332,9 +2332,21 @@ export interface PersistedProductGroup {
   average_score: number | null;
   minimum_score: number | null;
   threshold: number;
+  embedding_match_threshold: number | null;
   algorithm_version: string;
   generated_at: string;
   members: ProductClusterProfile[];
+  rules: ProductGroupRule[];
+}
+
+export interface ProductGroupRule {
+  id: string;
+  group_id: string;
+  instruction: string;
+  status: "active";
+  version: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PersistedProductGroupOverview {
@@ -2380,23 +2392,45 @@ export function getProductClusterGraph(
   );
 }
 
-export function getPersistedProductGroups(
+export async function getPersistedProductGroups(
   ipId: string,
   relationship: "same" | "related",
 ) {
-  return request<PersistedProductGroupOverview>(
+  const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups?relationship=${relationship}`,
   );
+  return {
+    ...overview,
+    groups: overview.groups.map((group) => ({
+      ...group,
+      rules: Array.isArray(group.rules) ? group.rules : [],
+      embedding_match_threshold:
+        typeof group.embedding_match_threshold === "number"
+          ? group.embedding_match_threshold
+          : null,
+    })),
+  };
 }
 
-export function refreshPersistedProductGroups(
+export async function refreshPersistedProductGroups(
   ipId: string,
   relationship: "same" | "related",
 ) {
-  return request<PersistedProductGroupOverview>(
+  const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?relationship=${relationship}`,
     { method: "POST" },
   );
+  return {
+    ...overview,
+    groups: overview.groups.map((group) => ({
+      ...group,
+      rules: Array.isArray(group.rules) ? group.rules : [],
+      embedding_match_threshold:
+        typeof group.embedding_match_threshold === "number"
+          ? group.embedding_match_threshold
+          : null,
+    })),
+  };
 }
 
 export function confirmPersistedProductGroup(
@@ -2414,6 +2448,25 @@ export function confirmPersistedProductGroup(
     {
       method: "PATCH",
       body: JSON.stringify({ display_name: displayName }),
+    },
+  );
+}
+
+export function updatePersistedProductGroupEmbeddingSettings(
+  ipId: string,
+  groupId: string,
+  embeddingMatchThreshold: number | null,
+) {
+  return request<{
+    group: Pick<PersistedProductGroup, "id" | "embedding_match_threshold">;
+    regrouping_queued: boolean;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/embedding-settings`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        embedding_match_threshold: embeddingMatchThreshold,
+      }),
     },
   );
 }
@@ -2447,6 +2500,40 @@ export function restorePersistedProductGroupMember(
     regrouped: boolean;
   }>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/corrections/${encodeURIComponent(correctionId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function createPersistedProductGroupRule(
+  ipId: string,
+  groupId: string,
+  instruction: string,
+) {
+  return request<{ rule: ProductGroupRule; rescore_jobs_enqueued: number }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/rules`,
+    { method: "POST", body: JSON.stringify({ instruction }) },
+  );
+}
+
+export function updatePersistedProductGroupRule(
+  ipId: string,
+  groupId: string,
+  ruleId: string,
+  instruction: string,
+) {
+  return request<{ rule: ProductGroupRule; rescore_jobs_enqueued: number }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/rules/${encodeURIComponent(ruleId)}`,
+    { method: "PATCH", body: JSON.stringify({ instruction }) },
+  );
+}
+
+export function deletePersistedProductGroupRule(
+  ipId: string,
+  groupId: string,
+  ruleId: string,
+) {
+  return request<{ id: string; rescore_jobs_enqueued: number }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/rules/${encodeURIComponent(ruleId)}`,
     { method: "DELETE" },
   );
 }
