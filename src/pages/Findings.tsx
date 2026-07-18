@@ -367,7 +367,9 @@ export function MonitoringInboxView() {
             ? "enforced"
             : filters.status === "dismissed"
               ? "dismissed"
-              : "open";
+              : filters.show_dismissed
+                ? "across all statuses"
+                : "open";
     const ipName =
       filters.ip_id
         ? facets.ips.find((ip) => ip.ip_id === filters.ip_id)?.name ?? "selected IP"
@@ -380,7 +382,13 @@ export function MonitoringInboxView() {
     return `${count} finding${count === 1 ? "" : "s"} ${statusLabel} · ${ipName}${
       productName ? ` · ${productName}` : ""
     }.`;
-  }, [facets, filters.ip_id, filters.product_group_id, filters.status]);
+  }, [
+    facets,
+    filters.ip_id,
+    filters.product_group_id,
+    filters.show_dismissed,
+    filters.status,
+  ]);
 
   return (
     <div className="space-y-4">

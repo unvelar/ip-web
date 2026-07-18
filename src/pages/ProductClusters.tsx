@@ -51,6 +51,7 @@ import { useAuth } from "../context/AuthContext";
 const MAX_NODES = 80;
 const MAX_EDGES = 400;
 type LabView = "similarity" | "groups";
+type ProductGroupView = "triage" | "all";
 
 export default function ProductClusters() {
   const { actingTenantId } = useAuth();
@@ -60,6 +61,7 @@ export default function ProductClusters() {
   const [groupOverview, setGroupOverview] = useState<PersistedProductGroupOverview | null>(null);
   const [mode, setMode] = useState<RelationshipMode>("same");
   const [view, setView] = useState<LabView>("groups");
+  const [productGroupView, setProductGroupView] = useState<ProductGroupView>("triage");
   const [threshold, setThreshold] = useState(0.3);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -73,7 +75,7 @@ export default function ProductClusters() {
   const [error, setError] = useState<string | null>(null);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const graphRequestKey = `${scopesRequestKey}:${selectedIpId}`;
-  const groupsRequestKey = `${graphRequestKey}:${mode}`;
+  const groupsRequestKey = `${graphRequestKey}:${mode}:${productGroupView}`;
   const loadingScopes = scopesLoadedKey !== scopesRequestKey;
   const loadingGraph = Boolean(selectedIpId) && graphLoadedKey !== graphRequestKey;
   const loadingGroups = Boolean(selectedIpId) && groupsLoadedKey !== groupsRequestKey;
@@ -138,7 +140,7 @@ export default function ProductClusters() {
     if (!selectedIpId) return;
     let alive = true;
     setGroupOverview(null);
-    void getPersistedProductGroups(selectedIpId, mode)
+    void getPersistedProductGroups(selectedIpId, mode, productGroupView)
       .then((overview) => {
         if (!alive) return;
         setGroupOverview(overview);
@@ -155,7 +157,7 @@ export default function ProductClusters() {
     return () => {
       alive = false;
     };
-  }, [selectedIpId, mode, refreshVersion, actingTenantId, groupsRequestKey]);
+  }, [selectedIpId, mode, productGroupView, refreshVersion, actingTenantId, groupsRequestKey]);
 
   const visibleEdges = useMemo(() => {
     if (!graph) return [];
@@ -197,7 +199,11 @@ export default function ProductClusters() {
     if (selectedIpId && view === "groups") {
       setRefreshingGroups(true);
       try {
-        setGroupOverview(await refreshPersistedProductGroups(selectedIpId, mode));
+        setGroupOverview(await refreshPersistedProductGroups(
+          selectedIpId,
+          mode,
+          productGroupView,
+        ));
       } catch (caught: unknown) {
         setError(errorMessage(caught));
       } finally {
@@ -244,7 +250,7 @@ export default function ProductClusters() {
         profile_id: profileId,
         reason,
       });
-      setGroupOverview(await getPersistedProductGroups(selectedIpId, mode));
+      setGroupOverview(await getPersistedProductGroups(selectedIpId, mode, productGroupView));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
       throw caught;
@@ -476,10 +482,38 @@ export default function ProductClusters() {
                     represented in current snapshot
                   </span>
                 )}
-                <span>
-                  <strong className="text-stone-800">{groupOverview?.group_count ?? 0}</strong>{" "}
-                  persistent groups
-                </span>
+                {productGroupView === "triage" && groupOverview?.triage_projection_available && (
+                  <>
+                    <span>
+                      <strong className="text-stone-800">
+                        {groupOverview.triage_profile_count ?? 0}
+                      </strong>{" "}
+                      {(groupOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
+                    </span>
+                    <span>
+                      <strong className="text-stone-800">
+                        {groupOverview.triage_group_count ?? 0}
+                      </strong>{" "}
+                      {(groupOverview.triage_group_count ?? 0) === 1 ? "grouped batch" : "grouped batches"} with work
+                    </span>
+                  </>
+                )}
+                {productGroupView === "all" && groupOverview && (
+                  <>
+                    <span>
+                      <strong className="text-stone-800">{groupOverview.group_count}</strong>{" "}
+                      {groupOverview.group_count === 1 ? "stored group" : "stored groups"}
+                    </span>
+                    {groupOverview.triage_projection_available && (
+                      <span>
+                        <strong className="text-stone-800">
+                          {groupOverview.triage_profile_count ?? 0}
+                        </strong>{" "}
+                        {(groupOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
+                      </span>
+                    )}
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -550,6 +584,8 @@ export default function ProductClusters() {
           <ProductGroupsOverview
             overview={groupOverview}
             mode={mode}
+            groupView={productGroupView}
+            onGroupViewChange={setProductGroupView}
             onSelectReference={(profileId) => {
               selectReference(profileId);
               setView("similarity");
@@ -716,6 +752,8 @@ function NearestListings({
 function ProductGroupsOverview({
   overview,
   mode,
+  groupView,
+  onGroupViewChange,
   onSelectReference,
   canSelectReference,
   savingGroupId,
@@ -729,6 +767,8 @@ function ProductGroupsOverview({
 }: {
   overview: PersistedProductGroupOverview;
   mode: RelationshipMode;
+  groupView: ProductGroupView;
+  onGroupViewChange: (view: ProductGroupView) => void;
   onSelectReference: (profileId: string) => void;
   canSelectReference: (profileId: string) => boolean;
   savingGroupId: string | null;
@@ -763,6 +803,20 @@ function ProductGroupsOverview({
   const generatedAt = overview.generated_at
     ? new Date(overview.generated_at).toLocaleString()
     : null;
+  const showingTriage = groupView === "triage";
+  const displayedGroups = showingTriage
+    ? overview.triage_projection_available
+      ? overview.groups.filter((group) => (group.triage_member_count ?? 0) > 0)
+      : []
+    : overview.groups;
+  const triageProfileCount = overview.triage_profile_count ?? 0;
+  const displayedUngroupedCount = showingTriage
+    ? overview.triage_ungrouped_count ?? 0
+    : overview.ungrouped_count;
+  const displayedUngrouped = showingTriage
+    ? overview.triage_ungrouped
+    : overview.ungrouped;
+  const buildingFirstSnapshot = overview.dirty && (overview.snapshot_profile_count ?? 0) === 0;
 
   return (
     <div className="mt-5">
@@ -771,8 +825,42 @@ function ProductGroupsOverview({
         {mode === "same"
           ? " New listings are assigned automatically. Image similarity is explanatory only. A listing must pass the product’s multimodal candidate gate; rules and the final pairwise same-product score then decide membership. Open Manage product to configure the gate, references, rules, or corrections."
           : " Related families remain review candidates and cannot be confirmed as one product."}
+        {showingTriage
+          ? " This review view only counts and displays listings still in To triage; handled listings remain in their stored groups."
+          : " This management view includes handled listings as stored history; its counts describe durable membership, not open Tasks."}
         {" "}These relationships do not measure similarity to the IP.
         {generatedAt && <span className="ml-1 text-blue-700">Snapshot: {generatedAt}.</span>}
+      </div>
+
+      <div
+        className="mt-3 inline-flex rounded-lg border border-stone-200 bg-white p-1 shadow-sm"
+        role="group"
+        aria-label="Product group listing view"
+      >
+        <button
+          type="button"
+          aria-pressed={showingTriage}
+          onClick={() => onGroupViewChange("triage")}
+          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+            showingTriage
+              ? "bg-stone-900 text-white"
+              : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+          }`}
+        >
+          Needs triage
+        </button>
+        <button
+          type="button"
+          aria-pressed={!showingTriage}
+          onClick={() => onGroupViewChange("all")}
+          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+            !showingTriage
+              ? "bg-stone-900 text-white"
+              : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+          }`}
+        >
+          All stored groups
+        </button>
       </div>
 
       {overview.dirty && (
@@ -793,72 +881,102 @@ function ProductGroupsOverview({
         </div>
       )}
 
-      {overview.groups.length === 0 ? (
-        <div className="mt-5 rounded-2xl border border-dashed border-stone-300 bg-white px-6 py-14 text-center">
-          <h2 className="text-base font-bold text-stone-900">
-            {overview.dirty ? "Building the first persistent snapshot" : "No multi-listing groups in this snapshot"}
-          </h2>
-          <p className="mt-2 text-sm text-stone-500">
-            {overview.dirty
-              ? "The backend will publish groups after the queued refresh completes."
-              : "The remaining listings are stored as one-listing product candidates."}
-          </p>
+      {showingTriage && !overview.triage_projection_available ? (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Triage workload is temporarily unavailable while the backend update rolls out. Historical group membership is hidden so it is not mistaken for open work.
         </div>
       ) : (
-        <div className="mt-5 grid gap-5 lg:grid-cols-2">
-          {overview.groups.map((group, index) => (
-            <ProductGroupCard
-              key={group.id}
-              group={group}
-              index={index}
-              ipId={overview.scope.ip_id}
-              mode={mode}
-              saving={savingGroupId === group.id}
-              savingCorrectionProfileId={savingCorrectionProfileId}
-              onConfirmGroup={onConfirmGroup}
-              onUpdateEmbeddingThreshold={onUpdateEmbeddingThreshold}
-              onCorrectGroupMember={onCorrectGroupMember}
-              onCreateRule={onCreateRule}
-              onUpdateRule={onUpdateRule}
-              onDeleteRule={onDeleteRule}
-              onSelectReference={onSelectReference}
-              canSelectReference={canSelectReference}
-            />
-          ))}
-        </div>
-      )}
+        <>
+          {displayedGroups.length === 0 ? (
+            <div className="mt-5 rounded-2xl border border-dashed border-stone-300 bg-white px-6 py-14 text-center">
+              <h2 className="text-base font-bold text-stone-900">
+                {buildingFirstSnapshot
+                  ? "Building the first persistent snapshot"
+                  : showingTriage
+                    ? triageProfileCount === 0
+                      ? "No listings need triage"
+                      : "No multi-listing batches need triage"
+                    : "No multi-listing groups in this snapshot"}
+              </h2>
+              <p className="mt-2 text-sm text-stone-500">
+                {buildingFirstSnapshot
+                  ? showingTriage
+                    ? "The backend will publish triage batches after the queued refresh completes."
+                    : "The backend will publish stored groups after the queued refresh completes."
+                  : showingTriage
+                    ? triageProfileCount === 0
+                      ? "No review-ready listings in this snapshot are waiting in To triage."
+                      : "The remaining work is shown as one-listing candidates below."
+                    : displayedUngroupedCount > 0
+                      ? "Stored one-listing candidates are shown below."
+                      : "No stored group memberships are available for this IP."}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 grid gap-5 lg:grid-cols-2">
+              {displayedGroups.map((group, index) => (
+                <ProductGroupCard
+                  key={group.id}
+                  group={group}
+                  index={index}
+                  ipId={overview.scope.ip_id}
+                  mode={mode}
+                  showPersistedMembers={!showingTriage}
+                  triageProjectionAvailable={overview.triage_projection_available}
+                  saving={savingGroupId === group.id}
+                  savingCorrectionProfileId={savingCorrectionProfileId}
+                  onConfirmGroup={onConfirmGroup}
+                  onUpdateEmbeddingThreshold={onUpdateEmbeddingThreshold}
+                  onCorrectGroupMember={onCorrectGroupMember}
+                  onCreateRule={onCreateRule}
+                  onUpdateRule={onUpdateRule}
+                  onDeleteRule={onDeleteRule}
+                  onSelectReference={onSelectReference}
+                  canSelectReference={canSelectReference}
+                />
+              ))}
+            </div>
+          )}
 
-      {overview.truncated && (
-        <p className="mt-3 text-xs text-amber-700">
-          Showing 200 of {overview.group_count} persistent groups. Tasks can still filter every stored group.
-        </p>
-      )}
-
-      {overview.ungrouped_count > 0 && (
-        <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-bold text-stone-900">
-            One-listing product candidates · {overview.ungrouped_count}
-          </h2>
-          <p className="mt-1 text-xs text-stone-500">
-            These are persisted too, but no second listing has enough complete pairwise evidence to join them yet.
-          </p>
-          <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-10">
-            {overview.ungrouped.map((profile) => (
-              <ListingTile
-                key={profile.id}
-                profile={profile}
-                onClick={canSelectReference(profile.id)
-                  ? () => onSelectReference(profile.id)
-                  : undefined}
-              />
-            ))}
-          </div>
-          {overview.ungrouped_count > overview.ungrouped.length && (
-            <p className="mt-3 text-xs text-stone-500">
-              +{overview.ungrouped_count - overview.ungrouped.length} more one-listing candidates
+          {overview.truncated && (
+            <p className="mt-3 text-xs text-amber-700">
+              Showing {displayedGroups.length} of {showingTriage
+                ? overview.triage_group_count ?? 0
+                : overview.group_count} {showingTriage ? "grouped batches with work" : "stored groups"}.
             </p>
           )}
-        </section>
+
+          {displayedUngroupedCount > 0 && (
+            <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-bold text-stone-900">
+                {showingTriage ? "One-listing candidates to triage" : "Stored one-listing candidates"} · {displayedUngroupedCount}
+              </h2>
+              <p className="mt-1 text-xs text-stone-500">
+                {showingTriage
+                  ? "These listings still need triage, but no second listing has enough complete pairwise evidence to join them yet."
+                  : "These are persisted too, but no second listing has enough complete pairwise evidence to join them yet."}
+              </p>
+              <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-10">
+                {displayedUngrouped.map((profile) => (
+                  <ListingTile
+                    key={profile.id}
+                    profile={profile}
+                    onClick={canSelectReference(profile.id)
+                      ? () => onSelectReference(profile.id)
+                      : undefined}
+                  />
+                ))}
+              </div>
+              {displayedUngroupedCount > displayedUngrouped.length && (
+                <p className="mt-3 text-xs text-stone-500">
+                  +{displayedUngroupedCount - displayedUngrouped.length} more {showingTriage
+                    ? "one-listing candidates to triage"
+                    : "stored one-listing candidates"}
+                </p>
+              )}
+            </section>
+          )}
+        </>
       )}
     </div>
   );
@@ -869,6 +987,8 @@ function ProductGroupCard({
   index,
   ipId,
   mode,
+  showPersistedMembers,
+  triageProjectionAvailable,
   saving,
   savingCorrectionProfileId,
   onConfirmGroup,
@@ -884,6 +1004,8 @@ function ProductGroupCard({
   index: number;
   ipId: string;
   mode: RelationshipMode;
+  showPersistedMembers: boolean;
+  triageProjectionAvailable: boolean;
   saving: boolean;
   savingCorrectionProfileId: string | null;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
@@ -938,6 +1060,20 @@ function ProductGroupCard({
   const [savingReferenceImageId, setSavingReferenceImageId] = useState<string | null>(null);
   const [resettingReferences, setResettingReferences] = useState(false);
   const confirmed = group.confirmation_status === "confirmed";
+  const triageMemberCount = group.triage_member_count ?? 0;
+  const showingPersistedMembers = showPersistedMembers || managing;
+  const displayedMembers = showingPersistedMembers ? group.members : group.triage_members;
+  const displayedMemberCount = showingPersistedMembers ? group.member_count : triageMemberCount;
+  const taskLinkMode = !showingPersistedMembers || (
+    triageProjectionAvailable && triageMemberCount > 0
+  )
+    ? "pending"
+    : triageProjectionAvailable
+      ? "history"
+      : "all";
+  const taskQuery = taskLinkMode === "pending"
+    ? "status=pending"
+    : "status=all&show_dismissed=true";
   const canConfirm = mode === "same";
   const trimmedName = name.trim();
   const correctingProfile = group.members.find((profile) => profile.id === correctingProfileId) ?? null;
@@ -1062,11 +1198,25 @@ function ProductGroupCard({
           )}
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-sm font-bold text-stone-900">{group.member_count} listings</p>
+          <p className="text-sm font-bold text-stone-900">
+            {showingPersistedMembers
+              ? `${group.member_count} persisted ${group.member_count === 1 ? "listing" : "listings"}`
+              : `${triageMemberCount} to triage`}
+          </p>
           <p className="mt-0.5 text-[10px] text-stone-500">
+            {!showingPersistedMembers && <>{group.member_count} persisted · </>}
             Avg {mode === "same" ? "same-product" : "related-product"} score{" "}
             {group.average_score?.toFixed(3) ?? "—"}
           </p>
+          {showingPersistedMembers && triageProjectionAvailable && (
+            <p className={`mt-0.5 text-[10px] font-semibold ${
+              triageMemberCount > 0 ? "text-red-700" : "text-emerald-700"
+            }`}>
+              {triageMemberCount > 0
+                ? `${triageMemberCount} still to triage`
+                : "No listings need triage"}
+            </p>
+          )}
           {confirmed && (
             <>
               <p className="mt-1 text-[10px] font-semibold text-blue-700">
@@ -1673,7 +1823,7 @@ function ProductGroupCard({
         </p>
       )}
       <div className={`${visualEvidence ? "mt-2" : "mt-4"} grid grid-cols-3 gap-2 sm:grid-cols-4`}>
-        {group.members.map((profile) => {
+        {displayedMembers.map((profile) => {
           const primaryVisualEvidence = primaryVisualEvidenceByProfileId.get(profile.id);
           const matchedReferenceRank = primaryVisualEvidence?.matched_reference_image_id
             ? referenceRankByImageId.get(primaryVisualEvidence.matched_reference_image_id)
@@ -1751,18 +1901,26 @@ function ProductGroupCard({
       )}
       <div className="mt-3 flex items-center justify-between gap-3">
         <p className="text-xs text-stone-500">
-          {group.member_count > group.members.length
-            ? `+${group.member_count - group.members.length} more listings`
+          {displayedMemberCount > displayedMembers.length
+            ? `+${displayedMemberCount - displayedMembers.length} more ${showingPersistedMembers ? "persisted" : "to-triage"} listings`
             : `Minimum ${mode === "same" ? "same-product" : "related-product"} score ${
               group.minimum_score?.toFixed(3) ?? "—"
             }`}
         </p>
         <Link
-          to={`/monitoring/tasks?ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-800 transition hover:border-red-300 hover:bg-red-100"
+          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}`}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+            taskLinkMode === "pending"
+              ? "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100"
+              : "border-stone-200 bg-stone-50 text-stone-700 hover:border-stone-300 hover:bg-stone-100"
+          }`}
         >
           <ListFilter size={13} />
-          Open tasks
+          {taskLinkMode === "pending"
+            ? "Open tasks"
+            : taskLinkMode === "history"
+              ? "View history"
+              : "View tasks"}
         </Link>
       </div>
     </section>

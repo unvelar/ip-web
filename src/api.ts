@@ -2329,6 +2329,7 @@ export interface PersistedProductGroup {
   confirmation_status: "candidate" | "confirmed";
   confirmed_at: string | null;
   member_count: number;
+  triage_member_count: number | null;
   average_score: number | null;
   minimum_score: number | null;
   threshold: number;
@@ -2336,6 +2337,7 @@ export interface PersistedProductGroup {
   algorithm_version: string;
   generated_at: string;
   members: ProductClusterProfile[];
+  triage_members: ProductClusterProfile[];
   rules: ProductGroupRule[];
 }
 
@@ -2399,10 +2401,15 @@ export interface PersistedProductGroupOverview {
   last_error: string | null;
   groups: PersistedProductGroup[];
   group_count: number;
+  triage_group_count: number | null;
+  triage_profile_count: number | null;
   snapshot_profile_count: number | null;
   pending_snapshot_count: number | null;
   ungrouped_count: number;
+  triage_ungrouped_count: number | null;
   ungrouped: ProductClusterProfile[];
+  triage_ungrouped: ProductClusterProfile[];
+  triage_projection_available: boolean;
   truncated: boolean;
 }
 
@@ -2438,11 +2445,20 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
   const groups = overview.groups.map((group) => ({
     ...group,
     rules: Array.isArray(group.rules) ? group.rules : [],
+    triage_member_count: Number.isFinite(group.triage_member_count)
+      ? Number(group.triage_member_count)
+      : null,
+    triage_members: Array.isArray(group.triage_members) ? group.triage_members : [],
     embedding_match_threshold:
       typeof group.embedding_match_threshold === "number"
         ? group.embedding_match_threshold
         : null,
   }));
+  const triageProjectionAvailable =
+    Number.isFinite(overview.triage_group_count) &&
+    Number.isFinite(overview.triage_profile_count) &&
+    Number.isFinite(overview.triage_ungrouped_count) &&
+    groups.every((group) => group.triage_member_count != null);
   // Keep the frontend compatible while the API and GitHub Pages deploys roll
   // out independently. A capped legacy response cannot provide exact coverage.
   const fallbackSnapshotProfileCount = groups.reduce(
@@ -2460,6 +2476,19 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
   return {
     ...overview,
     groups,
+    triage_group_count: triageProjectionAvailable
+      ? Number(overview.triage_group_count)
+      : null,
+    triage_profile_count: triageProjectionAvailable
+      ? Number(overview.triage_profile_count)
+      : null,
+    triage_ungrouped_count: triageProjectionAvailable
+      ? Number(overview.triage_ungrouped_count)
+      : null,
+    triage_ungrouped: Array.isArray(overview.triage_ungrouped)
+      ? overview.triage_ungrouped
+      : [],
+    triage_projection_available: triageProjectionAvailable,
     snapshot_profile_count: snapshotProfileCount,
     pending_snapshot_count: pendingSnapshotCount,
   };
@@ -2468,9 +2497,10 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
 export async function getPersistedProductGroups(
   ipId: string,
   relationship: "same" | "related",
+  view: "triage" | "all" = "triage",
 ) {
   const overview = await request<PersistedProductGroupOverview>(
-    `/api/product-clusters/${encodeURIComponent(ipId)}/groups?relationship=${relationship}`,
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups?relationship=${relationship}&view=${view}`,
   );
   return normalizePersistedProductGroupOverview(overview);
 }
@@ -2478,9 +2508,10 @@ export async function getPersistedProductGroups(
 export async function refreshPersistedProductGroups(
   ipId: string,
   relationship: "same" | "related",
+  view: "triage" | "all" = "triage",
 ) {
   const overview = await request<PersistedProductGroupOverview>(
-    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?relationship=${relationship}`,
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?relationship=${relationship}&view=${view}`,
     { method: "POST" },
   );
   return normalizePersistedProductGroupOverview(overview);
