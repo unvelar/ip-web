@@ -463,20 +463,45 @@ export default function ProductClusters() {
 
         {graph && (
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-stone-100 pt-3 text-xs text-stone-500">
-            <span><strong className="text-stone-800">{
-              view === "groups" ? groupOverview?.scope.profile_count ?? graph.scope.profile_count : graph.profiles.length
-            }</strong> {view === "groups" ? "listings grouped on the backend" : "listings loaded"}</span>
             {view === "groups" ? (
-              <span><strong className="text-stone-800">{groupOverview?.group_count ?? 0}</strong> persistent groups</span>
+              <>
+                <span>
+                  <strong className="text-stone-800">
+                    {groupOverview?.scope.profile_count ?? graph.scope.profile_count}
+                  </strong> profiled listings
+                </span>
+                {groupOverview?.snapshot_profile_count != null && (
+                  <span>
+                    <strong className="text-stone-800">{groupOverview.snapshot_profile_count}</strong>{" "}
+                    represented in current snapshot
+                  </span>
+                )}
+                <span>
+                  <strong className="text-stone-800">{groupOverview?.group_count ?? 0}</strong>{" "}
+                  persistent groups
+                </span>
+              </>
             ) : (
-              <span><strong className="text-stone-800">{visibleEdges.length}</strong> relationships above score filter</span>
+              <>
+                <span><strong className="text-stone-800">{graph.profiles.length}</strong> listings loaded</span>
+                <span><strong className="text-stone-800">{visibleEdges.length}</strong> relationships above score filter</span>
+              </>
             )}
             <span><strong className="text-stone-800">{graph.scope.pair_count}</strong> scored pairs total</span>
             {view === "similarity" && graph.truncated && (
               <span className="text-amber-700">Showing the strongest bounded subset</span>
             )}
             {view === "groups" && groupOverview?.dirty && (
-              <span className="text-amber-700">A newer snapshot is being rebuilt</span>
+              <span className="text-amber-700">
+                {groupOverview.pending_snapshot_count != null && groupOverview.pending_snapshot_count > 0 ? (
+                  <>
+                    <strong>{groupOverview.pending_snapshot_count}</strong>{" "}
+                    profiled {groupOverview.pending_snapshot_count === 1 ? "listing" : "listings"} awaiting grouping refresh
+                  </>
+                ) : (
+                  <>A newer snapshot is being rebuilt</>
+                )}
+              </span>
             )}
           </div>
         )}
@@ -752,7 +777,14 @@ function ProductGroupsOverview({
 
       {overview.dirty && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          New product evidence arrived after this snapshot. A refreshed backend grouping is queued.
+          {overview.pending_snapshot_count != null && overview.pending_snapshot_count > 0 ? (
+            <>
+              A backend grouping rebuild is queued. <strong>{overview.pending_snapshot_count} profiled {overview.pending_snapshot_count === 1 ? "listing is" : "listings are"}</strong>{" "}
+              awaiting it and {overview.pending_snapshot_count === 1 ? "is" : "are"} not represented in this snapshot yet.
+            </>
+          ) : (
+            <>New product evidence arrived after this snapshot. A refreshed backend grouping is queued.</>
+          )}
         </div>
       )}
       {overview.last_error && (

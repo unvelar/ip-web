@@ -2399,6 +2399,8 @@ export interface PersistedProductGroupOverview {
   last_error: string | null;
   groups: PersistedProductGroup[];
   group_count: number;
+  snapshot_profile_count: number | null;
+  pending_snapshot_count: number | null;
   ungrouped_count: number;
   ungrouped: ProductClusterProfile[];
   truncated: boolean;
@@ -2432,6 +2434,37 @@ export function getProductClusterGraph(
   );
 }
 
+function normalizePersistedProductGroupOverview(overview: PersistedProductGroupOverview) {
+  const groups = overview.groups.map((group) => ({
+    ...group,
+    rules: Array.isArray(group.rules) ? group.rules : [],
+    embedding_match_threshold:
+      typeof group.embedding_match_threshold === "number"
+        ? group.embedding_match_threshold
+        : null,
+  }));
+  // Keep the frontend compatible while the API and GitHub Pages deploys roll
+  // out independently. A capped legacy response cannot provide exact coverage.
+  const fallbackSnapshotProfileCount = groups.reduce(
+    (total, group) => total + group.member_count,
+    overview.ungrouped_count,
+  );
+  const snapshotProfileCount = Number.isFinite(overview.snapshot_profile_count)
+    ? overview.snapshot_profile_count
+    : overview.truncated ? null : fallbackSnapshotProfileCount;
+  const pendingSnapshotCount = Number.isFinite(overview.pending_snapshot_count)
+    ? overview.pending_snapshot_count
+    : snapshotProfileCount == null
+      ? null
+      : Math.max(0, overview.scope.profile_count - snapshotProfileCount);
+  return {
+    ...overview,
+    groups,
+    snapshot_profile_count: snapshotProfileCount,
+    pending_snapshot_count: pendingSnapshotCount,
+  };
+}
+
 export async function getPersistedProductGroups(
   ipId: string,
   relationship: "same" | "related",
@@ -2439,17 +2472,7 @@ export async function getPersistedProductGroups(
   const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups?relationship=${relationship}`,
   );
-  return {
-    ...overview,
-    groups: overview.groups.map((group) => ({
-      ...group,
-      rules: Array.isArray(group.rules) ? group.rules : [],
-      embedding_match_threshold:
-        typeof group.embedding_match_threshold === "number"
-          ? group.embedding_match_threshold
-          : null,
-    })),
-  };
+  return normalizePersistedProductGroupOverview(overview);
 }
 
 export async function refreshPersistedProductGroups(
@@ -2460,17 +2483,7 @@ export async function refreshPersistedProductGroups(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?relationship=${relationship}`,
     { method: "POST" },
   );
-  return {
-    ...overview,
-    groups: overview.groups.map((group) => ({
-      ...group,
-      rules: Array.isArray(group.rules) ? group.rules : [],
-      embedding_match_threshold:
-        typeof group.embedding_match_threshold === "number"
-          ? group.embedding_match_threshold
-          : null,
-    })),
-  };
+  return normalizePersistedProductGroupOverview(overview);
 }
 
 export function confirmPersistedProductGroup(
