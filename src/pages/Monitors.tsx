@@ -65,7 +65,7 @@ export default function Monitors() {
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-2">
           {ips.map((ip) => (
             <MonitoredIpCard key={ip.ip_id} ip={ip} onChanged={load} />
           ))}
@@ -103,12 +103,12 @@ function MonitoredIpCard({
   }
 
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white p-5 space-y-3">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+    <div className="rounded-xl border border-stone-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex items-center gap-2">
           <Link
             to={`/ips/${ip.ip_id}`}
-            className="text-base font-bold text-stone-900 hover:underline"
+            className="truncate text-sm font-bold text-stone-900 hover:underline"
           >
             {ip.ip_name}
           </Link>
@@ -117,38 +117,23 @@ function MonitoredIpCard({
             onClick={() => setExpanded((current) => !current)}
             aria-expanded={expanded}
             aria-controls={detailsId}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+            aria-label={`${expanded ? "Collapse" : "Manage"} ${ip.ip_name}`}
+            title={expanded ? "Collapse" : "Manage"}
+            className="shrink-0 rounded-md p-1 text-stone-600 hover:bg-stone-100 hover:text-stone-900"
           >
-            {expanded ? "Collapse" : "Manage"}
             <ChevronDown
-              size={14}
+              size={16}
               aria-hidden="true"
               className={`transition-transform ${expanded ? "rotate-180" : ""}`}
             />
           </button>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <Link
-            to={`/ips/${ip.ip_id}/audit`}
-            className="text-xs text-blue-700 hover:underline"
-          >
-            Audit log →
-          </Link>
-          <button
-            type="button"
-            onClick={stopMonitoring}
-            disabled={removing}
-            className="text-xs text-stone-400 hover:text-red-600 font-semibold disabled:opacity-50"
-            title="Stop monitoring this IP"
-          >
-            {removing ? "Removing…" : "Stop monitoring"}
-          </button>
-        </div>
       </div>
 
       {expanded && (
-        <div id={detailsId} className="space-y-3">
-          <div className="flex items-center gap-1.5 flex-wrap">
+        <div id={detailsId} className="mt-3 space-y-3 border-t border-stone-100 pt-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
             {hasKeywords ? (
               (ip.keywords ?? []).map((k, i) => (
                 <span
@@ -167,6 +152,24 @@ function MonitoredIpCard({
                 so the scrape has search terms.
               </span>
             )}
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <Link
+                to={`/ips/${ip.ip_id}/audit`}
+                className="text-xs text-blue-700 hover:underline"
+              >
+                Audit log →
+              </Link>
+              <button
+                type="button"
+                onClick={stopMonitoring}
+                disabled={removing}
+                className="text-xs font-semibold text-stone-400 hover:text-red-600 disabled:opacity-50"
+                title="Stop monitoring this IP"
+              >
+                {removing ? "Removing…" : "Stop monitoring"}
+              </button>
+            </div>
           </div>
 
           {err && <div className="text-xs text-red-600">{err}</div>}
