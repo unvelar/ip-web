@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   listMonitoredIps,
@@ -83,7 +84,9 @@ function MonitoredIpCard({
 }) {
   const hasKeywords = (ip.keywords ?? []).length > 0;
   const [removing, setRemoving] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [err, setErr] = useState("");
+  const detailsId = `monitored-ip-${ip.ip_id}-details`;
 
   async function stopMonitoring() {
     if (removing) return;
@@ -102,33 +105,27 @@ function MonitoredIpCard({
   return (
     <div className="rounded-2xl border border-stone-200 bg-white p-5 space-y-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
+        <div className="min-w-0 flex items-center gap-2">
           <Link
             to={`/ips/${ip.ip_id}`}
             className="text-base font-bold text-stone-900 hover:underline"
           >
             {ip.ip_name}
           </Link>
-          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-            {hasKeywords ? (
-              (ip.keywords ?? []).map((k, i) => (
-                <span
-                  key={`${i}-${k}`}
-                  className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 text-[11px]"
-                >
-                  {k}
-                </span>
-              ))
-            ) : (
-              <span className="text-[11px] text-amber-700">
-                No keywords —{" "}
-                <Link to={`/ips/${ip.ip_id}`} className="underline">
-                  set them on the IP page
-                </Link>{" "}
-                so the scrape has search terms.
-              </span>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+            aria-expanded={expanded}
+            aria-controls={detailsId}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+          >
+            {expanded ? "Collapse" : "Manage"}
+            <ChevronDown
+              size={14}
+              aria-hidden="true"
+              className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+            />
+          </button>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <Link
@@ -149,15 +146,40 @@ function MonitoredIpCard({
         </div>
       </div>
 
-      {err && <div className="text-xs text-red-600">{err}</div>}
+      {expanded && (
+        <div id={detailsId} className="space-y-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {hasKeywords ? (
+              (ip.keywords ?? []).map((k, i) => (
+                <span
+                  key={`${i}-${k}`}
+                  className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 text-[11px]"
+                >
+                  {k}
+                </span>
+              ))
+            ) : (
+              <span className="text-[11px] text-amber-700">
+                No keywords —{" "}
+                <Link to={`/ips/${ip.ip_id}`} className="underline">
+                  set them on the IP page
+                </Link>{" "}
+                so the scrape has search terms.
+              </span>
+            )}
+          </div>
 
-      <PlatformsPanel
-        ipId={ip.ip_id}
-        keywords={ip.keywords}
-        monitoringFrequency={ip.monitoring_frequency}
-        onMonitoringFrequencyChanged={onChanged}
-        onPlatformsChanged={onChanged}
-      />
+          {err && <div className="text-xs text-red-600">{err}</div>}
+
+          <PlatformsPanel
+            ipId={ip.ip_id}
+            keywords={ip.keywords}
+            monitoringFrequency={ip.monitoring_frequency}
+            onMonitoringFrequencyChanged={onChanged}
+            onPlatformsChanged={onChanged}
+          />
+        </div>
+      )}
     </div>
   );
 }
