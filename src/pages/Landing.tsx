@@ -316,35 +316,24 @@ export default function Landing() {
               Where teams use it
             </div>
             <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
-              Protecting{" "}
-              <span className="text-gradient-red">film, gaming, and creative IP.</span>
+              Built for the teams{" "}
+              <span className="text-gradient-red">enforcing IP.</span>
             </h2>
             <p className="mt-4 text-stone-500 max-w-2xl mx-auto text-balance leading-relaxed">
-              Rightsholders use Unvelar to find and take down infringement
-              across the web — and to clear new visual work before it reaches
-              production, marketing, or release.
+              Whether you're managing IP in-house or defending it for clients,
+              Unvelar handles monitoring, evidence, and takedowns from one platform.
             </p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid sm:grid-cols-2 gap-4">
             <UseCaseCard
               icon="registry"
-              title="Rightsholders & studios"
-              description="Monitor marketplaces and social for counterfeits and unauthorized use of your characters and brands."
-            />
-            <UseCaseCard
-              icon="controller"
-              title="Game studios"
-              description="Watch for leaked or copied skins and assets — and clear new characters, environments, and marketing art."
+              title="In-house legal & IP teams"
+              description="Protect your entire portfolio — trademarks, copyrighted works, and registered designs — across marketplaces, social platforms, and the open web. Turn scattered infringement reports into a single review queue with the evidence already gathered."
             />
             <UseCaseCard
               icon="megaphone"
-              title="Brand protection teams"
-              description="Catch infringing listings early and issue takedowns with the evidence already gathered."
-            />
-            <UseCaseCard
-              icon="sparkles"
-              title="AI creative tools"
-              description="Add pre-publication copyright clearance to image generation workflows."
+              title="Law firms"
+              description="Run IP enforcement for every client from one dashboard. Continuous monitoring, defensible evidence trails, and one-click takedowns — so your team spends time on strategy, not on searching on marketplaces."
             />
           </div>
         </div>

@@ -115,7 +115,7 @@ function createSocialPreviewSvg(logoSvg) {
   <rect x="64" y="64" width="1072" height="502" rx="40" fill="#ffffff"/>
   <image href="${logoDataUri}" x="132" y="165" width="300" height="300"/>
   <text x="492" y="272" fill="#1c1917" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="82" font-weight="800">Unvelar</text>
-  <text x="496" y="345" fill="#44403c" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="29" font-weight="600">Automated Visual Copyright Compliance</text>
-  <text x="496" y="409" fill="#78716c" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="500">Monitor marketplaces. Review evidence. Act faster.</text>
+  <text x="496" y="345" fill="#44403c" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="29" font-weight="600">Visual IP Monitoring &amp; Takedowns</text>
+  <text x="496" y="409" fill="#78716c" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="500">Scan the web. Turn every hit into a takedown-ready case.</text>
 </svg>`;
 }
