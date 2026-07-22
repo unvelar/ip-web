@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ArrowRight, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import Nav from "../components/Nav";
 
@@ -38,17 +39,33 @@ export default function Landing() {
             </p>
             <form
               onSubmit={handleHeroScan}
-              className="mt-8 sm:mt-10 mx-auto max-w-xl rounded-2xl sm:rounded-full border border-stone-900/10 bg-white/85 backdrop-blur p-2 sm:p-1.5 shadow-lg shadow-stone-900/10 flex flex-col sm:flex-row gap-2"
+              className="mt-8 sm:mt-10 mx-auto max-w-md sm:max-w-xl rounded-2xl sm:rounded-full border border-stone-900/10 bg-white/90 sm:bg-white/75 backdrop-blur p-1.5 shadow-lg shadow-stone-900/10 flex items-center gap-1.5 sm:gap-2"
             >
+              <Search className="sm:hidden ml-2 h-4 w-4 shrink-0 text-stone-400" aria-hidden />
+              <input
+                value={scanProduct}
+                onChange={(e) => setScanProduct(e.target.value)}
+                placeholder="Search your IP"
+                aria-label="Write the name of a product, brand or IP"
+                className="sm:hidden min-w-0 flex-1 h-11 bg-transparent px-1 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none"
+              />
+              <button
+                type="submit"
+                aria-label="Start scan"
+                className="sm:hidden h-11 w-11 shrink-0 rounded-xl bg-red-600 text-white shadow-md shadow-red-600/20 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 inline-flex items-center justify-center transition-colors"
+              >
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </button>
               <input
                 value={scanProduct}
                 onChange={(e) => setScanProduct(e.target.value)}
                 placeholder="Write the name of a product, brand or IP"
-                className="min-w-0 flex-1 h-12 sm:h-11 rounded-xl sm:rounded-full bg-stone-900/[0.04] sm:bg-transparent px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-red-500/25"
+                aria-label="Write the name of a product, brand or IP"
+                className="hidden sm:block min-w-0 flex-1 h-11 rounded-full bg-transparent px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-red-500/25"
               />
               <button
                 type="submit"
-                className="h-12 sm:h-11 w-full sm:w-auto sm:min-w-[5.25rem] rounded-xl sm:rounded-full bg-stone-900 px-5 text-sm font-semibold text-white shadow-md shadow-stone-900/20 hover:bg-stone-800 inline-flex items-center justify-center gap-2"
+                className="hidden sm:inline-flex h-11 min-w-[5.25rem] rounded-full bg-stone-900 px-5 text-sm font-semibold text-white shadow-md shadow-stone-900/20 hover:bg-stone-800 items-center justify-center transition-colors"
               >
                 Scan
               </button>
