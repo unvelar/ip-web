@@ -404,7 +404,6 @@ export default function Landing() {
             <Link to="/" className="font-semibold text-stone-600 hover:text-stone-900 transition-colors">
               Unvelar
             </Link>
-            <span>· Copyright Intelligence Layer</span>
           </div>
           <span className="tabular-nums">© {new Date().getFullYear()}</span>
         </div>
