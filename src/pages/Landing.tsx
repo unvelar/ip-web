@@ -25,7 +25,7 @@ export default function Landing() {
         </div>
         <div className="absolute inset-0 bg-grid mask-radial-top pointer-events-none" aria-hidden />
 
-        <div className="relative max-w-6xl mx-auto px-6 pt-20 lg:pt-24 pb-16">
+        <div className="relative max-w-6xl mx-auto px-6 pt-16 lg:pt-20 pb-10">
           <div className="text-center max-w-3xl mx-auto animate-fade-up">
             <h1 className="text-4xl sm:text-5xl lg:text-[3.75rem] font-black tracking-[-0.035em] leading-[1.05] text-stone-900 text-balance">
               Find and take down{" "}
@@ -33,10 +33,9 @@ export default function Landing() {
               across the web
             </h1>
             <p className="mt-7 text-lg text-stone-500 max-w-2xl mx-auto leading-relaxed text-balance">
-              Unvelar continuously monitors marketplaces, social platforms, and
-              the open web for infringements of your characters, brands, and
-              artwork — and clears new work before it ships. Purpose-built for
-              legal and IP teams in film and gaming.
+              Unvelar continuously scans marketplaces, social platforms, and
+              the open web for visual infringements of your IP, and turns every
+              hit into a takedown-ready case.
             </p>
             <form
               onSubmit={handleHeroScan}
@@ -64,51 +63,6 @@ export default function Landing() {
                 Explore the platform
               </a>
             </div>
-
-            {/* Trust ribbon */}
-            <div className="mt-14 inline-flex items-baseline gap-3 bg-white/70 backdrop-blur-sm border border-stone-900/10 rounded-full px-5 py-2 shadow-sm shadow-stone-900/5">
-              <span className="text-2xl font-black text-stone-900 tabular-nums tracking-tight">
-                200K<span className="text-stone-400">+</span>
-              </span>
-              <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-[0.18em]">
-                Protected IPs indexed
-              </span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================= Problem ================= */}
-      <section className="relative border-t border-stone-200 overflow-hidden">
-        <div className="absolute inset-0 bg-grid mask-radial opacity-40 pointer-events-none" aria-hidden />
-        <div className="relative max-w-6xl mx-auto px-6 py-24">
-          <div className="max-w-3xl mb-14">
-            <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
-              <span className="w-1 h-1 rounded-full bg-stone-600" />
-              The problem
-            </div>
-            <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
-              Infringement happens everywhere, all the time.{" "}
-              <span className="text-stone-400">Enforcement is still manual.</span>
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-5">
-            <ProblemCard
-              index="01"
-              title="Knock-offs spread faster than teams can find them."
-              description="Counterfeit listings, fan merch, and reuploaded art appear across thousands of marketplaces and social platforms every day."
-            />
-            <ProblemCard
-              index="02"
-              title="Manual searching never keeps up."
-              description="Brand teams scan a handful of sites by hand and miss the long tail — by the time a listing is found, it has already sold."
-            />
-            <ProblemCard
-              index="03"
-              title="General-purpose vision models miss real IP."
-              description="They name household brands and go blank on the lesser-known characters and marks that infringers actually copy."
-            />
           </div>
         </div>
       </section>
@@ -134,7 +88,6 @@ export default function Landing() {
 
           <div className="grid md:grid-cols-2 gap-6">
             <FeatureCard
-              tag="Primary"
               icon="radar"
               title="Monitoring"
               tagline="Continuous web surveillance & takedowns"
@@ -171,7 +124,7 @@ export default function Landing() {
         </div>
         <div className="absolute inset-0 bg-grid-dark mask-radial pointer-events-none" aria-hidden />
 
-        <div className="relative max-w-6xl mx-auto px-6 py-24">
+        <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-24">
           <div className="text-center mb-14">
             <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-white/60 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
               <span className="w-1 h-1 rounded-full bg-red-400" />
@@ -200,7 +153,7 @@ export default function Landing() {
                 <FlowRow
                   icon="registry"
                   title="Register your IP"
-                  description="Characters, brands, and artwork, indexed for detection"
+                  description="Products, brands, and artwork, indexed for detection"
                 />
                 <FlowRow
                   icon="globe"
@@ -353,47 +306,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ================= Benchmark ================= */}
-      <section className="relative bg-cream-dark/40 border-t border-stone-200 overflow-hidden">
-        <div className="absolute inset-0 bg-grid mask-radial opacity-50 pointer-events-none" aria-hidden />
-        <div className="relative max-w-6xl mx-auto px-6 py-24">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
-              <span className="w-1 h-1 rounded-full bg-emerald-600" />
-              Benchmark
-            </div>
-            <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance max-w-3xl mx-auto">
-              Purpose-built IP detection beats{" "}
-              <span className="text-stone-400">general-purpose vision models.</span>
-            </h2>
-          </div>
-
-          <div className="relative isolate overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm shadow-stone-900/5 max-w-3xl mx-auto">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-stone-400 text-[10px] uppercase tracking-[0.18em] border-b border-stone-200">
-                    <th className="text-left px-6 py-5 font-semibold">Approach</th>
-                    <th className="text-right px-6 py-5 font-semibold">
-                      Accuracy <span className="text-stone-300 font-mono">↑</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {BENCHMARK_ROWS.map((row) => (
-                    <BenchmarkRow key={row.name} {...row} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <p className="mt-6 text-[11px] text-stone-400 text-center max-w-3xl mx-auto tracking-wide">
-            Based on Unvelar internal benchmark. Methodology available on request.
-          </p>
-        </div>
-      </section>
-
       {/* ================= Use cases ================= */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-grid mask-radial opacity-50 pointer-events-none" aria-hidden />
@@ -492,36 +404,11 @@ export default function Landing() {
             <Link to="/" className="font-semibold text-stone-600 hover:text-stone-900 transition-colors">
               Unvelar
             </Link>
+            <span>· Copyright Intelligence Layer</span>
           </div>
           <span className="tabular-nums">© {new Date().getFullYear()}</span>
         </div>
       </footer>
-    </div>
-  );
-}
-
-/* ---------- Problem card ---------- */
-function ProblemCard({
-  index,
-  title,
-  description,
-}: {
-  index: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="group relative bg-white rounded-2xl border border-stone-200/80 p-7 card-elevated card-elevated-hover transition-all overflow-hidden">
-      <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-gradient-to-br from-red-100 to-orange-100 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl" />
-      <div className="relative">
-        <div className="font-mono text-[10px] font-semibold text-stone-300 tracking-[0.2em] mb-4">
-          {index}
-        </div>
-        <h3 className="font-bold text-stone-900 text-[1.05rem] mb-2 tracking-tight leading-snug text-balance">
-          {title}
-        </h3>
-        <p className="text-sm text-stone-500 leading-relaxed">{description}</p>
-      </div>
     </div>
   );
 }
@@ -768,87 +655,5 @@ function UseCaseCard({
         {description}
       </p>
     </div>
-  );
-}
-
-/* ---------- Benchmark table ---------- */
-type BenchmarkRowData = {
-  name: string;
-  description: string;
-  accuracy: number;
-  highlight?: boolean;
-};
-
-const BENCHMARK_ROWS: BenchmarkRowData[] = [
-  {
-    name: "OpenAI CLIP",
-    description: "Image-similarity AI — recognises what it has seen, blank on the rest",
-    accuracy: (0.704 + 0.0) / 2,
-  },
-  {
-    name: "Google SigLIP",
-    description: "Image-similarity AI — same blind spot on lesser-known IP",
-    accuracy: (0.609 + 0.0) / 2,
-  },
-  {
-    name: "Gemini 2.5",
-    description: "Names household IPs; on lesser-known marks with no readable text, returns nothing",
-    accuracy: (0.962 + 0.05) / 2,
-  },
-  {
-    name: "GPT-4.1",
-    description: "Same pattern — strong on famous IPs, silent on lesser-known visual marks",
-    accuracy: (0.872 + 0.04) / 2,
-  },
-  {
-    name: "Unvelar",
-    description: "Catalog matching plus AI review layer — full coverage across famous and lesser-known IP",
-    accuracy: (0.981 + 0.976) / 2,
-    highlight: true,
-  },
-];
-
-function BenchmarkRow({
-  name,
-  description,
-  accuracy,
-  highlight,
-}: BenchmarkRowData) {
-  const rowCls = highlight
-    ? "bg-gradient-to-r from-emerald-500/[0.08] via-emerald-500/[0.04] to-transparent"
-    : "hover:bg-stone-50/60 transition-colors";
-  const nameCls = highlight ? "text-emerald-700" : "text-stone-800";
-  const pct = Math.round(accuracy * 100);
-  const barColor = highlight
-    ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
-    : "bg-stone-300";
-  const textColor = highlight
-    ? "text-emerald-700 font-bold"
-    : "text-stone-600";
-  return (
-    <tr className={`${rowCls} border-t border-stone-100`}>
-      <td className="px-6 py-5">
-        <div className="flex items-center gap-2">
-          {highlight && (
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-dot" />
-          )}
-          <div className={`text-sm font-semibold tracking-tight ${nameCls}`}>
-            {name}
-          </div>
-        </div>
-        <div className="text-xs text-stone-400 mt-0.5">{description}</div>
-      </td>
-      <td className="text-right px-6 py-5 font-mono tabular-nums">
-        <div className="flex items-center justify-end gap-3">
-          <div className="hidden sm:block w-24 h-1.5 rounded-full bg-stone-100 overflow-hidden">
-            <div
-              className={`h-full ${barColor} transition-all`}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <span className={`text-sm w-10 text-right ${textColor}`}>{pct}%</span>
-        </div>
-      </td>
-    </tr>
   );
 }
