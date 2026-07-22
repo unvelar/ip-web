@@ -27,13 +27,6 @@ export default function Landing() {
 
         <div className="relative max-w-6xl mx-auto px-6 pt-20 lg:pt-24 pb-16">
           <div className="text-center max-w-3xl mx-auto animate-fade-up">
-            <div className="inline-flex items-center gap-2 bg-white/70 backdrop-blur-sm border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.18em] uppercase px-3.5 py-1.5 rounded-full mb-7 shadow-sm shadow-stone-900/5">
-              <span className="relative flex w-1.5 h-1.5">
-                <span className="absolute inset-0 bg-red-500 rounded-full animate-pulse-dot" />
-                <span className="relative bg-red-600 rounded-full w-1.5 h-1.5" />
-              </span>
-              Copyright Intelligence Layer
-            </div>
             <h1 className="text-4xl sm:text-5xl lg:text-[3.75rem] font-black tracking-[-0.035em] leading-[1.05] text-stone-900 text-balance">
               Find and take down{" "}
               <span className="text-gradient-red">visual IP infringement</span>{" "}
@@ -499,7 +492,6 @@ export default function Landing() {
             <Link to="/" className="font-semibold text-stone-600 hover:text-stone-900 transition-colors">
               Unvelar
             </Link>
-            <span>· Copyright Intelligence Layer</span>
           </div>
           <span className="tabular-nums">© {new Date().getFullYear()}</span>
         </div>
