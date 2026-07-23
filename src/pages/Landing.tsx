@@ -161,8 +161,8 @@ export default function Landing() {
             {/* Step 1 — Watch */}
             <div className="relative isolate bg-white/[0.03] backdrop-blur-sm rounded-3xl p-8 gradient-border">
               <StepHeader label="Step One" icon="radar" />
-              <h3 className="text-2xl font-black tracking-tight mb-3">Watch</h3>
-              <p className="text-sm text-white/50 mb-7 leading-relaxed">
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight mb-3">Watch</h3>
+              <p className="text-[13px] sm:text-sm text-white/50 mb-7 leading-relaxed">
                 Register the IP you own and the domains and platforms to keep an
                 eye on. Unvelar scans them on a schedule — no manual searching.
               </p>
@@ -188,8 +188,8 @@ export default function Landing() {
             {/* Step 2 — Detect */}
             <div className="relative isolate bg-white/[0.03] backdrop-blur-sm rounded-3xl p-8 gradient-border">
               <StepHeader label="Step Two" icon="scan" />
-              <h3 className="text-2xl font-black tracking-tight mb-3">Detect</h3>
-              <p className="text-sm text-white/50 mb-7 leading-relaxed">
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight mb-3">Detect</h3>
+              <p className="text-[13px] sm:text-sm text-white/50 mb-7 leading-relaxed">
                 Every asset we find is checked across four independent
                 dimensions, each surfacing a different kind of similarity to your
                 protected references.
@@ -221,8 +221,8 @@ export default function Landing() {
             {/* Step 3 — Enforce */}
             <div className="relative isolate bg-white/[0.03] backdrop-blur-sm rounded-3xl p-8 gradient-border">
               <StepHeader label="Step Three" icon="shield" />
-              <h3 className="text-2xl font-black tracking-tight mb-3">Enforce</h3>
-              <p className="text-sm text-white/50 mb-7 leading-relaxed">
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight mb-3">Enforce</h3>
+              <p className="text-[13px] sm:text-sm text-white/50 mb-7 leading-relaxed">
                 Likely infringements arrive as review-ready cases — the match,
                 the reference, and the supporting evidence already gathered.
               </p>
@@ -247,7 +247,7 @@ export default function Landing() {
                 <div className="text-[10px] text-red-300/80 uppercase tracking-[0.22em] font-semibold mb-2">
                   Built for enforcement teams
                 </div>
-                <p className="text-xs text-white/45 leading-relaxed">
+                <p className="text-[11px] sm:text-xs text-white/45 leading-relaxed">
                   Reviewers see the match, the source, and the reasoning —
                   everything they need to act with confidence.
                 </p>
@@ -260,7 +260,7 @@ export default function Landing() {
       {/* ================= Clearance Review ================= */}
       <section className="relative border-t border-stone-200 overflow-hidden">
         <div className="absolute inset-0 bg-grid mask-radial opacity-40 pointer-events-none" aria-hidden />
-        <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-20">
+        <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-10">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
@@ -326,7 +326,7 @@ export default function Landing() {
       {/* ================= Use cases ================= */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-grid mask-radial opacity-50 pointer-events-none" aria-hidden />
-        <div className="relative max-w-6xl mx-auto px-6 pt-20 pb-24">
+        <div className="relative max-w-6xl mx-auto px-6 pt-10 pb-24">
           <div className="text-center mb-14">
             <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
               <span className="w-1 h-1 rounded-full bg-stone-600" />
@@ -543,8 +543,8 @@ function FlowRow({
         </svg>
       </div>
       <div className="pt-0.5">
-        <div className="text-sm font-semibold text-white/85">{title}</div>
-        <div className="text-xs text-white/45 mt-0.5 leading-relaxed">
+        <div className="text-[13px] sm:text-sm font-semibold text-white/85">{title}</div>
+        <div className="text-[11px] sm:text-xs text-white/45 mt-0.5 leading-relaxed">
           {description}
         </div>
       </div>
