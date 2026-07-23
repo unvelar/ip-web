@@ -32,7 +32,7 @@ export default function Landing() {
               <span className="text-gradient-red">visual IP infringement</span>{" "}
               across the web
             </h1>
-            <p className="mt-7 text-lg text-stone-500 max-w-2xl mx-auto leading-relaxed text-balance">
+            <p className="mt-7 text-[1.0625rem] sm:text-lg text-stone-500 max-w-2xl mx-auto leading-relaxed text-balance">
               Unvelar continuously scans marketplaces, social platforms, and
               the open web for visual infringements of your IP, and turns every
               hit into a takedown-ready case.
@@ -101,12 +101,13 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
             <FeatureCard
               icon="radar"
               title="Monitoring"
               tagline="Continuous web surveillance & takedowns"
               description="Register the IP you own and the places you want watched. Unvelar scans marketplaces, social platforms, and the open web around the clock, surfaces likely infringements as review-ready cases, and lets your team issue takedowns in a click."
+              mobileDescription="Scan marketplaces, social platforms, and the web for likely infringements, ready for review and takedown."
               points={[
                 "Always-on scanning across domains and platforms",
                 "Infringements arrive as enriched, review-ready cases",
@@ -118,6 +119,7 @@ export default function Landing() {
               title="Clearance Review"
               tagline="Pre-publication copyright clearance"
               description="Run new characters, key art, and assets against 200K+ protected references before they reach production or release. Every flag comes back with side-by-side evidence and a plain-language verdict your reviewers can act on."
+              mobileDescription="Check new characters, key art, and assets against protected IP before release."
               points={[
                 "Check assets against indexed protected IP",
                 "Multi-dimensional similarity, not a single score",
@@ -423,6 +425,7 @@ function FeatureCard({
   title,
   tagline,
   description,
+  mobileDescription,
   points,
 }: {
   tag?: string;
@@ -430,16 +433,17 @@ function FeatureCard({
   title: string;
   tagline: string;
   description: string;
+  mobileDescription: string;
   points: string[];
 }) {
   return (
-    <div className="group relative bg-white rounded-3xl border border-stone-200/80 p-8 card-elevated card-elevated-hover transition-all overflow-hidden">
+    <div className="group relative bg-white rounded-2xl sm:rounded-3xl border border-stone-200/80 p-5 sm:p-8 card-elevated card-elevated-hover transition-all overflow-hidden">
       <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full bg-gradient-to-br from-red-100 to-orange-100 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-3xl" />
       <div className="relative">
-        <div className="flex items-center justify-between mb-5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-stone-100 to-stone-50 border border-stone-200/60 flex items-center justify-center group-hover:from-red-50 group-hover:to-orange-50 group-hover:border-red-200/60 transition-colors">
+        <div className="flex items-center justify-between mb-4 sm:mb-5">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-stone-100 to-stone-50 border border-stone-200/60 flex items-center justify-center group-hover:from-red-50 group-hover:to-orange-50 group-hover:border-red-200/60 transition-colors">
             <svg
-              className="w-5 h-5 text-stone-600 group-hover:text-red-600 transition-colors"
+              className="w-4 h-4 sm:w-5 sm:h-5 text-stone-600 group-hover:text-red-600 transition-colors"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -454,20 +458,23 @@ function FeatureCard({
             </span>
           )}
         </div>
-        <h3 className="text-2xl font-black text-stone-900 tracking-tight">
+        <h3 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
           {title}
         </h3>
-        <div className="mt-1 text-xs font-semibold text-stone-400 uppercase tracking-[0.14em]">
+        <div className="hidden sm:block mt-1 text-xs font-semibold text-stone-400 uppercase tracking-[0.14em]">
           {tagline}
         </div>
-        <p className="mt-4 text-sm text-stone-500 leading-relaxed">
+        <p className="sm:hidden mt-3 text-[13px] text-stone-500 leading-[1.55]">
+          {mobileDescription}
+        </p>
+        <p className="hidden sm:block mt-4 text-sm text-stone-500 leading-relaxed">
           {description}
         </p>
-        <ul className="mt-6 space-y-2.5">
+        <ul className="mt-5 sm:mt-6 space-y-2 sm:space-y-2.5">
           {points.map((p) => (
-            <li key={p} className="flex items-start gap-2.5">
+            <li key={p} className="flex items-start gap-2 sm:gap-2.5">
               <svg
-                className="shrink-0 w-4 h-4 mt-0.5 text-red-500"
+                className="shrink-0 w-3.5 h-3.5 sm:w-4 sm:h-4 mt-0.5 text-red-500"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -475,7 +482,7 @@ function FeatureCard({
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              <span className="text-sm text-stone-600 leading-snug">{p}</span>
+              <span className="text-[13px] sm:text-sm text-stone-600 leading-snug">{p}</span>
             </li>
           ))}
         </ul>
