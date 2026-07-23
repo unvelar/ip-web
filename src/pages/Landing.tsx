@@ -32,7 +32,7 @@ export default function Landing() {
               <span className="text-gradient-red">visual IP infringement</span>{" "}
               across the web
             </h1>
-            <p className="mt-7 text-[1.0625rem] sm:text-lg text-stone-500 max-w-2xl mx-auto leading-relaxed text-balance">
+            <p className="mt-7 text-base sm:text-lg text-stone-500 max-w-2xl mx-auto leading-relaxed text-balance">
               Unvelar continuously scans marketplaces, social platforms, and
               the open web for visual infringements of your IP, and turns every
               hit into a takedown-ready case.
@@ -260,7 +260,7 @@ export default function Landing() {
       {/* ================= Clearance Review ================= */}
       <section className="relative border-t border-stone-200 overflow-hidden">
         <div className="absolute inset-0 bg-grid mask-radial opacity-40 pointer-events-none" aria-hidden />
-        <div className="relative max-w-6xl mx-auto px-6 py-24">
+        <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-20">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
@@ -293,13 +293,13 @@ export default function Landing() {
               </div>
             </div>
 
-            <div className="relative isolate rounded-3xl border border-stone-200 bg-white p-8 card-elevated overflow-hidden">
+            <div className="relative isolate rounded-2xl sm:rounded-3xl border border-stone-200 bg-white p-5 sm:p-8 card-elevated overflow-hidden">
               <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full bg-gradient-to-br from-red-100 to-orange-100 opacity-60 blur-3xl pointer-events-none" />
               <div className="relative">
-                <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-[0.2em] mb-5">
+                <div className="text-[9px] sm:text-[10px] font-semibold text-stone-400 uppercase tracking-[0.16em] sm:tracking-[0.2em] mb-4 sm:mb-5">
                   What a clearance check evaluates
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   <ClearanceDimension
                     title="Visual Likeness"
                     description="Distinctive shapes, layout, and silhouettes"
@@ -326,7 +326,7 @@ export default function Landing() {
       {/* ================= Use cases ================= */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-grid mask-radial opacity-50 pointer-events-none" aria-hidden />
-        <div className="relative max-w-6xl mx-auto px-6 py-24">
+        <div className="relative max-w-6xl mx-auto px-6 pt-20 pb-24">
           <div className="text-center mb-14">
             <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
               <span className="w-1 h-1 rounded-full bg-stone-600" />
@@ -440,7 +440,7 @@ function FeatureCard({
     <div className="group relative bg-white rounded-2xl sm:rounded-3xl border border-stone-200/80 p-5 sm:p-8 card-elevated card-elevated-hover transition-all overflow-hidden">
       <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full bg-gradient-to-br from-red-100 to-orange-100 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-3xl" />
       <div className="relative">
-        <div className="flex items-center justify-between mb-4 sm:mb-5">
+        <div className="hidden sm:flex items-center justify-between mb-5">
           <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-stone-100 to-stone-50 border border-stone-200/60 flex items-center justify-center group-hover:from-red-50 group-hover:to-orange-50 group-hover:border-red-200/60 transition-colors">
             <svg
               className="w-4 h-4 sm:w-5 sm:h-5 text-stone-600 group-hover:text-red-600 transition-colors"
@@ -582,11 +582,11 @@ function ClearanceDimension({
   description: string;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-stone-200/70 bg-cream/40 px-4 py-3">
-      <span className="shrink-0 w-1.5 h-1.5 mt-2 rounded-full bg-red-500" />
+    <div className="flex items-start gap-2.5 sm:gap-3 rounded-xl border border-stone-200/70 bg-cream/40 px-3 py-2.5 sm:px-4 sm:py-3">
+      <span className="shrink-0 w-1.5 h-1.5 mt-1.5 sm:mt-2 rounded-full bg-red-500" />
       <div>
-        <div className="text-sm font-semibold text-stone-800">{title}</div>
-        <div className="text-xs text-stone-500 mt-0.5 leading-relaxed">
+        <div className="text-[13px] sm:text-sm font-semibold text-stone-800">{title}</div>
+        <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-relaxed">
           {description}
         </div>
       </div>
