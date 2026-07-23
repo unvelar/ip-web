@@ -658,10 +658,10 @@ function UseCaseCard({
           />
         </svg>
       </div>
-      <h3 className="relative font-bold text-stone-900 text-[0.95rem] mb-1.5 tracking-tight">
+      <h3 className="relative font-bold text-stone-900 text-sm sm:text-[0.95rem] mb-1.5 tracking-tight">
         {title}
       </h3>
-      <p className="relative text-xs text-stone-500 leading-relaxed">
+      <p className="relative text-[11px] sm:text-xs text-stone-500 leading-relaxed">
         {description}
       </p>
     </div>
