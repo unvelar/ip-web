@@ -52,6 +52,7 @@ const MAX_NODES = 80;
 const MAX_EDGES = 400;
 type LabView = "similarity" | "groups";
 type ProductGroupView = "triage" | "all";
+type GroupMode = RelationshipMode | "visual";
 
 export default function ProductClusters() {
   const { actingTenantId } = useAuth();
@@ -59,7 +60,7 @@ export default function ProductClusters() {
   const [selectedIpId, setSelectedIpId] = useState("");
   const [graph, setGraph] = useState<ProductClusterGraph | null>(null);
   const [groupOverview, setGroupOverview] = useState<PersistedProductGroupOverview | null>(null);
-  const [mode, setMode] = useState<RelationshipMode>("same");
+  const [mode, setMode] = useState<GroupMode>("same");
   const [view, setView] = useState<LabView>("groups");
   const [productGroupView, setProductGroupView] = useState<ProductGroupView>("triage");
   const [threshold, setThreshold] = useState(0.3);
@@ -160,7 +161,7 @@ export default function ProductClusters() {
   }, [selectedIpId, mode, productGroupView, refreshVersion, actingTenantId, groupsRequestKey]);
 
   const visibleEdges = useMemo(() => {
-    if (!graph) return [];
+    if (!graph || mode === "visual") return [];
     return graph.edges
       .filter((edge) => scoreFor(edge, mode) >= threshold)
       .sort((left, right) => scoreFor(right, mode) - scoreFor(left, mode));
@@ -380,8 +381,8 @@ export default function ProductClusters() {
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Compare listing-to-listing product evidence. Image similarity, multimodal
-            similarity, and relationship scores do not measure similarity to the IP itself.
+            Review exact products, related families, and overlapping gallery-image
+            cohorts. These signals compare listings with one another, not with the IP itself.
           </p>
         </div>
         <button
@@ -426,7 +427,7 @@ export default function ProductClusters() {
 
           <div>
             <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">
-              Final relationship score
+              Grouping lens
             </span>
             <div className="inline-flex rounded-lg border border-stone-300 bg-stone-50 p-1">
               <ModeButton active={mode === "same"} onClick={() => setMode("same")}>
@@ -434,6 +435,15 @@ export default function ProductClusters() {
               </ModeButton>
               <ModeButton active={mode === "related"} onClick={() => setMode("related")}>
                 Related
+              </ModeButton>
+              <ModeButton
+                active={mode === "visual"}
+                onClick={() => {
+                  setMode("visual");
+                  setView("groups");
+                }}
+              >
+                Visual views
               </ModeButton>
             </div>
           </div>
@@ -460,8 +470,13 @@ export default function ProductClusters() {
                 Final grouping policy
               </span>
               <span className="mt-1 block text-sm font-semibold text-stone-900">
-                Strict pairwise {mode === "same" ? "same-product" : "related-product"} score ≥{" "}
-                {(groupOverview?.threshold ?? 0.3).toFixed(2)}
+                {mode === "visual" ? (
+                  <>Image-backed cliques with overlapping listings · image similarity ≥{" "}
+                    {(groupOverview?.threshold ?? 0.82).toFixed(2)}</>
+                ) : (
+                  <>Strict pairwise {mode === "same" ? "same-product" : "related-product"} score ≥{" "}
+                    {(groupOverview?.threshold ?? 0.3).toFixed(2)}</>
+                )}
               </span>
             </div>
           )}
@@ -482,6 +497,17 @@ export default function ProductClusters() {
                     represented in current snapshot
                   </span>
                 )}
+                {mode === "visual" &&
+                  groupOverview?.snapshot_membership_count != null &&
+                  groupOverview.snapshot_membership_count >
+                    (groupOverview.snapshot_profile_count ?? 0) && (
+                  <span>
+                    <strong className="text-stone-800">
+                      {groupOverview.snapshot_membership_count}
+                    </strong>{" "}
+                    image-backed placements
+                  </span>
+                )}
                 {productGroupView === "triage" && groupOverview?.triage_projection_available && (
                   <>
                     <span>
@@ -494,7 +520,13 @@ export default function ProductClusters() {
                       <strong className="text-stone-800">
                         {groupOverview.triage_group_count ?? 0}
                       </strong>{" "}
-                      {(groupOverview.triage_group_count ?? 0) === 1 ? "grouped batch" : "grouped batches"} with work
+                      {mode === "visual"
+                        ? (groupOverview.triage_group_count ?? 0) === 1
+                          ? "visual cohort"
+                          : "visual cohorts"
+                        : (groupOverview.triage_group_count ?? 0) === 1
+                          ? "grouped batch"
+                          : "grouped batches"} with work
                     </span>
                   </>
                 )}
@@ -502,7 +534,13 @@ export default function ProductClusters() {
                   <>
                     <span>
                       <strong className="text-stone-800">{groupOverview.group_count}</strong>{" "}
-                      {groupOverview.group_count === 1 ? "stored group" : "stored groups"}
+                      {mode === "visual"
+                        ? groupOverview.group_count === 1
+                          ? "visual cohort"
+                          : "visual cohorts"
+                        : groupOverview.group_count === 1
+                          ? "stored group"
+                          : "stored groups"}
                     </span>
                     {groupOverview.triage_projection_available && (
                       <span>
@@ -521,7 +559,9 @@ export default function ProductClusters() {
                 <span><strong className="text-stone-800">{visibleEdges.length}</strong> relationships above score filter</span>
               </>
             )}
-            <span><strong className="text-stone-800">{graph.scope.pair_count}</strong> scored pairs total</span>
+            {mode !== "visual" && (
+              <span><strong className="text-stone-800">{graph.scope.pair_count}</strong> scored pairs total</span>
+            )}
             {view === "similarity" && graph.truncated && (
               <span className="text-amber-700">Showing the strongest bounded subset</span>
             )}
@@ -551,7 +591,10 @@ export default function ProductClusters() {
         <div className="mt-5 flex border-b border-stone-200" role="tablist" aria-label="Clustering lab view">
           <ViewTab
             active={view === "similarity"}
-            onClick={() => setView("similarity")}
+            onClick={() => {
+              if (mode === "visual") setMode("same");
+              setView("similarity");
+            }}
           >
             Similarity from one listing
           </ViewTab>
@@ -573,7 +616,7 @@ export default function ProductClusters() {
             reference={reference}
             referenceEdges={referenceEdges}
             profileById={profileById}
-            mode={mode}
+            mode={mode === "visual" ? "same" : mode}
             selectedEdgeId={effectiveSelectedEdgeId}
             selectedEdge={selectedEdge}
             comparisonProfile={comparisonProfile}
@@ -590,7 +633,9 @@ export default function ProductClusters() {
               selectReference(profileId);
               setView("similarity");
             }}
-            canSelectReference={(profileId) => profileById.has(profileId)}
+            canSelectReference={(profileId) =>
+              mode !== "visual" && profileById.has(profileId)
+            }
             savingGroupId={savingGroupId}
             savingCorrectionProfileId={savingCorrectionProfileId}
             onConfirmGroup={confirmGroup}
@@ -766,7 +811,7 @@ function ProductGroupsOverview({
   onDeleteRule,
 }: {
   overview: PersistedProductGroupOverview;
-  mode: RelationshipMode;
+  mode: GroupMode;
   groupView: ProductGroupView;
   onGroupViewChange: (view: ProductGroupView) => void;
   onSelectReference: (profileId: string) => void;
@@ -821,10 +866,19 @@ function ProductGroupsOverview({
   return (
     <div className="mt-5">
       <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        These groups are stored on the backend across the full IP corpus. In each {mode === "same" ? "product group" : "related family"}, every listing has a final pairwise {mode === "same" ? "same-product" : "related-product"} score of at least {overview.threshold.toFixed(2)} with every other member.
-        {mode === "same"
-          ? " New listings are assigned automatically. Image similarity is explanatory only. A listing must pass the product’s multimodal candidate gate; rules and the final pairwise same-product score then decide membership. Open Manage product to configure the gate, references, rules, or corrections."
-          : " Related families remain review candidates and cannot be confirmed as one product."}
+        {mode === "visual" ? (
+          <>Every stored gallery image is analyzed independently. Each matching image is
+          assigned to one strict pairwise image-similarity clique at or above {overview.threshold.toFixed(2)},
+          and its thumbnail is the exact view that caused membership. A listing can still
+          appear in several cards through different front, back, color, packaging, or
+          accessory views. These are overlapping listing cohorts—not claims that the
+          listings are the exact same product.</>
+        ) : (
+          <>These groups are stored on the backend across the full IP corpus. In each {mode === "same" ? "product group" : "related family"}, every listing has a final pairwise {mode === "same" ? "same-product" : "related-product"} score of at least {overview.threshold.toFixed(2)} with every other member.
+            {mode === "same"
+              ? " New listings are assigned automatically. Image similarity is explanatory only. A listing must pass the product’s multimodal candidate gate; rules and the final pairwise same-product score then decide membership. Open Manage product to configure the gate, references, rules, or corrections."
+              : " Related families remain review candidates and cannot be confirmed as one product."}</>
+        )}
         {showingTriage
           ? " This review view only counts and displays listings still in To triage; handled listings remain in their stored groups."
           : " This management view includes handled listings as stored history; its counts describe durable membership, not open Tasks."}
@@ -895,8 +949,12 @@ function ProductGroupsOverview({
                   : showingTriage
                     ? triageProfileCount === 0
                       ? "No listings need triage"
-                      : "No multi-listing batches need triage"
-                    : "No multi-listing groups in this snapshot"}
+                      : mode === "visual"
+                        ? "No overlapping visual cohorts need triage"
+                        : "No multi-listing batches need triage"
+                    : mode === "visual"
+                      ? "No multi-listing visual cohorts in this snapshot"
+                      : "No multi-listing groups in this snapshot"}
               </h2>
               <p className="mt-2 text-sm text-stone-500">
                 {buildingFirstSnapshot
@@ -906,9 +964,13 @@ function ProductGroupsOverview({
                   : showingTriage
                     ? triageProfileCount === 0
                       ? "No review-ready listings in this snapshot are waiting in To triage."
-                      : "The remaining work is shown as one-listing candidates below."
+                      : mode === "visual"
+                        ? "The remaining work has no close cross-listing gallery view yet."
+                        : "The remaining work is shown as one-listing candidates below."
                     : displayedUngroupedCount > 0
-                      ? "Stored one-listing candidates are shown below."
+                      ? mode === "visual"
+                        ? "Listings without a close visual cohort are shown below."
+                        : "Stored one-listing candidates are shown below."
                       : "No stored group memberships are available for this IP."}
               </p>
             </div>
@@ -949,10 +1011,18 @@ function ProductGroupsOverview({
           {displayedUngroupedCount > 0 && (
             <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-bold text-stone-900">
-                {showingTriage ? "One-listing candidates to triage" : "Stored one-listing candidates"} · {displayedUngroupedCount}
+                {mode === "visual"
+                  ? showingTriage
+                    ? "Listings without a visual cohort to triage"
+                    : "Listings without a visual cohort"
+                  : showingTriage
+                    ? "One-listing candidates to triage"
+                    : "Stored one-listing candidates"} · {displayedUngroupedCount}
               </h2>
               <p className="mt-1 text-xs text-stone-500">
-                {showingTriage
+                {mode === "visual"
+                  ? "All of their stored images were analyzed, but none formed a retained cross-listing clique at this cutoff."
+                  : showingTriage
                   ? "These listings still need triage, but no second listing has enough complete pairwise evidence to join them yet."
                   : "These are persisted too, but no second listing has enough complete pairwise evidence to join them yet."}
               </p>
@@ -970,8 +1040,12 @@ function ProductGroupsOverview({
               {displayedUngroupedCount > displayedUngrouped.length && (
                 <p className="mt-3 text-xs text-stone-500">
                   +{displayedUngroupedCount - displayedUngrouped.length} more {showingTriage
-                    ? "one-listing candidates to triage"
-                    : "stored one-listing candidates"}
+                    ? mode === "visual"
+                      ? "listings without a visual cohort to triage"
+                      : "one-listing candidates to triage"
+                    : mode === "visual"
+                      ? "listings without a visual cohort"
+                      : "stored one-listing candidates"}
                 </p>
               )}
             </section>
@@ -1003,7 +1077,7 @@ function ProductGroupCard({
   group: PersistedProductGroup;
   index: number;
   ipId: string;
-  mode: RelationshipMode;
+  mode: GroupMode;
   showPersistedMembers: boolean;
   triageProjectionAvailable: boolean;
   saving: boolean;
@@ -1174,19 +1248,29 @@ function ProductGroupCard({
 
   return (
     <section className={`rounded-2xl border bg-white p-4 shadow-sm ${
-      confirmed ? "border-emerald-200" : "border-stone-200"
+      confirmed
+        ? "border-emerald-200"
+        : mode === "visual"
+          ? "border-indigo-200"
+          : "border-stone-200"
     }`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide ${
-            confirmed ? "text-emerald-700" : "text-stone-500"
+            confirmed
+              ? "text-emerald-700"
+              : mode === "visual"
+                ? "text-indigo-700"
+                : "text-stone-500"
           }`}>
             {confirmed && <CheckCircle2 size={13} />}
             {confirmed
               ? "Confirmed product"
               : mode === "same"
                 ? `Potential product group ${index + 1}`
-                : `Related family ${index + 1}`}
+                : mode === "related"
+                  ? `Related family ${index + 1}`
+                  : `Overlapping visual group ${index + 1}`}
           </p>
           <h2 className="mt-1 line-clamp-2 text-sm font-bold text-stone-900">
             {group.display_name}
@@ -1205,7 +1289,11 @@ function ProductGroupCard({
           </p>
           <p className="mt-0.5 text-[10px] text-stone-500">
             {!showingPersistedMembers && <>{group.member_count} persisted · </>}
-            Avg {mode === "same" ? "same-product" : "related-product"} score{" "}
+            Avg {mode === "same"
+              ? "same-product"
+              : mode === "related"
+                ? "related-product"
+                : "image similarity"}{" "}
             {group.average_score?.toFixed(3) ?? "—"}
           </p>
           {showingPersistedMembers && triageProjectionAvailable && (
@@ -1832,6 +1920,12 @@ function ProductGroupCard({
             <div key={profile.id} className="group/member relative min-w-0">
               <ListingTile
                 profile={profile}
+                groupImageSimilarity={mode === "visual"
+                  ? profile.group_image_similarity
+                  : undefined}
+                groupImagePosition={mode === "visual"
+                  ? profile.group_image_position
+                  : undefined}
                 visualSupportScore={primaryVisualEvidence?.visual_support_score}
                 visualSupportReferenceRank={matchedReferenceRank}
                 visualSupportIsReference={primaryVisualEvidence?.is_reference}
@@ -1903,7 +1997,11 @@ function ProductGroupCard({
         <p className="text-xs text-stone-500">
           {displayedMemberCount > displayedMembers.length
             ? `+${displayedMemberCount - displayedMembers.length} more ${showingPersistedMembers ? "persisted" : "to-triage"} listings`
-            : `Minimum ${mode === "same" ? "same-product" : "related-product"} score ${
+            : `Minimum ${mode === "same"
+              ? "same-product"
+              : mode === "related"
+                ? "related-product"
+                : "pairwise image similarity"} ${
               group.minimum_score?.toFixed(3) ?? "—"
             }`}
         </p>
@@ -1930,17 +2028,22 @@ function ProductGroupCard({
 function ListingTile({
   profile,
   onClick,
+  groupImageSimilarity,
+  groupImagePosition,
   visualSupportScore,
   visualSupportReferenceRank,
   visualSupportIsReference = false,
 }: {
   profile: ProductClusterProfile;
   onClick?: () => void;
+  groupImageSimilarity?: number | null;
+  groupImagePosition?: number | null;
   visualSupportScore?: number | null;
   visualSupportReferenceRank?: number | null;
   visualSupportIsReference?: boolean;
 }) {
   const hasVisualSupport = visualSupportScore !== undefined;
+  const hasGroupImageSimilarity = groupImageSimilarity !== undefined;
   return (
     <button
       type="button"
@@ -1957,22 +2060,33 @@ function ListingTile({
             {profileTitle(profile).slice(0, 1).toUpperCase()}
           </span>
         )}
-        {hasVisualSupport && (
+        {(hasVisualSupport || hasGroupImageSimilarity) && (
           <span
             className="absolute right-1.5 top-1.5 rounded-md border border-indigo-100 bg-white/95 px-1.5 py-1 font-mono text-[10px] font-bold text-indigo-900 shadow-sm"
             title={
-              visualSupportScore == null
-                ? "No reference image from another listing was available"
-                : `Raw image similarity to ${
-                  visualSupportReferenceRank
-                    ? `product reference #${visualSupportReferenceRank}`
-                    : "the closest product reference"
-                }`
+              hasGroupImageSimilarity
+                ? groupImageSimilarity == null
+                  ? "No pairwise score is available for this singleton view"
+                  : "Average pairwise similarity for this exact gallery image within the visual group"
+                : visualSupportScore == null
+                  ? "No reference image from another listing was available"
+                  : `Raw image similarity to ${
+                    visualSupportReferenceRank
+                      ? `product reference #${visualSupportReferenceRank}`
+                      : "the closest product reference"
+                  }`
             }
           >
-            {visualSupportScore == null
+            {(hasGroupImageSimilarity ? groupImageSimilarity : visualSupportScore) == null
               ? "Image sim —"
-              : `Image sim ${visualSupportScore.toFixed(2)}`}
+              : `Image sim ${(
+                hasGroupImageSimilarity ? groupImageSimilarity! : visualSupportScore!
+              ).toFixed(2)}`}
+          </span>
+        )}
+        {hasGroupImageSimilarity && groupImagePosition != null && (
+          <span className="absolute bottom-1.5 left-1.5 rounded bg-indigo-900/85 px-1.5 py-0.5 text-[9px] font-bold text-white">
+            Gallery view {groupImagePosition + 1}
           </span>
         )}
         {visualSupportIsReference && (

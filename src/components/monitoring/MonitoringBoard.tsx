@@ -969,7 +969,7 @@ export function MonitoringBoard({
           {((facets.product_groups?.length ?? 0) > 0 || filters.product_group_id) && (
             <div className="flex items-center gap-2 px-3 py-2">
               <span className={filterHeaderLabel}>
-                Product
+                Group
               </span>
               <select
                 value={filters.product_group_id ?? "all"}
@@ -978,15 +978,15 @@ export function MonitoringBoard({
                     product_group_id: event.target.value === "all" ? null : event.target.value,
                   })
                 }
-                aria-label="Filter by persistent product group"
-                title="Filter tasks by backend product group"
+                aria-label="Filter by product or visual group"
+                title="Filter tasks by a stored exact-product or overlapping visual group"
                 className={`${FILTER_SELECT} max-w-sm`}
               >
-                <option value="all">All products</option>
+                <option value="all">All groups</option>
                 {filters.product_group_id && !(facets.product_groups ?? []).some(
                   (group) => group.product_group_id === filters.product_group_id,
                 ) && (
-                  <option value={filters.product_group_id}>Selected product (0)</option>
+                  <option value={filters.product_group_id}>Selected group (0)</option>
                 )}
                 {(facets.product_groups ?? []).map((group) => (
                   <option key={group.product_group_id} value={group.product_group_id}>

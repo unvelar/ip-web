@@ -2296,6 +2296,9 @@ export interface ProductClusterProfile {
   price_currency: string | null;
   image_count: number;
   image_url: string | null;
+  group_image_id?: string | null;
+  group_image_position?: number | null;
+  group_image_similarity?: number | null;
   updated_at: string;
 }
 
@@ -2393,7 +2396,7 @@ export interface ProductGroupVisualEvidence {
 
 export interface PersistedProductGroupOverview {
   scope: ProductClusterScope;
-  relationship_type: "same_product" | "related_product";
+  relationship_type: "same_product" | "related_product" | "visual_similarity";
   threshold: number;
   algorithm_version: string;
   generated_at: string | null;
@@ -2404,6 +2407,7 @@ export interface PersistedProductGroupOverview {
   triage_group_count: number | null;
   triage_profile_count: number | null;
   snapshot_profile_count: number | null;
+  snapshot_membership_count: number | null;
   pending_snapshot_count: number | null;
   ungrouped_count: number;
   triage_ungrouped_count: number | null;
@@ -2468,6 +2472,9 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
   const snapshotProfileCount = Number.isFinite(overview.snapshot_profile_count)
     ? overview.snapshot_profile_count
     : overview.truncated ? null : fallbackSnapshotProfileCount;
+  const snapshotMembershipCount = Number.isFinite(overview.snapshot_membership_count)
+    ? Number(overview.snapshot_membership_count)
+    : overview.truncated ? null : fallbackSnapshotProfileCount;
   const pendingSnapshotCount = Number.isFinite(overview.pending_snapshot_count)
     ? overview.pending_snapshot_count
     : snapshotProfileCount == null
@@ -2490,13 +2497,14 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
       : [],
     triage_projection_available: triageProjectionAvailable,
     snapshot_profile_count: snapshotProfileCount,
+    snapshot_membership_count: snapshotMembershipCount,
     pending_snapshot_count: pendingSnapshotCount,
   };
 }
 
 export async function getPersistedProductGroups(
   ipId: string,
-  relationship: "same" | "related",
+  relationship: "same" | "related" | "visual",
   view: "triage" | "all" = "triage",
 ) {
   const overview = await request<PersistedProductGroupOverview>(
@@ -2507,7 +2515,7 @@ export async function getPersistedProductGroups(
 
 export async function refreshPersistedProductGroups(
   ipId: string,
-  relationship: "same" | "related",
+  relationship: "same" | "related" | "visual",
   view: "triage" | "all" = "triage",
 ) {
   const overview = await request<PersistedProductGroupOverview>(
