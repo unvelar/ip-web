@@ -118,6 +118,7 @@ export function MonitoringBoard({
   onRefresh,
   onDismiss,
   showIpColumn,
+  showIpFilter = true,
   activeFindingId,
   onActiveFindingChange,
   seedBatchFindings,
@@ -141,8 +142,10 @@ export function MonitoringBoard({
   onRefresh: (completedResultId?: string) => void;
   /** Optional post-dismiss notification with the dismissed result_id. */
   onDismiss?: (resultId: string) => void;
-  /** Render the IP-name chip + IP filter dropdown. */
+  /** Render the IP-name chip on findings. */
   showIpColumn?: boolean;
+  /** Render the page-level IP filter. False when the app shell owns selection. */
+  showIpFilter?: boolean;
   /** Finding opened by a route such as /monitoring/tasks/:taskId. */
   activeFindingId?: string | null;
   /** Notifies the route owner when the reviewer opens/collapses a finding. */
@@ -933,7 +936,7 @@ export function MonitoringBoard({
         </div>
 
         <div className="divide-y divide-stone-100">
-          {ipAware && facets.ips.length > 1 && (
+          {showIpFilter && ipAware && facets.ips.length > 1 && (
             <div
               className={filterRow}
               role="group"

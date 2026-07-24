@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
   Archive,
@@ -17,7 +17,6 @@ import {
   dismissIpFinding,
   discoverMonitoringCampaigns,
   getMonitoringCampaign,
-  listTrademarks,
   listMonitoringCampaigns,
   markIpFindingEnforced,
   markIpFindingNeedsReview,
@@ -29,8 +28,8 @@ import {
   type MonitoringCampaignMember,
   type MonitoringReviewOutcome,
   type MonitoringCampaignSummary,
-  type Trademark,
 } from "../api";
+import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
@@ -100,7 +99,7 @@ function CampaignListItem({
 }) {
   return (
     <Link
-      to={`/monitoring/campaigns/${campaign.id}`}
+      to={`/monitoring/campaigns/${campaign.id}?ip_id=${encodeURIComponent(campaign.ip_catalog_id)}`}
       className={`block border-b border-stone-100 px-3 py-3 hover:bg-stone-50 ${
         active ? "bg-blue-50/70" : "bg-white"
       }`}
@@ -607,7 +606,9 @@ function CampaignDetailPanel({
               </button>
               <button
                 type="button"
-                onClick={() => navigate(`/monitoring/tasks?status=all&campaign_batch=${current.id}`)}
+                onClick={() => navigate(
+                  `/monitoring/tasks?status=all&campaign_batch=${current.id}&ip_id=${encodeURIComponent(current.ip_catalog_id)}`,
+                )}
                 disabled={actionableMembers.length === 0}
                 className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-stone-300"
               >
@@ -779,35 +780,51 @@ function EvidenceChip({ label, value }: { label: string; value: string }) {
 
 export default function MonitoringCampaigns() {
   const { campaignId } = useParams<{ campaignId?: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const {
+    activeIpId: selectedIpId,
+    loading: loadingActiveIp,
+  } = useActiveIp();
   const [campaigns, setCampaigns] = useState<MonitoringCampaignSummary[]>([]);
   const [campaign, setCampaign] = useState<MonitoringCampaignDetail | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [discovering, setDiscovering] = useState(false);
-  const [ips, setIps] = useState<Trademark[]>([]);
-  const [selectedIpId, setSelectedIpId] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const listRequestSeq = useRef(0);
+  const detailRequestSeq = useRef(0);
 
   const activeCampaignId = campaignId ?? campaigns[0]?.id ?? null;
 
   const loadCampaigns = useCallback(async () => {
+    if (loadingActiveIp) return;
+    const seq = ++listRequestSeq.current;
     setLoadingList(true);
     setError("");
+    setCampaigns([]);
+    setCampaign(null);
+    if (!selectedIpId) {
+      setLoadingList(false);
+      return;
+    }
     try {
       const { campaigns } = await listMonitoringCampaigns({
         limit: 100,
-        ip_id: selectedIpId || null,
+        ip_id: selectedIpId,
         include_inactive: showInactive,
       });
+      if (listRequestSeq.current !== seq) return;
       setCampaigns(campaigns);
     } catch (e) {
+      if (listRequestSeq.current !== seq) return;
       setError(e instanceof Error ? e.message : "Failed to load campaigns");
     } finally {
-      setLoadingList(false);
+      if (listRequestSeq.current === seq) setLoadingList(false);
     }
-  }, [selectedIpId, showInactive]);
+  }, [loadingActiveIp, selectedIpId, showInactive]);
 
   async function handleDiscoverCampaigns() {
     setDiscovering(true);
@@ -832,38 +849,42 @@ export default function MonitoringCampaigns() {
   }
 
   const loadDetail = useCallback(async (id: string) => {
+    if (!selectedIpId) {
+      detailRequestSeq.current++;
+      setCampaign(null);
+      return;
+    }
+    const seq = ++detailRequestSeq.current;
     setLoadingDetail(true);
     setError("");
     try {
       const { campaign } = await getMonitoringCampaign(id);
-      setCampaign(campaign);
+      if (detailRequestSeq.current !== seq) return;
+      setCampaign(campaign.ip_catalog_id === selectedIpId ? campaign : null);
     } catch (e) {
+      if (detailRequestSeq.current !== seq) return;
       setError(e instanceof Error ? e.message : "Failed to load campaign");
       setCampaign(null);
     } finally {
-      setLoadingDetail(false);
+      if (detailRequestSeq.current === seq) setLoadingDetail(false);
     }
-  }, []);
+  }, [selectedIpId]);
 
   useEffect(() => {
     void loadCampaigns();
   }, [loadCampaigns]);
 
+  const previousSelectedIpId = useRef<string | null>(selectedIpId);
   useEffect(() => {
-    let cancelled = false;
-    listTrademarks()
-      .then(({ trademarks }) => {
-        if (!cancelled) {
-          setIps([...trademarks].sort((a, b) => a.name.localeCompare(b.name)));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setIps([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    const previous = previousSelectedIpId.current;
+    previousSelectedIpId.current = selectedIpId;
+    if (!campaignId || !previous || !selectedIpId || previous === selectedIpId) return;
+
+    const routeIpId = new URLSearchParams(location.search).get("ip_id");
+    if (routeIpId !== selectedIpId) {
+      navigate("/monitoring/campaigns", { replace: true });
+    }
+  }, [campaignId, location.search, navigate, selectedIpId]);
 
   useEffect(() => {
     if (!activeCampaignId) {
@@ -931,20 +952,7 @@ export default function MonitoringCampaigns() {
               <RefreshCw size={13} />
             </button>
           </div>
-          <div className="space-y-2 border-b border-stone-100 px-3 py-3">
-            <select
-              value={selectedIpId}
-              onChange={(e) => setSelectedIpId(e.target.value)}
-              className="h-8 w-full rounded-md border border-stone-200 bg-white px-2 text-xs font-semibold text-stone-700 outline-none focus:border-blue-400"
-              aria-label="Filter campaigns by IP"
-            >
-              <option value="">All IPs</option>
-              {ips.map((ip) => (
-                <option key={ip.id} value={ip.id}>
-                  {ip.name}
-                </option>
-              ))}
-            </select>
+          <div className="border-b border-stone-100 px-3 py-3">
             <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">
               <input
                 type="checkbox"

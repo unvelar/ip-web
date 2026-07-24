@@ -16,6 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import { getDashboardGroups, type DashboardGroups } from "../api";
+import { useActiveIp } from "../context/ActiveIpContext";
 
 type Days = 7 | 30 | 90;
 type Ip = DashboardGroups["ips"][number];
@@ -51,7 +52,11 @@ const EMPTY_KPIS: DashboardGroups["kpis"] = {
  */
 export default function Dashboard() {
   const [days, setDays] = useState<Days>(30);
-  const [selectedIpId, setSelectedIpId] = useState<string | null>(null);
+  const {
+    activeIpId: selectedIpId,
+    activeIp,
+    loading: loadingActiveIp,
+  } = useActiveIp();
   const [data, setData] = useState<DashboardGroups | null>(null);
   const [err, setErr] = useState("");
 
@@ -79,7 +84,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!data) {
+  if (!data || loadingActiveIp) {
     return (
       <div className="max-w-7xl mx-auto px-6 py-6">
         <DashboardSkeleton />
@@ -90,18 +95,17 @@ export default function Dashboard() {
   // Defensive defaults — tolerate a partial/older API response shape rather
   // than crashing the whole page on a missing field.
   const ips = data.ips ?? [];
-  const kpis = data.kpis ?? EMPTY_KPIS;
   const selectedIp = selectedIpId ? ips.find((ip) => ip.ip_id === selectedIpId) ?? null : null;
-  const activeIpId = selectedIp?.ip_id ?? null;
-  const scopedIps = selectedIp ? [selectedIp] : ips;
-  const scopedKpis = selectedIp ? kpisForIp(selectedIp) : kpis;
+  const activeIpId = selectedIpId;
+  const scopedIps = selectedIp ? [selectedIp] : [];
+  const scopedKpis = selectedIp ? kpisForIp(selectedIp) : EMPTY_KPIS;
   const scopedPlatforms = filterCountRows(data.platforms ?? [], activeIpId);
   const scopedCountries = filterCountRows(data.countries ?? [], activeIpId);
   const scopedMarketByCountry = filterCountRows(data.marketByCountry ?? [], activeIpId);
   const scopedSellers = activeIpId
     ? (data.sellers ?? []).filter((s) => s.ip_id === activeIpId)
-    : (data.sellers ?? []);
-  const empty = ips.length === 0;
+    : [];
+  const empty = !selectedIp;
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
@@ -109,11 +113,11 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl font-black text-stone-900 tracking-tight">Dashboard</h1>
           <p className="mt-1 text-sm text-stone-500">
-            Last {days} days of monitoring activity · grouped by IP.
+            Last {days} days of monitoring activity
+            {activeIp ? ` for ${activeIp.name}.` : "."}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <IpFilterSelect ips={ips} selectedIpId={activeIpId} onChange={setSelectedIpId} />
           <RangeToggle days={days} onChange={setDays} />
         </div>
       </div>
@@ -121,10 +125,12 @@ export default function Dashboard() {
       {empty ? (
         <div className="rounded-2xl border border-stone-200 bg-white px-6 py-16 text-center">
           <p className="text-base font-semibold text-stone-700">
-            No IPs are being monitored yet
+            {activeIp
+              ? `${activeIp.name} is not being monitored yet`
+              : "No IPs are registered yet"}
           </p>
           <p className="mt-1 text-sm text-stone-500">
-            Watch your first intellectual property to start gathering findings.
+            Start monitoring this intellectual property to gather findings.
           </p>
           <Link
             to="/monitoring/new"
@@ -214,33 +220,6 @@ function RangeToggle({ days, onChange }: { days: Days; onChange: (d: Days) => vo
         </button>
       ))}
     </div>
-  );
-}
-
-function IpFilterSelect({
-  ips,
-  selectedIpId,
-  onChange,
-}: {
-  ips: Ip[];
-  selectedIpId: string | null;
-  onChange: (ipId: string | null) => void;
-}) {
-  return (
-    <select
-      value={selectedIpId ?? ""}
-      onChange={(e) => onChange(e.target.value || null)}
-      aria-label="Filter dashboard by IP"
-      title="Filter dashboard by IP"
-      className="h-8 max-w-[14rem] rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-700 outline-none focus:ring-1 focus:ring-stone-300"
-    >
-      <option value="">All IPs</option>
-      {ips.map((ip) => (
-        <option key={ip.ip_id} value={ip.ip_id}>
-          {ip.ip_name ?? "Unnamed IP"}
-        </option>
-      ))}
-    </select>
   );
 }
 

@@ -46,6 +46,7 @@ import {
   scoreFor,
   type RelationshipMode,
 } from "../components/product-clusters/productClusterGraphUtils";
+import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 
 const MAX_NODES = 80;
@@ -56,8 +57,12 @@ type GroupMode = RelationshipMode | "visual";
 
 export default function ProductClusters() {
   const { actingTenantId } = useAuth();
+  const {
+    activeIpId: selectedIpId,
+    activeIp,
+    loading: loadingActiveIp,
+  } = useActiveIp();
   const [scopes, setScopes] = useState<ProductClusterScope[]>([]);
-  const [selectedIpId, setSelectedIpId] = useState("");
   const [graph, setGraph] = useState<ProductClusterGraph | null>(null);
   const [groupOverview, setGroupOverview] = useState<PersistedProductGroupOverview | null>(null);
   const [mode, setMode] = useState<GroupMode>("same");
@@ -75,11 +80,16 @@ export default function ProductClusters() {
   const [savingCorrectionProfileId, setSavingCorrectionProfileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
-  const graphRequestKey = `${scopesRequestKey}:${selectedIpId}`;
+  const graphRequestKey = `${scopesRequestKey}:${selectedIpId ?? ""}`;
   const groupsRequestKey = `${graphRequestKey}:${mode}:${productGroupView}`;
-  const loadingScopes = scopesLoadedKey !== scopesRequestKey;
-  const loadingGraph = Boolean(selectedIpId) && graphLoadedKey !== graphRequestKey;
-  const loadingGroups = Boolean(selectedIpId) && groupsLoadedKey !== groupsRequestKey;
+  const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
+  const selectedScopeAvailable =
+    scopesLoadedKey === scopesRequestKey && selectedScope != null;
+  const loadingScopes = loadingActiveIp || scopesLoadedKey !== scopesRequestKey;
+  const loadingGraph =
+    Boolean(selectedIpId && selectedScopeAvailable) && graphLoadedKey !== graphRequestKey;
+  const loadingGroups =
+    Boolean(selectedIpId && selectedScopeAvailable) && groupsLoadedKey !== groupsRequestKey;
 
   useEffect(() => {
     let alive = true;
@@ -87,10 +97,6 @@ export default function ProductClusters() {
       .then(({ scopes: nextScopes }) => {
         if (!alive) return;
         setScopes(nextScopes);
-        setSelectedIpId((current) => {
-          if (nextScopes.some((scope) => scope.ip_id === current)) return current;
-          return nextScopes[0]?.ip_id ?? "";
-        });
         if (nextScopes.length === 0) {
           setGraph(null);
           setGroupOverview(null);
@@ -99,7 +105,6 @@ export default function ProductClusters() {
       .catch((caught: unknown) => {
         if (!alive) return;
         setScopes([]);
-        setSelectedIpId("");
         setGraph(null);
         setGroupOverview(null);
         setError(errorMessage(caught));
@@ -113,7 +118,10 @@ export default function ProductClusters() {
   }, [actingTenantId, refreshVersion, scopesRequestKey]);
 
   useEffect(() => {
-    if (!selectedIpId) return;
+    if (!selectedIpId || !selectedScopeAvailable) {
+      setGraph(null);
+      return;
+    }
     let alive = true;
     void getProductClusterGraph(selectedIpId, {
       maxNodes: MAX_NODES,
@@ -135,10 +143,19 @@ export default function ProductClusters() {
     return () => {
       alive = false;
     };
-  }, [selectedIpId, refreshVersion, actingTenantId, graphRequestKey]);
+  }, [
+    selectedIpId,
+    selectedScopeAvailable,
+    refreshVersion,
+    actingTenantId,
+    graphRequestKey,
+  ]);
 
   useEffect(() => {
-    if (!selectedIpId) return;
+    if (!selectedIpId || !selectedScopeAvailable) {
+      setGroupOverview(null);
+      return;
+    }
     let alive = true;
     setGroupOverview(null);
     void getPersistedProductGroups(selectedIpId, mode, productGroupView)
@@ -158,7 +175,21 @@ export default function ProductClusters() {
     return () => {
       alive = false;
     };
-  }, [selectedIpId, mode, productGroupView, refreshVersion, actingTenantId, groupsRequestKey]);
+  }, [
+    selectedIpId,
+    selectedScopeAvailable,
+    mode,
+    productGroupView,
+    refreshVersion,
+    actingTenantId,
+    groupsRequestKey,
+  ]);
+
+  useEffect(() => {
+    setSelectedProfileId(null);
+    setSelectedEdgeId(null);
+    setError(null);
+  }, [selectedIpId]);
 
   const visibleEdges = useMemo(() => {
     if (!graph || mode === "visual") return [];
@@ -197,7 +228,7 @@ export default function ProductClusters() {
 
   async function refreshAll() {
     setError(null);
-    if (selectedIpId && view === "groups") {
+    if (selectedIpId && selectedScopeAvailable && view === "groups") {
       setRefreshingGroups(true);
       try {
         setGroupOverview(await refreshPersistedProductGroups(
@@ -400,31 +431,7 @@ export default function ProductClusters() {
       </header>
 
       <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[minmax(15rem,1fr)_auto_minmax(15rem,1fr)] lg:items-end">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">
-              Intellectual property
-            </span>
-            <select
-              value={selectedIpId}
-              onChange={(event) => {
-                setError(null);
-                setSelectedIpId(event.target.value);
-                setSelectedProfileId(null);
-                setSelectedEdgeId(null);
-              }}
-              disabled={loadingScopes || scopes.length === 0}
-              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 disabled:bg-stone-50"
-            >
-              {scopes.length === 0 && <option value="">No profiles available</option>}
-              {scopes.map((scope) => (
-                <option value={scope.ip_id} key={scope.ip_id}>
-                  {scope.ip_name} · {scope.profile_count} listings · {scope.pair_count} pairs
-                </option>
-              ))}
-            </select>
-          </label>
-
+        <div className="grid gap-4 lg:grid-cols-[auto_minmax(15rem,1fr)] lg:items-end lg:justify-between">
           <div>
             <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">
               Grouping lens
@@ -606,8 +613,8 @@ export default function ProductClusters() {
 
       {loadingScopes ? (
         <LoadingState />
-      ) : scopes.length === 0 ? (
-        <EmptyState />
+      ) : !selectedIpId || !selectedScope ? (
+        <EmptyState ipName={activeIp?.name ?? null} />
       ) : (loadingGraph && !graph) || (view === "groups" && loadingGroups && !groupOverview) ? (
         <LoadingState />
       ) : view === "similarity" && graph && reference ? (
@@ -2269,12 +2276,15 @@ function LoadingState() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ ipName }: { ipName: string | null }) {
   return (
     <div className="mt-5 rounded-2xl border border-dashed border-stone-300 bg-white px-6 py-16 text-center">
-      <h2 className="text-base font-bold text-stone-900">No product profiles yet</h2>
+      <h2 className="text-base font-bold text-stone-900">
+        {ipName ? `No product profiles for ${ipName}` : "No product profiles yet"}
+      </h2>
       <p className="mx-auto mt-2 max-w-lg text-sm text-stone-500">
-        Run the product-profile backfill or let new enrichment jobs populate the model before using this lab.
+        Let new enrichment jobs populate this IP before using the lab, or choose another
+        working IP from the top bar.
       </p>
     </div>
   );

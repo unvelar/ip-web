@@ -16,6 +16,7 @@ import {
   type MonitoringStatusFilter,
 } from "../api";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
+import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 
 /** Legacy route — redirects to the canonical Monitoring Tasks page. */
@@ -128,7 +129,20 @@ export function MonitoringInboxView() {
   const navigate = useNavigate();
   const location = useLocation();
   const { actingTenantId, switchTenant } = useAuth();
-  const filters = parseFilters(params);
+  const {
+    activeIpId,
+    loading: loadingActiveIp,
+  } = useActiveIp();
+  const urlFilters = parseFilters(params);
+  const urlIpChanged =
+    Boolean(urlFilters.ip_id) &&
+    Boolean(activeIpId) &&
+    urlFilters.ip_id !== activeIpId;
+  const filters: InboxFilters = {
+    ...urlFilters,
+    ip_id: activeIpId,
+    product_group_id: urlIpChanged ? null : urlFilters.product_group_id,
+  };
   const campaignBatchId = params.get("campaign_batch");
 
   const [findings, setFindings] = useState<IpReviewFinding[]>([]);
@@ -149,6 +163,7 @@ export function MonitoringInboxView() {
   const reqSeq = useRef(0);
   const linkedReqSeq = useRef(0);
   const taskIdRef = useRef<string | undefined>(taskId);
+  const requestedIpIdRef = useRef<string | null>(null);
   const completedLinkedIds = useRef<Set<string>>(new Set());
   taskIdRef.current = taskId;
 
@@ -227,10 +242,60 @@ export function MonitoringInboxView() {
   // Stringify the filters as the dep to avoid re-running on object identity.
   const filterKey = JSON.stringify(filters);
   useEffect(() => {
+    if (loadingActiveIp) return;
+    if (requestedIpIdRef.current !== activeIpId) {
+      requestedIpIdRef.current = activeIpId;
+      reqSeq.current++;
+      setFindings([]);
+      setFacets(null);
+      setNextCursor(null);
+      setLoaded(false);
+    }
+    if (!activeIpId) {
+      reqSeq.current++;
+      setFindings([]);
+      setFacets(null);
+      setNextCursor(null);
+      setLoaded(true);
+      return;
+    }
     void loadFirstPage(filters);
     // filterKey is enough; parseFilters is pure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterKey, loadFirstPage]);
+  }, [activeIpId, filterKey, loadFirstPage, loadingActiveIp]);
+
+  // Keep task URLs shareable while the top bar remains the control that owns
+  // the IP selection. Changing IP also closes task/campaign detail and clears
+  // product-group state from the previous IP.
+  const searchKey = params.toString();
+  useEffect(() => {
+    if (loadingActiveIp || !activeIpId || urlFilters.ip_id === activeIpId) return;
+    const previous = new URLSearchParams(searchKey);
+    const previousFilters = parseFilters(previous);
+    const ipChanged =
+      Boolean(previousFilters.ip_id) && previousFilters.ip_id !== activeIpId;
+    const next = writeFilters(previous, {
+      ...previousFilters,
+      ip_id: activeIpId,
+      product_group_id: ipChanged ? null : previousFilters.product_group_id,
+    });
+    if (ipChanged) next.delete("campaign_batch");
+    const nextSearch = next.toString();
+    navigate({
+      pathname: ipChanged && taskId ? "/monitoring/tasks" : location.pathname,
+      search: nextSearch ? `?${nextSearch}` : "",
+      hash: location.hash,
+    }, { replace: true });
+  }, [
+    activeIpId,
+    loadingActiveIp,
+    location.hash,
+    location.pathname,
+    navigate,
+    searchKey,
+    taskId,
+    urlFilters.ip_id,
+  ]);
 
   useEffect(() => {
     if (!taskId) {
@@ -313,11 +378,15 @@ export function MonitoringInboxView() {
 
   const onFiltersChange = useCallback(
     (next: Partial<InboxFilters>) => {
-      setParams((prev) => writeFilters(prev, { ...filters, ...next }), {
+      setParams((prev) => writeFilters(prev, {
+        ...filters,
+        ...next,
+        ip_id: activeIpId,
+      }), {
         replace: true,
       });
     },
-    [filters, setParams],
+    [activeIpId, filters, setParams],
   );
 
   const onActiveFindingChange = useCallback((resultId: string | null) => {
@@ -415,7 +484,11 @@ export function MonitoringInboxView() {
         </div>
       )}
 
-      {!loaded ? (
+      {!loadingActiveIp && !activeIpId ? (
+        <div className="rounded-lg border border-dashed border-stone-300 bg-white px-6 py-12 text-center text-sm text-stone-500">
+          Add an IP from the top bar to start reviewing monitoring tasks.
+        </div>
+      ) : !loaded ? (
         <div className="text-sm text-stone-400 py-8 text-center">Loading…</div>
       ) : !facets ? (
         <div className="text-sm text-stone-400 py-8 text-center">No task data available.</div>
@@ -431,6 +504,7 @@ export function MonitoringInboxView() {
           runInProgress={false}
           onRefresh={refresh}
           showIpColumn
+          showIpFilter={false}
           activeFindingId={taskId ?? null}
           onActiveFindingChange={onActiveFindingChange}
           seedBatchFindings={campaignBatchFindings}

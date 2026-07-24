@@ -27,6 +27,7 @@ import {
   type Tenant,
 } from "../api";
 import { CURRENT_BUILD_SHA, CURRENT_BUILD_TIME, buildAgo } from "../lib/buildInfo";
+import { ActiveIpProvider, useActiveIp } from "../context/ActiveIpContext";
 
 /** Inbox badge polling cadence. Cheap server-side aggregation + small payload,
  *  but no need to refetch every few seconds — the badge is a glanceable
@@ -51,11 +52,18 @@ const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
  *     ↳ Tasks        (badge = clearance reviews needing attention)
  *     ↳ New          (launch the clearance wizard)
  *
- * IPs lives on the desktop topbar, not the sidebar — managing the IP
- * registry is an occasional task, not day-to-day triage, so it shouldn't
- * compete for sidebar real estate.
+ * The working IP lives in the topbar as shared application context. Registry
+ * management stays beside it rather than competing with day-to-day navigation.
  */
 export default function AppShell() {
+  return (
+    <ActiveIpProvider>
+      <AppShellContent />
+    </ActiveIpProvider>
+  );
+}
+
+function AppShellContent() {
   const { user, logout, actingTenantId, isActingAsOther, switchTenant } = useAuth();
   const [tenants, setTenants] = useState<Tenant[]>([]);
 
@@ -283,10 +291,10 @@ export default function AppShell() {
         </button>
         <Link to="/" className="flex items-center gap-2">
           <BrandMark className="h-6 w-6 shrink-0" />
-          <span className="text-sm font-bold tracking-tight">Unvelar</span>
+          <span className="hidden text-sm font-bold tracking-tight sm:inline">Unvelar</span>
         </Link>
         <div className="ml-auto">
-          <TopbarIpsLink active={isActive("/ips")} />
+          <TopbarIpSelector active={isActive("/ips")} />
         </div>
       </div>
 
@@ -326,10 +334,10 @@ export default function AppShell() {
               onReturn={() => user && switchTenant(user.tenant_id)}
             />
           )}
-          {/* Desktop topbar — only IPs lives here; it's an infrequent
-              admin-y action, kept out of the day-to-day sidebar. */}
+          {/* Desktop topbar — the working IP is global application context.
+              Registry management stays beside it without competing in nav. */}
           <div className="hidden lg:flex sticky top-0 z-20 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 items-center justify-end px-6">
-            <TopbarIpsLink active={isActive("/ips")} />
+            <TopbarIpSelector active={isActive("/ips")} />
           </div>
           <Outlet />
         </main>
@@ -338,15 +346,60 @@ export default function AppShell() {
   );
 }
 
-function TopbarIpsLink({ active }: { active: boolean }) {
-  const cls = active
-    ? "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-stone-900 text-white shadow-sm"
-    : "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border border-stone-300 bg-white text-stone-900 shadow-sm hover:bg-stone-50 hover:border-stone-400";
+function TopbarIpSelector({ active }: { active: boolean }) {
+  const { ips, activeIpId, loading, error, selectIp } = useActiveIp();
+  const manageCls = active
+    ? "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-stone-900 px-2.5 text-xs font-semibold text-white shadow-sm"
+    : "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-semibold text-stone-700 shadow-sm hover:border-stone-400 hover:bg-stone-50";
+
   return (
-    <Link to="/ips" className={cls}>
-      <Library size={16} />
-      <span>My IPs</span>
-    </Link>
+    <div className="flex min-w-0 items-center gap-1.5">
+      <label
+        className="flex h-8 w-[124px] min-w-0 items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-2.5 text-stone-900 shadow-sm transition focus-within:border-stone-400 focus-within:ring-2 focus-within:ring-stone-200 sm:w-[208px] lg:w-64"
+        title={error ?? "Choose the IP you are working with"}
+      >
+        <Library size={15} className="hidden shrink-0 text-stone-500 sm:block" aria-hidden />
+        <span className="hidden shrink-0 text-[10px] font-bold uppercase tracking-wide text-stone-400 xl:inline">
+          Working IP
+        </span>
+        <span className="relative min-w-0 flex-1">
+          <select
+            value={activeIpId ?? ""}
+            onChange={(event) => selectIp(event.target.value)}
+            disabled={loading || ips.length === 0}
+            aria-label="Working intellectual property"
+            className="h-7 w-full appearance-none truncate bg-transparent pr-5 text-[11px] font-bold text-stone-800 outline-none disabled:cursor-not-allowed disabled:text-stone-400 sm:text-xs"
+          >
+            {loading ? (
+              <option value="">Loading IPs…</option>
+            ) : ips.length === 0 ? (
+              <option value="">{error ? "IPs unavailable" : "No IPs yet"}</option>
+            ) : (
+              ips.map((ip) => (
+                <option key={ip.id} value={ip.id}>
+                  {ip.name}
+                </option>
+              ))
+            )}
+          </select>
+          <ChevronDown
+            size={13}
+            className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-stone-400"
+            aria-hidden
+          />
+        </span>
+      </label>
+
+      <Link
+        to="/ips"
+        className={manageCls}
+        aria-label="Manage intellectual properties"
+        title="Manage IPs"
+      >
+        <SettingsIcon size={14} aria-hidden />
+        <span className="hidden xl:inline">Manage IPs</span>
+      </Link>
+    </div>
   );
 }
 
