@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   Images,
@@ -18,7 +18,10 @@ import {
   confirmPersistedProductGroup,
   createPersistedProductGroupRule,
   deletePersistedProductGroupRule,
+  dismissIpFinding,
   excludePersistedProductGroupMember,
+  getMonitoringFinding,
+  getMonitoringFindingForCase,
   getPersistedProductGroups,
   listProductClusterScopes,
   pinPersistedProductGroupReferenceImage,
@@ -29,18 +32,26 @@ import {
   updatePersistedProductGroupRule,
   type PersistedProductGroup,
   type PersistedProductGroupOverview,
+  type IpReviewFinding,
+  type MonitoringReviewOutcome,
   type ProductClusterProfile,
   type ProductClusterScope,
   type ProductGroupCorrectionReason,
   type ProductGroupRule,
   type ProductGroupVisualEvidence,
 } from "../api";
+import { FindingInspector } from "../components/monitoring/board/FindingInspector";
 import { profileTitle } from "../components/product-clusters/productClusterGraphUtils";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 
 type ProductGroupView = "triage" | "all";
 type GroupMode = "same" | "related" | "visual";
+type ActiveProductTask = {
+  profileId: string;
+  groupId: string | null;
+  finding: IpReviewFinding;
+};
 
 export default function ProductClusters() {
   const { actingTenantId } = useAuth();
@@ -59,6 +70,16 @@ export default function ProductClusters() {
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
   const [savingCorrectionProfileId, setSavingCorrectionProfileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTask, setActiveTask] = useState<ActiveProductTask | null>(null);
+  const [loadingTaskProfileId, setLoadingTaskProfileId] = useState<string | null>(null);
+  const [dismissingTaskId, setDismissingTaskId] = useState<string | null>(null);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const taskRequestSequence = useRef(0);
+  const closeTask = useCallback(() => {
+    taskRequestSequence.current += 1;
+    setActiveTask(null);
+    setLoadingTaskProfileId(null);
+  }, []);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey = `${scopesRequestKey}:${selectedIpId ?? ""}:visual:${productGroupView}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
@@ -127,7 +148,100 @@ export default function ProductClusters() {
 
   useEffect(() => {
     setError(null);
-  }, [selectedIpId]);
+    setTaskError(null);
+    closeTask();
+  }, [actingTenantId, closeTask, selectedIpId]);
+
+  useEffect(() => {
+    if (!activeTask) return;
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (target instanceof Element && target.closest("[data-finding-inspector]")) return;
+      closeTask();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeTask();
+    };
+
+    document.addEventListener("pointerdown", handleOutsidePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeTask, closeTask]);
+
+  async function openTask(profile: ProductClusterProfile, groupId: string | null) {
+    const requestSequence = ++taskRequestSequence.current;
+    setActiveTask(null);
+    setLoadingTaskProfileId(profile.id);
+    setTaskError(null);
+    try {
+      const { finding } = await getMonitoringFindingForCase(profile.case_id);
+      if (taskRequestSequence.current !== requestSequence) return;
+      setActiveTask({ profileId: profile.id, groupId, finding });
+    } catch (caught: unknown) {
+      if (taskRequestSequence.current !== requestSequence) return;
+      setTaskError(errorMessage(caught, "Unable to open task details."));
+    } finally {
+      if (taskRequestSequence.current === requestSequence) {
+        setLoadingTaskProfileId(null);
+      }
+    }
+  }
+
+  async function dismissActiveTask(reason: MonitoringReviewOutcome) {
+    if (!activeTask) return;
+    const finding = activeTask.finding;
+    const ipId = finding.ip_id ?? selectedIpId;
+    if (!ipId) {
+      setTaskError("Cannot update this task because it has no associated IP.");
+      return;
+    }
+    setDismissingTaskId(finding.result_id);
+    setTaskError(null);
+    try {
+      await dismissIpFinding(ipId, finding.result_id, { reason });
+      closeTask();
+      setRefreshVersion((version) => version + 1);
+    } catch (caught: unknown) {
+      setTaskError(errorMessage(caught, "Unable to update task."));
+    } finally {
+      setDismissingTaskId(null);
+    }
+  }
+
+  function refreshTaskAfterUpdate(opts?: { completed?: boolean }) {
+    const task = activeTask;
+    const reopeningClosedTask = Boolean(
+      task && (
+        task.finding.dismissed_at ||
+        (task.finding.review_status ?? "pending") !== "pending"
+      ),
+    );
+    if (opts?.completed || reopeningClosedTask) {
+      setRefreshVersion((version) => version + 1);
+    }
+    if (!task || opts?.completed) {
+      closeTask();
+      return;
+    }
+
+    const requestSequence = ++taskRequestSequence.current;
+    void getMonitoringFinding(task.finding.result_id)
+      .then(({ finding }) => {
+        if (taskRequestSequence.current !== requestSequence) return;
+        setActiveTask({ ...task, finding });
+      })
+      .catch((caught: unknown) => {
+        if (taskRequestSequence.current !== requestSequence) return;
+        setTaskError(errorMessage(caught, "Unable to refresh task details."));
+      });
+  }
 
   async function refreshAll() {
     setError(null);
@@ -377,6 +491,20 @@ export default function ProductClusters() {
         </div>
       )}
 
+      {taskError && (
+        <div className="mt-5 flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <span>{taskError}</span>
+          <button
+            type="button"
+            onClick={() => setTaskError(null)}
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-red-500 hover:bg-red-100 hover:text-red-800"
+            aria-label="Dismiss task error"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {loadingScopes ? (
         <LoadingState />
       ) : !selectedIpId || !selectedScope ? (
@@ -391,6 +519,9 @@ export default function ProductClusters() {
           onGroupViewChange={setProductGroupView}
           savingGroupId={savingGroupId}
           savingCorrectionProfileId={savingCorrectionProfileId}
+          activeTaskProfileId={activeTask?.profileId ?? null}
+          loadingTaskProfileId={loadingTaskProfileId}
+          onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
           onConfirmGroup={confirmGroup}
           onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
           onCorrectGroupMember={correctGroupMember}
@@ -399,6 +530,39 @@ export default function ProductClusters() {
           onDeleteRule={deleteGroupRule}
         />
       ) : null}
+
+      {activeTask && (
+        <FindingInspector
+          f={activeTask.finding}
+          ipId={activeTask.finding.ip_id ?? selectedIpId ?? undefined}
+          showIp
+          isDismissed={
+            Boolean(activeTask.finding.dismissed_at) ||
+            dismissingTaskId === activeTask.finding.result_id
+          }
+          isDismissing={
+            dismissingTaskId === activeTask.finding.result_id &&
+            !activeTask.finding.dismissed_at
+          }
+          onClose={closeTask}
+          onDismiss={(reason) => void dismissActiveTask(reason)}
+          onActionComplete={closeTask}
+          onNeedsReview={() => undefined}
+          onTakedownSent={() => undefined}
+          onEnforced={() => undefined}
+          onLicensed={() => undefined}
+          onUpdated={refreshTaskAfterUpdate}
+          onAddRelatedToBatch={() => undefined}
+          productGroupId={activeTask.groupId ?? undefined}
+          onCorrectProductGroup={activeTask.groupId
+            ? async (reason) => {
+              await correctGroupMember(activeTask.groupId!, activeTask.profileId, reason);
+              closeTask();
+            }
+            : undefined}
+          showRelatedItems={false}
+        />
+      )}
     </div>
   );
 }
@@ -410,6 +574,9 @@ function ProductGroupsOverview({
   onGroupViewChange,
   savingGroupId,
   savingCorrectionProfileId,
+  activeTaskProfileId,
+  loadingTaskProfileId,
+  onOpenTask,
   onConfirmGroup,
   onUpdateEmbeddingThreshold,
   onCorrectGroupMember,
@@ -423,6 +590,9 @@ function ProductGroupsOverview({
   onGroupViewChange: (view: ProductGroupView) => void;
   savingGroupId: string | null;
   savingCorrectionProfileId: string | null;
+  activeTaskProfileId: string | null;
+  loadingTaskProfileId: string | null;
+  onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
     groupId: string,
@@ -556,6 +726,9 @@ function ProductGroupsOverview({
                   triageProjectionAvailable={overview.triage_projection_available}
                   saving={savingGroupId === group.id}
                   savingCorrectionProfileId={savingCorrectionProfileId}
+                  activeTaskProfileId={activeTaskProfileId}
+                  loadingTaskProfileId={loadingTaskProfileId}
+                  onOpenTask={onOpenTask}
                   onConfirmGroup={onConfirmGroup}
                   onUpdateEmbeddingThreshold={onUpdateEmbeddingThreshold}
                   onCorrectGroupMember={onCorrectGroupMember}
@@ -598,6 +771,9 @@ function ProductGroupsOverview({
                   <ListingTile
                     key={profile.id}
                     profile={profile}
+                    active={activeTaskProfileId === profile.id}
+                    loading={loadingTaskProfileId === profile.id}
+                    onClick={() => onOpenTask(profile, null)}
                   />
                 ))}
               </div>
@@ -629,6 +805,9 @@ function ProductGroupCard({
   triageProjectionAvailable,
   saving,
   savingCorrectionProfileId,
+  activeTaskProfileId,
+  loadingTaskProfileId,
+  onOpenTask,
   onConfirmGroup,
   onUpdateEmbeddingThreshold,
   onCorrectGroupMember,
@@ -644,6 +823,9 @@ function ProductGroupCard({
   triageProjectionAvailable: boolean;
   saving: boolean;
   savingCorrectionProfileId: string | null;
+  activeTaskProfileId: string | null;
+  loadingTaskProfileId: string | null;
+  onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
     groupId: string,
@@ -1496,6 +1678,9 @@ function ProductGroupCard({
             <div key={profile.id} className="group/member relative min-w-0">
               <ListingTile
                 profile={profile}
+                active={activeTaskProfileId === profile.id}
+                loading={loadingTaskProfileId === profile.id}
+                onClick={() => onOpenTask(profile, group.id)}
                 groupImageSimilarity={mode === "visual"
                   ? profile.group_image_similarity
                   : undefined}
@@ -1604,6 +1789,8 @@ function ProductGroupCard({
 function ListingTile({
   profile,
   onClick,
+  active = false,
+  loading = false,
   groupImageSimilarity,
   groupImagePosition,
   visualSupportScore,
@@ -1612,6 +1799,8 @@ function ListingTile({
 }: {
   profile: ProductClusterProfile;
   onClick?: () => void;
+  active?: boolean;
+  loading?: boolean;
   groupImageSimilarity?: number | null;
   groupImagePosition?: number | null;
   visualSupportScore?: number | null;
@@ -1625,8 +1814,14 @@ function ListingTile({
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      title={onClick ? `Inspect similarity from: ${profileTitle(profile)}` : profileTitle(profile)}
-      className="w-full min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-left transition enabled:hover:border-red-300 enabled:hover:bg-red-50 disabled:cursor-default"
+      title={onClick
+        ? `Open task details: ${profileTitle(profile)}`
+        : `Task details unavailable: ${profileTitle(profile)}`}
+      className={`w-full min-w-0 rounded-lg border p-1.5 text-left transition disabled:cursor-default ${
+        active
+          ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
+          : "border-stone-200 bg-stone-50 enabled:hover:border-blue-300 enabled:hover:bg-blue-50"
+      }`}
     >
       <span className="relative block aspect-square overflow-hidden rounded-md bg-stone-100">
         {profile.image_url ? (
@@ -1670,6 +1865,11 @@ function ListingTile({
             Reference
           </span>
         )}
+        {loading && (
+          <span className="absolute inset-0 flex items-center justify-center bg-white/70" aria-hidden="true">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" />
+          </span>
+        )}
       </span>
       <span className="mt-1.5 block truncate text-[10px] font-semibold text-stone-700">
         {profileTitle(profile)}
@@ -1703,8 +1903,12 @@ function EmptyState({ ipName }: { ipName: string | null }) {
   );
 }
 
-function errorMessage(caught: unknown) {
-  return caught instanceof Error ? caught.message : "Could not load product relationships.";
+function errorMessage(
+  caught: unknown,
+  fallback = "Could not load product relationships.",
+) {
+  if (caught instanceof Error && caught.message.trim()) return caught.message;
+  return fallback;
 }
 
 function rescoreNotice(count: number) {

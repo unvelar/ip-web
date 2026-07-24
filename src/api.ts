@@ -2054,6 +2054,12 @@ export function getMonitoringFinding(resultId: string) {
   );
 }
 
+export function getMonitoringFindingForCase(caseId: string) {
+  return request<{ finding: IpReviewFinding }>(
+    `/api/monitoring/findings/case/${encodeURIComponent(caseId)}`,
+  );
+}
+
 export function resolveMonitoringFindingTenant(resultId: string) {
   return request<{ tenant_id: string }>(
     `/api/monitoring/findings/${encodeURIComponent(resultId)}/tenant`,
