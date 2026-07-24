@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   CircleX,
-  ExternalLink,
   Images,
   ListFilter,
   Pencil,
@@ -21,7 +20,6 @@ import {
   createPersistedProductGroupRule,
   deletePersistedProductGroupRule,
   excludePersistedProductGroupMember,
-  getProductClusterGraph,
   getPersistedProductGroups,
   listProductClusterScopes,
   pinPersistedProductGroupReferenceImage,
@@ -32,28 +30,18 @@ import {
   updatePersistedProductGroupRule,
   type PersistedProductGroup,
   type PersistedProductGroupOverview,
-  type ProductClusterEdge,
-  type ProductClusterGraph,
   type ProductClusterProfile,
   type ProductClusterScope,
   type ProductGroupCorrectionReason,
   type ProductGroupRule,
   type ProductGroupVisualEvidence,
 } from "../api";
-import ProductSimilarityRadial from "../components/product-clusters/ProductSimilarityRadial";
-import {
-  profileTitle,
-  scoreFor,
-  type RelationshipMode,
-} from "../components/product-clusters/productClusterGraphUtils";
+import { profileTitle } from "../components/product-clusters/productClusterGraphUtils";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 
-const MAX_NODES = 80;
-const MAX_EDGES = 400;
-type LabView = "similarity" | "groups";
 type ProductGroupView = "triage" | "all";
-type GroupMode = RelationshipMode | "visual";
+type GroupMode = "same" | "related" | "visual";
 
 export default function ProductClusters() {
   const { actingTenantId } = useAuth();
@@ -63,31 +51,21 @@ export default function ProductClusters() {
     loading: loadingActiveIp,
   } = useActiveIp();
   const [scopes, setScopes] = useState<ProductClusterScope[]>([]);
-  const [graph, setGraph] = useState<ProductClusterGraph | null>(null);
   const [groupOverview, setGroupOverview] = useState<PersistedProductGroupOverview | null>(null);
-  const [mode, setMode] = useState<GroupMode>("same");
-  const [view, setView] = useState<LabView>("groups");
   const [productGroupView, setProductGroupView] = useState<ProductGroupView>("triage");
-  const [threshold, setThreshold] = useState(0.3);
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [scopesLoadedKey, setScopesLoadedKey] = useState<string | null>(null);
-  const [graphLoadedKey, setGraphLoadedKey] = useState<string | null>(null);
   const [groupsLoadedKey, setGroupsLoadedKey] = useState<string | null>(null);
   const [refreshingGroups, setRefreshingGroups] = useState(false);
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
   const [savingCorrectionProfileId, setSavingCorrectionProfileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
-  const graphRequestKey = `${scopesRequestKey}:${selectedIpId ?? ""}`;
-  const groupsRequestKey = `${graphRequestKey}:${mode}:${productGroupView}`;
+  const groupsRequestKey = `${scopesRequestKey}:${selectedIpId ?? ""}:same:${productGroupView}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
   const selectedScopeAvailable =
     scopesLoadedKey === scopesRequestKey && selectedScope != null;
   const loadingScopes = loadingActiveIp || scopesLoadedKey !== scopesRequestKey;
-  const loadingGraph =
-    Boolean(selectedIpId && selectedScopeAvailable) && graphLoadedKey !== graphRequestKey;
   const loadingGroups =
     Boolean(selectedIpId && selectedScopeAvailable) && groupsLoadedKey !== groupsRequestKey;
 
@@ -98,14 +76,12 @@ export default function ProductClusters() {
         if (!alive) return;
         setScopes(nextScopes);
         if (nextScopes.length === 0) {
-          setGraph(null);
           setGroupOverview(null);
         }
       })
       .catch((caught: unknown) => {
         if (!alive) return;
         setScopes([]);
-        setGraph(null);
         setGroupOverview(null);
         setError(errorMessage(caught));
       })
@@ -119,46 +95,12 @@ export default function ProductClusters() {
 
   useEffect(() => {
     if (!selectedIpId || !selectedScopeAvailable) {
-      setGraph(null);
-      return;
-    }
-    let alive = true;
-    void getProductClusterGraph(selectedIpId, {
-      maxNodes: MAX_NODES,
-      maxEdges: MAX_EDGES,
-    })
-      .then((nextGraph) => {
-        if (!alive) return;
-        setGraph(nextGraph);
-        setError(null);
-      })
-      .catch((caught: unknown) => {
-        if (!alive) return;
-        setGraph(null);
-        setError(errorMessage(caught));
-      })
-      .finally(() => {
-        if (alive) setGraphLoadedKey(graphRequestKey);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [
-    selectedIpId,
-    selectedScopeAvailable,
-    refreshVersion,
-    actingTenantId,
-    graphRequestKey,
-  ]);
-
-  useEffect(() => {
-    if (!selectedIpId || !selectedScopeAvailable) {
       setGroupOverview(null);
       return;
     }
     let alive = true;
     setGroupOverview(null);
-    void getPersistedProductGroups(selectedIpId, mode, productGroupView)
+    void getPersistedProductGroups(selectedIpId, "same", productGroupView)
       .then((overview) => {
         if (!alive) return;
         setGroupOverview(overview);
@@ -178,7 +120,6 @@ export default function ProductClusters() {
   }, [
     selectedIpId,
     selectedScopeAvailable,
-    mode,
     productGroupView,
     refreshVersion,
     actingTenantId,
@@ -186,54 +127,17 @@ export default function ProductClusters() {
   ]);
 
   useEffect(() => {
-    setSelectedProfileId(null);
-    setSelectedEdgeId(null);
     setError(null);
   }, [selectedIpId]);
 
-  const visibleEdges = useMemo(() => {
-    if (!graph || mode === "visual") return [];
-    return graph.edges
-      .filter((edge) => scoreFor(edge, mode) >= threshold)
-      .sort((left, right) => scoreFor(right, mode) - scoreFor(left, mode));
-  }, [graph, mode, threshold]);
-  const profileById = useMemo(
-    () => new Map(graph?.profiles.map((profile) => [profile.id, profile]) ?? []),
-    [graph],
-  );
-  const effectiveProfileId = selectedProfileId && profileById.has(selectedProfileId)
-    ? selectedProfileId
-    : graph?.profiles[0]?.id ?? null;
-  const reference = effectiveProfileId ? profileById.get(effectiveProfileId) ?? null : null;
-  const referenceEdges = useMemo(
-    () => effectiveProfileId
-      ? visibleEdges.filter((edge) =>
-        edge.left_profile_id === effectiveProfileId || edge.right_profile_id === effectiveProfileId
-      )
-      : [],
-    [effectiveProfileId, visibleEdges],
-  );
-  const effectiveSelectedEdgeId = referenceEdges.some((edge) => edge.id === selectedEdgeId)
-    ? selectedEdgeId
-    : referenceEdges[0]?.id ?? null;
-  const selectedEdge = referenceEdges.find((edge) => edge.id === effectiveSelectedEdgeId) ?? null;
-  const comparisonProfile = selectedEdge && effectiveProfileId
-    ? profileById.get(otherProfileId(selectedEdge, effectiveProfileId)) ?? null
-    : null;
-
-  function selectReference(profileId: string, edgeId: string | null = null) {
-    setSelectedProfileId(profileId);
-    setSelectedEdgeId(edgeId);
-  }
-
   async function refreshAll() {
     setError(null);
-    if (selectedIpId && selectedScopeAvailable && view === "groups") {
+    if (selectedIpId && selectedScopeAvailable) {
       setRefreshingGroups(true);
       try {
         setGroupOverview(await refreshPersistedProductGroups(
           selectedIpId,
-          mode,
+          "same",
           productGroupView,
         ));
       } catch (caught: unknown) {
@@ -282,7 +186,7 @@ export default function ProductClusters() {
         profile_id: profileId,
         reason,
       });
-      setGroupOverview(await getPersistedProductGroups(selectedIpId, mode, productGroupView));
+      setGroupOverview(await getPersistedProductGroups(selectedIpId, "same", productGroupView));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
       throw caught;
@@ -412,181 +316,60 @@ export default function ProductClusters() {
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Review exact products, related families, and overlapping gallery-image
-            cohorts. These signals compare listings with one another, not with the IP itself.
+            Review listings grouped as the same product, confirm products, and open
+            their remaining tasks.
           </p>
         </div>
         <button
           type="button"
           onClick={() => void refreshAll()}
-          disabled={loadingScopes || loadingGraph || loadingGroups || refreshingGroups}
+          disabled={loadingScopes || loadingGroups || refreshingGroups}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             size={15}
-            className={loadingScopes || loadingGraph || loadingGroups || refreshingGroups ? "animate-spin" : ""}
+            className={loadingScopes || loadingGroups || refreshingGroups ? "animate-spin" : ""}
           />
           Refresh
         </button>
       </header>
 
-      <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[auto_minmax(15rem,1fr)] lg:items-end lg:justify-between">
-          <div>
-            <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">
-              Grouping lens
+      {groupOverview && (
+        <section className="mt-6 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-stone-500">
+            <span>
+              <strong className="text-stone-800">{groupOverview.scope.profile_count}</strong>{" "}
+              profiled listings
             </span>
-            <div className="inline-flex rounded-lg border border-stone-300 bg-stone-50 p-1">
-              <ModeButton active={mode === "same"} onClick={() => setMode("same")}>
-                Same product
-              </ModeButton>
-              <ModeButton active={mode === "related"} onClick={() => setMode("related")}>
-                Related
-              </ModeButton>
-              <ModeButton
-                active={mode === "visual"}
-                onClick={() => {
-                  setMode("visual");
-                  setView("groups");
-                }}
-              >
-                Visual views
-              </ModeButton>
-            </div>
-          </div>
-
-          {view === "similarity" ? (
-            <label className="block">
-              <span className="mb-1.5 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-stone-500">
-                Minimum relationship score
-                <span className="font-mono text-stone-900">{threshold.toFixed(2)}</span>
-              </span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={threshold}
-                onChange={(event) => setThreshold(Number(event.target.value))}
-                className="h-2 w-full cursor-pointer accent-red-700"
-              />
-            </label>
-          ) : (
-            <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
-              <span className="block text-xs font-bold uppercase tracking-wide text-stone-500">
-                Final grouping policy
-              </span>
-              <span className="mt-1 block text-sm font-semibold text-stone-900">
-                {mode === "visual" ? (
-                  <>Image-backed cliques with overlapping listings · image similarity ≥{" "}
-                    {(groupOverview?.threshold ?? 0.82).toFixed(2)}</>
-                ) : (
-                  <>Strict pairwise {mode === "same" ? "same-product" : "related-product"} score ≥{" "}
-                    {(groupOverview?.threshold ?? 0.3).toFixed(2)}</>
-                )}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {graph && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-stone-100 pt-3 text-xs text-stone-500">
-            {view === "groups" ? (
+            {productGroupView === "triage" && groupOverview.triage_projection_available && (
               <>
                 <span>
-                  <strong className="text-stone-800">
-                    {groupOverview?.scope.profile_count ?? graph.scope.profile_count}
-                  </strong> profiled listings
+                  <strong className="text-stone-800">{groupOverview.triage_profile_count ?? 0}</strong>{" "}
+                  {(groupOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
                 </span>
-                {groupOverview?.snapshot_profile_count != null && (
-                  <span>
-                    <strong className="text-stone-800">{groupOverview.snapshot_profile_count}</strong>{" "}
-                    represented in current snapshot
-                  </span>
-                )}
-                {mode === "visual" &&
-                  groupOverview?.snapshot_membership_count != null &&
-                  groupOverview.snapshot_membership_count >
-                    (groupOverview.snapshot_profile_count ?? 0) && (
-                  <span>
-                    <strong className="text-stone-800">
-                      {groupOverview.snapshot_membership_count}
-                    </strong>{" "}
-                    image-backed placements
-                  </span>
-                )}
-                {productGroupView === "triage" && groupOverview?.triage_projection_available && (
-                  <>
-                    <span>
-                      <strong className="text-stone-800">
-                        {groupOverview.triage_profile_count ?? 0}
-                      </strong>{" "}
-                      {(groupOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
-                    </span>
-                    <span>
-                      <strong className="text-stone-800">
-                        {groupOverview.triage_group_count ?? 0}
-                      </strong>{" "}
-                      {mode === "visual"
-                        ? (groupOverview.triage_group_count ?? 0) === 1
-                          ? "visual cohort"
-                          : "visual cohorts"
-                        : (groupOverview.triage_group_count ?? 0) === 1
-                          ? "grouped batch"
-                          : "grouped batches"} with work
-                    </span>
-                  </>
-                )}
-                {productGroupView === "all" && groupOverview && (
-                  <>
-                    <span>
-                      <strong className="text-stone-800">{groupOverview.group_count}</strong>{" "}
-                      {mode === "visual"
-                        ? groupOverview.group_count === 1
-                          ? "visual cohort"
-                          : "visual cohorts"
-                        : groupOverview.group_count === 1
-                          ? "stored group"
-                          : "stored groups"}
-                    </span>
-                    {groupOverview.triage_projection_available && (
-                      <span>
-                        <strong className="text-stone-800">
-                          {groupOverview.triage_profile_count ?? 0}
-                        </strong>{" "}
-                        {(groupOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
-                      </span>
-                    )}
-                  </>
-                )}
+                <span>
+                  <strong className="text-stone-800">{groupOverview.triage_group_count ?? 0}</strong>{" "}
+                  {(groupOverview.triage_group_count ?? 0) === 1 ? "group" : "groups"} with work
+                </span>
               </>
-            ) : (
+            )}
+            {productGroupView === "all" && (
               <>
-                <span><strong className="text-stone-800">{graph.profiles.length}</strong> listings loaded</span>
-                <span><strong className="text-stone-800">{visibleEdges.length}</strong> relationships above score filter</span>
-              </>
-            )}
-            {mode !== "visual" && (
-              <span><strong className="text-stone-800">{graph.scope.pair_count}</strong> scored pairs total</span>
-            )}
-            {view === "similarity" && graph.truncated && (
-              <span className="text-amber-700">Showing the strongest bounded subset</span>
-            )}
-            {view === "groups" && groupOverview?.dirty && (
-              <span className="text-amber-700">
-                {groupOverview.pending_snapshot_count != null && groupOverview.pending_snapshot_count > 0 ? (
-                  <>
-                    <strong>{groupOverview.pending_snapshot_count}</strong>{" "}
-                    profiled {groupOverview.pending_snapshot_count === 1 ? "listing" : "listings"} awaiting grouping refresh
-                  </>
-                ) : (
-                  <>A newer snapshot is being rebuilt</>
+                <span>
+                  <strong className="text-stone-800">{groupOverview.group_count}</strong>{" "}
+                  {groupOverview.group_count === 1 ? "stored group" : "stored groups"}
+                </span>
+                {groupOverview.triage_projection_available && (
+                  <span>
+                    <strong className="text-stone-800">{groupOverview.triage_profile_count ?? 0}</strong>{" "}
+                    {(groupOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
+                  </span>
                 )}
-              </span>
+              </>
             )}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {error && (
         <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -594,210 +377,29 @@ export default function ProductClusters() {
         </div>
       )}
 
-      {graph && (
-        <div className="mt-5 flex border-b border-stone-200" role="tablist" aria-label="Clustering lab view">
-          <ViewTab
-            active={view === "similarity"}
-            onClick={() => {
-              if (mode === "visual") setMode("same");
-              setView("similarity");
-            }}
-          >
-            Similarity from one listing
-          </ViewTab>
-          <ViewTab active={view === "groups"} onClick={() => setView("groups")}>
-            Product groups
-          </ViewTab>
-        </div>
-      )}
-
       {loadingScopes ? (
         <LoadingState />
       ) : !selectedIpId || !selectedScope ? (
         <EmptyState ipName={activeIp?.name ?? null} />
-      ) : (loadingGraph && !graph) || (view === "groups" && loadingGroups && !groupOverview) ? (
+      ) : loadingGroups && !groupOverview ? (
         <LoadingState />
-      ) : view === "similarity" && graph && reference ? (
-          <SimilarityView
-            graph={graph}
-            reference={reference}
-            referenceEdges={referenceEdges}
-            profileById={profileById}
-            mode={mode === "visual" ? "same" : mode}
-            selectedEdgeId={effectiveSelectedEdgeId}
-            selectedEdge={selectedEdge}
-            comparisonProfile={comparisonProfile}
-            loading={loadingGraph}
-            onSelectReference={selectReference}
-          />
-      ) : view === "groups" && groupOverview ? (
-          <ProductGroupsOverview
-            overview={groupOverview}
-            mode={mode}
-            groupView={productGroupView}
-            onGroupViewChange={setProductGroupView}
-            onSelectReference={(profileId) => {
-              selectReference(profileId);
-              setView("similarity");
-            }}
-            canSelectReference={(profileId) =>
-              mode !== "visual" && profileById.has(profileId)
-            }
-            savingGroupId={savingGroupId}
-            savingCorrectionProfileId={savingCorrectionProfileId}
-            onConfirmGroup={confirmGroup}
-            onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
-            onCorrectGroupMember={correctGroupMember}
-            onCreateRule={createGroupRule}
-            onUpdateRule={updateGroupRule}
-            onDeleteRule={deleteGroupRule}
-          />
+      ) : groupOverview ? (
+        <ProductGroupsOverview
+          overview={groupOverview}
+          mode="same"
+          groupView={productGroupView}
+          onGroupViewChange={setProductGroupView}
+          savingGroupId={savingGroupId}
+          savingCorrectionProfileId={savingCorrectionProfileId}
+          onConfirmGroup={confirmGroup}
+          onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
+          onCorrectGroupMember={correctGroupMember}
+          onCreateRule={createGroupRule}
+          onUpdateRule={updateGroupRule}
+          onDeleteRule={deleteGroupRule}
+        />
       ) : null}
     </div>
-  );
-}
-
-function SimilarityView({
-  graph,
-  reference,
-  referenceEdges,
-  profileById,
-  mode,
-  selectedEdgeId,
-  selectedEdge,
-  comparisonProfile,
-  loading,
-  onSelectReference,
-}: {
-  graph: ProductClusterGraph;
-  reference: ProductClusterProfile;
-  referenceEdges: ProductClusterEdge[];
-  profileById: Map<string, ProductClusterProfile>;
-  mode: RelationshipMode;
-  selectedEdgeId: string | null;
-  selectedEdge: ProductClusterEdge | null;
-  comparisonProfile: ProductClusterProfile | null;
-  loading: boolean;
-  onSelectReference: (profileId: string, edgeId?: string | null) => void;
-}) {
-  return (
-    <>
-      <div className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <label className="block max-w-2xl">
-          <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">
-            Reference listing shown in the center
-          </span>
-          <select
-            value={reference.id}
-            onChange={(event) => onSelectReference(event.target.value)}
-            className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
-          >
-            {graph.profiles.map((profile) => (
-              <option value={profile.id} key={profile.id}>
-                {profileTitle(profile)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="mt-2 text-xs text-stone-500">
-          Every distance is calculated only from this listing. Select another node to make it the new reference.
-        </p>
-      </div>
-
-      <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className={loading ? "min-w-0 opacity-60" : "min-w-0"}>
-          <ProductSimilarityRadial
-            reference={reference}
-            edges={referenceEdges}
-            profileById={profileById}
-            mode={mode}
-            selectedEdgeId={selectedEdgeId}
-            onSelectNeighbor={onSelectReference}
-          />
-        </div>
-        <NearestListings
-          referenceId={reference.id}
-          edges={referenceEdges}
-          mode={mode}
-          profileById={profileById}
-          selectedEdgeId={selectedEdgeId}
-          onSelect={onSelectReference}
-        />
-      </div>
-
-      {selectedEdge && comparisonProfile && (
-        <PairInspector
-          edge={selectedEdge}
-          reference={reference}
-          comparison={comparisonProfile}
-        />
-      )}
-    </>
-  );
-}
-
-function NearestListings({
-  referenceId,
-  edges,
-  mode,
-  profileById,
-  selectedEdgeId,
-  onSelect,
-}: {
-  referenceId: string;
-  edges: ProductClusterEdge[];
-  mode: RelationshipMode;
-  profileById: Map<string, ProductClusterProfile>;
-  selectedEdgeId: string | null;
-  onSelect: (profileId: string, edgeId: string) => void;
-}) {
-  return (
-    <aside className="min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-      <div className="border-b border-stone-100 px-4 py-3">
-        <h2 className="text-sm font-bold text-stone-900">Most similar to the reference</h2>
-        <p className="mt-0.5 text-xs text-stone-500">Select one to move it into the center</p>
-      </div>
-      <div className="max-h-[512px] overflow-y-auto p-2">
-        {edges.length === 0 ? (
-          <p className="px-3 py-10 text-center text-sm text-stone-500">
-            No direct relationships meet this score filter. Lower it to reveal more.
-          </p>
-        ) : (
-          edges.slice(0, 50).map((edge, index) => {
-            const profileId = otherProfileId(edge, referenceId);
-            const profile = profileById.get(profileId);
-            if (!profile) return null;
-            const selected = edge.id === selectedEdgeId;
-            return (
-              <button
-                type="button"
-                key={edge.id}
-                onClick={() => onSelect(profileId, edge.id)}
-                className={`mb-1 w-full rounded-xl border px-3 py-2.5 text-left transition last:mb-0 ${
-                  selected
-                    ? "border-red-200 bg-red-50"
-                    : "border-transparent hover:border-stone-200 hover:bg-stone-50"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-5 shrink-0 text-[10px] font-bold text-stone-400">#{index + 1}</span>
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-stone-800">
-                    {profileTitle(profile)}
-                  </span>
-                  <span className="font-mono text-xs font-bold text-red-800">
-                    {scoreFor(edge, mode).toFixed(3)}
-                  </span>
-                </div>
-                <div className="mt-1 flex items-center justify-between gap-2 pl-7 text-[10px] text-stone-400">
-                  <span>{profile.platform || "Unknown platform"}</span>
-                  {edge.price_ratio != null && <span>{edge.price_ratio.toFixed(2)}× price ratio</span>}
-                </div>
-              </button>
-            );
-          })
-        )}
-      </div>
-    </aside>
   );
 }
 
@@ -806,8 +408,6 @@ function ProductGroupsOverview({
   mode,
   groupView,
   onGroupViewChange,
-  onSelectReference,
-  canSelectReference,
   savingGroupId,
   savingCorrectionProfileId,
   onConfirmGroup,
@@ -821,8 +421,6 @@ function ProductGroupsOverview({
   mode: GroupMode;
   groupView: ProductGroupView;
   onGroupViewChange: (view: ProductGroupView) => void;
-  onSelectReference: (profileId: string) => void;
-  canSelectReference: (profileId: string) => boolean;
   savingGroupId: string | null;
   savingCorrectionProfileId: string | null;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
@@ -852,9 +450,6 @@ function ProductGroupsOverview({
     ruleId: string,
   ) => Promise<{ id: string; rescore_jobs_enqueued: number }>;
 }) {
-  const generatedAt = overview.generated_at
-    ? new Date(overview.generated_at).toLocaleString()
-    : null;
   const showingTriage = groupView === "triage";
   const displayedGroups = showingTriage
     ? overview.triage_projection_available
@@ -872,29 +467,8 @@ function ProductGroupsOverview({
 
   return (
     <div className="mt-5">
-      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        {mode === "visual" ? (
-          <>Every stored gallery image is analyzed independently. Each matching image is
-          assigned to one strict pairwise image-similarity clique at or above {overview.threshold.toFixed(2)},
-          and its thumbnail is the exact view that caused membership. A listing can still
-          appear in several cards through different front, back, color, packaging, or
-          accessory views. These are overlapping listing cohorts—not claims that the
-          listings are the exact same product.</>
-        ) : (
-          <>These groups are stored on the backend across the full IP corpus. In each {mode === "same" ? "product group" : "related family"}, every listing has a final pairwise {mode === "same" ? "same-product" : "related-product"} score of at least {overview.threshold.toFixed(2)} with every other member.
-            {mode === "same"
-              ? " New listings are assigned automatically. Image similarity is explanatory only. A listing must pass the product’s multimodal candidate gate; rules and the final pairwise same-product score then decide membership. Open Manage product to configure the gate, references, rules, or corrections."
-              : " Related families remain review candidates and cannot be confirmed as one product."}</>
-        )}
-        {showingTriage
-          ? " This review view only counts and displays listings still in To triage; handled listings remain in their stored groups."
-          : " This management view includes handled listings as stored history; its counts describe durable membership, not open Tasks."}
-        {" "}These relationships do not measure similarity to the IP.
-        {generatedAt && <span className="ml-1 text-blue-700">Snapshot: {generatedAt}.</span>}
-      </div>
-
       <div
-        className="mt-3 inline-flex rounded-lg border border-stone-200 bg-white p-1 shadow-sm"
+        className="inline-flex rounded-lg border border-stone-200 bg-white p-1 shadow-sm"
         role="group"
         aria-label="Product group listing view"
       >
@@ -924,18 +498,6 @@ function ProductGroupsOverview({
         </button>
       </div>
 
-      {overview.dirty && (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {overview.pending_snapshot_count != null && overview.pending_snapshot_count > 0 ? (
-            <>
-              A backend grouping rebuild is queued. <strong>{overview.pending_snapshot_count} profiled {overview.pending_snapshot_count === 1 ? "listing is" : "listings are"}</strong>{" "}
-              awaiting it and {overview.pending_snapshot_count === 1 ? "is" : "are"} not represented in this snapshot yet.
-            </>
-          ) : (
-            <>New product evidence arrived after this snapshot. A refreshed backend grouping is queued.</>
-          )}
-        </div>
-      )}
       {overview.last_error && (
         <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           The latest automatic group refresh failed: {overview.last_error}
@@ -1000,8 +562,6 @@ function ProductGroupsOverview({
                   onCreateRule={onCreateRule}
                   onUpdateRule={onUpdateRule}
                   onDeleteRule={onDeleteRule}
-                  onSelectReference={onSelectReference}
-                  canSelectReference={canSelectReference}
                 />
               ))}
             </div>
@@ -1038,9 +598,6 @@ function ProductGroupsOverview({
                   <ListingTile
                     key={profile.id}
                     profile={profile}
-                    onClick={canSelectReference(profile.id)
-                      ? () => onSelectReference(profile.id)
-                      : undefined}
                   />
                 ))}
               </div>
@@ -1078,8 +635,6 @@ function ProductGroupCard({
   onCreateRule,
   onUpdateRule,
   onDeleteRule,
-  onSelectReference,
-  canSelectReference,
 }: {
   group: PersistedProductGroup;
   index: number;
@@ -1115,8 +670,6 @@ function ProductGroupCard({
     groupId: string,
     ruleId: string,
   ) => Promise<{ id: string; rescore_jobs_enqueued: number }>;
-  onSelectReference: (profileId: string) => void;
-  canSelectReference: (profileId: string) => boolean;
 }) {
   const [editingName, setEditingName] = useState(false);
   const [managing, setManaging] = useState(false);
@@ -1936,9 +1489,6 @@ function ProductGroupCard({
                 visualSupportScore={primaryVisualEvidence?.visual_support_score}
                 visualSupportReferenceRank={matchedReferenceRank}
                 visualSupportIsReference={primaryVisualEvidence?.is_reference}
-                onClick={canSelectReference(profile.id)
-                  ? () => onSelectReference(profile.id)
-                  : undefined}
               />
               {canConfirm && confirmed && managing && group.member_count > 1 && (
                 <button
@@ -2109,162 +1659,6 @@ function ListingTile({
   );
 }
 
-function PairInspector({
-  edge,
-  reference,
-  comparison,
-}: {
-  edge: ProductClusterEdge;
-  reference: ProductClusterProfile;
-  comparison: ProductClusterProfile;
-}) {
-  return (
-    <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Selected relationship</p>
-          <h2 className="mt-1 text-lg font-black text-stone-900">Pair evidence</h2>
-          <p className="mt-1 max-w-xl text-xs leading-5 text-stone-500">
-            The final product scores combine whole-listing multimodal similarity,
-            exact-product model evidence and, when available, price evidence.
-            Per-image similarity is separate and explanatory only.
-          </p>
-        </div>
-        <div className="grid grid-cols-3 gap-x-5 gap-y-2 sm:grid-cols-6">
-          <Metric label="Same-product" value={edge.same_product_score} />
-          <Metric label="Related-product" value={edge.related_product_score} />
-          <Metric label="Multimodal listing" value={edge.vector_similarity} />
-          <Metric label="Exact-product model" value={edge.exact_reranker_score} />
-          <Metric label="Price ratio" value={edge.price_ratio} suffix="×" />
-          <Metric label="Low-price signal" value={edge.too_cheap_signal} />
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <ListingCard
-          profile={reference}
-          label="Reference listing"
-          cheaper={edge.cheaper_profile_id === reference.id}
-        />
-        <ListingCard
-          profile={comparison}
-          label="Compared listing"
-          cheaper={edge.cheaper_profile_id === comparison.id}
-        />
-      </div>
-    </section>
-  );
-}
-
-function ListingCard({
-  profile,
-  label,
-  cheaper,
-}: {
-  profile: ProductClusterProfile;
-  label: string;
-  cheaper: boolean;
-}) {
-  return (
-    <article className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50/50">
-      <div className="flex min-h-40">
-        <div className="h-40 w-36 shrink-0 bg-stone-100 sm:w-44">
-          {profile.image_url ? (
-            <img src={profile.image_url} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full items-center justify-center px-4 text-center text-xs text-stone-400">
-              No image available
-            </div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1 p-4">
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-stone-500">
-            <span className="text-red-800">{label}</span>
-            <span>{profile.platform || "Unknown platform"}</span>
-            {cheaper && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">Cheaper listing</span>
-            )}
-          </div>
-          <h3 className="mt-1.5 line-clamp-2 text-sm font-bold text-stone-900">
-            {profileTitle(profile)}
-          </h3>
-          <p className="mt-2 text-sm font-semibold text-stone-800">{formatPrice(profile)}</p>
-          {profile.description_summary && (
-            <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-500">
-              {profile.description_summary}
-            </p>
-          )}
-          {profile.source_url && (
-            <a
-              href={profile.source_url}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-red-800 hover:text-red-950"
-            >
-              Open listing <ExternalLink size={12} />
-            </a>
-          )}
-        </div>
-      </div>
-      <details className="border-t border-stone-200 px-4 py-3">
-        <summary className="cursor-pointer text-xs font-semibold text-stone-600">View model product profile</summary>
-        <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap font-sans text-xs leading-5 text-stone-600">
-          {profile.profile_text}
-        </pre>
-      </details>
-    </article>
-  );
-}
-
-function ModeButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
-        active ? "bg-stone-900 text-white shadow-sm" : "text-stone-600 hover:bg-white hover:text-stone-900"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ViewTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={`border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
-        active ? "border-red-800 text-red-900" : "border-transparent text-stone-500 hover:text-stone-900"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Metric({ label, value, suffix = "" }: { label: string; value: number | null; suffix?: string }) {
-  return (
-    <div>
-      <p className="whitespace-nowrap text-[10px] font-bold uppercase tracking-wide text-stone-400">{label}</p>
-      <p className="mt-0.5 font-mono text-sm font-bold text-stone-800">
-        {value == null ? "—" : `${value.toFixed(3)}${suffix}`}
-      </p>
-    </div>
-  );
-}
-
 function LoadingState() {
   return (
     <div className="mt-5 flex min-h-96 items-center justify-center rounded-2xl border border-stone-200 bg-white">
@@ -2288,27 +1682,6 @@ function EmptyState({ ipName }: { ipName: string | null }) {
       </p>
     </div>
   );
-}
-
-function otherProfileId(edge: ProductClusterEdge, profileId: string) {
-  return edge.left_profile_id === profileId ? edge.right_profile_id : edge.left_profile_id;
-}
-
-function formatPrice(profile: ProductClusterProfile) {
-  if (profile.price_value == null) return "Price unavailable";
-  const currency = profile.price_currency?.toUpperCase();
-  if (currency?.match(/^[A-Z]{3}$/)) {
-    try {
-      return new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 2,
-      }).format(profile.price_value);
-    } catch {
-      // Fall through to a plain value if a marketplace supplied an invalid code.
-    }
-  }
-  return `${profile.price_value.toLocaleString()}${currency ? ` ${currency}` : ""}`;
 }
 
 function errorMessage(caught: unknown) {
