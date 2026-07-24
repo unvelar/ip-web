@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   CheckCircle2,
-  CircleX,
   Images,
   ListFilter,
   Pencil,
@@ -1510,15 +1509,15 @@ function ProductGroupCard({
               {canConfirm && group.member_count > 1 && (!confirmed || managing) && (
                 <button
                   type="button"
-                  aria-label={`Remove ${profileTitle(profile)} from this group`}
-                  title="This image-backed placement does not belong in the group"
+                  aria-label={`Exclude ${profileTitle(profile)} from this group`}
+                  title="Exclude this gallery view from this group"
                   disabled={Boolean(savingCorrectionProfileId)}
                   onClick={() => setCorrectingProfileId(profile.id)}
-                  className={`absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/80 bg-white/90 text-stone-500 shadow-sm transition hover:bg-red-50 hover:text-red-700 focus:opacity-100 disabled:opacity-40 ${
+                  className={`absolute right-2 top-10 inline-flex h-7 items-center justify-center rounded-full border border-red-200 bg-white/95 px-2.5 text-[10px] font-bold text-red-700 shadow-sm transition hover:bg-red-50 focus:opacity-100 disabled:opacity-40 ${
                     confirmed ? "opacity-0 group-hover/member:opacity-100" : "opacity-100"
                   }`}
                 >
-                  <CircleX size={15} />
+                  Exclude
                 </button>
               )}
             </div>
@@ -1545,7 +1544,7 @@ function ProductGroupCard({
               }}
               className="rounded-lg bg-amber-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-950 disabled:opacity-50"
             >
-              Does not belong
+              Exclude
             </button>
             <button
               type="button"
