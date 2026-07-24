@@ -61,7 +61,7 @@ export default function ProductClusters() {
   const [savingCorrectionProfileId, setSavingCorrectionProfileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
-  const groupsRequestKey = `${scopesRequestKey}:${selectedIpId ?? ""}:same:${productGroupView}`;
+  const groupsRequestKey = `${scopesRequestKey}:${selectedIpId ?? ""}:visual:${productGroupView}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
   const selectedScopeAvailable =
     scopesLoadedKey === scopesRequestKey && selectedScope != null;
@@ -100,7 +100,7 @@ export default function ProductClusters() {
     }
     let alive = true;
     setGroupOverview(null);
-    void getPersistedProductGroups(selectedIpId, "same", productGroupView)
+    void getPersistedProductGroups(selectedIpId, "visual", productGroupView)
       .then((overview) => {
         if (!alive) return;
         setGroupOverview(overview);
@@ -137,7 +137,7 @@ export default function ProductClusters() {
       try {
         setGroupOverview(await refreshPersistedProductGroups(
           selectedIpId,
-          "same",
+          "visual",
           productGroupView,
         ));
       } catch (caught: unknown) {
@@ -186,7 +186,7 @@ export default function ProductClusters() {
         profile_id: profileId,
         reason,
       });
-      setGroupOverview(await getPersistedProductGroups(selectedIpId, "same", productGroupView));
+      setGroupOverview(await getPersistedProductGroups(selectedIpId, "visual", productGroupView));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
       throw caught;
@@ -316,8 +316,9 @@ export default function ProductClusters() {
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Review listings grouped as the same product, confirm products, and open
-            their remaining tasks.
+            Review overlapping groups built from every stored listing image. A listing
+            can appear in several groups through different views; name a group only
+            when you confirm it.
           </p>
         </div>
         <button
@@ -386,7 +387,7 @@ export default function ProductClusters() {
       ) : groupOverview ? (
         <ProductGroupsOverview
           overview={groupOverview}
-          mode="same"
+          mode="visual"
           groupView={productGroupView}
           onGroupViewChange={setProductGroupView}
           savingGroupId={savingGroupId}
@@ -674,7 +675,9 @@ function ProductGroupCard({
   const [editingName, setEditingName] = useState(false);
   const [managing, setManaging] = useState(false);
   const [correctingProfileId, setCorrectingProfileId] = useState<string | null>(null);
-  const [name, setName] = useState(group.display_name);
+  const [name, setName] = useState(
+    group.confirmation_status === "confirmed" ? group.display_name ?? "" : "",
+  );
   const [ruleDraft, setRuleDraft] = useState("");
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editingRuleText, setEditingRuleText] = useState("");
@@ -708,7 +711,7 @@ function ProductGroupCard({
   const taskQuery = taskLinkMode === "pending"
     ? "status=pending"
     : "status=all&show_dismissed=true";
-  const canConfirm = mode === "same";
+  const canConfirm = mode === "same" || mode === "visual";
   const trimmedName = name.trim();
   const correctingProfile = group.members.find((profile) => profile.id === correctingProfileId) ?? null;
   const nextEmbeddingThreshold = embeddingThresholdEnabled
@@ -825,16 +828,22 @@ function ProductGroupCard({
           }`}>
             {confirmed && <CheckCircle2 size={13} />}
             {confirmed
-              ? "Confirmed product"
+              ? "Confirmed group"
               : mode === "same"
                 ? `Potential product group ${index + 1}`
                 : mode === "related"
                   ? `Related family ${index + 1}`
-                  : `Overlapping visual group ${index + 1}`}
+                  : `Potential group ${index + 1}`}
           </p>
-          <h2 className="mt-1 line-clamp-2 text-sm font-bold text-stone-900">
-            {group.display_name}
-          </h2>
+          {confirmed && group.display_name ? (
+            <h2 className="mt-1 line-clamp-2 text-sm font-bold text-stone-900">
+              {group.display_name}
+            </h2>
+          ) : (
+            <p className="mt-1 text-[11px] text-stone-500">
+              Unnamed until confirmed
+            </p>
+          )}
           {confirmed && group.confirmed_at && (
             <p className="mt-1 text-[10px] text-emerald-700">
               Confirmed {new Date(group.confirmed_at).toLocaleString()}
@@ -865,7 +874,7 @@ function ProductGroupCard({
                 : "No listings need triage"}
             </p>
           )}
-          {confirmed && (
+          {confirmed && mode === "same" && (
             <>
               <p className="mt-1 text-[10px] font-semibold text-blue-700">
                 {group.rules.length} active rule{group.rules.length === 1 ? "" : "s"}
@@ -885,7 +894,7 @@ function ProductGroupCard({
           <button
             type="button"
             onClick={() => {
-              setName(group.display_name);
+              setName(confirmed ? group.display_name ?? "" : "");
               if (confirmed) {
                 setManaging((current) => !current);
               } else {
@@ -899,9 +908,11 @@ function ProductGroupCard({
             }`}
           >
             {confirmed ? <Settings2 size={14} /> : <CheckCircle2 size={14} />}
-            {confirmed ? (managing ? "Close product settings" : "Manage product") : "Confirm & manage"}
+            {confirmed
+              ? (managing ? "Close group settings" : "Manage group")
+              : "Confirm & name"}
           </button>
-          {confirmed && !managing && (
+          {confirmed && mode === "same" && !managing && (
             <button
               type="button"
               disabled={loadingVisualEvidence}
@@ -933,10 +944,11 @@ function ProductGroupCard({
           }}
         >
           <label className="block">
-            <span className="text-xs font-bold text-emerald-900">Product name</span>
+            <span className="text-xs font-bold text-emerald-900">Group name</span>
             <input
               autoFocus
               type="text"
+              required
               value={name}
               maxLength={200}
               onChange={(event) => setName(event.target.value)}
@@ -958,7 +970,7 @@ function ProductGroupCard({
               className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckCircle2 size={13} />
-              {saving ? "Saving…" : confirmed ? "Save name" : "Confirm & manage"}
+              {saving ? "Saving…" : confirmed ? "Save name" : "Confirm & name"}
             </button>
           </div>
         </form>
@@ -970,11 +982,12 @@ function ProductGroupCard({
             <div>
               <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-blue-900">
                 <Settings2 size={14} />
-                Product settings
+                Group settings
               </p>
               <p className="mt-1 text-[11px] text-blue-700">
-                Rename the product, tune its multimodal candidate gate, manage
-                representative images and rules, or remove a listing below.
+                {mode === "same"
+                  ? "Rename the product, tune its multimodal candidate gate, manage representative images and rules, or remove a listing below."
+                  : "Rename this confirmed group or remove an incorrect image-backed placement below."}
               </p>
             </div>
             <button
@@ -994,7 +1007,7 @@ function ProductGroupCard({
             }}
           >
             <label className="block">
-              <span className="text-xs font-bold text-stone-800">Product name</span>
+              <span className="text-xs font-bold text-stone-800">Group name</span>
               <div className="mt-1.5 flex gap-2">
                 <input
                   type="text"
@@ -1014,6 +1027,8 @@ function ProductGroupCard({
             </label>
           </form>
 
+          {mode === "same" && (
+            <>
           <div className="mt-4 border-t border-blue-200 pt-3">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1459,6 +1474,8 @@ function ProductGroupCard({
               </p>
             )}
           </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1490,14 +1507,16 @@ function ProductGroupCard({
                 visualSupportReferenceRank={matchedReferenceRank}
                 visualSupportIsReference={primaryVisualEvidence?.is_reference}
               />
-              {canConfirm && confirmed && managing && group.member_count > 1 && (
+              {canConfirm && group.member_count > 1 && (!confirmed || managing) && (
                 <button
                   type="button"
-                  aria-label={`Remove ${profileTitle(profile)} from this product`}
-                  title="This listing is not this product"
+                  aria-label={`Remove ${profileTitle(profile)} from this group`}
+                  title="This image-backed placement does not belong in the group"
                   disabled={Boolean(savingCorrectionProfileId)}
                   onClick={() => setCorrectingProfileId(profile.id)}
-                  className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/80 bg-white/90 text-stone-500 opacity-0 shadow-sm transition hover:bg-red-50 hover:text-red-700 focus:opacity-100 disabled:opacity-40 group-hover/member:opacity-100"
+                  className={`absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/80 bg-white/90 text-stone-500 shadow-sm transition hover:bg-red-50 hover:text-red-700 focus:opacity-100 disabled:opacity-40 ${
+                    confirmed ? "opacity-0 group-hover/member:opacity-100" : "opacity-100"
+                  }`}
                 >
                   <CircleX size={15} />
                 </button>
@@ -1509,10 +1528,11 @@ function ProductGroupCard({
       {correctingProfile && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
           <p className="text-xs font-bold text-amber-950">
-            Remove “{profileTitle(correctingProfile)}” from this product?
+            Remove “{profileTitle(correctingProfile)}” from this group?
           </p>
           <p className="mt-1 text-[11px] text-amber-800">
-            It will be categorized automatically again, but it will not be placed back with these same members.
+            The exact gallery-image placement will be categorized again, but it will
+            not be paired with these same group images after a refresh.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
@@ -1525,7 +1545,7 @@ function ProductGroupCard({
               }}
               className="rounded-lg bg-amber-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-950 disabled:opacity-50"
             >
-              Not this product
+              Does not belong
             </button>
             <button
               type="button"
@@ -1643,7 +1663,7 @@ function ListingTile({
         )}
         {hasGroupImageSimilarity && groupImagePosition != null && (
           <span className="absolute bottom-1.5 left-1.5 rounded bg-indigo-900/85 px-1.5 py-0.5 text-[9px] font-bold text-white">
-            Gallery view {groupImagePosition + 1}
+            Gallery view {groupImagePosition + 1} of {profile.image_count}
           </span>
         )}
         {visualSupportIsReference && (
