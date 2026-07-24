@@ -12,6 +12,10 @@ export function BatchOperationBar({
   resortTooltip,
   onClear,
   showResort = true,
+  placement = "fixed",
+  showShortcuts = true,
+  disabled = false,
+  statusMessage,
 }: {
   selectedCount: number;
   selectedSummary: string[];
@@ -20,14 +24,30 @@ export function BatchOperationBar({
   onResort?: () => void;
   resortDisabled?: boolean;
   resortTooltip?: string;
-  onClear: () => void;
+  onClear?: () => void;
   showResort?: boolean;
+  placement?: "fixed" | "inline";
+  showShortcuts?: boolean;
+  disabled?: boolean;
+  statusMessage?: string | null;
 }) {
   if (selectedCount <= 0) return null;
 
+  const wrapperClass = placement === "fixed"
+    ? "fixed inset-x-0 bottom-0 z-30 px-4 pb-4 sm:px-6 lg:left-64 pointer-events-none"
+    : "mt-4 pointer-events-none";
+  const panelClass = placement === "fixed"
+    ? "mx-auto max-w-7xl pointer-events-auto max-h-[45vh] overflow-y-auto rounded-lg border border-stone-200 bg-white/95 px-4 py-3 shadow-[0_16px_48px_-20px_rgba(28,25,23,0.45)] backdrop-blur"
+    : "pointer-events-auto rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-2";
+  const actionDisabled = disabled || Boolean(statusMessage);
+  const shortcutLabel = (label: string, shortcut: string, dark = false) =>
+    showShortcuts
+      ? <ButtonWithShortcut label={label} shortcut={shortcut} dark={dark} />
+      : <span className="whitespace-nowrap">{label}</span>;
+
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 sm:px-6 lg:left-64 pointer-events-none">
-      <div className="mx-auto max-w-7xl pointer-events-auto max-h-[45vh] overflow-y-auto rounded-lg border border-stone-200 bg-white/95 px-4 py-3 shadow-[0_16px_48px_-20px_rgba(28,25,23,0.45)] backdrop-blur">
+    <div className={wrapperClass} data-batch-operation-bar={placement}>
+      <div className={panelClass}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs font-semibold text-stone-700 shrink-0">
@@ -43,7 +63,9 @@ export function BatchOperationBar({
             ))}
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            {batchProgress ? (
+            {statusMessage ? (
+              <span className="text-xs text-stone-500">{statusMessage}</span>
+            ) : batchProgress ? (
               <span className="text-xs text-stone-500">
                 Working... ({batchProgress.done}/{batchProgress.total})
               </span>
@@ -51,45 +73,57 @@ export function BatchOperationBar({
               <>
                 <button
                   type="button"
+                  data-batch-action="send"
                   onClick={() => onAction("send")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-500"
+                  disabled={actionDisabled}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <ButtonWithShortcut label="Send takedowns" shortcut="T" dark />
+                  {shortcutLabel("Send takedowns", "T", true)}
                 </button>
                 <button
                   type="button"
+                  data-batch-action="enforce"
                   onClick={() => onAction("enforce")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-500 whitespace-nowrap"
+                  disabled={actionDisabled}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-500 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Mark enforced
                 </button>
                 <button
                   type="button"
+                  data-batch-action="false_positive"
                   onClick={() => onAction("false_positive")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
+                  disabled={actionDisabled}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <ButtonWithShortcut label="False positive" shortcut="1" />
+                  {shortcutLabel("False positive", "1")}
                 </button>
                 <button
                   type="button"
+                  data-batch-action="do_not_pursue"
                   onClick={() => onAction("do_not_pursue")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
+                  disabled={actionDisabled}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <ButtonWithShortcut label="Don't pursue" shortcut="3" />
+                  {shortcutLabel("Don't pursue", "3")}
                 </button>
                 <button
                   type="button"
+                  data-batch-action="second_hand"
                   onClick={() => onAction("second_hand")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50"
+                  disabled={actionDisabled}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <ButtonWithShortcut label="Second hand" shortcut="2" />
+                  {shortcutLabel("Second hand", "2")}
                 </button>
                 <button
                   type="button"
+                  data-batch-action="review"
                   onClick={() => onAction("review")}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-sky-200 text-sky-700 bg-white hover:bg-sky-50"
+                  disabled={actionDisabled}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-sky-200 text-sky-700 bg-white hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <ButtonWithShortcut label="Review" shortcut="R" />
+                  {shortcutLabel("Review", "R")}
                 </button>
                 {showResort && (
                   <span
@@ -99,7 +133,7 @@ export function BatchOperationBar({
                     <button
                       type="button"
                       onClick={onResort}
-                      disabled={resortDisabled}
+                      disabled={resortDisabled || actionDisabled}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:opacity-50 disabled:pointer-events-none disabled:hover:bg-white"
                     >
                       <Shuffle size={13} aria-hidden="true" />
@@ -112,13 +146,16 @@ export function BatchOperationBar({
                     )}
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={onClear}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold text-stone-500 hover:text-stone-700"
-                >
-                  Clear
-                </button>
+                {onClear && (
+                  <button
+                    type="button"
+                    onClick={onClear}
+                    disabled={actionDisabled}
+                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold text-stone-500 hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                )}
               </>
             )}
           </div>

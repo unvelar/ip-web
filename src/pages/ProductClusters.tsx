@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
+  autoSendTakedown,
   calculatePersistedProductGroupVisualEvidence,
   confirmPersistedProductGroup,
   createPersistedProductGroupRule,
@@ -23,7 +24,11 @@ import {
   getMonitoringFinding,
   getMonitoringFindingForCase,
   getPersistedProductGroups,
+  listMonitoringFindingsGlobal,
   listProductClusterScopes,
+  markIpFindingEnforced,
+  markIpFindingNeedsReview,
+  markTakedownSentWithoutEmail,
   pinPersistedProductGroupReferenceImage,
   refreshPersistedProductGroups,
   removePersistedProductGroupReferenceImage,
@@ -32,6 +37,7 @@ import {
   updatePersistedProductGroupRule,
   type PersistedProductGroup,
   type PersistedProductGroupOverview,
+  type CaseReviewStatus,
   type IpReviewFinding,
   type MonitoringReviewOutcome,
   type ProductClusterProfile,
@@ -40,7 +46,11 @@ import {
   type ProductGroupRule,
   type ProductGroupVisualEvidence,
 } from "../api";
+import { BatchConfirmModal } from "../components/monitoring/board/batch";
+import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
+import { type BatchAction, runPool, summarizeBatch } from "../components/monitoring/board/batchUtils";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
+import { selectedFindingSummary } from "../components/monitoring/board/utils";
 import { profileTitle } from "../components/product-clusters/productClusterGraphUtils";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
@@ -52,9 +62,13 @@ type ActiveProductTask = {
   groupId: string | null;
   finding: IpReviewFinding;
 };
+type ProductGroupBatch = {
+  groupId: string;
+  findings: IpReviewFinding[];
+};
 
 export default function ProductClusters() {
-  const { actingTenantId } = useAuth();
+  const { actingTenantId, user } = useAuth();
   const {
     activeIpId: selectedIpId,
     activeIp,
@@ -74,7 +88,14 @@ export default function ProductClusters() {
   const [loadingTaskProfileId, setLoadingTaskProfileId] = useState<string | null>(null);
   const [dismissingTaskId, setDismissingTaskId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [loadingBatchGroupId, setLoadingBatchGroupId] = useState<string | null>(null);
+  const [activeBatch, setActiveBatch] = useState<ProductGroupBatch | null>(null);
+  const [confirmBatchAction, setConfirmBatchAction] = useState<BatchAction | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const [batchResult, setBatchResult] = useState<string | null>(null);
   const taskRequestSequence = useRef(0);
+  const batchRequestSequence = useRef(0);
+  const canMarkSentWithoutEmail = user?.role === "admin";
   const closeTask = useCallback(() => {
     taskRequestSequence.current += 1;
     setActiveTask(null);
@@ -149,6 +170,12 @@ export default function ProductClusters() {
   useEffect(() => {
     setError(null);
     setTaskError(null);
+    setBatchResult(null);
+    setLoadingBatchGroupId(null);
+    setActiveBatch(null);
+    setConfirmBatchAction(null);
+    setBatchProgress(null);
+    batchRequestSequence.current += 1;
     closeTask();
   }, [actingTenantId, closeTask, selectedIpId]);
 
@@ -259,6 +286,135 @@ export default function ProductClusters() {
         setRefreshingGroups(false);
       }
     }
+    setRefreshVersion((version) => version + 1);
+  }
+
+  async function openGroupBatch(groupId: string, action: BatchAction) {
+    if (!selectedIpId || batchProgress || loadingBatchGroupId) return;
+    if (activeBatch?.groupId === groupId) {
+      setConfirmBatchAction(action);
+      return;
+    }
+
+    const requestSequence = ++batchRequestSequence.current;
+    setLoadingBatchGroupId(groupId);
+    setActiveBatch(null);
+    setConfirmBatchAction(null);
+    setError(null);
+    try {
+      const findings = await loadProductGroupBatch(selectedIpId, groupId);
+      if (batchRequestSequence.current !== requestSequence) return;
+      if (findings.length === 0) {
+        setBatchResult("No tasks in this product group still need triage.");
+        setRefreshVersion((version) => version + 1);
+        return;
+      }
+      setActiveBatch({ groupId, findings });
+      setConfirmBatchAction(action);
+    } catch (caught: unknown) {
+      if (batchRequestSequence.current !== requestSequence) return;
+      setError(errorMessage(caught, "Unable to load this product group's tasks."));
+    } finally {
+      if (batchRequestSequence.current === requestSequence) {
+        setLoadingBatchGroupId(null);
+      }
+    }
+  }
+
+  function partitionGroupBatch(action: BatchAction) {
+    const eligible: IpReviewFinding[] = [];
+    const skipped: Record<string, number> = {};
+    const skip = (reason: string) => {
+      skipped[reason] = (skipped[reason] ?? 0) + 1;
+    };
+    for (const finding of activeBatch?.findings ?? []) {
+      const state: CaseReviewStatus = finding.dismissed_at
+        ? "dismissed"
+        : (finding.review_status ?? "pending");
+      const findingIpId = finding.ip_id ?? selectedIpId;
+      if (action === "send") {
+        if (!isDecisionState(state)) skip("already sent or closed");
+        else if (!finding.case_id) skip("still preparing");
+        else if (finding.signer_ready === false && !canMarkSentWithoutEmail) {
+          skip("missing signer information");
+        } else eligible.push(finding);
+      } else if (action === "review") {
+        if (state !== "pending") skip("not in triage");
+        else if (!finding.case_id) skip("still preparing");
+        else if (!findingIpId) skip("no associated IP");
+        else eligible.push(finding);
+      } else if (
+        action === "false_positive" ||
+        action === "do_not_pursue" ||
+        action === "second_hand"
+      ) {
+        if (finding.dismissed_at) skip("already dismissed");
+        else if (!findingIpId) skip("no associated IP");
+        else eligible.push(finding);
+      } else {
+        if (state !== "takedown_sent") skip("not awaiting enforcement");
+        else if (!findingIpId) skip("no associated IP");
+        else eligible.push(finding);
+      }
+    }
+    return { eligible, skipped };
+  }
+
+  async function runGroupBatch(action: BatchAction) {
+    const { eligible, skipped } = partitionGroupBatch(action);
+    const skipCounts = { ...skipped };
+    let ok = 0;
+    let failed = 0;
+    if (eligible.length === 0) {
+      setBatchResult(summarizeBatch(action, 0, skipCounts, 0));
+      return;
+    }
+
+    setBatchProgress({ done: 0, total: eligible.length });
+    const bump = (reason: string) => {
+      skipCounts[reason] = (skipCounts[reason] ?? 0) + 1;
+    };
+    await runPool(
+      eligible,
+      async (finding) => {
+        try {
+          const findingIpId = (finding.ip_id ?? selectedIpId) as string;
+          if (action === "send") {
+            const result = await autoSendTakedown(finding.case_id as string);
+            if (result.status === "sent") ok += 1;
+            else if (canMarkSentWithoutEmail) {
+              await markTakedownSentWithoutEmail(finding.case_id as string);
+              ok += 1;
+            } else if (result.status === "needs_compose") bump("needs manual compose");
+            else bump("email not configured");
+          } else if (
+            action === "false_positive" ||
+            action === "do_not_pursue" ||
+            action === "second_hand"
+          ) {
+            await dismissIpFinding(findingIpId, finding.result_id, { reason: action });
+            ok += 1;
+          } else if (action === "review") {
+            await markIpFindingNeedsReview(findingIpId, finding.result_id);
+            ok += 1;
+          } else {
+            await markIpFindingEnforced(findingIpId, finding.result_id);
+            ok += 1;
+          }
+        } catch {
+          failed += 1;
+        } finally {
+          setBatchProgress((progress) => progress
+            ? { ...progress, done: progress.done + 1 }
+            : progress);
+        }
+      },
+      4,
+    );
+    setBatchProgress(null);
+    setActiveBatch(null);
+    setBatchResult(summarizeBatch(action, ok, skipCounts, failed));
+    closeTask();
     setRefreshVersion((version) => version + 1);
   }
 
@@ -505,6 +661,20 @@ export default function ProductClusters() {
         </div>
       )}
 
+      {batchResult && (
+        <div className="mt-5 flex items-start justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
+          <span>{batchResult}</span>
+          <button
+            type="button"
+            onClick={() => setBatchResult(null)}
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-stone-400 hover:bg-stone-200 hover:text-stone-700"
+            aria-label="Dismiss batch result"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {loadingScopes ? (
         <LoadingState />
       ) : !selectedIpId || !selectedScope ? (
@@ -521,6 +691,10 @@ export default function ProductClusters() {
           savingCorrectionProfileId={savingCorrectionProfileId}
           activeTaskProfileId={activeTask?.profileId ?? null}
           loadingTaskProfileId={loadingTaskProfileId}
+          loadingBatchGroupId={loadingBatchGroupId}
+          activeBatch={activeBatch}
+          batchProgress={batchProgress}
+          onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
           onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
           onConfirmGroup={confirmGroup}
           onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
@@ -563,6 +737,18 @@ export default function ProductClusters() {
           showRelatedItems={false}
         />
       )}
+      {confirmBatchAction && activeBatch && (
+        <BatchConfirmModal
+          action={confirmBatchAction}
+          {...partitionGroupBatch(confirmBatchAction)}
+          onCancel={() => setConfirmBatchAction(null)}
+          onConfirm={() => {
+            const action = confirmBatchAction;
+            setConfirmBatchAction(null);
+            void runGroupBatch(action);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -576,6 +762,10 @@ function ProductGroupsOverview({
   savingCorrectionProfileId,
   activeTaskProfileId,
   loadingTaskProfileId,
+  loadingBatchGroupId,
+  activeBatch,
+  batchProgress,
+  onBatchAction,
   onOpenTask,
   onConfirmGroup,
   onUpdateEmbeddingThreshold,
@@ -592,6 +782,10 @@ function ProductGroupsOverview({
   savingCorrectionProfileId: string | null;
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
+  loadingBatchGroupId: string | null;
+  activeBatch: ProductGroupBatch | null;
+  batchProgress: { done: number; total: number } | null;
+  onBatchAction: (groupId: string, action: BatchAction) => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
@@ -728,6 +922,14 @@ function ProductGroupsOverview({
                   savingCorrectionProfileId={savingCorrectionProfileId}
                   activeTaskProfileId={activeTaskProfileId}
                   loadingTaskProfileId={loadingTaskProfileId}
+                  loadingBatch={loadingBatchGroupId === group.id}
+                  batchFindings={activeBatch?.groupId === group.id ? activeBatch.findings : null}
+                  batchProgress={activeBatch?.groupId === group.id ? batchProgress : null}
+                  batchDisabled={Boolean(
+                    (loadingBatchGroupId && loadingBatchGroupId !== group.id) ||
+                    (batchProgress && activeBatch?.groupId !== group.id)
+                  )}
+                  onBatchAction={(action) => onBatchAction(group.id, action)}
                   onOpenTask={onOpenTask}
                   onConfirmGroup={onConfirmGroup}
                   onUpdateEmbeddingThreshold={onUpdateEmbeddingThreshold}
@@ -807,6 +1009,11 @@ function ProductGroupCard({
   savingCorrectionProfileId,
   activeTaskProfileId,
   loadingTaskProfileId,
+  loadingBatch,
+  batchFindings,
+  batchProgress,
+  batchDisabled,
+  onBatchAction,
   onOpenTask,
   onConfirmGroup,
   onUpdateEmbeddingThreshold,
@@ -825,6 +1032,11 @@ function ProductGroupCard({
   savingCorrectionProfileId: string | null;
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
+  loadingBatch: boolean;
+  batchFindings: IpReviewFinding[] | null;
+  batchProgress: { done: number; total: number } | null;
+  batchDisabled: boolean;
+  onBatchAction: (action: BatchAction) => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
@@ -991,13 +1203,16 @@ function ProductGroupCard({
   }
 
   return (
-    <section className={`rounded-2xl border bg-white p-4 shadow-sm ${
-      confirmed
-        ? "border-emerald-200"
-        : mode === "visual"
-          ? "border-indigo-200"
-          : "border-stone-200"
-    }`}>
+    <section
+      data-product-group-id={group.id}
+      className={`rounded-2xl border bg-white p-4 shadow-sm ${
+        confirmed
+          ? "border-emerald-200"
+          : mode === "visual"
+            ? "border-indigo-200"
+            : "border-stone-200"
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide ${
@@ -1782,8 +1997,54 @@ function ProductGroupCard({
               : "View tasks"}
         </Link>
       </div>
+      <BatchOperationBar
+        selectedCount={batchFindings?.length ?? triageMemberCount}
+        selectedSummary={batchFindings
+          ? selectedFindingSummary(batchFindings)
+          : group.display_name
+            ? [group.display_name]
+            : []}
+        batchProgress={batchProgress}
+        onAction={onBatchAction}
+        showResort={false}
+        placement="inline"
+        showShortcuts={false}
+        disabled={batchDisabled}
+        statusMessage={loadingBatch ? "Loading all group tasks…" : null}
+      />
     </section>
   );
+}
+
+async function loadProductGroupBatch(ipId: string, groupId: string) {
+  const findings: IpReviewFinding[] = [];
+  const seenResultIds = new Set<string>();
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+
+  do {
+    const page = await listMonitoringFindingsGlobal({
+      status: "pending",
+      ip_id: ipId,
+      product_group_id: groupId,
+      limit: 200,
+      cursor,
+    });
+    for (const finding of page.findings) {
+      if (seenResultIds.has(finding.result_id)) continue;
+      seenResultIds.add(finding.result_id);
+      findings.push(finding);
+    }
+    cursor = page.next_cursor;
+    if (cursor && seenCursors.has(cursor)) break;
+    if (cursor) seenCursors.add(cursor);
+  } while (cursor);
+
+  return findings;
+}
+
+function isDecisionState(state: CaseReviewStatus) {
+  return state === "pending" || state === "review";
 }
 
 function ListingTile({
