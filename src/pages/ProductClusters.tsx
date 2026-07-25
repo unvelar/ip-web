@@ -75,7 +75,10 @@ export default function ProductClusters() {
     loading: loadingActiveIp,
   } = useActiveIp();
   const [scopes, setScopes] = useState<ProductClusterScope[]>([]);
-  const [groupOverview, setGroupOverview] = useState<PersistedProductGroupOverview | null>(null);
+  const [semanticOverview, setSemanticOverview] =
+    useState<PersistedProductGroupOverview | null>(null);
+  const [visualOverview, setVisualOverview] =
+    useState<PersistedProductGroupOverview | null>(null);
   const [productGroupView, setProductGroupView] = useState<ProductGroupView>("triage");
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [scopesLoadedKey, setScopesLoadedKey] = useState<string | null>(null);
@@ -102,7 +105,8 @@ export default function ProductClusters() {
     setLoadingTaskProfileId(null);
   }, []);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
-  const groupsRequestKey = `${scopesRequestKey}:${selectedIpId ?? ""}:semantic:${productGroupView}`;
+  const groupsRequestKey =
+    `${scopesRequestKey}:${selectedIpId ?? ""}:semantic+visual:${productGroupView}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
   const selectedScopeAvailable =
     scopesLoadedKey === scopesRequestKey && selectedScope != null;
@@ -117,13 +121,15 @@ export default function ProductClusters() {
         if (!alive) return;
         setScopes(nextScopes);
         if (nextScopes.length === 0) {
-          setGroupOverview(null);
+          setSemanticOverview(null);
+          setVisualOverview(null);
         }
       })
       .catch((caught: unknown) => {
         if (!alive) return;
         setScopes([]);
-        setGroupOverview(null);
+        setSemanticOverview(null);
+        setVisualOverview(null);
         setError(errorMessage(caught));
       })
       .finally(() => {
@@ -136,20 +142,27 @@ export default function ProductClusters() {
 
   useEffect(() => {
     if (!selectedIpId || !selectedScopeAvailable) {
-      setGroupOverview(null);
+      setSemanticOverview(null);
+      setVisualOverview(null);
       return;
     }
     let alive = true;
-    setGroupOverview(null);
-    void getPersistedProductGroups(selectedIpId, "semantic", productGroupView)
-      .then((overview) => {
+    setSemanticOverview(null);
+    setVisualOverview(null);
+    void Promise.all([
+      getPersistedProductGroups(selectedIpId, "semantic", productGroupView),
+      getPersistedProductGroups(selectedIpId, "visual", productGroupView),
+    ])
+      .then(([nextSemanticOverview, nextVisualOverview]) => {
         if (!alive) return;
-        setGroupOverview(overview);
+        setSemanticOverview(nextSemanticOverview);
+        setVisualOverview(nextVisualOverview);
         setError(null);
       })
       .catch((caught: unknown) => {
         if (!alive) return;
-        setGroupOverview(null);
+        setSemanticOverview(null);
+        setVisualOverview(null);
         setError(errorMessage(caught));
       })
       .finally(() => {
@@ -275,9 +288,15 @@ export default function ProductClusters() {
     if (selectedIpId && selectedScopeAvailable) {
       setRefreshingGroups(true);
       try {
-        setGroupOverview(await refreshPersistedProductGroups(
+        const nextSemanticOverview = await refreshPersistedProductGroups(
           selectedIpId,
           "semantic",
+          productGroupView,
+        );
+        setSemanticOverview(nextSemanticOverview);
+        setVisualOverview(await getPersistedProductGroups(
+          selectedIpId,
+          "visual",
           productGroupView,
         ));
       } catch (caught: unknown) {
@@ -428,7 +447,7 @@ export default function ProductClusters() {
         groupId,
         displayName,
       );
-      setGroupOverview((current) => current ? {
+      setVisualOverview((current) => current ? {
         ...current,
         groups: current.groups.map((candidate) =>
           candidate.id === group.id ? { ...candidate, ...group } : candidate
@@ -455,7 +474,7 @@ export default function ProductClusters() {
         profile_id: profileId,
         reason,
       });
-      setGroupOverview(await getPersistedProductGroups(selectedIpId, "visual", productGroupView));
+      setVisualOverview(await getPersistedProductGroups(selectedIpId, "visual", productGroupView));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
       throw caught;
@@ -476,7 +495,7 @@ export default function ProductClusters() {
         groupId,
         embeddingMatchThreshold,
       );
-      setGroupOverview((current) => current ? {
+      setVisualOverview((current) => current ? {
         ...current,
         dirty: result.regrouping_queued || current.dirty,
         groups: current.groups.map((group) =>
@@ -499,7 +518,7 @@ export default function ProductClusters() {
         groupId,
         instruction,
       );
-      setGroupOverview((current) => current ? {
+      setVisualOverview((current) => current ? {
         ...current,
         groups: current.groups.map((group) =>
           group.id === groupId
@@ -528,7 +547,7 @@ export default function ProductClusters() {
         ruleId,
         instruction,
       );
-      setGroupOverview((current) => current ? {
+      setVisualOverview((current) => current ? {
         ...current,
         groups: current.groups.map((group) =>
           group.id === groupId
@@ -557,7 +576,7 @@ export default function ProductClusters() {
         groupId,
         ruleId,
       );
-      setGroupOverview((current) => current ? {
+      setVisualOverview((current) => current ? {
         ...current,
         groups: current.groups.map((group) =>
           group.id === groupId
@@ -572,6 +591,9 @@ export default function ProductClusters() {
     }
   }
 
+  const primaryOverview = semanticOverview ?? visualOverview;
+  const workloadOverview = semanticOverview ?? visualOverview;
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -585,8 +607,8 @@ export default function ProductClusters() {
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Listings are classified by sellable product type, then split into useful
-            marketed variants such as red plush toys, blue plush toys, or keychains.
+            Groups can overlap. A listing may belong to a product type such as home
+            decor and, independently, to one or more visually similar groups.
           </p>
         </div>
         <button
@@ -603,49 +625,63 @@ export default function ProductClusters() {
         </button>
       </header>
 
-      {groupOverview && (
+      {primaryOverview && (
         <section className="mt-6 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-stone-500">
             <span>
-              <strong className="text-stone-800">{groupOverview.scope.profile_count}</strong>{" "}
+              <strong className="text-stone-800">{primaryOverview.scope.profile_count}</strong>{" "}
               profiled listings
             </span>
-            {groupOverview.relationship_type === "semantic_category" &&
-              groupOverview.snapshot_profile_count != null && (
+            {semanticOverview?.snapshot_profile_count != null && (
               <span>
-                <strong className="text-stone-800">{groupOverview.snapshot_profile_count}</strong>{" "}
+                <strong className="text-stone-800">{semanticOverview.snapshot_profile_count}</strong>{" "}
                 classified
               </span>
             )}
-            {groupOverview.relationship_type === "semantic_category" &&
-              (groupOverview.pending_snapshot_count ?? 0) > 0 && (
+            {(semanticOverview?.pending_snapshot_count ?? 0) > 0 && (
               <span className="text-violet-700">
-                <strong>{groupOverview.pending_snapshot_count}</strong>{" "}
+                <strong>{semanticOverview?.pending_snapshot_count}</strong>{" "}
                 awaiting classification
               </span>
             )}
-            {productGroupView === "triage" && groupOverview.triage_projection_available && (
+            {productGroupView === "triage" && workloadOverview?.triage_projection_available && (
               <>
                 <span>
-                  <strong className="text-stone-800">{groupOverview.triage_profile_count ?? 0}</strong>{" "}
-                  {(groupOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
+                  <strong className="text-stone-800">{workloadOverview.triage_profile_count ?? 0}</strong>{" "}
+                  {(workloadOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
                 </span>
-                <span>
-                  <strong className="text-stone-800">{groupOverview.triage_group_count ?? 0}</strong>{" "}
-                  {(groupOverview.triage_group_count ?? 0) === 1 ? "group" : "groups"} with work
-                </span>
+                {semanticOverview && (
+                  <span>
+                    <strong className="text-stone-800">{semanticOverview.triage_group_count ?? 0}</strong>{" "}
+                    type/variant groups with work
+                  </span>
+                )}
+                {visualOverview && (
+                  <span>
+                    <strong className="text-stone-800">{visualOverview.triage_group_count ?? 0}</strong>{" "}
+                    visual groups with work
+                  </span>
+                )}
               </>
             )}
             {productGroupView === "all" && (
               <>
-                <span>
-                  <strong className="text-stone-800">{groupOverview.group_count}</strong>{" "}
-                  {groupOverview.group_count === 1 ? "product group" : "product groups"}
-                </span>
-                {groupOverview.triage_projection_available && (
+                {semanticOverview && (
                   <span>
-                    <strong className="text-stone-800">{groupOverview.triage_profile_count ?? 0}</strong>{" "}
-                    {(groupOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
+                    <strong className="text-stone-800">{semanticOverview.group_count}</strong>{" "}
+                    type/variant groups
+                  </span>
+                )}
+                {visualOverview && (
+                  <span>
+                    <strong className="text-stone-800">{visualOverview.group_count}</strong>{" "}
+                    visual groups
+                  </span>
+                )}
+                {workloadOverview?.triage_projection_available && (
+                  <span>
+                    <strong className="text-stone-800">{workloadOverview.triage_profile_count ?? 0}</strong>{" "}
+                    {(workloadOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
                   </span>
                 )}
               </>
@@ -692,43 +728,79 @@ export default function ProductClusters() {
         <LoadingState />
       ) : !selectedIpId || !selectedScope ? (
         <EmptyState ipName={activeIp?.name ?? null} />
-      ) : loadingGroups && !groupOverview ? (
+      ) : loadingGroups && !semanticOverview && !visualOverview ? (
         <LoadingState />
-      ) : groupOverview?.relationship_type === "semantic_category" ? (
-        <SemanticProductGroupsOverview
-          overview={groupOverview}
-          groupView={productGroupView}
-          onGroupViewChange={setProductGroupView}
-          activeTaskProfileId={activeTask?.profileId ?? null}
-          loadingTaskProfileId={loadingTaskProfileId}
-          loadingBatchGroupId={loadingBatchGroupId}
-          activeBatch={activeBatch}
-          batchProgress={batchProgress}
-          onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
-          onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
-        />
-      ) : groupOverview ? (
-        <ProductGroupsOverview
-          overview={groupOverview}
-          mode="visual"
-          groupView={productGroupView}
-          onGroupViewChange={setProductGroupView}
-          savingGroupId={savingGroupId}
-          savingCorrectionProfileId={savingCorrectionProfileId}
-          activeTaskProfileId={activeTask?.profileId ?? null}
-          loadingTaskProfileId={loadingTaskProfileId}
-          loadingBatchGroupId={loadingBatchGroupId}
-          activeBatch={activeBatch}
-          batchProgress={batchProgress}
-          onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
-          onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
-          onConfirmGroup={confirmGroup}
-          onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
-          onCorrectGroupMember={correctGroupMember}
-          onCreateRule={createGroupRule}
-          onUpdateRule={updateGroupRule}
-          onDeleteRule={deleteGroupRule}
-        />
+      ) : semanticOverview || visualOverview ? (
+        <div className="mt-5">
+          <ProductGroupViewToggle
+            view={productGroupView}
+            onChange={setProductGroupView}
+          />
+          {semanticOverview && (
+            <section className="mt-7" aria-labelledby="semantic-groups-heading">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">
+                Product classification
+              </p>
+              <h2 id="semantic-groups-heading" className="mt-1 text-lg font-black text-stone-900">
+                Product types and useful variants
+              </h2>
+              <p className="mt-1 max-w-3xl text-sm text-stone-500">
+                Functional categories such as home decor, plush toys, and keychains,
+                with meaningful variants nested beneath them.
+              </p>
+              <SemanticProductGroupsOverview
+                overview={semanticOverview}
+                groupView={productGroupView}
+                onGroupViewChange={setProductGroupView}
+                showViewToggle={false}
+                activeTaskProfileId={activeTask?.profileId ?? null}
+                loadingTaskProfileId={loadingTaskProfileId}
+                loadingBatchGroupId={loadingBatchGroupId}
+                activeBatch={activeBatch}
+                batchProgress={batchProgress}
+                onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
+                onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
+              />
+            </section>
+          )}
+          {visualOverview && (
+            <section className="mt-10 border-t border-stone-200 pt-7" aria-labelledby="visual-groups-heading">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-700">
+                Visual similarity
+              </p>
+              <h2 id="visual-groups-heading" className="mt-1 text-lg font-black text-stone-900">
+                Visually similar groups
+              </h2>
+              <p className="mt-1 max-w-3xl text-sm text-stone-500">
+                Independent cohorts formed from shared gallery appearance. The same
+                listing can appear here, in another visual group, and in a product-type group above.
+              </p>
+              <ProductGroupsOverview
+                overview={visualOverview}
+                mode="visual"
+                groupView={productGroupView}
+                onGroupViewChange={setProductGroupView}
+                showViewToggle={false}
+                showUngrouped={false}
+                savingGroupId={savingGroupId}
+                savingCorrectionProfileId={savingCorrectionProfileId}
+                activeTaskProfileId={activeTask?.profileId ?? null}
+                loadingTaskProfileId={loadingTaskProfileId}
+                loadingBatchGroupId={loadingBatchGroupId}
+                activeBatch={activeBatch}
+                batchProgress={batchProgress}
+                onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
+                onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
+                onConfirmGroup={confirmGroup}
+                onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
+                onCorrectGroupMember={correctGroupMember}
+                onCreateRule={createGroupRule}
+                onUpdateRule={updateGroupRule}
+                onDeleteRule={deleteGroupRule}
+              />
+            </section>
+          )}
+        </div>
       ) : null}
 
       {activeTask && (
@@ -773,10 +845,53 @@ export default function ProductClusters() {
   );
 }
 
+function ProductGroupViewToggle({
+  view,
+  onChange,
+}: {
+  view: ProductGroupView;
+  onChange: (view: ProductGroupView) => void;
+}) {
+  const showingTriage = view === "triage";
+  return (
+    <div
+      className="inline-flex rounded-lg border border-stone-200 bg-white p-1 shadow-sm"
+      role="group"
+      aria-label="Product group listing view"
+    >
+      <button
+        type="button"
+        aria-pressed={showingTriage}
+        onClick={() => onChange("triage")}
+        className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+          showingTriage
+            ? "bg-stone-900 text-white"
+            : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+        }`}
+      >
+        Needs triage
+      </button>
+      <button
+        type="button"
+        aria-pressed={!showingTriage}
+        onClick={() => onChange("all")}
+        className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+          !showingTriage
+            ? "bg-stone-900 text-white"
+            : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+        }`}
+      >
+        All product groups
+      </button>
+    </div>
+  );
+}
+
 function SemanticProductGroupsOverview({
   overview,
   groupView,
   onGroupViewChange,
+  showViewToggle = true,
   activeTaskProfileId,
   loadingTaskProfileId,
   loadingBatchGroupId,
@@ -788,6 +903,7 @@ function SemanticProductGroupsOverview({
   overview: PersistedProductGroupOverview;
   groupView: ProductGroupView;
   onGroupViewChange: (view: ProductGroupView) => void;
+  showViewToggle?: boolean;
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
   loadingBatchGroupId: string | null;
@@ -827,38 +943,9 @@ function SemanticProductGroupsOverview({
 
   return (
     <div className="mt-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div
-          className="inline-flex rounded-lg border border-stone-200 bg-white p-1 shadow-sm"
-          role="group"
-          aria-label="Product group listing view"
-        >
-          <button
-            type="button"
-            aria-pressed={showingTriage}
-            onClick={() => onGroupViewChange("triage")}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-              showingTriage
-                ? "bg-stone-900 text-white"
-                : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
-            }`}
-          >
-            Needs triage
-          </button>
-          <button
-            type="button"
-            aria-pressed={!showingTriage}
-            onClick={() => onGroupViewChange("all")}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-              !showingTriage
-                ? "bg-stone-900 text-white"
-                : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
-            }`}
-          >
-            All product groups
-          </button>
-        </div>
-      </div>
+      {showViewToggle && (
+        <ProductGroupViewToggle view={groupView} onChange={onGroupViewChange} />
+      )}
 
       {overview.last_error && (
         <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -1129,6 +1216,8 @@ function ProductGroupsOverview({
   mode,
   groupView,
   onGroupViewChange,
+  showViewToggle = true,
+  showUngrouped = true,
   savingGroupId,
   savingCorrectionProfileId,
   activeTaskProfileId,
@@ -1149,6 +1238,8 @@ function ProductGroupsOverview({
   mode: GroupMode;
   groupView: ProductGroupView;
   onGroupViewChange: (view: ProductGroupView) => void;
+  showViewToggle?: boolean;
+  showUngrouped?: boolean;
   savingGroupId: string | null;
   savingCorrectionProfileId: string | null;
   activeTaskProfileId: string | null;
@@ -1202,36 +1293,9 @@ function ProductGroupsOverview({
 
   return (
     <div className="mt-5">
-      <div
-        className="inline-flex rounded-lg border border-stone-200 bg-white p-1 shadow-sm"
-        role="group"
-        aria-label="Product group listing view"
-      >
-        <button
-          type="button"
-          aria-pressed={showingTriage}
-          onClick={() => onGroupViewChange("triage")}
-          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-            showingTriage
-              ? "bg-stone-900 text-white"
-              : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
-          }`}
-        >
-          Needs triage
-        </button>
-        <button
-          type="button"
-          aria-pressed={!showingTriage}
-          onClick={() => onGroupViewChange("all")}
-          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-            !showingTriage
-              ? "bg-stone-900 text-white"
-              : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
-          }`}
-        >
-          All stored groups
-        </button>
-      </div>
+      {showViewToggle && (
+        <ProductGroupViewToggle view={groupView} onChange={onGroupViewChange} />
+      )}
 
       {overview.last_error && (
         <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -1321,7 +1385,7 @@ function ProductGroupsOverview({
             </p>
           )}
 
-          {displayedUngroupedCount > 0 && (
+          {showUngrouped && displayedUngroupedCount > 0 && (
             <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-bold text-stone-900">
                 {mode === "visual"
@@ -1600,7 +1664,7 @@ function ProductGroupCard({
                 ? `Potential product group ${index + 1}`
                 : mode === "related"
                   ? `Related family ${index + 1}`
-                  : `Potential group ${index + 1}`}
+                  : `Visual group ${index + 1}`}
           </p>
           {confirmed && group.display_name ? (
             <h2 className="mt-1 line-clamp-2 text-sm font-bold text-stone-900">
@@ -1608,7 +1672,9 @@ function ProductGroupCard({
             </h2>
           ) : (
             <p className="mt-1 text-[11px] text-stone-500">
-              Unnamed until confirmed
+              {mode === "visual"
+                ? "Automatically grouped by shared gallery appearance"
+                : "Unnamed until confirmed"}
             </p>
           )}
           {confirmed && group.confirmed_at && (
