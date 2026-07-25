@@ -102,7 +102,7 @@ export default function ProductClusters() {
     setLoadingTaskProfileId(null);
   }, []);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
-  const groupsRequestKey = `${scopesRequestKey}:${selectedIpId ?? ""}:visual:${productGroupView}`;
+  const groupsRequestKey = `${scopesRequestKey}:${selectedIpId ?? ""}:semantic:${productGroupView}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
   const selectedScopeAvailable =
     scopesLoadedKey === scopesRequestKey && selectedScope != null;
@@ -141,7 +141,7 @@ export default function ProductClusters() {
     }
     let alive = true;
     setGroupOverview(null);
-    void getPersistedProductGroups(selectedIpId, "visual", productGroupView)
+    void getPersistedProductGroups(selectedIpId, "semantic", productGroupView)
       .then((overview) => {
         if (!alive) return;
         setGroupOverview(overview);
@@ -277,7 +277,7 @@ export default function ProductClusters() {
       try {
         setGroupOverview(await refreshPersistedProductGroups(
           selectedIpId,
-          "visual",
+          "semantic",
           productGroupView,
         ));
       } catch (caught: unknown) {
@@ -585,9 +585,8 @@ export default function ProductClusters() {
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Review overlapping groups built from every stored listing image. A listing
-            can appear in several groups through different views; name a group only
-            when you confirm it.
+            Listings are classified by sellable product type, then split into useful
+            marketed variants such as red plush toys, blue plush toys, or keychains.
           </p>
         </div>
         <button
@@ -611,6 +610,20 @@ export default function ProductClusters() {
               <strong className="text-stone-800">{groupOverview.scope.profile_count}</strong>{" "}
               profiled listings
             </span>
+            {groupOverview.relationship_type === "semantic_category" &&
+              groupOverview.snapshot_profile_count != null && (
+              <span>
+                <strong className="text-stone-800">{groupOverview.snapshot_profile_count}</strong>{" "}
+                classified
+              </span>
+            )}
+            {groupOverview.relationship_type === "semantic_category" &&
+              (groupOverview.pending_snapshot_count ?? 0) > 0 && (
+              <span className="text-violet-700">
+                <strong>{groupOverview.pending_snapshot_count}</strong>{" "}
+                awaiting classification
+              </span>
+            )}
             {productGroupView === "triage" && groupOverview.triage_projection_available && (
               <>
                 <span>
@@ -627,7 +640,7 @@ export default function ProductClusters() {
               <>
                 <span>
                   <strong className="text-stone-800">{groupOverview.group_count}</strong>{" "}
-                  {groupOverview.group_count === 1 ? "stored group" : "stored groups"}
+                  {groupOverview.group_count === 1 ? "product group" : "product groups"}
                 </span>
                 {groupOverview.triage_projection_available && (
                   <span>
@@ -681,6 +694,19 @@ export default function ProductClusters() {
         <EmptyState ipName={activeIp?.name ?? null} />
       ) : loadingGroups && !groupOverview ? (
         <LoadingState />
+      ) : groupOverview?.relationship_type === "semantic_category" ? (
+        <SemanticProductGroupsOverview
+          overview={groupOverview}
+          groupView={productGroupView}
+          onGroupViewChange={setProductGroupView}
+          activeTaskProfileId={activeTask?.profileId ?? null}
+          loadingTaskProfileId={loadingTaskProfileId}
+          loadingBatchGroupId={loadingBatchGroupId}
+          activeBatch={activeBatch}
+          batchProgress={batchProgress}
+          onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
+          onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
+        />
       ) : groupOverview ? (
         <ProductGroupsOverview
           overview={groupOverview}
@@ -728,12 +754,6 @@ export default function ProductClusters() {
           onUpdated={refreshTaskAfterUpdate}
           onAddRelatedToBatch={() => undefined}
           productGroupId={activeTask.groupId ?? undefined}
-          onCorrectProductGroup={activeTask.groupId
-            ? async (reason) => {
-              await correctGroupMember(activeTask.groupId!, activeTask.profileId, reason);
-              closeTask();
-            }
-            : undefined}
           showRelatedItems={false}
         />
       )}
@@ -749,6 +769,357 @@ export default function ProductClusters() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function SemanticProductGroupsOverview({
+  overview,
+  groupView,
+  onGroupViewChange,
+  activeTaskProfileId,
+  loadingTaskProfileId,
+  loadingBatchGroupId,
+  activeBatch,
+  batchProgress,
+  onBatchAction,
+  onOpenTask,
+}: {
+  overview: PersistedProductGroupOverview;
+  groupView: ProductGroupView;
+  onGroupViewChange: (view: ProductGroupView) => void;
+  activeTaskProfileId: string | null;
+  loadingTaskProfileId: string | null;
+  loadingBatchGroupId: string | null;
+  activeBatch: ProductGroupBatch | null;
+  batchProgress: { done: number; total: number } | null;
+  onBatchAction: (groupId: string, action: BatchAction) => void;
+  onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
+}) {
+  const showingTriage = groupView === "triage";
+  const displayedGroups = showingTriage
+    ? overview.groups.filter((group) => (group.triage_member_count ?? 0) > 0)
+    : overview.groups;
+  const categoryGroups = displayedGroups.filter(
+    (group) => group.semantic_kind === "category" && !group.parent_group_id,
+  );
+  const categoryIds = new Set(categoryGroups.map((group) => group.id));
+  const childrenByParent = new Map<string, PersistedProductGroup[]>();
+  const orphanGroups: PersistedProductGroup[] = [];
+  for (const group of displayedGroups) {
+    if (group.semantic_kind === "category" && !group.parent_group_id) continue;
+    if (!group.parent_group_id || !categoryIds.has(group.parent_group_id)) {
+      orphanGroups.push(group);
+      continue;
+    }
+    const siblings = childrenByParent.get(group.parent_group_id) ?? [];
+    siblings.push(group);
+    childrenByParent.set(group.parent_group_id, siblings);
+  }
+  for (const siblings of childrenByParent.values()) {
+    siblings.sort((left, right) =>
+      (left.display_name ?? "").localeCompare(right.display_name ?? ""),
+    );
+  }
+  const buildingFirstSnapshot = overview.dirty &&
+    (overview.snapshot_profile_count ?? 0) === 0;
+  const pendingClassifications = overview.pending_snapshot_count ?? 0;
+
+  return (
+    <div className="mt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          className="inline-flex rounded-lg border border-stone-200 bg-white p-1 shadow-sm"
+          role="group"
+          aria-label="Product group listing view"
+        >
+          <button
+            type="button"
+            aria-pressed={showingTriage}
+            onClick={() => onGroupViewChange("triage")}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              showingTriage
+                ? "bg-stone-900 text-white"
+                : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+            }`}
+          >
+            Needs triage
+          </button>
+          <button
+            type="button"
+            aria-pressed={!showingTriage}
+            onClick={() => onGroupViewChange("all")}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              !showingTriage
+                ? "bg-stone-900 text-white"
+                : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+            }`}
+          >
+            All product groups
+          </button>
+        </div>
+      </div>
+
+      {overview.last_error && (
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          The latest automatic group refresh failed: {overview.last_error}
+        </div>
+      )}
+
+      {showingTriage && !overview.triage_projection_available ? (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Triage workload is temporarily unavailable while the backend update rolls out.
+        </div>
+      ) : categoryGroups.length === 0 && orphanGroups.length === 0 ? (
+        <div className="mt-5 rounded-2xl border border-dashed border-stone-300 bg-white px-6 py-14 text-center">
+          <h2 className="text-base font-bold text-stone-900">
+            {buildingFirstSnapshot
+              ? "Building the first product taxonomy"
+              : showingTriage
+                ? (overview.triage_profile_count ?? 0) === 0
+                  ? "No listings need triage"
+                  : "No classified group has shared triage work"
+                : "No product type has multiple listings yet"}
+          </h2>
+          <p className="mt-2 text-sm text-stone-500">
+            {buildingFirstSnapshot || pendingClassifications > 0
+              ? "Classification runs independently in the background and groups appear as results arrive."
+              : showingTriage
+                ? "Any remaining to-triage listings are either still being classified or are the only listing of their type."
+                : "Singleton classifications are retained for coverage and will appear once another listing shares their type."}
+          </p>
+        </div>
+      ) : (
+        <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+          {categoryGroups.map((group) => (
+            <section
+              key={group.id}
+              className="rounded-2xl border border-violet-200 bg-white p-4 shadow-sm"
+            >
+              <SemanticProductGroupCard
+                group={group}
+                ipId={overview.scope.ip_id}
+                showingTriage={showingTriage}
+                triageProjectionAvailable={overview.triage_projection_available}
+                activeTaskProfileId={activeTaskProfileId}
+                loadingTaskProfileId={loadingTaskProfileId}
+                loadingBatch={loadingBatchGroupId === group.id}
+                batchFindings={activeBatch?.groupId === group.id ? activeBatch.findings : null}
+                batchProgress={activeBatch?.groupId === group.id ? batchProgress : null}
+                batchDisabled={Boolean(
+                  (loadingBatchGroupId && loadingBatchGroupId !== group.id) ||
+                  (batchProgress && activeBatch?.groupId !== group.id)
+                )}
+                onBatchAction={(action) => onBatchAction(group.id, action)}
+                onOpenTask={onOpenTask}
+              />
+              {(childrenByParent.get(group.id)?.length ?? 0) > 0 && (
+                <div className="mt-4 border-t border-violet-100 pt-4">
+                  <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">
+                    Useful variants
+                  </p>
+                  <div className="space-y-3">
+                    {childrenByParent.get(group.id)?.map((child) => (
+                      <SemanticProductGroupCard
+                        key={child.id}
+                        group={child}
+                        ipId={overview.scope.ip_id}
+                        showingTriage={showingTriage}
+                        triageProjectionAvailable={overview.triage_projection_available}
+                        nested
+                        activeTaskProfileId={activeTaskProfileId}
+                        loadingTaskProfileId={loadingTaskProfileId}
+                        loadingBatch={loadingBatchGroupId === child.id}
+                        batchFindings={activeBatch?.groupId === child.id ? activeBatch.findings : null}
+                        batchProgress={activeBatch?.groupId === child.id ? batchProgress : null}
+                        batchDisabled={Boolean(
+                          (loadingBatchGroupId && loadingBatchGroupId !== child.id) ||
+                          (batchProgress && activeBatch?.groupId !== child.id)
+                        )}
+                        onBatchAction={(action) => onBatchAction(child.id, action)}
+                        onOpenTask={onOpenTask}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          ))}
+          {orphanGroups.map((group) => (
+            <section
+              key={group.id}
+              className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm"
+            >
+              <SemanticProductGroupCard
+                group={group}
+                ipId={overview.scope.ip_id}
+                showingTriage={showingTriage}
+                triageProjectionAvailable={overview.triage_projection_available}
+                activeTaskProfileId={activeTaskProfileId}
+                loadingTaskProfileId={loadingTaskProfileId}
+                loadingBatch={loadingBatchGroupId === group.id}
+                batchFindings={activeBatch?.groupId === group.id ? activeBatch.findings : null}
+                batchProgress={activeBatch?.groupId === group.id ? batchProgress : null}
+                batchDisabled={Boolean(
+                  (loadingBatchGroupId && loadingBatchGroupId !== group.id) ||
+                  (batchProgress && activeBatch?.groupId !== group.id)
+                )}
+                onBatchAction={(action) => onBatchAction(group.id, action)}
+                onOpenTask={onOpenTask}
+              />
+            </section>
+          ))}
+        </div>
+      )}
+
+      {overview.truncated && (
+        <p className="mt-3 text-xs text-amber-700">
+          Showing the first {displayedGroups.length} of {showingTriage
+            ? overview.triage_group_count ?? 0
+            : overview.group_count} product groups.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SemanticProductGroupCard({
+  group,
+  ipId,
+  showingTriage,
+  triageProjectionAvailable,
+  nested = false,
+  activeTaskProfileId,
+  loadingTaskProfileId,
+  loadingBatch,
+  batchFindings,
+  batchProgress,
+  batchDisabled,
+  onBatchAction,
+  onOpenTask,
+}: {
+  group: PersistedProductGroup;
+  ipId: string;
+  showingTriage: boolean;
+  triageProjectionAvailable: boolean;
+  nested?: boolean;
+  activeTaskProfileId: string | null;
+  loadingTaskProfileId: string | null;
+  loadingBatch: boolean;
+  batchFindings: IpReviewFinding[] | null;
+  batchProgress: { done: number; total: number } | null;
+  batchDisabled: boolean;
+  onBatchAction: (action: BatchAction) => void;
+  onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
+}) {
+  const triageMemberCount = group.triage_member_count ?? 0;
+  const displayedMembers = showingTriage ? group.triage_members : group.members;
+  const displayedMemberCount = showingTriage ? triageMemberCount : group.member_count;
+  const taskLinkMode = showingTriage || (triageProjectionAvailable && triageMemberCount > 0)
+    ? "pending"
+    : triageProjectionAvailable
+      ? "history"
+      : "all";
+  const taskQuery = taskLinkMode === "pending"
+    ? "status=pending"
+    : "status=all&show_dismissed=true";
+  const color = group.semantic_definition?.variant_color;
+
+  return (
+    <div
+      data-product-group-id={group.id}
+      className={nested
+        ? "rounded-xl border border-stone-200 bg-stone-50 p-3"
+        : ""}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+            nested ? "text-stone-500" : "text-violet-700"
+          }`}>
+            {nested ? "Color variant" : "Product type"}
+          </p>
+          <h2 className={`${nested ? "mt-0.5 text-sm" : "mt-1 text-lg"} font-black text-stone-900`}>
+            {group.display_name ?? "Classified products"}
+          </h2>
+          <p className="mt-1 text-[11px] text-stone-500">
+            {color
+              ? `Listings marketed as ${color}.`
+              : "Automatically classified from listing text and stored gallery evidence."}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-bold text-stone-900">
+            {showingTriage
+              ? `${triageMemberCount} to triage`
+              : `${group.member_count} ${group.member_count === 1 ? "listing" : "listings"}`}
+          </p>
+          <p className="mt-0.5 text-[10px] text-stone-500">
+            Classifier confidence {group.average_score?.toFixed(2) ?? "—"}
+          </p>
+          {!showingTriage && triageProjectionAvailable && (
+            <p className={`mt-0.5 text-[10px] font-semibold ${
+              triageMemberCount > 0 ? "text-red-700" : "text-emerald-700"
+            }`}>
+              {triageMemberCount > 0
+                ? `${triageMemberCount} still to triage`
+                : "No listings need triage"}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className={`mt-3 grid grid-cols-3 gap-2 ${nested ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+        {displayedMembers.map((profile) => (
+          <ListingTile
+            key={profile.id}
+            profile={profile}
+            active={activeTaskProfileId === profile.id}
+            loading={loadingTaskProfileId === profile.id}
+            onClick={() => onOpenTask(profile, group.id)}
+          />
+        ))}
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <p className="text-xs text-stone-500">
+          {displayedMemberCount > displayedMembers.length
+            ? `+${displayedMemberCount - displayedMembers.length} more listings`
+            : nested
+              ? "A meaningful color subset of the parent type"
+              : `${group.member_count} classified in this product type`}
+        </p>
+        <Link
+          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}`}
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+            taskLinkMode === "pending"
+              ? "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100"
+              : "border-stone-200 bg-white text-stone-700 hover:border-stone-300 hover:bg-stone-100"
+          }`}
+        >
+          <ListFilter size={13} />
+          {taskLinkMode === "pending"
+            ? "Open tasks"
+            : taskLinkMode === "history"
+              ? "View history"
+              : "View tasks"}
+        </Link>
+      </div>
+      <BatchOperationBar
+        selectedCount={batchFindings?.length ?? triageMemberCount}
+        selectedSummary={batchFindings
+          ? selectedFindingSummary(batchFindings)
+          : group.display_name
+            ? [group.display_name]
+            : []}
+        batchProgress={batchProgress}
+        onAction={onBatchAction}
+        showResort={false}
+        placement="inline"
+        showShortcuts={false}
+        disabled={batchDisabled}
+        statusMessage={loadingBatch ? "Loading all group tasks…" : null}
+      />
     </div>
   );
 }
@@ -1875,20 +2246,9 @@ function ProductGroupCard({
         </div>
       )}
 
-      {visualEvidence && (
-        <p className="mt-4 text-[10px] text-indigo-700">
-          Image similarity compares the displayed image with the closest product
-          reference image from another listing. It is explanatory only—not an
-          authenticity probability, multimodal candidate score, or final
-          same-product score.
-        </p>
-      )}
-      <div className={`${visualEvidence ? "mt-2" : "mt-4"} grid grid-cols-3 gap-2 sm:grid-cols-4`}>
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
         {displayedMembers.map((profile) => {
           const primaryVisualEvidence = primaryVisualEvidenceByProfileId.get(profile.id);
-          const matchedReferenceRank = primaryVisualEvidence?.matched_reference_image_id
-            ? referenceRankByImageId.get(primaryVisualEvidence.matched_reference_image_id)
-            : null;
           return (
             <div key={profile.id} className="group/member relative min-w-0">
               <ListingTile
@@ -1902,8 +2262,6 @@ function ProductGroupCard({
                 groupImagePosition={mode === "visual"
                   ? profile.group_image_position
                   : undefined}
-                visualSupportScore={primaryVisualEvidence?.visual_support_score}
-                visualSupportReferenceRank={matchedReferenceRank}
                 visualSupportIsReference={primaryVisualEvidence?.is_reference}
               />
               {canConfirm && group.member_count > 1 && (!confirmed || managing) && (
@@ -2054,8 +2412,6 @@ function ListingTile({
   loading = false,
   groupImageSimilarity,
   groupImagePosition,
-  visualSupportScore,
-  visualSupportReferenceRank,
   visualSupportIsReference = false,
 }: {
   profile: ProductClusterProfile;
@@ -2064,11 +2420,8 @@ function ListingTile({
   loading?: boolean;
   groupImageSimilarity?: number | null;
   groupImagePosition?: number | null;
-  visualSupportScore?: number | null;
-  visualSupportReferenceRank?: number | null;
   visualSupportIsReference?: boolean;
 }) {
-  const hasVisualSupport = visualSupportScore !== undefined;
   const hasGroupImageSimilarity = groupImageSimilarity !== undefined;
   return (
     <button
@@ -2090,30 +2443,6 @@ function ListingTile({
         ) : (
           <span className="flex h-full items-center justify-center text-sm font-bold text-stone-400">
             {profileTitle(profile).slice(0, 1).toUpperCase()}
-          </span>
-        )}
-        {(hasVisualSupport || hasGroupImageSimilarity) && (
-          <span
-            className="absolute right-1.5 top-1.5 rounded-md border border-indigo-100 bg-white/95 px-1.5 py-1 font-mono text-[10px] font-bold text-indigo-900 shadow-sm"
-            title={
-              hasGroupImageSimilarity
-                ? groupImageSimilarity == null
-                  ? "No pairwise score is available for this singleton view"
-                  : "Average pairwise similarity for this exact gallery image within the visual group"
-                : visualSupportScore == null
-                  ? "No reference image from another listing was available"
-                  : `Raw image similarity to ${
-                    visualSupportReferenceRank
-                      ? `product reference #${visualSupportReferenceRank}`
-                      : "the closest product reference"
-                  }`
-            }
-          >
-            {(hasGroupImageSimilarity ? groupImageSimilarity : visualSupportScore) == null
-              ? "Image sim —"
-              : `Image sim ${(
-                hasGroupImageSimilarity ? groupImageSimilarity! : visualSupportScore!
-              ).toFixed(2)}`}
           </span>
         )}
         {hasGroupImageSimilarity && groupImagePosition != null && (

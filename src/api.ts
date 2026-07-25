@@ -2337,6 +2337,10 @@ export interface PersistedProductGroup {
   name_source: "auto" | "manual";
   confirmation_status: "candidate" | "confirmed";
   confirmed_at: string | null;
+  parent_group_id: string | null;
+  semantic_kind: "category" | "color" | null;
+  semantic_key: string | null;
+  semantic_definition: Record<string, string> | null;
   member_count: number;
   triage_member_count: number | null;
   average_score: number | null;
@@ -2402,7 +2406,11 @@ export interface ProductGroupVisualEvidence {
 
 export interface PersistedProductGroupOverview {
   scope: ProductClusterScope;
-  relationship_type: "same_product" | "related_product" | "visual_similarity";
+  relationship_type:
+    | "same_product"
+    | "related_product"
+    | "visual_similarity"
+    | "semantic_category";
   threshold: number;
   algorithm_version: string;
   generated_at: string | null;
@@ -2454,6 +2462,13 @@ export function getProductClusterGraph(
 function normalizePersistedProductGroupOverview(overview: PersistedProductGroupOverview) {
   const groups = overview.groups.map((group) => ({
     ...group,
+    parent_group_id: group.parent_group_id ?? null,
+    semantic_kind: group.semantic_kind ?? null,
+    semantic_key: group.semantic_key ?? null,
+    semantic_definition:
+      group.semantic_definition && typeof group.semantic_definition === "object"
+        ? group.semantic_definition
+        : null,
     rules: Array.isArray(group.rules) ? group.rules : [],
     triage_member_count: Number.isFinite(group.triage_member_count)
       ? Number(group.triage_member_count)
@@ -2510,7 +2525,7 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
 
 export async function getPersistedProductGroups(
   ipId: string,
-  relationship: "same" | "related" | "visual",
+  relationship: "same" | "related" | "visual" | "semantic",
   view: "triage" | "all" = "triage",
 ) {
   const overview = await request<PersistedProductGroupOverview>(
@@ -2521,7 +2536,7 @@ export async function getPersistedProductGroups(
 
 export async function refreshPersistedProductGroups(
   ipId: string,
-  relationship: "same" | "related" | "visual",
+  relationship: "same" | "related" | "visual" | "semantic",
   view: "triage" | "all" = "triage",
 ) {
   const overview = await request<PersistedProductGroupOverview>(
