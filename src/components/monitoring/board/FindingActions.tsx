@@ -185,6 +185,7 @@ export function FindingActions({
       recommendationReason
         ? `Recommended action: ${recommendationReason}`
         : "Recommended action",
+      "Press Enter to use this recommendation",
       title,
     ].filter(Boolean).join(" · ");
   }
@@ -209,7 +210,8 @@ export function FindingActions({
       title={actionTitle(action, title)}
       className={actionClass(action)}
       aria-label={actionAriaLabel(action, label)}
-      aria-keyshortcuts={shortcut}
+      aria-keyshortcuts={recommendedAction === action ? `Enter ${shortcut}` : shortcut}
+      data-recommended-action={recommendedAction === action ? "Recommended" : undefined}
     >
       {isDismissing ? (
         "Working…"
@@ -272,7 +274,8 @@ export function FindingActions({
       }
       className={actionClass("review")}
       aria-label={actionAriaLabel("review", "Review")}
-      aria-keyshortcuts="R"
+      aria-keyshortcuts={recommendedAction === "review" ? "Enter R" : "R"}
+      data-recommended-action={recommendedAction === "review" ? "Recommended" : undefined}
     >
       {busy === "review" ? (
         "Working..."
@@ -321,6 +324,8 @@ export function FindingActions({
             : "h-7 px-2 rounded-md text-xs font-medium leading-none whitespace-nowrap text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
       }
       aria-label={actionAriaLabel("license", compact ? "License seller" : "License this seller")}
+      aria-keyshortcuts={recommendedAction === "license" ? "Enter" : undefined}
+      data-recommended-action={recommendedAction === "license" ? "Recommended" : undefined}
     >
       {licensing ? "Licensing…" : compact ? "License seller" : "License this seller"}
     </button>
@@ -391,7 +396,8 @@ export function FindingActions({
           }}
           className={actionClass("send_takedown")}
           aria-label={actionAriaLabel("send_takedown", "Send takedown")}
-          aria-keyshortcuts="T"
+          aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
+          data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
         >
           <ButtonWithShortcut
             label="Send takedown"
@@ -428,7 +434,8 @@ export function FindingActions({
           }}
           className={actionClass("send_takedown")}
           aria-label={actionAriaLabel("send_takedown", "Send takedown")}
-          aria-keyshortcuts="T"
+          aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
+          data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
         >
           <ButtonWithShortcut
             label="Send takedown"
@@ -485,7 +492,7 @@ export function FindingActions({
           : "min-w-0"
       }
     >
-      <div className={compact ? "grid grid-cols-2 gap-1.5" : "flex min-w-0 max-w-full flex-wrap items-center gap-1.5"}>
+      <div className={compact ? "finding-action-buttons grid grid-cols-2 gap-1.5" : "finding-action-buttons flex min-w-0 max-w-full flex-wrap items-center gap-1.5"}>
         {buttons}
         {!compact && utilityButtons && (
           <div className="ml-1 flex min-w-0 flex-wrap items-center gap-1.5 border-l border-stone-200 pl-2">
@@ -495,7 +502,7 @@ export function FindingActions({
       </div>
       {compact && (utilityButtons || refreshBtn) && (
         <div
-          className="relative border-t border-stone-200 pt-1 flex items-center justify-between gap-2 text-[11px] text-stone-400"
+          className="finding-action-utilities relative border-t border-stone-200 pt-1 flex items-center justify-between gap-2 text-[11px] text-stone-400"
         >
           <div>{utilityButtons}</div>
           {refreshBtn && (

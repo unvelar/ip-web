@@ -321,6 +321,9 @@ export function ConfirmSendModal({
   return (
     <div
       onClick={onCancel}
+      role="dialog"
+      aria-modal="true"
+      aria-label={noEmailMode ? "Mark takedown as sent" : "Send takedown notice"}
       className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
     >
       <div
@@ -488,6 +491,9 @@ export function ComposeModal({
   return (
     <div
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Send takedown request"
       className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
     >
       <div

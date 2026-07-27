@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import type {
   IpReviewFinding,
@@ -47,14 +48,55 @@ export function FindingInspector({
   onCorrectProductGroup?: (reason: ProductGroupCorrectionReason) => Promise<void>;
   showRelatedItems?: boolean;
 }) {
+  const inspectorRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    inspectorRef.current?.focus({ preventScroll: true });
+  }, [f.result_id]);
+
+  useEffect(() => {
+    function hasNativeEnterBehavior(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false;
+      return Boolean(target.closest(
+        "input, textarea, select, button, a, summary, label, [role='button'], [role='link'], [contenteditable]",
+      ));
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Enter" || event.repeat || event.isComposing) return;
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        hasNativeEnterBehavior(event.target)
+      ) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+
+      const recommendedButton = inspectorRef.current?.querySelector<HTMLButtonElement>(
+        "button[data-recommended-action]",
+      );
+      if (!recommendedButton || recommendedButton.disabled) return;
+
+      event.preventDefault();
+      recommendedButton.click();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <div className="fixed inset-0 z-40 pointer-events-none flex justify-end">
       <aside
+        ref={inspectorRef}
         data-finding-inspector
         role="dialog"
         aria-modal="false"
         aria-label="Finding details"
-        className="pointer-events-auto h-full w-full bg-white shadow-2xl shadow-stone-950/20 border-l border-stone-200 sm:w-[min(92vw,48rem)] xl:w-[min(58vw,60rem)] flex flex-col"
+        tabIndex={-1}
+        className="pointer-events-auto h-full w-full bg-white shadow-2xl shadow-stone-950/20 border-l border-stone-200 focus:outline-none sm:w-[min(92vw,48rem)] xl:w-[min(58vw,60rem)] flex flex-col"
       >
         <div className="h-12 shrink-0 border-b border-stone-200 bg-white/95 backdrop-blur flex items-center gap-3 px-4">
           <div className="min-w-0 flex-1">
