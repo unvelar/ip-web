@@ -2730,6 +2730,7 @@ export function correctProductSemanticGroupMember(
 ) {
   return request<{
     correction: ProductSemanticCorrection;
+    already_applied?: boolean;
     regrouped: boolean;
     similar_profiles_queued: number;
     propagation_visual_similarity_threshold: number | null;

@@ -27,6 +27,7 @@ import {
   getMonitoringFindingForCase,
   getPersistedProductGroups,
   getProductSemanticTaxonomy,
+  isApiError,
   listMonitoringFindingsGlobal,
   listProductClusterScopes,
   markIpFindingEnforced,
@@ -549,7 +550,9 @@ export default function ProductClusters() {
       );
       setSemanticCorrectionTarget(null);
       setSemanticFeedbackNotice(
-        result.similar_profiles_queued > 0
+        result.already_applied
+          ? "This product type was already corrected. The latest product groups are now loaded."
+          : result.similar_profiles_queued > 0
           ? `Type corrected. ${result.similar_profiles_queued} visually similar listing${
             result.similar_profiles_queued === 1 ? " is" : "s are"
           } queued for reconsideration using this reviewer-confirmed example.`
@@ -558,6 +561,21 @@ export default function ProductClusters() {
             : "Type corrected for this listing only.",
       );
     } catch (caught: unknown) {
+      if (isApiError(caught, 404)) {
+        const latestOverview = await getPersistedProductGroups(
+          selectedIpId,
+          "semantic",
+          productGroupView,
+        ).catch(() => null);
+        if (latestOverview) {
+          setSemanticOverview(latestOverview);
+          setSemanticCorrectionTarget(null);
+          setSemanticFeedbackNotice(
+            "That listing changed product groups while the page was open. The latest groups are now loaded.",
+          );
+          return;
+        }
+      }
       setError(errorMessage(caught, "Unable to correct this product type."));
       throw caught;
     } finally {
@@ -587,6 +605,21 @@ export default function ProductClusters() {
           : "Correction reset to the classifier result.",
       );
     } catch (caught: unknown) {
+      if (isApiError(caught, 404)) {
+        const latestOverview = await getPersistedProductGroups(
+          selectedIpId,
+          "semantic",
+          productGroupView,
+        ).catch(() => null);
+        if (latestOverview) {
+          setSemanticOverview(latestOverview);
+          setSemanticCorrectionTarget(null);
+          setSemanticFeedbackNotice(
+            "That correction had already changed. The latest product groups are now loaded.",
+          );
+          return;
+        }
+      }
       setError(errorMessage(caught, "Unable to reset this product-type correction."));
       throw caught;
     } finally {
