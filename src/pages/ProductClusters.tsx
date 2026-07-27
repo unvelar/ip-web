@@ -14,9 +14,11 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
+  DEFAULT_PRODUCT_SEMANTIC_TAXONOMY,
   autoSendTakedown,
   calculatePersistedProductGroupVisualEvidence,
   confirmPersistedProductGroup,
+  correctProductSemanticGroupMember,
   createPersistedProductGroupRule,
   deletePersistedProductGroupRule,
   dismissIpFinding,
@@ -24,6 +26,7 @@ import {
   getMonitoringFinding,
   getMonitoringFindingForCase,
   getPersistedProductGroups,
+  getProductSemanticTaxonomy,
   listMonitoringFindingsGlobal,
   listProductClusterScopes,
   markIpFindingEnforced,
@@ -33,6 +36,7 @@ import {
   refreshPersistedProductGroups,
   removePersistedProductGroupReferenceImage,
   resetPersistedProductGroupReferenceImages,
+  restoreProductSemanticCorrection,
   updatePersistedProductGroupEmbeddingSettings,
   updatePersistedProductGroupRule,
   type PersistedProductGroup,
@@ -45,6 +49,7 @@ import {
   type ProductGroupCorrectionReason,
   type ProductGroupRule,
   type ProductGroupVisualEvidence,
+  type ProductSemanticCategory,
 } from "../api";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
@@ -66,6 +71,10 @@ type ProductGroupBatch = {
   groupId: string;
   findings: IpReviewFinding[];
 };
+type SemanticCorrectionTarget = {
+  group: PersistedProductGroup;
+  profile: ProductClusterProfile;
+};
 
 export default function ProductClusters() {
   const { actingTenantId, user } = useAuth();
@@ -86,6 +95,15 @@ export default function ProductClusters() {
   const [refreshingGroups, setRefreshingGroups] = useState(false);
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
   const [savingCorrectionProfileId, setSavingCorrectionProfileId] = useState<string | null>(null);
+  const [savingSemanticCorrectionProfileId, setSavingSemanticCorrectionProfileId] =
+    useState<string | null>(null);
+  const [semanticCorrectionTarget, setSemanticCorrectionTarget] =
+    useState<SemanticCorrectionTarget | null>(null);
+  const [semanticTaxonomy, setSemanticTaxonomy] = useState<ProductSemanticCategory[]>(
+    () => [...DEFAULT_PRODUCT_SEMANTIC_TAXONOMY],
+  );
+  const [semanticTaxonomyLoaded, setSemanticTaxonomyLoaded] = useState(false);
+  const [semanticFeedbackNotice, setSemanticFeedbackNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<ActiveProductTask | null>(null);
   const [loadingTaskProfileId, setLoadingTaskProfileId] = useState<string | null>(null);
@@ -190,7 +208,28 @@ export default function ProductClusters() {
     setBatchProgress(null);
     batchRequestSequence.current += 1;
     closeTask();
+    setSemanticCorrectionTarget(null);
+    setSemanticFeedbackNotice(null);
+    setSemanticTaxonomyLoaded(false);
   }, [actingTenantId, closeTask, selectedIpId]);
+
+  useEffect(() => {
+    if (!semanticCorrectionTarget || semanticTaxonomyLoaded) return;
+    let alive = true;
+    void getProductSemanticTaxonomy()
+      .then(({ categories }) => {
+        if (alive && categories.length > 0) setSemanticTaxonomy(categories);
+      })
+      .catch(() => {
+        // Keep the bundled taxonomy while frontend and API releases roll out.
+      })
+      .finally(() => {
+        if (alive) setSemanticTaxonomyLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [semanticCorrectionTarget, semanticTaxonomyLoaded]);
 
   useEffect(() => {
     if (!activeTask) return;
@@ -483,6 +522,78 @@ export default function ProductClusters() {
     }
   }
 
+  async function correctSemanticMember(input: {
+    group: PersistedProductGroup;
+    profile: ProductClusterProfile;
+    correctedCategoryKey: string;
+    note: string;
+    propagateToSimilar: boolean;
+  }) {
+    if (!selectedIpId) return;
+    setError(null);
+    setSemanticFeedbackNotice(null);
+    setSavingSemanticCorrectionProfileId(input.profile.id);
+    try {
+      const result = await correctProductSemanticGroupMember(
+        selectedIpId,
+        input.group.id,
+        {
+          profile_id: input.profile.id,
+          corrected_category_key: input.correctedCategoryKey,
+          note: input.note.trim() || null,
+          propagate_to_similar: input.propagateToSimilar,
+        },
+      );
+      setSemanticOverview(
+        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView),
+      );
+      setSemanticCorrectionTarget(null);
+      setSemanticFeedbackNotice(
+        result.similar_profiles_queued > 0
+          ? `Type corrected. ${result.similar_profiles_queued} visually similar listing${
+            result.similar_profiles_queued === 1 ? " is" : "s are"
+          } queued for reconsideration using this reviewer-confirmed example.`
+          : input.propagateToSimilar
+            ? "Type corrected. No other listing met the strong visual-similarity threshold."
+            : "Type corrected for this listing only.",
+      );
+    } catch (caught: unknown) {
+      setError(errorMessage(caught, "Unable to correct this product type."));
+      throw caught;
+    } finally {
+      setSavingSemanticCorrectionProfileId(null);
+    }
+  }
+
+  async function resetSemanticCorrection(target: SemanticCorrectionTarget) {
+    if (!selectedIpId || !target.profile.semantic_correction_id) return;
+    setError(null);
+    setSemanticFeedbackNotice(null);
+    setSavingSemanticCorrectionProfileId(target.profile.id);
+    try {
+      const result = await restoreProductSemanticCorrection(
+        selectedIpId,
+        target.profile.semantic_correction_id,
+      );
+      setSemanticOverview(
+        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView),
+      );
+      setSemanticCorrectionTarget(null);
+      setSemanticFeedbackNotice(
+        result.similar_profiles_queued > 0
+          ? `Correction reset. ${result.similar_profiles_queued} visually similar listing${
+            result.similar_profiles_queued === 1 ? " is" : "s are"
+          } queued to reconsider the change without that example.`
+          : "Correction reset to the classifier result.",
+      );
+    } catch (caught: unknown) {
+      setError(errorMessage(caught, "Unable to reset this product-type correction."));
+      throw caught;
+    } finally {
+      setSavingSemanticCorrectionProfileId(null);
+    }
+  }
+
   async function updateGroupEmbeddingThreshold(
     groupId: string,
     embeddingMatchThreshold: number | null,
@@ -748,6 +859,19 @@ export default function ProductClusters() {
                 Functional categories such as home decor, plush toys, and keychains,
                 with meaningful variants nested beneath them.
               </p>
+              {semanticFeedbackNotice && (
+                <div className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">
+                  <span>{semanticFeedbackNotice}</span>
+                  <button
+                    type="button"
+                    aria-label="Dismiss semantic correction status"
+                    onClick={() => setSemanticFeedbackNotice(null)}
+                    className="shrink-0 rounded p-0.5 text-emerald-700 hover:bg-emerald-100"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
               <SemanticProductGroupsOverview
                 overview={semanticOverview}
                 groupView={productGroupView}
@@ -758,8 +882,12 @@ export default function ProductClusters() {
                 loadingBatchGroupId={loadingBatchGroupId}
                 activeBatch={activeBatch}
                 batchProgress={batchProgress}
+                savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
                 onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
                 onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
+                onCorrectType={(group, profile) => {
+                  setSemanticCorrectionTarget({ group, profile });
+                }}
               />
             </section>
           )}
@@ -841,6 +969,207 @@ export default function ProductClusters() {
           }}
         />
       )}
+      {semanticCorrectionTarget && (
+        <SemanticCorrectionDialog
+          target={semanticCorrectionTarget}
+          categories={semanticTaxonomy}
+          saving={savingSemanticCorrectionProfileId === semanticCorrectionTarget.profile.id}
+          onClose={() => setSemanticCorrectionTarget(null)}
+          onSave={(values) => correctSemanticMember({
+            ...values,
+            group: semanticCorrectionTarget.group,
+            profile: semanticCorrectionTarget.profile,
+          })}
+          onReset={() => resetSemanticCorrection(semanticCorrectionTarget)}
+        />
+      )}
+    </div>
+  );
+}
+
+function SemanticCorrectionDialog({
+  target,
+  categories,
+  saving,
+  onClose,
+  onSave,
+  onReset,
+}: {
+  target: SemanticCorrectionTarget;
+  categories: ProductSemanticCategory[];
+  saving: boolean;
+  onClose: () => void;
+  onSave: (values: {
+    correctedCategoryKey: string;
+    note: string;
+    propagateToSimilar: boolean;
+  }) => Promise<void> | void;
+  onReset: () => Promise<void> | void;
+}) {
+  const [correctedCategoryKey, setCorrectedCategoryKey] = useState("");
+  const [note, setNote] = useState("");
+  const [propagateToSimilar, setPropagateToSimilar] = useState(true);
+  const currentCategoryKey = target.group.semantic_definition?.category_key ?? "";
+  const sourceCategoryKey = target.profile.semantic_source_category_key ?? currentCategoryKey;
+  const availableCategories = categories.filter((category) =>
+    category.key !== currentCategoryKey &&
+    (!target.profile.semantic_correction_id || category.key !== sourceCategoryKey)
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || saving) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, saving]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !saving) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="semantic-correction-title"
+        className="w-full max-w-lg rounded-2xl border border-violet-200 bg-white p-5 shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">
+              Reviewer correction
+            </p>
+            <h2 id="semantic-correction-title" className="mt-1 text-lg font-black text-stone-950">
+              Correct product type
+            </h2>
+            <p className="mt-1 truncate text-sm font-semibold text-stone-700">
+              {profileTitle(target.profile)}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close product type correction"
+            disabled={saving}
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-xs text-stone-600">
+          <p>
+            Current group: <strong className="text-stone-900">{target.group.display_name}</strong>
+          </p>
+          {target.profile.semantic_correction_id && (
+            <p className="mt-1">
+              Classifier result: <strong className="text-stone-900">{
+                target.profile.semantic_source_category_label ?? sourceCategoryKey
+              }</strong>
+            </p>
+          )}
+        </div>
+
+        <form
+          className="mt-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!correctedCategoryKey || saving) return;
+            void Promise.resolve(onSave({
+              correctedCategoryKey,
+              note,
+              propagateToSimilar,
+            })).catch(() => undefined);
+          }}
+        >
+          <label className="block text-xs font-bold text-stone-800" htmlFor="corrected-product-type">
+            Correct product type
+          </label>
+          <select
+            id="corrected-product-type"
+            value={correctedCategoryKey}
+            disabled={saving}
+            onChange={(event) => setCorrectedCategoryKey(event.target.value)}
+            className="mt-1.5 w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+          >
+            <option value="">Choose the correct type…</option>
+            {availableCategories.map((category) => (
+              <option key={category.key} value={category.key}>{category.label}</option>
+            ))}
+          </select>
+
+          <label className="mt-4 block text-xs font-bold text-stone-800" htmlFor="semantic-correction-note">
+            Note <span className="font-normal text-stone-500">(optional)</span>
+          </label>
+          <textarea
+            id="semantic-correction-note"
+            value={note}
+            maxLength={1000}
+            rows={3}
+            disabled={saving}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Why is the current type wrong?"
+            className="mt-1.5 w-full resize-none rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+          />
+
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
+            <input
+              type="checkbox"
+              checked={propagateToSimilar}
+              disabled={saving}
+              onChange={(event) => setPropagateToSimilar(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-violet-300 text-violet-700"
+            />
+            <span>
+              <span className="block text-xs font-bold text-violet-950">
+                Reconsider visually similar listings
+              </span>
+              <span className="mt-0.5 block text-[11px] leading-relaxed text-violet-800">
+                Strong visual matches are queued for classification using this correction as a trusted example. Their types are still decided from their own text and images.
+              </span>
+            </span>
+          </label>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              {target.profile.semantic_correction_id && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void Promise.resolve(onReset()).catch(() => undefined)}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  <RotateCcw size={13} />
+                  Use classifier result
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={onClose}
+                className="rounded-lg px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving || !correctedCategoryKey}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-violet-700 px-3.5 py-2 text-xs font-bold text-white hover:bg-violet-800 disabled:opacity-40"
+              >
+                <CheckCircle2 size={14} />
+                {saving ? "Updating…" : "Update type"}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -897,8 +1226,10 @@ function SemanticProductGroupsOverview({
   loadingBatchGroupId,
   activeBatch,
   batchProgress,
+  savingSemanticCorrectionProfileId,
   onBatchAction,
   onOpenTask,
+  onCorrectType,
 }: {
   overview: PersistedProductGroupOverview;
   groupView: ProductGroupView;
@@ -909,8 +1240,13 @@ function SemanticProductGroupsOverview({
   loadingBatchGroupId: string | null;
   activeBatch: ProductGroupBatch | null;
   batchProgress: { done: number; total: number } | null;
+  savingSemanticCorrectionProfileId: string | null;
   onBatchAction: (groupId: string, action: BatchAction) => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
+  onCorrectType: (
+    group: PersistedProductGroup,
+    profile: ProductClusterProfile,
+  ) => void;
 }) {
   const showingTriage = groupView === "triage";
   const displayedGroups = showingTriage
@@ -993,12 +1329,14 @@ function SemanticProductGroupsOverview({
                 loadingBatch={loadingBatchGroupId === group.id}
                 batchFindings={activeBatch?.groupId === group.id ? activeBatch.findings : null}
                 batchProgress={activeBatch?.groupId === group.id ? batchProgress : null}
+                savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
                 batchDisabled={Boolean(
                   (loadingBatchGroupId && loadingBatchGroupId !== group.id) ||
                   (batchProgress && activeBatch?.groupId !== group.id)
                 )}
                 onBatchAction={(action) => onBatchAction(group.id, action)}
                 onOpenTask={onOpenTask}
+                onCorrectType={onCorrectType}
               />
               {(childrenByParent.get(group.id)?.length ?? 0) > 0 && (
                 <div className="mt-4 border-t border-violet-100 pt-4">
@@ -1019,12 +1357,14 @@ function SemanticProductGroupsOverview({
                         loadingBatch={loadingBatchGroupId === child.id}
                         batchFindings={activeBatch?.groupId === child.id ? activeBatch.findings : null}
                         batchProgress={activeBatch?.groupId === child.id ? batchProgress : null}
+                        savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
                         batchDisabled={Boolean(
                           (loadingBatchGroupId && loadingBatchGroupId !== child.id) ||
                           (batchProgress && activeBatch?.groupId !== child.id)
                         )}
                         onBatchAction={(action) => onBatchAction(child.id, action)}
                         onOpenTask={onOpenTask}
+                        onCorrectType={onCorrectType}
                       />
                     ))}
                   </div>
@@ -1047,12 +1387,14 @@ function SemanticProductGroupsOverview({
                 loadingBatch={loadingBatchGroupId === group.id}
                 batchFindings={activeBatch?.groupId === group.id ? activeBatch.findings : null}
                 batchProgress={activeBatch?.groupId === group.id ? batchProgress : null}
+                savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
                 batchDisabled={Boolean(
                   (loadingBatchGroupId && loadingBatchGroupId !== group.id) ||
                   (batchProgress && activeBatch?.groupId !== group.id)
                 )}
                 onBatchAction={(action) => onBatchAction(group.id, action)}
                 onOpenTask={onOpenTask}
+                onCorrectType={onCorrectType}
               />
             </section>
           ))}
@@ -1082,8 +1424,10 @@ function SemanticProductGroupCard({
   batchFindings,
   batchProgress,
   batchDisabled,
+  savingSemanticCorrectionProfileId,
   onBatchAction,
   onOpenTask,
+  onCorrectType,
 }: {
   group: PersistedProductGroup;
   ipId: string;
@@ -1096,8 +1440,13 @@ function SemanticProductGroupCard({
   batchFindings: IpReviewFinding[] | null;
   batchProgress: { done: number; total: number } | null;
   batchDisabled: boolean;
+  savingSemanticCorrectionProfileId: string | null;
   onBatchAction: (action: BatchAction) => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
+  onCorrectType: (
+    group: PersistedProductGroup,
+    profile: ProductClusterProfile,
+  ) => void;
 }) {
   const triageMemberCount = group.triage_member_count ?? 0;
   const displayedMembers = showingTriage ? group.triage_members : group.members;
@@ -1158,13 +1507,31 @@ function SemanticProductGroupCard({
 
       <div className={`mt-3 grid grid-cols-3 gap-2 ${nested ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
         {displayedMembers.map((profile) => (
-          <ListingTile
-            key={profile.id}
-            profile={profile}
-            active={activeTaskProfileId === profile.id}
-            loading={loadingTaskProfileId === profile.id}
-            onClick={() => onOpenTask(profile, group.id)}
-          />
+          <div key={profile.id} className="group/semantic-member relative min-w-0">
+            <ListingTile
+              profile={profile}
+              active={activeTaskProfileId === profile.id}
+              loading={loadingTaskProfileId === profile.id}
+              onClick={() => onOpenTask(profile, group.id)}
+            />
+            <button
+              type="button"
+              aria-label={`Correct product type for ${profileTitle(profile)}`}
+              title={profile.semantic_correction_id
+                ? "Edit this reviewer-corrected product type"
+                : "Correct this product type"}
+              disabled={Boolean(savingSemanticCorrectionProfileId)}
+              onClick={() => onCorrectType(group, profile)}
+              className={`absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-bold shadow-sm transition disabled:opacity-50 ${
+                profile.semantic_correction_id
+                  ? "border-emerald-200 bg-emerald-50/95 text-emerald-800 hover:bg-emerald-100"
+                  : "border-violet-200 bg-white/95 text-violet-800 hover:bg-violet-50"
+              }`}
+            >
+              <Pencil size={9} />
+              {profile.semantic_correction_id ? "Corrected" : "Correct type"}
+            </button>
+          </div>
         ))}
       </div>
 

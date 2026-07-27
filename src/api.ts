@@ -2305,8 +2305,48 @@ export interface ProductClusterProfile {
   group_image_id?: string | null;
   group_image_position?: number | null;
   group_image_similarity?: number | null;
+  semantic_component_id?: string | null;
+  semantic_component_ordinal?: number | null;
+  semantic_correction_id?: string | null;
+  semantic_source_category_key?: string | null;
+  semantic_source_category_label?: string | null;
   updated_at: string;
 }
+
+export interface ProductSemanticCategory {
+  key: string;
+  label: string;
+  supports_color_variants: boolean;
+}
+
+// This is a staged-deployment fallback. The API endpoint is authoritative once
+// migration 036 and the matching backend release are live.
+export const DEFAULT_PRODUCT_SEMANTIC_TAXONOMY: readonly ProductSemanticCategory[] = [
+  { key: "plush_toy", label: "Plush toy", supports_color_variants: true },
+  { key: "keychain", label: "Keychain", supports_color_variants: true },
+  { key: "backpack", label: "Backpack", supports_color_variants: true },
+  { key: "bag", label: "Bag", supports_color_variants: true },
+  { key: "cushion", label: "Cushion", supports_color_variants: true },
+  { key: "doll", label: "Doll", supports_color_variants: true },
+  { key: "figurine", label: "Figurine", supports_color_variants: true },
+  { key: "toy", label: "Toy", supports_color_variants: true },
+  { key: "apparel", label: "Apparel item", supports_color_variants: true },
+  { key: "footwear", label: "Footwear item", supports_color_variants: true },
+  { key: "jewelry", label: "Jewelry item", supports_color_variants: true },
+  { key: "phone_case", label: "Phone case", supports_color_variants: true },
+  { key: "perfume", label: "Perfume", supports_color_variants: false },
+  { key: "body_care", label: "Body care item", supports_color_variants: false },
+  { key: "cosmetics", label: "Cosmetic", supports_color_variants: false },
+  { key: "drinkware", label: "Drinkware item", supports_color_variants: true },
+  { key: "wall_art", label: "Wall art item", supports_color_variants: true },
+  { key: "sticker", label: "Sticker", supports_color_variants: true },
+  { key: "pin_badge", label: "Pin or badge", supports_color_variants: true },
+  { key: "patch", label: "Patch", supports_color_variants: true },
+  { key: "stationery", label: "Stationery item", supports_color_variants: true },
+  { key: "home_decor", label: "Home decor item", supports_color_variants: true },
+  { key: "accessory", label: "Accessory", supports_color_variants: true },
+  { key: "other", label: "Other product", supports_color_variants: false },
+];
 
 export interface ProductClusterEdge {
   id: string;
@@ -2442,8 +2482,27 @@ export interface ProductGroupMemberCorrection {
   created_at: string;
 }
 
+export interface ProductSemanticCorrection {
+  id: string;
+  source_group_id: string | null;
+  profile_id: string;
+  case_id: string;
+  component_ordinal: number;
+  source_category_key: string;
+  source_category_label: string;
+  corrected_category_key: string;
+  corrected_category_label: string;
+  created_at: string;
+}
+
 export function listProductClusterScopes() {
   return request<{ scopes: ProductClusterScope[] }>("/api/product-clusters/scopes");
+}
+
+export function getProductSemanticTaxonomy() {
+  return request<{ categories: ProductSemanticCategory[] }>(
+    "/api/product-clusters/semantic-taxonomy",
+  );
 }
 
 export function getProductClusterGraph(
@@ -2655,6 +2714,41 @@ export function restorePersistedProductGroupMember(
     regrouped: boolean;
   }>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/corrections/${encodeURIComponent(correctionId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function correctProductSemanticGroupMember(
+  ipId: string,
+  groupId: string,
+  input: {
+    profile_id: string;
+    corrected_category_key: string;
+    note?: string | null;
+    propagate_to_similar: boolean;
+  },
+) {
+  return request<{
+    correction: ProductSemanticCorrection;
+    regrouped: boolean;
+    similar_profiles_queued: number;
+    propagation_visual_similarity_threshold: number | null;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/semantic-corrections`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function restoreProductSemanticCorrection(
+  ipId: string,
+  correctionId: string,
+) {
+  return request<{
+    correction: ProductSemanticCorrection;
+    regrouped: boolean;
+    similar_profiles_queued: number;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/semantic-corrections/${encodeURIComponent(correctionId)}`,
     { method: "DELETE" },
   );
 }
