@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
+  DEFAULT_PRODUCT_SEMANTIC_COLORS,
   DEFAULT_PRODUCT_SEMANTIC_TAXONOMY,
   autoSendTakedown,
   calculatePersistedProductGroupVisualEvidence,
@@ -51,6 +52,7 @@ import {
   type ProductGroupRule,
   type ProductGroupVisualEvidence,
   type ProductSemanticCategory,
+  type ProductSemanticColor,
 } from "../api";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
@@ -102,6 +104,9 @@ export default function ProductClusters() {
     useState<SemanticCorrectionTarget | null>(null);
   const [semanticTaxonomy, setSemanticTaxonomy] = useState<ProductSemanticCategory[]>(
     () => [...DEFAULT_PRODUCT_SEMANTIC_TAXONOMY],
+  );
+  const [semanticColors, setSemanticColors] = useState<ProductSemanticColor[]>(
+    () => [...DEFAULT_PRODUCT_SEMANTIC_COLORS],
   );
   const [semanticTaxonomyLoaded, setSemanticTaxonomyLoaded] = useState(false);
   const [semanticFeedbackNotice, setSemanticFeedbackNotice] = useState<string | null>(null);
@@ -218,8 +223,9 @@ export default function ProductClusters() {
     if (!semanticCorrectionTarget || semanticTaxonomyLoaded) return;
     let alive = true;
     void getProductSemanticTaxonomy()
-      .then(({ categories }) => {
+      .then(({ categories, colors }) => {
         if (alive && categories.length > 0) setSemanticTaxonomy(categories);
+        if (alive && colors && colors.length > 0) setSemanticColors(colors);
       })
       .catch(() => {
         // Keep the bundled taxonomy while frontend and API releases roll out.
@@ -527,6 +533,7 @@ export default function ProductClusters() {
     group: PersistedProductGroup;
     profile: ProductClusterProfile;
     correctedCategoryKey: string;
+    correctedVariantColors: string[];
     note: string;
     propagateToSimilar: boolean;
   }) {
@@ -541,6 +548,7 @@ export default function ProductClusters() {
         {
           profile_id: input.profile.id,
           corrected_category_key: input.correctedCategoryKey,
+          corrected_variant_colors: input.correctedVariantColors,
           note: input.note.trim() || null,
           propagate_to_similar: input.propagateToSimilar,
         },
@@ -551,14 +559,14 @@ export default function ProductClusters() {
       setSemanticCorrectionTarget(null);
       setSemanticFeedbackNotice(
         result.already_applied
-          ? "This product type was already corrected. The latest product groups are now loaded."
+          ? "This classification was already corrected. The latest product groups are now loaded."
           : result.similar_profiles_queued > 0
-          ? `Type corrected. ${result.similar_profiles_queued} visually similar listing${
+          ? `Classification corrected. ${result.similar_profiles_queued} visually similar listing${
             result.similar_profiles_queued === 1 ? " is" : "s are"
           } queued for reconsideration using this reviewer-confirmed example.`
           : input.propagateToSimilar
-            ? "Type corrected. No other listing met the strong visual-similarity threshold."
-            : "Type corrected for this listing only.",
+            ? "Classification corrected. No other listing met the strong visual-similarity threshold."
+            : "Classification corrected for this listing only.",
       );
     } catch (caught: unknown) {
       if (isApiError(caught, 404)) {
@@ -576,7 +584,7 @@ export default function ProductClusters() {
           return;
         }
       }
-      setError(errorMessage(caught, "Unable to correct this product type."));
+      setError(errorMessage(caught, "Unable to correct this classification."));
       throw caught;
     } finally {
       setSavingSemanticCorrectionProfileId(null);
@@ -620,7 +628,7 @@ export default function ProductClusters() {
           return;
         }
       }
-      setError(errorMessage(caught, "Unable to reset this product-type correction."));
+      setError(errorMessage(caught, "Unable to reset this classification correction."));
       throw caught;
     } finally {
       setSavingSemanticCorrectionProfileId(null);
@@ -1006,6 +1014,7 @@ export default function ProductClusters() {
         <SemanticCorrectionDialog
           target={semanticCorrectionTarget}
           categories={semanticTaxonomy}
+          colors={semanticColors}
           saving={savingSemanticCorrectionProfileId === semanticCorrectionTarget.profile.id}
           onClose={() => setSemanticCorrectionTarget(null)}
           onSave={(values) => correctSemanticMember({
@@ -1023,6 +1032,7 @@ export default function ProductClusters() {
 function SemanticCorrectionDialog({
   target,
   categories,
+  colors,
   saving,
   onClose,
   onSave,
@@ -1030,24 +1040,45 @@ function SemanticCorrectionDialog({
 }: {
   target: SemanticCorrectionTarget;
   categories: ProductSemanticCategory[];
+  colors: ProductSemanticColor[];
   saving: boolean;
   onClose: () => void;
   onSave: (values: {
     correctedCategoryKey: string;
+    correctedVariantColors: string[];
     note: string;
     propagateToSimilar: boolean;
   }) => Promise<void> | void;
   onReset: () => Promise<void> | void;
 }) {
-  const [correctedCategoryKey, setCorrectedCategoryKey] = useState("");
-  const [note, setNote] = useState("");
-  const [propagateToSimilar, setPropagateToSimilar] = useState(true);
   const currentCategoryKey = target.group.semantic_definition?.category_key ?? "";
   const sourceCategoryKey = target.profile.semantic_source_category_key ?? currentCategoryKey;
-  const availableCategories = categories.filter((category) =>
-    category.key !== currentCategoryKey &&
-    (!target.profile.semantic_correction_id || category.key !== sourceCategoryKey)
+  const groupVariantColor = target.group.semantic_definition?.variant_color;
+  const currentVariantColors = [...new Set(
+    (target.profile.semantic_variant_colors ?? (
+      groupVariantColor
+        ? [{ color: groupVariantColor, confidence: 1, evidence_image_positions: [] }]
+        : []
+    ))
+      .map(({ color }) => color.trim().toLowerCase())
+      .filter(Boolean),
+  )].sort();
+  const [correctedCategoryKey, setCorrectedCategoryKey] = useState(currentCategoryKey);
+  const [correctedVariantColors, setCorrectedVariantColors] = useState<string[]>(
+    currentVariantColors,
   );
+  const [note, setNote] = useState("");
+  const [propagateToSimilar, setPropagateToSimilar] = useState(true);
+  const selectedCategory = categories.find(
+    (category) => category.key === correctedCategoryKey,
+  ) ?? null;
+  const effectiveCorrectedColors = selectedCategory?.supports_color_variants
+    ? correctedVariantColors
+    : [];
+  const classificationChanged = correctedCategoryKey !== currentCategoryKey ||
+    effectiveCorrectedColors.length !== currentVariantColors.length ||
+    effectiveCorrectedColors.some((color, index) => color !== currentVariantColors[index]);
+  const colorLabels = new Map(colors.map((color) => [color.key, color.label]));
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1070,7 +1101,7 @@ function SemanticCorrectionDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="semantic-correction-title"
-        className="w-full max-w-lg rounded-2xl border border-violet-200 bg-white p-5 shadow-2xl"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-violet-200 bg-white p-5 shadow-2xl"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -1078,7 +1109,7 @@ function SemanticCorrectionDialog({
               Reviewer correction
             </p>
             <h2 id="semantic-correction-title" className="mt-1 text-lg font-black text-stone-950">
-              Correct product type
+              Correct classification
             </h2>
             <p className="mt-1 truncate text-sm font-semibold text-stone-700">
               {profileTitle(target.profile)}
@@ -1086,7 +1117,7 @@ function SemanticCorrectionDialog({
           </div>
           <button
             type="button"
-            aria-label="Close product type correction"
+            aria-label="Close classification correction"
             disabled={saving}
             onClick={onClose}
             className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
@@ -1098,6 +1129,13 @@ function SemanticCorrectionDialog({
         <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-xs text-stone-600">
           <p>
             Current group: <strong className="text-stone-900">{target.group.display_name}</strong>
+          </p>
+          <p className="mt-1">
+            Current colors: <strong className="text-stone-900">{
+              currentVariantColors.length > 0
+                ? currentVariantColors.map((color) => colorLabels.get(color) ?? color).join(", ")
+                : "No color subgroup"
+            }</strong>
           </p>
           {target.profile.semantic_correction_id && (
             <p className="mt-1">
@@ -1112,29 +1150,95 @@ function SemanticCorrectionDialog({
           className="mt-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!correctedCategoryKey || saving) return;
+            if (!correctedCategoryKey || !classificationChanged || saving) return;
             void Promise.resolve(onSave({
               correctedCategoryKey,
+              correctedVariantColors: effectiveCorrectedColors,
               note,
               propagateToSimilar,
             })).catch(() => undefined);
           }}
         >
           <label className="block text-xs font-bold text-stone-800" htmlFor="corrected-product-type">
-            Correct product type
+            Product type
           </label>
           <select
             id="corrected-product-type"
             value={correctedCategoryKey}
             disabled={saving}
-            onChange={(event) => setCorrectedCategoryKey(event.target.value)}
+            onChange={(event) => {
+              const nextCategoryKey = event.target.value;
+              setCorrectedCategoryKey(nextCategoryKey);
+              if (!categories.find((category) => category.key === nextCategoryKey)
+                ?.supports_color_variants) {
+                setCorrectedVariantColors([]);
+              }
+            }}
             className="mt-1.5 w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
           >
-            <option value="">Choose the correct type…</option>
-            {availableCategories.map((category) => (
+            {categories.map((category) => (
               <option key={category.key} value={category.key}>{category.label}</option>
             ))}
           </select>
+
+          <fieldset className="mt-4">
+            <legend className="text-xs font-bold text-stone-800">Color groups</legend>
+            {selectedCategory?.supports_color_variants ? (
+              <>
+                <p className="mt-1 text-[11px] leading-relaxed text-stone-500">
+                  Select every marketed color variant that should apply. Color groups may overlap.
+                </p>
+                <button
+                  type="button"
+                  aria-pressed={correctedVariantColors.length === 0}
+                  disabled={saving}
+                  onClick={() => setCorrectedVariantColors([])}
+                  className={`mt-2 w-full rounded-xl border px-3 py-2.5 text-left transition disabled:opacity-50 ${
+                    correctedVariantColors.length === 0
+                      ? "border-violet-400 bg-violet-50 text-violet-950"
+                      : "border-stone-200 bg-white text-stone-700 hover:border-violet-300"
+                  }`}
+                >
+                  <span className="block text-xs font-bold">No color subgroup</span>
+                  <span className="mt-0.5 block text-[11px]">
+                    Keep this listing only in the generic product-type group.
+                  </span>
+                </button>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {colors.map((color) => {
+                    const checked = correctedVariantColors.includes(color.key);
+                    return (
+                      <label
+                        key={color.key}
+                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-semibold transition ${
+                          checked
+                            ? "border-violet-400 bg-violet-50 text-violet-950"
+                            : "border-stone-200 bg-white text-stone-700 hover:border-violet-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={saving}
+                          onChange={(event) => {
+                            setCorrectedVariantColors((current) => event.target.checked
+                              ? [...new Set([...current, color.key])].sort()
+                              : current.filter((key) => key !== color.key));
+                          }}
+                          className="h-3.5 w-3.5 rounded border-violet-300 text-violet-700"
+                        />
+                        {color.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <p className="mt-1 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-[11px] text-stone-600">
+                This product type does not create color subgroups.
+              </p>
+            )}
+          </fieldset>
 
           <label className="mt-4 block text-xs font-bold text-stone-800" htmlFor="semantic-correction-note">
             Note <span className="font-normal text-stone-500">(optional)</span>
@@ -1146,7 +1250,7 @@ function SemanticCorrectionDialog({
             rows={3}
             disabled={saving}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="Why is the current type wrong?"
+            placeholder="Why is the current classification wrong?"
             className="mt-1.5 w-full resize-none rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
           />
 
@@ -1163,7 +1267,7 @@ function SemanticCorrectionDialog({
                 Reconsider visually similar listings
               </span>
               <span className="mt-0.5 block text-[11px] leading-relaxed text-violet-800">
-                Strong visual matches are queued for classification using this correction as a trusted example. Their types are still decided from their own text and images.
+                Strong visual matches are queued using this correction as a trusted example. Their types and colors are still decided from their own text and images.
               </span>
             </span>
           </label>
@@ -1193,11 +1297,11 @@ function SemanticCorrectionDialog({
               </button>
               <button
                 type="submit"
-                disabled={saving || !correctedCategoryKey}
+                disabled={saving || !correctedCategoryKey || !classificationChanged}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-violet-700 px-3.5 py-2 text-xs font-bold text-white hover:bg-violet-800 disabled:opacity-40"
               >
                 <CheckCircle2 size={14} />
-                {saving ? "Updating…" : "Update type"}
+                {saving ? "Updating…" : "Update classification"}
               </button>
             </div>
           </div>
@@ -1549,10 +1653,10 @@ function SemanticProductGroupCard({
             />
             <button
               type="button"
-              aria-label={`Correct product type for ${profileTitle(profile)}`}
+              aria-label={`Correct classification for ${profileTitle(profile)}`}
               title={profile.semantic_correction_id
-                ? "Edit this reviewer-corrected product type"
-                : "Correct this product type"}
+                ? "Edit this reviewer-corrected classification"
+                : "Correct this classification"}
               disabled={Boolean(savingSemanticCorrectionProfileId)}
               onClick={() => onCorrectType(group, profile)}
               className={`absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-bold shadow-sm transition disabled:opacity-50 ${
@@ -1562,7 +1666,7 @@ function SemanticProductGroupCard({
               }`}
             >
               <Pencil size={9} />
-              {profile.semantic_correction_id ? "Corrected" : "Correct type"}
+              {profile.semantic_correction_id ? "Corrected" : "Correct"}
             </button>
           </div>
         ))}

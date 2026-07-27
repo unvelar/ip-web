@@ -2310,7 +2310,14 @@ export interface ProductClusterProfile {
   semantic_correction_id?: string | null;
   semantic_source_category_key?: string | null;
   semantic_source_category_label?: string | null;
+  semantic_variant_colors?: ProductSemanticVariantColor[];
   updated_at: string;
+}
+
+export interface ProductSemanticVariantColor {
+  color: string;
+  confidence: number;
+  evidence_image_positions: number[];
 }
 
 export interface ProductSemanticCategory {
@@ -2319,8 +2326,13 @@ export interface ProductSemanticCategory {
   supports_color_variants: boolean;
 }
 
-// This is a staged-deployment fallback. The API endpoint is authoritative once
-// migration 036 and the matching backend release are live.
+export interface ProductSemanticColor {
+  key: string;
+  label: string;
+}
+
+// This is a staged-deployment fallback. The matching API endpoint is
+// authoritative once the backend release is live.
 export const DEFAULT_PRODUCT_SEMANTIC_TAXONOMY: readonly ProductSemanticCategory[] = [
   { key: "plush_toy", label: "Plush toy", supports_color_variants: true },
   { key: "keychain", label: "Keychain", supports_color_variants: true },
@@ -2346,6 +2358,25 @@ export const DEFAULT_PRODUCT_SEMANTIC_TAXONOMY: readonly ProductSemanticCategory
   { key: "home_decor", label: "Home decor item", supports_color_variants: true },
   { key: "accessory", label: "Accessory", supports_color_variants: true },
   { key: "other", label: "Other product", supports_color_variants: false },
+];
+
+export const DEFAULT_PRODUCT_SEMANTIC_COLORS: readonly ProductSemanticColor[] = [
+  { key: "black", label: "Black" },
+  { key: "blue", label: "Blue" },
+  { key: "brown", label: "Brown" },
+  { key: "clear", label: "Clear" },
+  { key: "gold", label: "Gold" },
+  { key: "gray", label: "Gray" },
+  { key: "green", label: "Green" },
+  { key: "multicolor", label: "Multicolor" },
+  { key: "orange", label: "Orange" },
+  { key: "pink", label: "Pink" },
+  { key: "purple", label: "Purple" },
+  { key: "red", label: "Red" },
+  { key: "silver", label: "Silver" },
+  { key: "tan", label: "Tan" },
+  { key: "white", label: "White" },
+  { key: "yellow", label: "Yellow" },
 ];
 
 export interface ProductClusterEdge {
@@ -2492,6 +2523,7 @@ export interface ProductSemanticCorrection {
   source_category_label: string;
   corrected_category_key: string;
   corrected_category_label: string;
+  corrected_variant_colors: ProductSemanticVariantColor[];
   created_at: string;
 }
 
@@ -2500,7 +2532,10 @@ export function listProductClusterScopes() {
 }
 
 export function getProductSemanticTaxonomy() {
-  return request<{ categories: ProductSemanticCategory[] }>(
+  return request<{
+    categories: ProductSemanticCategory[];
+    colors?: ProductSemanticColor[];
+  }>(
     "/api/product-clusters/semantic-taxonomy",
   );
 }
@@ -2724,6 +2759,7 @@ export function correctProductSemanticGroupMember(
   input: {
     profile_id: string;
     corrected_category_key: string;
+    corrected_variant_colors: string[];
     note?: string | null;
     propagate_to_similar: boolean;
   },
