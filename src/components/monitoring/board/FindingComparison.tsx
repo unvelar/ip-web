@@ -7,7 +7,6 @@ import {
   type MonitoringReviewOutcome,
   type ProductGroupCorrectionReason,
 } from "../../../api";
-import { ActionabilityBadge } from "./ActionabilityBadge";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
 import {
@@ -233,13 +232,6 @@ export function FindingComparison({
           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sb.cls}`}>
             {sb.label}
           </span>
-          <ActionabilityBadge
-            label={actionability.label}
-            reason={actionability.reason}
-            className="shrink-0 gap-1"
-            badgeClassName={`px-2 py-0.5 rounded-full text-[11px] font-bold ${actionability.cls}`}
-            iconClassName="h-4 w-4"
-          />
           {f.manual_candidate_outcome && (
             <span
               className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700"

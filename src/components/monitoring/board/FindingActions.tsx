@@ -19,6 +19,14 @@ export type FindingUpdateOptions = {
   completed?: boolean;
 };
 
+type RecommendableAction =
+  | "false_positive"
+  | "second_hand"
+  | "do_not_pursue"
+  | "review"
+  | "send_takedown"
+  | "license";
+
 export function FindingActions({
   f,
   ipId,
@@ -145,16 +153,49 @@ export function FindingActions({
     ? "dismissed"
     : (f.review_status ?? "pending");
 
+  const recommendedAction: RecommendableAction | null =
+    state !== "pending" && state !== "review"
+      ? null
+      : f.actionability?.key === "send_takedown"
+        ? "send_takedown"
+        : f.actionability?.key === "allowed_resale"
+          ? "second_hand"
+          : f.actionability?.key === "licensed_seller"
+            ? "license"
+            : f.actionability?.key === "false_positive"
+              ? "false_positive"
+              : "review";
+  const recommendationReason = f.actionability?.reason?.trim();
+
   const primaryCls =
     compact
-      ? "h-8 px-2 rounded-md text-[11px] font-semibold leading-none disabled:opacity-50"
-      : "h-7 px-2.5 rounded-md text-xs font-medium leading-none whitespace-nowrap disabled:opacity-50";
-  const blue = `${primaryCls} bg-blue-600 text-white hover:bg-blue-500`;
+      ? "h-8 px-2 rounded-md text-[11px] font-semibold leading-none disabled:opacity-50 transition-[background-color,border-color,color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+      : "h-7 px-2.5 rounded-md text-xs font-medium leading-none whitespace-nowrap disabled:opacity-50 transition-[background-color,border-color,color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2";
+  const recommendedPrimary = `${primaryCls} recommended-action bg-blue-600 text-white hover:bg-blue-500`;
   const emerald = `${primaryCls} bg-emerald-600 text-white hover:bg-emerald-500`;
   const ghostStone = `${primaryCls} border border-stone-200 text-stone-700 hover:bg-stone-50 bg-white`;
 
+  function actionClass(action: RecommendableAction) {
+    return recommendedAction === action ? recommendedPrimary : ghostStone;
+  }
+
+  function actionTitle(action: RecommendableAction, title?: string) {
+    if (recommendedAction !== action) return title;
+    return [
+      recommendationReason
+        ? `Recommended action: ${recommendationReason}`
+        : "Recommended action",
+      title,
+    ].filter(Boolean).join(" · ");
+  }
+
+  function actionAriaLabel(action: RecommendableAction, label: string) {
+    return recommendedAction === action ? `Recommended action: ${label}` : undefined;
+  }
+
   const outcomeButton = (
     key: string,
+    action: RecommendableAction,
     label: string,
     reason: MonitoringReviewOutcome,
     title: string,
@@ -165,15 +206,25 @@ export function FindingActions({
       type="button"
       onClick={() => onDismiss(reason)}
       disabled={isDismissing}
-      title={title}
-      className={ghostStone}
+      title={actionTitle(action, title)}
+      className={actionClass(action)}
+      aria-label={actionAriaLabel(action, label)}
       aria-keyshortcuts={shortcut}
     >
-      {isDismissing ? "Working…" : <ButtonWithShortcut label={label} shortcut={shortcut} />}
+      {isDismissing ? (
+        "Working…"
+      ) : (
+        <ButtonWithShortcut
+          label={label}
+          shortcut={shortcut}
+          dark={recommendedAction === action}
+        />
+      )}
     </button>
   );
   const falsePositiveBtn = outcomeButton(
     "false-positive",
+    "false_positive",
     "False positive",
     "false_positive",
     "Shortcut 1: the detection is wrong or irrelevant",
@@ -181,6 +232,7 @@ export function FindingActions({
   );
   const dontPursueBtn = outcomeButton(
     "do-not-pursue",
+    "do_not_pursue",
     "Don't pursue",
     "do_not_pursue",
     "Shortcut 3: valid detection, intentionally tolerated or not worth enforcement",
@@ -188,6 +240,7 @@ export function FindingActions({
   );
   const secondHandBtn = outcomeButton(
     "second-hand",
+    "second_hand",
     "Second hand",
     "second_hand",
     "Shortcut 2: resale or second-hand item",
@@ -198,13 +251,14 @@ export function FindingActions({
       key="review"
       type="button"
       disabled={!ipId || !f.case_id || busy === "review"}
-      title={
+      title={actionTitle(
+        "review",
         !f.case_id
           ? "Still preparing this case..."
           : !ipId
             ? "Cannot update finding: finding has no associated IP"
-            : "Shortcut R: move this finding to the Review bucket for lawyer input"
-      }
+            : "Shortcut R: move this finding to the Review bucket for lawyer input",
+      )}
       onClick={() =>
         ipId &&
         run(
@@ -216,10 +270,19 @@ export function FindingActions({
           { completeCurrent: true },
         )
       }
-      className={ghostStone}
+      className={actionClass("review")}
+      aria-label={actionAriaLabel("review", "Review")}
       aria-keyshortcuts="R"
     >
-      {busy === "review" ? "Working..." : <ButtonWithShortcut label="Review" shortcut="R" />}
+      {busy === "review" ? (
+        "Working..."
+      ) : (
+        <ButtonWithShortcut
+          label="Review"
+          shortcut="R"
+          dark={recommendedAction === "review"}
+        />
+      )}
     </button>
   );
 
@@ -246,12 +309,18 @@ export function FindingActions({
       type="button"
       onClick={handleLicense}
       disabled={licensing}
-      title="Mark this seller as licensed on this domain — dismisses this and future findings from them"
+      title={actionTitle(
+        "license",
+        "Mark this seller as licensed on this domain — dismisses this and future findings from them",
+      )}
       className={
-        compact
-          ? "px-1.5 py-1 rounded text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-          : "h-7 px-2 rounded-md text-xs font-medium leading-none whitespace-nowrap text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+        recommendedAction === "license"
+          ? recommendedPrimary
+          : compact
+            ? "px-1.5 py-1 rounded text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+            : "h-7 px-2 rounded-md text-xs font-medium leading-none whitespace-nowrap text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
       }
+      aria-label={actionAriaLabel("license", compact ? "License seller" : "License this seller")}
     >
       {licensing ? "Licensing…" : compact ? "License seller" : "License this seller"}
     </button>
@@ -306,23 +375,29 @@ export function FindingActions({
         <button
           type="button"
           disabled={!f.case_id || (!signerReady && !canMarkSentWithoutEmail)}
-          title={
+          title={actionTitle(
+            "send_takedown",
             !f.case_id
               ? "Still preparing this case…"
               : !signerReady && !canMarkSentWithoutEmail
                 ? "Add this IP's takedown signer (on the IP's page) before sending"
                 : !signerReady
                   ? "Admin override: mark sent without sending email"
-                : undefined
-          }
+                  : undefined,
+          )}
           onClick={() => {
             setSendErr("");
             setConfirming(true);
           }}
-          className={blue}
+          className={actionClass("send_takedown")}
+          aria-label={actionAriaLabel("send_takedown", "Send takedown")}
           aria-keyshortcuts="T"
         >
-          <ButtonWithShortcut label="Send takedown" shortcut="T" dark />
+          <ButtonWithShortcut
+            label="Send takedown"
+            shortcut="T"
+            dark={recommendedAction === "send_takedown"}
+          />
         </button>
       </>
     );
@@ -337,23 +412,29 @@ export function FindingActions({
         <button
           type="button"
           disabled={!f.case_id || (!signerReady && !canMarkSentWithoutEmail)}
-          title={
+          title={actionTitle(
+            "send_takedown",
             !f.case_id
               ? "Still preparing this case..."
               : !signerReady && !canMarkSentWithoutEmail
                 ? "Add this IP's takedown signer (on the IP's page) before sending"
                 : !signerReady
                   ? "Admin override: mark sent without sending email"
-                  : undefined
-          }
+                  : undefined,
+          )}
           onClick={() => {
             setSendErr("");
             setConfirming(true);
           }}
-          className={blue}
+          className={actionClass("send_takedown")}
+          aria-label={actionAriaLabel("send_takedown", "Send takedown")}
           aria-keyshortcuts="T"
         >
-          <ButtonWithShortcut label="Send takedown" shortcut="T" dark />
+          <ButtonWithShortcut
+            label="Send takedown"
+            shortcut="T"
+            dark={recommendedAction === "send_takedown"}
+          />
         </button>
       </>
     );
