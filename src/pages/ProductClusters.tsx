@@ -1040,7 +1040,7 @@ function ProductGroupCard({
   const [editingName, setEditingName] = useState(false);
   const [managing, setManaging] = useState(false);
   const [correctingProfileId, setCorrectingProfileId] = useState<string | null>(null);
-  const [name, setName] = useState(group.display_name);
+  const [name, setName] = useState(group.display_name ?? "");
   const [ruleDraft, setRuleDraft] = useState("");
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editingRuleText, setEditingRuleText] = useState("");
@@ -1189,7 +1189,7 @@ function ProductGroupCard({
                 : `Related family ${index + 1}`}
           </p>
           <h2 className="mt-1 line-clamp-2 text-sm font-bold text-stone-900">
-            {group.display_name}
+            {group.display_name ?? "Unnamed product group"}
           </h2>
           {confirmed && group.confirmed_at && (
             <p className="mt-1 text-[10px] text-emerald-700">
@@ -1237,7 +1237,7 @@ function ProductGroupCard({
           <button
             type="button"
             onClick={() => {
-              setName(group.display_name);
+              setName(group.display_name ?? "");
               if (confirmed) {
                 setManaging((current) => !current);
               } else {

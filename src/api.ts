@@ -2324,7 +2324,7 @@ export interface ProductClusterGraph {
 
 export interface PersistedProductGroup {
   id: string;
-  display_name: string;
+  display_name: string | null;
   name_source: "auto" | "manual";
   confirmation_status: "candidate" | "confirmed";
   confirmed_at: string | null;
