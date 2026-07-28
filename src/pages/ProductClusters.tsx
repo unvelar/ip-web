@@ -58,7 +58,7 @@ import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
 import { type BatchAction, runPool, summarizeBatch } from "../components/monitoring/board/batchUtils";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
-import { selectedFindingSummary } from "../components/monitoring/board/utils";
+import { formatMoney, selectedFindingSummary } from "../components/monitoring/board/utils";
 import { profileTitle } from "../components/product-clusters/productClusterGraphUtils";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
@@ -1450,7 +1450,7 @@ function SemanticProductGroupsOverview({
           </p>
         </div>
       ) : (
-        <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+        <div className="mt-5 grid items-start gap-5">
           {categoryGroups.map((group) => (
             <section
               key={group.id}
@@ -1642,7 +1642,7 @@ function SemanticProductGroupCard({
         </div>
       </div>
 
-      <div className={`mt-3 grid grid-cols-3 gap-2 ${nested ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-8">
         {displayedMembers.map((profile) => (
           <div key={profile.id} className="group/semantic-member relative min-w-0">
             <ListingTile
@@ -2993,6 +2993,10 @@ function ListingTile({
   visualSupportIsReference?: boolean;
 }) {
   const hasGroupImageSimilarity = groupImageSimilarity !== undefined;
+  const priceValue = profile.price_value == null ? null : Number(profile.price_value);
+  const price = priceValue != null && Number.isFinite(priceValue) && profile.price_currency
+    ? formatMoney(priceValue, profile.price_currency)
+    : null;
   return (
     <button
       type="button"
@@ -3013,6 +3017,11 @@ function ListingTile({
         ) : (
           <span className="flex h-full items-center justify-center text-sm font-bold text-stone-400">
             {profileTitle(profile).slice(0, 1).toUpperCase()}
+          </span>
+        )}
+        {price && (
+          <span className="absolute left-1.5 top-1.5 max-w-[calc(100%-0.75rem)] truncate rounded bg-stone-950/80 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
+            {price}
           </span>
         )}
         {hasGroupImageSimilarity && groupImagePosition != null && (
