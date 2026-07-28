@@ -2794,6 +2794,7 @@ export function correctProductSemanticGroupMember(
     already_applied?: boolean;
     regrouped: boolean;
     similar_profiles_queued: number;
+    propagation_failed?: boolean;
     propagation_visual_similarity_threshold: number | null;
   }>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/semantic-corrections`,
@@ -2809,6 +2810,7 @@ export function restoreProductSemanticCorrection(
     correction: ProductSemanticCorrection;
     regrouped: boolean;
     similar_profiles_queued: number;
+    propagation_failed?: boolean;
   }>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/semantic-corrections/${encodeURIComponent(correctionId)}`,
     { method: "DELETE" },

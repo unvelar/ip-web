@@ -675,15 +675,17 @@ export default function ProductClusters() {
       );
       setSemanticCorrectionTarget(null);
       setSemanticFeedbackNotice(
-        result.already_applied
-          ? "This classification was already corrected. The latest product groups are now loaded."
-          : result.similar_profiles_queued > 0
-          ? `Classification corrected. ${result.similar_profiles_queued} visually similar listing${
-            result.similar_profiles_queued === 1 ? " is" : "s are"
-          } queued for reconsideration using this reviewer-confirmed example.`
-          : input.propagateToSimilar
-            ? "Classification corrected. No other listing met the strong visual-similarity threshold."
-            : "Classification corrected for this listing only.",
+        result.propagation_failed
+          ? "Classification corrected, but visually similar listings could not be queued for reconsideration. The correction itself was saved."
+          : result.already_applied
+            ? "This classification was already corrected. Visually similar listings were checked again and the latest product groups are now loaded."
+            : result.similar_profiles_queued > 0
+              ? `Classification corrected. ${result.similar_profiles_queued} visually similar listing${
+                result.similar_profiles_queued === 1 ? " is" : "s are"
+              } queued for reconsideration using this reviewer-confirmed example.`
+              : input.propagateToSimilar
+                ? "Classification corrected. No other listing met the strong visual-similarity threshold."
+                : "Classification corrected for this listing only.",
       );
     } catch (caught: unknown) {
       if (isApiError(caught, 404)) {
@@ -728,11 +730,13 @@ export default function ProductClusters() {
       );
       setSemanticCorrectionTarget(null);
       setSemanticFeedbackNotice(
-        result.similar_profiles_queued > 0
-          ? `Correction reset. ${result.similar_profiles_queued} visually similar listing${
-            result.similar_profiles_queued === 1 ? " is" : "s are"
-          } queued to reconsider the change without that example.`
-          : "Correction reset to the classifier result.",
+        result.propagation_failed
+          ? "Correction reset, but visually similar listings could not be queued for reconsideration. The reset itself was saved."
+          : result.similar_profiles_queued > 0
+            ? `Correction reset. ${result.similar_profiles_queued} visually similar listing${
+              result.similar_profiles_queued === 1 ? " is" : "s are"
+            } queued to reconsider the change without that example.`
+            : "Correction reset to the classifier result.",
       );
     } catch (caught: unknown) {
       if (isApiError(caught, 404)) {
