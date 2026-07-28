@@ -2502,6 +2502,8 @@ export interface PersistedProductGroupOverview {
   ungrouped: ProductClusterProfile[];
   triage_ungrouped: ProductClusterProfile[];
   triage_projection_available: boolean;
+  pagination_group_count: number;
+  next_cursor: string | null;
   truncated: boolean;
 }
 
@@ -2598,6 +2600,11 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
     : snapshotProfileCount == null
       ? null
       : Math.max(0, overview.scope.profile_count - snapshotProfileCount);
+  const fallbackPaginationGroupCount = overview.relationship_type === "semantic_category"
+    ? groups.filter((group) => group.semantic_kind === "category" && !group.parent_group_id).length
+    : triageProjectionAvailable && overview.triage_group_count != null
+      ? Number(overview.triage_group_count)
+      : overview.group_count;
   return {
     ...overview,
     groups,
@@ -2617,6 +2624,12 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
     snapshot_profile_count: snapshotProfileCount,
     snapshot_membership_count: snapshotMembershipCount,
     pending_snapshot_count: pendingSnapshotCount,
+    pagination_group_count: Number.isFinite(overview.pagination_group_count)
+      ? Number(overview.pagination_group_count)
+      : fallbackPaginationGroupCount,
+    next_cursor: typeof overview.next_cursor === "string" && overview.next_cursor
+      ? overview.next_cursor
+      : null,
   };
 }
 
@@ -2624,9 +2637,14 @@ export async function getPersistedProductGroups(
   ipId: string,
   relationship: "same" | "related" | "visual" | "semantic",
   view: "triage" | "all" = "triage",
+  options: { limit?: number; cursor?: string | null; includeUngrouped?: boolean } = {},
 ) {
+  const params = new URLSearchParams({ relationship, view });
+  params.set("include_ungrouped", String(options.includeUngrouped ?? false));
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.cursor) params.set("cursor", options.cursor);
   const overview = await request<PersistedProductGroupOverview>(
-    `/api/product-clusters/${encodeURIComponent(ipId)}/groups?relationship=${relationship}&view=${view}`,
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups?${params.toString()}`,
   );
   return normalizePersistedProductGroupOverview(overview);
 }
@@ -2635,9 +2653,13 @@ export async function refreshPersistedProductGroups(
   ipId: string,
   relationship: "same" | "related" | "visual" | "semantic",
   view: "triage" | "all" = "triage",
+  options: { limit?: number; includeUngrouped?: boolean } = {},
 ) {
+  const params = new URLSearchParams({ relationship, view });
+  params.set("include_ungrouped", String(options.includeUngrouped ?? false));
+  if (options.limit) params.set("limit", String(options.limit));
   const overview = await request<PersistedProductGroupOverview>(
-    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?relationship=${relationship}&view=${view}`,
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?${params.toString()}`,
     { method: "POST" },
   );
   return normalizePersistedProductGroupOverview(overview);

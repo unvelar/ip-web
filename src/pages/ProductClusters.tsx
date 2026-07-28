@@ -79,6 +79,25 @@ type SemanticCorrectionTarget = {
   profile: ProductClusterProfile;
 };
 
+const SEMANTIC_GROUP_PAGE_SIZE = 4;
+const VISUAL_GROUP_PAGE_SIZE = 8;
+
+function appendProductGroupPage(
+  current: PersistedProductGroupOverview,
+  next: PersistedProductGroupOverview,
+) {
+  const loadedGroupIds = new Set(current.groups.map((group) => group.id));
+  return {
+    ...next,
+    groups: [
+      ...current.groups,
+      ...next.groups.filter((group) => !loadedGroupIds.has(group.id)),
+    ],
+    ungrouped: current.ungrouped,
+    triage_ungrouped: current.triage_ungrouped,
+  };
+}
+
 export default function ProductClusters() {
   const { actingTenantId, user } = useAuth();
   const {
@@ -96,6 +115,8 @@ export default function ProductClusters() {
   const [scopesLoadedKey, setScopesLoadedKey] = useState<string | null>(null);
   const [groupsLoadedKey, setGroupsLoadedKey] = useState<string | null>(null);
   const [refreshingGroups, setRefreshingGroups] = useState(false);
+  const [loadingMoreSemanticGroups, setLoadingMoreSemanticGroups] = useState(false);
+  const [loadingMoreVisualGroups, setLoadingMoreVisualGroups] = useState(false);
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
   const [savingCorrectionProfileId, setSavingCorrectionProfileId] = useState<string | null>(null);
   const [savingSemanticCorrectionProfileId, setSavingSemanticCorrectionProfileId] =
@@ -122,6 +143,8 @@ export default function ProductClusters() {
   const [batchResult, setBatchResult] = useState<string | null>(null);
   const taskRequestSequence = useRef(0);
   const batchRequestSequence = useRef(0);
+  const semanticPageRequestSequence = useRef(0);
+  const visualPageRequestSequence = useRef(0);
   const canMarkSentWithoutEmail = user?.role === "admin";
   const closeTask = useCallback(() => {
     taskRequestSequence.current += 1;
@@ -165,33 +188,50 @@ export default function ProductClusters() {
   }, [actingTenantId, refreshVersion, scopesRequestKey]);
 
   useEffect(() => {
+    semanticPageRequestSequence.current += 1;
+    visualPageRequestSequence.current += 1;
+    setLoadingMoreSemanticGroups(false);
+    setLoadingMoreVisualGroups(false);
     if (!selectedIpId || !selectedScopeAvailable) {
       setSemanticOverview(null);
       setVisualOverview(null);
       return;
     }
     let alive = true;
+    let loadError: unknown = null;
     setSemanticOverview(null);
     setVisualOverview(null);
-    void Promise.all([
-      getPersistedProductGroups(selectedIpId, "semantic", productGroupView),
-      getPersistedProductGroups(selectedIpId, "visual", productGroupView),
-    ])
-      .then(([nextSemanticOverview, nextVisualOverview]) => {
+    const loadSemantic = getPersistedProductGroups(
+      selectedIpId,
+      "semantic",
+      productGroupView,
+      {
+        limit: SEMANTIC_GROUP_PAGE_SIZE,
+      },
+    ).then((nextOverview) => {
+      if (alive) setSemanticOverview(nextOverview);
+    }).catch((caught: unknown) => {
+      loadError ??= caught;
+    });
+    const loadVisual = getPersistedProductGroups(
+      selectedIpId,
+      "visual",
+      productGroupView,
+      {
+        limit: VISUAL_GROUP_PAGE_SIZE,
+      },
+    ).then((nextOverview) => {
+      if (alive) setVisualOverview(nextOverview);
+    }).catch((caught: unknown) => {
+      loadError ??= caught;
+    });
+    void Promise.all([loadSemantic, loadVisual])
+      .then(() => {
         if (!alive) return;
-        setSemanticOverview(nextSemanticOverview);
-        setVisualOverview(nextVisualOverview);
-        setError(null);
+        setError(loadError == null ? null : errorMessage(loadError));
+        setGroupsLoadedKey(groupsRequestKey);
       })
-      .catch((caught: unknown) => {
-        if (!alive) return;
-        setSemanticOverview(null);
-        setVisualOverview(null);
-        setError(errorMessage(caught));
-      })
-      .finally(() => {
-        if (alive) setGroupsLoadedKey(groupsRequestKey);
-      });
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -338,12 +378,14 @@ export default function ProductClusters() {
           selectedIpId,
           "semantic",
           productGroupView,
+          { limit: SEMANTIC_GROUP_PAGE_SIZE },
         );
         setSemanticOverview(nextSemanticOverview);
         setVisualOverview(await getPersistedProductGroups(
           selectedIpId,
           "visual",
           productGroupView,
+          { limit: VISUAL_GROUP_PAGE_SIZE },
         ));
       } catch (caught: unknown) {
         setError(errorMessage(caught));
@@ -352,6 +394,66 @@ export default function ProductClusters() {
       }
     }
     setRefreshVersion((version) => version + 1);
+  }
+
+  async function loadMoreSemanticGroupTypes() {
+    const cursor = semanticOverview?.next_cursor;
+    if (!selectedIpId || !cursor || loadingMoreSemanticGroups) return;
+    const requestSequence = ++semanticPageRequestSequence.current;
+    setLoadingMoreSemanticGroups(true);
+    setError(null);
+    try {
+      const nextOverview = await getPersistedProductGroups(
+        selectedIpId,
+        "semantic",
+        productGroupView,
+        { limit: SEMANTIC_GROUP_PAGE_SIZE, cursor },
+      );
+      if (semanticPageRequestSequence.current !== requestSequence) return;
+      setSemanticOverview((current) =>
+        current && current.next_cursor === cursor
+          ? appendProductGroupPage(current, nextOverview)
+          : current
+      );
+    } catch (caught: unknown) {
+      if (semanticPageRequestSequence.current === requestSequence) {
+        setError(errorMessage(caught, "Unable to load more product types."));
+      }
+    } finally {
+      if (semanticPageRequestSequence.current === requestSequence) {
+        setLoadingMoreSemanticGroups(false);
+      }
+    }
+  }
+
+  async function loadMoreVisualGroups() {
+    const cursor = visualOverview?.next_cursor;
+    if (!selectedIpId || !cursor || loadingMoreVisualGroups) return;
+    const requestSequence = ++visualPageRequestSequence.current;
+    setLoadingMoreVisualGroups(true);
+    setError(null);
+    try {
+      const nextOverview = await getPersistedProductGroups(
+        selectedIpId,
+        "visual",
+        productGroupView,
+        { limit: VISUAL_GROUP_PAGE_SIZE, cursor },
+      );
+      if (visualPageRequestSequence.current !== requestSequence) return;
+      setVisualOverview((current) =>
+        current && current.next_cursor === cursor
+          ? appendProductGroupPage(current, nextOverview)
+          : current
+      );
+    } catch (caught: unknown) {
+      if (visualPageRequestSequence.current === requestSequence) {
+        setError(errorMessage(caught, "Unable to load more visual groups."));
+      }
+    } finally {
+      if (visualPageRequestSequence.current === requestSequence) {
+        setLoadingMoreVisualGroups(false);
+      }
+    }
   }
 
   async function openGroupBatch(groupId: string, action: BatchAction) {
@@ -485,20 +587,22 @@ export default function ProductClusters() {
 
   async function confirmGroup(groupId: string, displayName: string) {
     if (!selectedIpId) return;
+    visualPageRequestSequence.current += 1;
+    setLoadingMoreVisualGroups(false);
     setError(null);
     setSavingGroupId(groupId);
     try {
-      const { group } = await confirmPersistedProductGroup(
+      await confirmPersistedProductGroup(
         selectedIpId,
         groupId,
         displayName,
       );
-      setVisualOverview((current) => current ? {
-        ...current,
-        groups: current.groups.map((candidate) =>
-          candidate.id === group.id ? { ...candidate, ...group } : candidate
-        ),
-      } : current);
+      setVisualOverview(await getPersistedProductGroups(
+        selectedIpId,
+        "visual",
+        productGroupView,
+        { limit: VISUAL_GROUP_PAGE_SIZE },
+      ));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
       throw caught;
@@ -513,6 +617,8 @@ export default function ProductClusters() {
     reason: ProductGroupCorrectionReason,
   ) {
     if (!selectedIpId) return;
+    visualPageRequestSequence.current += 1;
+    setLoadingMoreVisualGroups(false);
     setError(null);
     setSavingCorrectionProfileId(profileId);
     try {
@@ -520,7 +626,12 @@ export default function ProductClusters() {
         profile_id: profileId,
         reason,
       });
-      setVisualOverview(await getPersistedProductGroups(selectedIpId, "visual", productGroupView));
+      setVisualOverview(await getPersistedProductGroups(
+        selectedIpId,
+        "visual",
+        productGroupView,
+        { limit: VISUAL_GROUP_PAGE_SIZE },
+      ));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
       throw caught;
@@ -538,6 +649,8 @@ export default function ProductClusters() {
     propagateToSimilar: boolean;
   }) {
     if (!selectedIpId) return;
+    semanticPageRequestSequence.current += 1;
+    setLoadingMoreSemanticGroups(false);
     setError(null);
     setSemanticFeedbackNotice(null);
     setSavingSemanticCorrectionProfileId(input.profile.id);
@@ -554,7 +667,9 @@ export default function ProductClusters() {
         },
       );
       setSemanticOverview(
-        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView),
+        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView, {
+          limit: SEMANTIC_GROUP_PAGE_SIZE,
+        }),
       );
       setSemanticCorrectionTarget(null);
       setSemanticFeedbackNotice(
@@ -574,6 +689,7 @@ export default function ProductClusters() {
           selectedIpId,
           "semantic",
           productGroupView,
+          { limit: SEMANTIC_GROUP_PAGE_SIZE },
         ).catch(() => null);
         if (latestOverview) {
           setSemanticOverview(latestOverview);
@@ -593,6 +709,8 @@ export default function ProductClusters() {
 
   async function resetSemanticCorrection(target: SemanticCorrectionTarget) {
     if (!selectedIpId || !target.profile.semantic_correction_id) return;
+    semanticPageRequestSequence.current += 1;
+    setLoadingMoreSemanticGroups(false);
     setError(null);
     setSemanticFeedbackNotice(null);
     setSavingSemanticCorrectionProfileId(target.profile.id);
@@ -602,7 +720,9 @@ export default function ProductClusters() {
         target.profile.semantic_correction_id,
       );
       setSemanticOverview(
-        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView),
+        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView, {
+          limit: SEMANTIC_GROUP_PAGE_SIZE,
+        }),
       );
       setSemanticCorrectionTarget(null);
       setSemanticFeedbackNotice(
@@ -618,6 +738,7 @@ export default function ProductClusters() {
           selectedIpId,
           "semantic",
           productGroupView,
+          { limit: SEMANTIC_GROUP_PAGE_SIZE },
         ).catch(() => null);
         if (latestOverview) {
           setSemanticOverview(latestOverview);
@@ -766,7 +887,10 @@ export default function ProductClusters() {
         <button
           type="button"
           onClick={() => void refreshAll()}
-          disabled={loadingScopes || loadingGroups || refreshingGroups}
+          disabled={
+            loadingScopes || loadingGroups || refreshingGroups ||
+            loadingMoreSemanticGroups || loadingMoreVisualGroups
+          }
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
@@ -924,7 +1048,9 @@ export default function ProductClusters() {
                 activeBatch={activeBatch}
                 batchProgress={batchProgress}
                 savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
+                loadingMore={loadingMoreSemanticGroups}
                 onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
+                onLoadMore={() => void loadMoreSemanticGroupTypes()}
                 onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
                 onCorrectType={(group, profile) => {
                   setSemanticCorrectionTarget({ group, profile });
@@ -958,7 +1084,9 @@ export default function ProductClusters() {
                 loadingBatchGroupId={loadingBatchGroupId}
                 activeBatch={activeBatch}
                 batchProgress={batchProgress}
+                loadingMore={loadingMoreVisualGroups}
                 onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
+                onLoadMore={() => void loadMoreVisualGroups()}
                 onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
                 onConfirmGroup={confirmGroup}
                 onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
@@ -1364,7 +1492,9 @@ function SemanticProductGroupsOverview({
   activeBatch,
   batchProgress,
   savingSemanticCorrectionProfileId,
+  loadingMore,
   onBatchAction,
+  onLoadMore,
   onOpenTask,
   onCorrectType,
 }: {
@@ -1378,7 +1508,9 @@ function SemanticProductGroupsOverview({
   activeBatch: ProductGroupBatch | null;
   batchProgress: { done: number; total: number } | null;
   savingSemanticCorrectionProfileId: string | null;
+  loadingMore: boolean;
   onBatchAction: (groupId: string, action: BatchAction) => void;
+  onLoadMore: () => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onCorrectType: (
     group: PersistedProductGroup,
@@ -1538,13 +1670,27 @@ function SemanticProductGroupsOverview({
         </div>
       )}
 
-      {overview.truncated && (
+      {overview.next_cursor ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3">
+          <p className="text-xs text-stone-600">
+            Showing {categoryGroups.length} of {overview.pagination_group_count} product types,
+            with their useful variants.
+          </p>
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 transition hover:bg-violet-100 disabled:cursor-wait disabled:opacity-60"
+          >
+            {loadingMore && <RefreshCw size={13} className="animate-spin" />}
+            {loadingMore ? "Loading…" : "Load more product types"}
+          </button>
+        </div>
+      ) : overview.truncated ? (
         <p className="mt-3 text-xs text-amber-700">
-          Showing the first {displayedGroups.length} of {showingTriage
-            ? overview.triage_group_count ?? 0
-            : overview.group_count} product groups.
+          More product types exist, but this API version cannot page through them yet.
         </p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1729,7 +1875,9 @@ function ProductGroupsOverview({
   loadingBatchGroupId,
   activeBatch,
   batchProgress,
+  loadingMore,
   onBatchAction,
+  onLoadMore,
   onOpenTask,
   onConfirmGroup,
   onUpdateEmbeddingThreshold,
@@ -1751,7 +1899,9 @@ function ProductGroupsOverview({
   loadingBatchGroupId: string | null;
   activeBatch: ProductGroupBatch | null;
   batchProgress: { done: number; total: number } | null;
+  loadingMore: boolean;
   onBatchAction: (groupId: string, action: BatchAction) => void;
+  onLoadMore: () => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
@@ -1881,13 +2031,28 @@ function ProductGroupsOverview({
             </div>
           )}
 
-          {overview.truncated && (
+          {overview.next_cursor ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3">
+              <p className="text-xs text-stone-600">
+                Showing {displayedGroups.length} of {overview.pagination_group_count} {showingTriage
+                  ? "visual groups with work"
+                  : "visual groups"}.
+              </p>
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={loadingMore}
+                className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800 transition hover:bg-indigo-100 disabled:cursor-wait disabled:opacity-60"
+              >
+                {loadingMore && <RefreshCw size={13} className="animate-spin" />}
+                {loadingMore ? "Loading…" : "Load more visual groups"}
+              </button>
+            </div>
+          ) : overview.truncated ? (
             <p className="mt-3 text-xs text-amber-700">
-              Showing {displayedGroups.length} of {showingTriage
-                ? overview.triage_group_count ?? 0
-                : overview.group_count} {showingTriage ? "grouped batches with work" : "stored groups"}.
+              More visual groups exist, but this API version cannot page through them yet.
             </p>
-          )}
+          ) : null}
 
           {showUngrouped && displayedUngroupedCount > 0 && (
             <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
