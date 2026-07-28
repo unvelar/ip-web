@@ -3020,7 +3020,7 @@ function ListingTile({
           </span>
         )}
         {price && (
-          <span className="absolute left-1.5 top-1.5 max-w-[calc(100%-0.75rem)] truncate rounded bg-stone-950/80 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
+          <span className="absolute bottom-1.5 right-1.5 max-w-[calc(100%-0.75rem)] truncate rounded-md bg-stone-950/90 px-2 py-1 text-xs font-extrabold tracking-tight text-white shadow-md ring-1 ring-white/30">
             {price}
           </span>
         )}
