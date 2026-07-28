@@ -2314,6 +2314,7 @@ export interface ProductClusterProfile {
   semantic_source_category_key?: string | null;
   semantic_source_category_label?: string | null;
   semantic_variant_colors?: ProductSemanticVariantColor[];
+  actionability?: MonitoringActionability | null;
   updated_at: string;
 }
 

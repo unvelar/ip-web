@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CheckCircle2,
   Eye,
@@ -84,6 +84,41 @@ type SemanticCorrectionTarget = {
 const SEMANTIC_GROUP_PAGE_SIZE = 4;
 const VISUAL_GROUP_PAGE_SIZE = 8;
 const NEW_PRODUCT_TYPE_VALUE = "__new_product_type__";
+type ProductGroupRecommendationBucket = "takedown" | "second_hand" | "review";
+
+const PRODUCT_GROUP_RECOMMENDATION_BUCKETS: Array<{
+  key: ProductGroupRecommendationBucket;
+  label: string;
+  description: string;
+  className: string;
+  labelClassName: string;
+  countClassName: string;
+}> = [
+  {
+    key: "takedown",
+    label: "Should be taken down",
+    description: "The current evidence recommends a takedown.",
+    className: "border-red-200 bg-red-50/60",
+    labelClassName: "text-red-900",
+    countClassName: "bg-white/80 text-red-800",
+  },
+  {
+    key: "second_hand",
+    label: "Likely second hand",
+    description: "The current evidence suggests secondary-market resale.",
+    className: "border-purple-200 bg-purple-50/60",
+    labelClassName: "text-purple-900",
+    countClassName: "bg-white/80 text-purple-800",
+  },
+  {
+    key: "review",
+    label: "Might be OK — review",
+    description: "The evidence is inconclusive or points toward clearance; review before deciding.",
+    className: "border-amber-200 bg-amber-50/60",
+    labelClassName: "text-amber-950",
+    countClassName: "bg-white/80 text-amber-800",
+  },
+];
 
 function productTypeLabelFromKey(key: string) {
   return key
@@ -1596,6 +1631,85 @@ function ProductGroupViewToggle({
   );
 }
 
+function recommendationBucketForProfile(
+  profile: ProductClusterProfile,
+): ProductGroupRecommendationBucket {
+  if (profile.actionability?.key === "send_takedown") return "takedown";
+  if (profile.actionability?.key === "allowed_resale") return "second_hand";
+  return "review";
+}
+
+function ProductGroupMemberSubgroups({
+  profiles,
+  totalCount,
+  separateByRecommendation,
+  gridClassName,
+  renderMember,
+}: {
+  profiles: ProductClusterProfile[];
+  totalCount: number;
+  separateByRecommendation: boolean;
+  gridClassName: string;
+  renderMember: (profile: ProductClusterProfile) => ReactNode;
+}) {
+  const recommendationsAvailable = separateByRecommendation &&
+    profiles.length > 0 &&
+    profiles.every((profile) => profile.actionability?.key);
+
+  if (!recommendationsAvailable) {
+    return (
+      <div className={`mt-3 grid gap-2 ${gridClassName}`}>
+        {profiles.map(renderMember)}
+      </div>
+    );
+  }
+
+  const profilesByBucket = new Map<
+    ProductGroupRecommendationBucket,
+    ProductClusterProfile[]
+  >();
+  for (const profile of profiles) {
+    const bucket = recommendationBucketForProfile(profile);
+    const bucketProfiles = profilesByBucket.get(bucket) ?? [];
+    bucketProfiles.push(profile);
+    profilesByBucket.set(bucket, bucketProfiles);
+  }
+  const previewTruncated = totalCount > profiles.length;
+
+  return (
+    <div className="mt-3 space-y-2.5">
+      {PRODUCT_GROUP_RECOMMENDATION_BUCKETS.map((bucket) => {
+        const bucketProfiles = profilesByBucket.get(bucket.key) ?? [];
+        if (bucketProfiles.length === 0) return null;
+        return (
+          <section
+            key={bucket.key}
+            data-product-review-subgroup={bucket.key}
+            className={`rounded-xl border p-2.5 ${bucket.className}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p
+                title={bucket.description}
+                className={`text-[10px] font-black uppercase tracking-[0.12em] ${bucket.labelClassName}`}
+              >
+                {bucket.label}
+              </p>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bucket.countClassName}`}
+              >
+                {bucketProfiles.length}{previewTruncated ? " shown" : ""}
+              </span>
+            </div>
+            <div className={`mt-2 grid gap-2 ${gridClassName}`}>
+              {bucketProfiles.map(renderMember)}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 function SemanticProductGroupsOverview({
   overview,
   groupView,
@@ -2005,8 +2119,12 @@ function SemanticProductGroupCard({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-8">
-        {displayedMembers.map((profile) => (
+      <ProductGroupMemberSubgroups
+        profiles={displayedMembers}
+        totalCount={displayedMemberCount}
+        separateByRecommendation={showingTriage}
+        gridClassName="grid-cols-3 sm:grid-cols-8"
+        renderMember={(profile) => (
           <div key={profile.id} className="group/semantic-member relative min-w-0">
             <ListingTile
               profile={profile}
@@ -2021,8 +2139,8 @@ function SemanticProductGroupCard({
               onEdit={() => onCorrectType(group, profile)}
             />
           </div>
-        ))}
-      </div>
+        )}
+      />
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <p className="text-xs text-stone-500">
@@ -3187,8 +3305,12 @@ function ProductGroupCard({
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
-        {displayedMembers.map((profile) => {
+      <ProductGroupMemberSubgroups
+        profiles={displayedMembers}
+        totalCount={displayedMemberCount}
+        separateByRecommendation={!showingPersistedMembers}
+        gridClassName="grid-cols-3 sm:grid-cols-4"
+        renderMember={(profile) => {
           const primaryVisualEvidence = primaryVisualEvidenceByProfileId.get(profile.id);
           return (
             <div key={profile.id} className="group/member relative min-w-0">
@@ -3221,8 +3343,8 @@ function ProductGroupCard({
               )}
             </div>
           );
-        })}
-      </div>
+        }}
+      />
       {correctingProfile && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
           <p className="text-xs font-bold text-amber-950">
