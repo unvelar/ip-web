@@ -78,7 +78,10 @@ export interface AuthUser {
  *  Optional `returnTo` is a same-origin path the backend will echo back to
  *  the SPA as `?next=…` after the OAuth round-trip succeeds. */
 export function workosLoginUrl(returnTo?: string, options: { forceReauth?: boolean } = {}): string {
-  const params = new URLSearchParams({ origin: window.location.origin });
+  // Include the deployed base path so authentication returns to the same app
+  // build instead of dropping PR previews back onto the production root.
+  const frontendUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+  const params = new URLSearchParams({ origin: frontendUrl });
   if (returnTo) params.set("return_to", returnTo);
   if (options.forceReauth) params.set("prompt", "login");
   return `${API}/api/auth/workos/start?${params.toString()}`;
