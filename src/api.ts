@@ -2327,6 +2327,8 @@ export interface ProductSemanticCategory {
   key: string;
   label: string;
   supports_color_variants: boolean;
+  is_generic?: boolean;
+  source?: "seed" | "classifier" | "reviewer";
 }
 
 export interface ProductSemanticColor {
@@ -2536,12 +2538,12 @@ export function listProductClusterScopes() {
   return request<{ scopes: ProductClusterScope[] }>("/api/product-clusters/scopes");
 }
 
-export function getProductSemanticTaxonomy() {
+export function getProductSemanticTaxonomy(ipId: string) {
   return request<{
     categories: ProductSemanticCategory[];
     colors?: ProductSemanticColor[];
   }>(
-    "/api/product-clusters/semantic-taxonomy",
+    `/api/product-clusters/${encodeURIComponent(ipId)}/semantic-taxonomy`,
   );
 }
 
@@ -2783,7 +2785,11 @@ export function correctProductSemanticGroupMember(
   groupId: string,
   input: {
     profile_id: string;
-    corrected_category_key: string;
+    corrected_category_key?: string;
+    new_product_type?: {
+      label: string;
+      supports_color_variants: boolean;
+    };
     corrected_variant_colors: string[];
     note?: string | null;
     propagate_to_similar: boolean;

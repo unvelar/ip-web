@@ -83,6 +83,15 @@ type SemanticCorrectionTarget = {
 
 const SEMANTIC_GROUP_PAGE_SIZE = 4;
 const VISUAL_GROUP_PAGE_SIZE = 8;
+const NEW_PRODUCT_TYPE_VALUE = "__new_product_type__";
+
+function productTypeLabelFromKey(key: string) {
+  return key
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 function appendProductGroupPage(
   current: PersistedProductGroupOverview,
@@ -125,9 +134,7 @@ export default function ProductClusters() {
     useState<string | null>(null);
   const [semanticCorrectionTarget, setSemanticCorrectionTarget] =
     useState<SemanticCorrectionTarget | null>(null);
-  const [semanticTaxonomy, setSemanticTaxonomy] = useState<ProductSemanticCategory[]>(
-    () => [...DEFAULT_PRODUCT_SEMANTIC_TAXONOMY],
-  );
+  const [semanticTaxonomy, setSemanticTaxonomy] = useState<ProductSemanticCategory[]>([]);
   const [semanticColors, setSemanticColors] = useState<ProductSemanticColor[]>(
     () => [...DEFAULT_PRODUCT_SEMANTIC_COLORS],
   );
@@ -258,19 +265,25 @@ export default function ProductClusters() {
     closeTask();
     setSemanticCorrectionTarget(null);
     setSemanticFeedbackNotice(null);
+    setSemanticTaxonomy([]);
     setSemanticTaxonomyLoaded(false);
   }, [actingTenantId, closeTask, selectedIpId]);
 
   useEffect(() => {
-    if (!semanticCorrectionTarget || semanticTaxonomyLoaded) return;
+    if (!semanticCorrectionTarget || !selectedIpId || semanticTaxonomyLoaded) return;
     let alive = true;
-    void getProductSemanticTaxonomy()
+    void getProductSemanticTaxonomy(selectedIpId)
       .then(({ categories, colors }) => {
-        if (alive && categories.length > 0) setSemanticTaxonomy(categories);
+        if (alive) setSemanticTaxonomy(
+          categories.filter((category) => category.key !== "other"),
+        );
         if (alive && colors && colors.length > 0) setSemanticColors(colors);
       })
       .catch(() => {
-        // Keep the bundled taxonomy while frontend and API releases roll out.
+        // Keep correction usable while frontend and API releases roll out.
+        if (alive) setSemanticTaxonomy(
+          DEFAULT_PRODUCT_SEMANTIC_TAXONOMY.filter((category) => category.key !== "other"),
+        );
       })
       .finally(() => {
         if (alive) setSemanticTaxonomyLoaded(true);
@@ -278,7 +291,7 @@ export default function ProductClusters() {
     return () => {
       alive = false;
     };
-  }, [semanticCorrectionTarget, semanticTaxonomyLoaded]);
+  }, [selectedIpId, semanticCorrectionTarget, semanticTaxonomyLoaded]);
 
   useEffect(() => {
     if (!activeTask) return;
@@ -645,7 +658,11 @@ export default function ProductClusters() {
   async function correctSemanticMember(input: {
     group: PersistedProductGroup;
     profile: ProductClusterProfile;
-    correctedCategoryKey: string;
+    correctedCategoryKey: string | null;
+    newProductType: {
+      label: string;
+      supportsColorVariants: boolean;
+    } | null;
     correctedVariantColors: string[];
     note: string;
     propagateToSimilar: boolean;
@@ -662,7 +679,14 @@ export default function ProductClusters() {
         input.group.id,
         {
           profile_id: input.profile.id,
-          corrected_category_key: input.correctedCategoryKey,
+          ...(input.newProductType
+            ? {
+              new_product_type: {
+                label: input.newProductType.label,
+                supports_color_variants: input.newProductType.supportsColorVariants,
+              },
+            }
+            : { corrected_category_key: input.correctedCategoryKey ?? undefined }),
           corrected_variant_colors: input.correctedVariantColors,
           note: input.note.trim() || null,
           propagate_to_similar: input.propagateToSimilar,
@@ -674,6 +698,7 @@ export default function ProductClusters() {
         }),
       );
       setSemanticCorrectionTarget(null);
+      setSemanticTaxonomyLoaded(false);
       setSemanticFeedbackNotice(
         result.propagation_failed
           ? "Classification corrected, but visually similar listings could not be queued for reconsideration. The correction itself was saved."
@@ -1178,7 +1203,11 @@ function SemanticCorrectionDialog({
   saving: boolean;
   onClose: () => void;
   onSave: (values: {
-    correctedCategoryKey: string;
+    correctedCategoryKey: string | null;
+    newProductType: {
+      label: string;
+      supportsColorVariants: boolean;
+    } | null;
     correctedVariantColors: string[];
     note: string;
     propagateToSimilar: boolean;
@@ -1198,20 +1227,41 @@ function SemanticCorrectionDialog({
       .filter(Boolean),
   )].sort();
   const [correctedCategoryKey, setCorrectedCategoryKey] = useState(currentCategoryKey);
+  const [newProductTypeLabel, setNewProductTypeLabel] = useState("");
+  const [newTypeSupportsColorVariants, setNewTypeSupportsColorVariants] = useState(false);
   const [correctedVariantColors, setCorrectedVariantColors] = useState<string[]>(
     currentVariantColors,
   );
   const [note, setNote] = useState("");
   const [propagateToSimilar, setPropagateToSimilar] = useState(true);
-  const selectedCategory = categories.find(
+  const currentCategory = categories.find(
+    (category) => category.key === currentCategoryKey,
+  ) ?? {
+    key: currentCategoryKey,
+    label: target.profile.semantic_source_category_key === currentCategoryKey
+      ? target.profile.semantic_source_category_label ?? productTypeLabelFromKey(currentCategoryKey)
+      : productTypeLabelFromKey(currentCategoryKey),
+    supports_color_variants: currentVariantColors.length > 0,
+  };
+  const availableCategories = categories.some(
+    (category) => category.key === currentCategoryKey,
+  ) ? categories : [currentCategory, ...categories];
+  const creatingProductType = correctedCategoryKey === NEW_PRODUCT_TYPE_VALUE;
+  const selectedCategory = availableCategories.find(
     (category) => category.key === correctedCategoryKey,
   ) ?? null;
-  const effectiveCorrectedColors = selectedCategory?.supports_color_variants
+  const supportsColorVariants = creatingProductType
+    ? newTypeSupportsColorVariants
+    : selectedCategory?.supports_color_variants === true;
+  const effectiveCorrectedColors = supportsColorVariants
     ? correctedVariantColors
     : [];
-  const classificationChanged = correctedCategoryKey !== currentCategoryKey ||
-    effectiveCorrectedColors.length !== currentVariantColors.length ||
-    effectiveCorrectedColors.some((color, index) => color !== currentVariantColors[index]);
+  const normalizedNewProductTypeLabel = newProductTypeLabel.trim().replace(/\s+/g, " ");
+  const classificationChanged = creatingProductType
+    ? normalizedNewProductTypeLabel.length >= 2
+    : correctedCategoryKey !== currentCategoryKey ||
+      effectiveCorrectedColors.length !== currentVariantColors.length ||
+      effectiveCorrectedColors.some((color, index) => color !== currentVariantColors[index]);
   const colorLabels = new Map(colors.map((color) => [color.key, color.label]));
 
   useEffect(() => {
@@ -1286,7 +1336,13 @@ function SemanticCorrectionDialog({
             event.preventDefault();
             if (!correctedCategoryKey || !classificationChanged || saving) return;
             void Promise.resolve(onSave({
-              correctedCategoryKey,
+              correctedCategoryKey: creatingProductType ? null : correctedCategoryKey,
+              newProductType: creatingProductType
+                ? {
+                  label: normalizedNewProductTypeLabel,
+                  supportsColorVariants: newTypeSupportsColorVariants,
+                }
+                : null,
               correctedVariantColors: effectiveCorrectedColors,
               note,
               propagateToSimilar,
@@ -1303,21 +1359,72 @@ function SemanticCorrectionDialog({
             onChange={(event) => {
               const nextCategoryKey = event.target.value;
               setCorrectedCategoryKey(nextCategoryKey);
-              if (!categories.find((category) => category.key === nextCategoryKey)
-                ?.supports_color_variants) {
+              const nextSupportsColorVariants = nextCategoryKey === NEW_PRODUCT_TYPE_VALUE
+                ? newTypeSupportsColorVariants
+                : availableCategories.find((category) => category.key === nextCategoryKey)
+                  ?.supports_color_variants === true;
+              if (!nextSupportsColorVariants) {
                 setCorrectedVariantColors([]);
               }
             }}
             className="mt-1.5 w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
           >
-            {categories.map((category) => (
+            {availableCategories.map((category) => (
               <option key={category.key} value={category.key}>{category.label}</option>
             ))}
+            <option value={NEW_PRODUCT_TYPE_VALUE}>Other — specify a new type…</option>
           </select>
+
+          {creatingProductType && (
+            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+              <label
+                className="block text-xs font-bold text-violet-950"
+                htmlFor="new-product-type-label"
+              >
+                New product type
+              </label>
+              <input
+                id="new-product-type-label"
+                type="text"
+                value={newProductTypeLabel}
+                minLength={2}
+                maxLength={120}
+                required
+                autoFocus
+                disabled={saving}
+                onChange={(event) => setNewProductTypeLabel(event.target.value)}
+                placeholder="For example: Video game"
+                className="mt-1.5 w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+              />
+              <p className="mt-1.5 text-[11px] leading-relaxed text-violet-800">
+                This becomes an active product type for this IP and can be reused by future classifications.
+              </p>
+              <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={newTypeSupportsColorVariants}
+                  disabled={saving}
+                  onChange={(event) => {
+                    setNewTypeSupportsColorVariants(event.target.checked);
+                    if (!event.target.checked) setCorrectedVariantColors([]);
+                  }}
+                  className="mt-0.5 h-4 w-4 rounded border-violet-300 text-violet-700"
+                />
+                <span>
+                  <span className="block text-xs font-bold text-violet-950">
+                    Color is a useful variant for this type
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-relaxed text-violet-800">
+                    Leave this off for media, fragrances, and products where packaging color is incidental.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
 
           <fieldset className="mt-4">
             <legend className="text-xs font-bold text-stone-800">Color groups</legend>
-            {selectedCategory?.supports_color_variants ? (
+            {supportsColorVariants ? (
               <>
                 <p className="mt-1 text-[11px] leading-relaxed text-stone-500">
                   Select every marketed color variant that should apply. Color groups may overlap.
@@ -1369,7 +1476,9 @@ function SemanticCorrectionDialog({
               </>
             ) : (
               <p className="mt-1 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-[11px] text-stone-600">
-                This product type does not create color subgroups.
+                {creatingProductType
+                  ? "This new product type will not create color subgroups."
+                  : "This product type does not create color subgroups."}
               </p>
             )}
           </fieldset>
