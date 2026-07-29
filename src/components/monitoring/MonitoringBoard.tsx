@@ -150,7 +150,7 @@ export function MonitoringBoard({
   activeFindingId?: string | null;
   /** Notifies the route owner when the reviewer opens/collapses a finding. */
   onActiveFindingChange?: (resultId: string | null) => void;
-  /** Optional one-shot selection seed, used when opening a campaign as a batch. */
+  /** Optional one-shot selection seed for cross-view batch handoffs. */
   seedBatchFindings?: IpReviewFinding[];
   seedBatchKey?: string | null;
 }) {
@@ -562,7 +562,7 @@ export function MonitoringBoard({
     appliedSeedKey.current = seedBatchKey;
     const openFindings = (seedBatchFindings ?? []).filter(isBatchSelectableFinding);
     if (openFindings.length === 0) {
-      setBatchResult("No open campaign findings to add.");
+      setBatchResult("No selectable findings were found.");
       return;
     }
     setSelectionExtras((prev) => {
@@ -575,7 +575,7 @@ export function MonitoringBoard({
       for (const f of openFindings) next.add(f.result_id);
       return next;
     });
-    setBatchResult(`Added ${openFindings.length} campaign finding${openFindings.length === 1 ? "" : "s"} to the batch.`);
+    setBatchResult(`Selected ${openFindings.length} finding${openFindings.length === 1 ? "" : "s"}.`);
   }, [filterKey, seedBatchFindings, seedBatchKey]);
 
   function toggleSelect(resultId: string) {

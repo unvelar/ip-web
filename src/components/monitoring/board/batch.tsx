@@ -3,12 +3,14 @@ import { BATCH_META, type BatchAction } from "./batchUtils";
 
 export function BatchConfirmModal({
   action,
+  scopeLabel,
   eligible,
   skipped,
   onConfirm,
   onCancel,
 }: {
   action: BatchAction;
+  scopeLabel?: string;
   eligible: IpReviewFinding[];
   skipped: Record<string, number>;
   onConfirm: () => void;
@@ -38,6 +40,9 @@ export function BatchConfirmModal({
               <span className="font-semibold text-stone-900">
                 {eligible.length} finding{eligible.length === 1 ? "" : "s"}
               </span>
+              {scopeLabel && (
+                <> from <span className="font-semibold text-stone-900">{scopeLabel}</span></>
+              )}
               {action === "send"
                 ? ". Each uses the suggested route + pre-filled draft for its platform."
                 : "."}

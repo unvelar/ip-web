@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Eye,
   Images,
   ListFilter,
@@ -60,7 +62,7 @@ import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
 import { type BatchAction, runPool, summarizeBatch } from "../components/monitoring/board/batchUtils";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
-import { formatMoney, selectedFindingSummary } from "../components/monitoring/board/utils";
+import { formatMoney } from "../components/monitoring/board/utils";
 import { profileTitle } from "../components/product-clusters/productClusterGraphUtils";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
@@ -74,7 +76,9 @@ type ActiveProductTask = {
 };
 type ProductGroupBatch = {
   groupId: string;
-  findings: IpReviewFinding[];
+  groupName: string;
+  bucket: ProductGroupRecommendationBucket;
+  findings: IpReviewFinding[] | null;
 };
 type SemanticCorrectionTarget = {
   group: PersistedProductGroup;
@@ -180,7 +184,9 @@ export default function ProductClusters() {
   const [loadingTaskProfileId, setLoadingTaskProfileId] = useState<string | null>(null);
   const [dismissingTaskId, setDismissingTaskId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
-  const [loadingBatchGroupId, setLoadingBatchGroupId] = useState<string | null>(null);
+  const [loadingGroupTasksId, setLoadingGroupTasksId] = useState<string | null>(null);
+  const [loadedGroupTasks, setLoadedGroupTasks] = useState<Record<string, IpReviewFinding[]>>({});
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [activeBatch, setActiveBatch] = useState<ProductGroupBatch | null>(null);
   const [confirmBatchAction, setConfirmBatchAction] = useState<BatchAction | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
@@ -292,7 +298,9 @@ export default function ProductClusters() {
     setError(null);
     setTaskError(null);
     setBatchResult(null);
-    setLoadingBatchGroupId(null);
+    setLoadingGroupTasksId(null);
+    setLoadedGroupTasks({});
+    setExpandedGroupId(null);
     setActiveBatch(null);
     setConfirmBatchAction(null);
     setBatchProgress(null);
@@ -303,6 +311,15 @@ export default function ProductClusters() {
     setSemanticTaxonomy([]);
     setSemanticTaxonomyLoaded(false);
   }, [actingTenantId, closeTask, selectedIpId]);
+
+  useEffect(() => {
+    batchRequestSequence.current += 1;
+    setLoadingGroupTasksId(null);
+    setLoadedGroupTasks({});
+    setExpandedGroupId(null);
+    setActiveBatch(null);
+    setConfirmBatchAction(null);
+  }, [productGroupView, refreshVersion]);
 
   useEffect(() => {
     if (!semanticCorrectionTarget || !selectedIpId || semanticTaxonomyLoaded) return;
@@ -368,6 +385,17 @@ export default function ProductClusters() {
         setLoadingTaskProfileId(null);
       }
     }
+  }
+
+  function openLoadedFinding(finding: IpReviewFinding, groupId: string) {
+    taskRequestSequence.current += 1;
+    setLoadingTaskProfileId(null);
+    setTaskError(null);
+    setActiveTask({
+      profileId: findingProfileId(finding),
+      groupId,
+      finding,
+    });
   }
 
   async function dismissActiveTask(reason: MonitoringReviewOutcome) {
@@ -506,36 +534,96 @@ export default function ProductClusters() {
     }
   }
 
-  async function openGroupBatch(groupId: string, action: BatchAction) {
-    if (!selectedIpId || batchProgress || loadingBatchGroupId) return;
-    if (activeBatch?.groupId === groupId) {
-      setConfirmBatchAction(action);
-      return;
-    }
+  async function loadGroupTasks(groupId: string) {
+    const cached = loadedGroupTasks[groupId];
+    if (cached) return cached;
+    if (!selectedIpId || loadingGroupTasksId) return null;
 
     const requestSequence = ++batchRequestSequence.current;
-    setLoadingBatchGroupId(groupId);
-    setActiveBatch(null);
-    setConfirmBatchAction(null);
+    setLoadingGroupTasksId(groupId);
     setError(null);
     try {
       const findings = await loadProductGroupBatch(selectedIpId, groupId);
-      if (batchRequestSequence.current !== requestSequence) return;
-      if (findings.length === 0) {
-        setBatchResult("No tasks in this product group still need triage.");
-        setRefreshVersion((version) => version + 1);
-        return;
-      }
-      setActiveBatch({ groupId, findings });
-      setConfirmBatchAction(action);
+      if (batchRequestSequence.current !== requestSequence) return null;
+      setLoadedGroupTasks((current) => ({ ...current, [groupId]: findings }));
+      return findings;
     } catch (caught: unknown) {
-      if (batchRequestSequence.current !== requestSequence) return;
-      setError(errorMessage(caught, "Unable to load this product group's tasks."));
+      if (batchRequestSequence.current === requestSequence) {
+        setError(errorMessage(caught, "Unable to load all listings in this product group."));
+      }
+      return null;
     } finally {
       if (batchRequestSequence.current === requestSequence) {
-        setLoadingBatchGroupId(null);
+        setLoadingGroupTasksId(null);
       }
     }
+  }
+
+  async function toggleGroupListings(groupId: string) {
+    if (batchProgress || loadingGroupTasksId) return;
+    if (expandedGroupId === groupId) {
+      setExpandedGroupId(null);
+      return;
+    }
+    setExpandedGroupId(groupId);
+    const findings = await loadGroupTasks(groupId);
+    if (!findings) setExpandedGroupId(null);
+  }
+
+  async function selectGroupBatch(
+    groupId: string,
+    groupName: string,
+    bucket: ProductGroupRecommendationBucket,
+  ) {
+    if (batchProgress || loadingGroupTasksId) return;
+    if (activeBatch?.groupId === groupId && activeBatch.bucket === bucket) {
+      setActiveBatch(null);
+      setConfirmBatchAction(null);
+      return;
+    }
+
+    const cached = loadedGroupTasks[groupId] ?? null;
+    const cachedScope = cached
+      ? cached.filter((finding) => recommendationBucketForFinding(finding) === bucket)
+      : null;
+    setActiveBatch({
+      groupId,
+      groupName,
+      bucket,
+      findings: cachedScope,
+    });
+    setConfirmBatchAction(null);
+    setBatchResult(null);
+    if (cachedScope) {
+      if (cachedScope.length === 0) {
+        const bucketLabel = productGroupRecommendationBucket(bucket).label;
+        setActiveBatch(null);
+        setBatchResult(`No current to-triage listings remain in “${bucketLabel}”.`);
+      }
+      return;
+    }
+
+    const findings = await loadGroupTasks(groupId);
+    if (!findings) {
+      setActiveBatch(null);
+      return;
+    }
+    const scopedFindings = findings.filter(
+      (finding) => recommendationBucketForFinding(finding) === bucket,
+    );
+    if (scopedFindings.length === 0) {
+      const bucketLabel = productGroupRecommendationBucket(bucket).label;
+      setActiveBatch(null);
+      setBatchResult(`No current to-triage listings remain in “${bucketLabel}”.`);
+      return;
+    }
+    setActiveBatch({ groupId, groupName, bucket, findings: scopedFindings });
+  }
+
+  function clearGroupBatch() {
+    if (batchProgress) return;
+    setActiveBatch(null);
+    setConfirmBatchAction(null);
   }
 
   function partitionGroupBatch(action: BatchAction) {
@@ -579,6 +667,7 @@ export default function ProductClusters() {
 
   async function runGroupBatch(action: BatchAction) {
     const { eligible, skipped } = partitionGroupBatch(action);
+    const completedBatch = activeBatch;
     const skipCounts = { ...skipped };
     let ok = 0;
     let failed = 0;
@@ -630,7 +719,12 @@ export default function ProductClusters() {
     );
     setBatchProgress(null);
     setActiveBatch(null);
-    setBatchResult(summarizeBatch(action, ok, skipCounts, failed));
+    const scopeLabel = completedBatch
+      ? productGroupRecommendationBucket(completedBatch.bucket).label
+      : null;
+    setBatchResult(
+      `${scopeLabel ? `${scopeLabel}: ` : ""}${summarizeBatch(action, ok, skipCounts, failed)}`,
+    );
     closeTask();
     setRefreshVersion((version) => version + 1);
   }
@@ -1110,14 +1204,23 @@ export default function ProductClusters() {
                 showViewToggle={false}
                 activeTaskProfileId={activeTask?.profileId ?? null}
                 loadingTaskProfileId={loadingTaskProfileId}
-                loadingBatchGroupId={loadingBatchGroupId}
+                loadingGroupTasksId={loadingGroupTasksId}
+                loadedGroupTasks={loadedGroupTasks}
+                expandedGroupId={expandedGroupId}
                 activeBatch={activeBatch}
                 batchProgress={batchProgress}
                 savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
                 loadingMore={loadingMoreSemanticGroups}
-                onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
+                onSelectBatch={(groupId, groupName, bucket) =>
+                  void selectGroupBatch(groupId, groupName, bucket)}
+                onBatchAction={(action) => {
+                  if (activeBatch?.findings) setConfirmBatchAction(action);
+                }}
+                onClearBatch={clearGroupBatch}
+                onToggleGroupListings={(groupId) => void toggleGroupListings(groupId)}
                 onLoadMore={() => void loadMoreSemanticGroupTypes()}
                 onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
+                onOpenFinding={openLoadedFinding}
                 onCorrectType={(group, profile) => {
                   setSemanticCorrectionTarget({ group, profile });
                 }}
@@ -1147,13 +1250,22 @@ export default function ProductClusters() {
                 savingCorrectionProfileId={savingCorrectionProfileId}
                 activeTaskProfileId={activeTask?.profileId ?? null}
                 loadingTaskProfileId={loadingTaskProfileId}
-                loadingBatchGroupId={loadingBatchGroupId}
+                loadingGroupTasksId={loadingGroupTasksId}
+                loadedGroupTasks={loadedGroupTasks}
+                expandedGroupId={expandedGroupId}
                 activeBatch={activeBatch}
                 batchProgress={batchProgress}
                 loadingMore={loadingMoreVisualGroups}
-                onBatchAction={(groupId, action) => void openGroupBatch(groupId, action)}
+                onSelectBatch={(groupId, groupName, bucket) =>
+                  void selectGroupBatch(groupId, groupName, bucket)}
+                onBatchAction={(action) => {
+                  if (activeBatch?.findings) setConfirmBatchAction(action);
+                }}
+                onClearBatch={clearGroupBatch}
+                onToggleGroupListings={(groupId) => void toggleGroupListings(groupId)}
                 onLoadMore={() => void loadMoreVisualGroups()}
                 onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
+                onOpenFinding={openLoadedFinding}
                 onConfirmGroup={confirmGroup}
                 onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
                 onCorrectGroupMember={correctGroupMember}
@@ -1192,9 +1304,10 @@ export default function ProductClusters() {
           showRelatedItems={false}
         />
       )}
-      {confirmBatchAction && activeBatch && (
+      {confirmBatchAction && activeBatch?.findings && (
         <BatchConfirmModal
           action={confirmBatchAction}
+          scopeLabel={productGroupRecommendationBucket(activeBatch.bucket).label}
           {...partitionGroupBatch(confirmBatchAction)}
           onCancel={() => setConfirmBatchAction(null)}
           onConfirm={() => {
@@ -1631,30 +1744,105 @@ function ProductGroupViewToggle({
   );
 }
 
-function recommendationBucketForProfile(
-  profile: ProductClusterProfile,
+function productGroupRecommendationBucket(key: ProductGroupRecommendationBucket) {
+  return PRODUCT_GROUP_RECOMMENDATION_BUCKETS.find((bucket) => bucket.key === key) ??
+    PRODUCT_GROUP_RECOMMENDATION_BUCKETS[2];
+}
+
+function recommendationBucketForActionability(
+  key: string | null | undefined,
 ): ProductGroupRecommendationBucket {
-  if (profile.actionability?.key === "send_takedown") return "takedown";
-  if (profile.actionability?.key === "allowed_resale") return "second_hand";
+  if (key === "send_takedown") return "takedown";
+  if (key === "allowed_resale") return "second_hand";
   return "review";
 }
+
+function recommendationBucketForProfile(profile: ProductClusterProfile) {
+  return recommendationBucketForActionability(profile.actionability?.key);
+}
+
+function recommendationBucketForFinding(finding: IpReviewFinding) {
+  return recommendationBucketForActionability(finding.actionability?.key);
+}
+
+function findingProfileId(finding: IpReviewFinding) {
+  return `finding:${finding.result_id}`;
+}
+
+function productClusterProfileForFinding(finding: IpReviewFinding): ProductClusterProfile {
+  return {
+    id: findingProfileId(finding),
+    case_id: finding.case_id ?? finding.result_id,
+    listing_title: finding.listing_title,
+    platform: finding.domain,
+    source_url: finding.page_url,
+    description_summary: finding.description_summary,
+    profile_text: "",
+    price_value: finding.price_value,
+    price_currency: finding.price_currency,
+    image_count: finding.image_urls?.length ?? (finding.image_url ? 1 : 0),
+    image_url: finding.image_url ?? finding.screenshot_url,
+    actionability: finding.actionability,
+    updated_at: finding.updated_at,
+  };
+}
+
+type ProductGroupSubgroupItem =
+  | { kind: "profile"; id: string; bucket: ProductGroupRecommendationBucket; profile: ProductClusterProfile }
+  | { kind: "finding"; id: string; bucket: ProductGroupRecommendationBucket; finding: IpReviewFinding };
 
 function ProductGroupMemberSubgroups({
   profiles,
   totalCount,
   separateByRecommendation,
+  allFindings,
+  expanded,
+  groupId,
+  groupName,
+  activeBatch,
+  batchProgress,
+  batchDisabled,
   gridClassName,
   renderMember,
+  renderFinding,
+  onSelectBatch,
+  onBatchAction,
+  onClearBatch,
 }: {
   profiles: ProductClusterProfile[];
   totalCount: number;
   separateByRecommendation: boolean;
+  allFindings: IpReviewFinding[] | null;
+  expanded: boolean;
+  groupId: string;
+  groupName: string;
+  activeBatch: ProductGroupBatch | null;
+  batchProgress: { done: number; total: number } | null;
+  batchDisabled: boolean;
   gridClassName: string;
   renderMember: (profile: ProductClusterProfile) => ReactNode;
+  renderFinding: (finding: IpReviewFinding) => ReactNode;
+  onSelectBatch: (bucket: ProductGroupRecommendationBucket) => void;
+  onBatchAction: (action: BatchAction) => void;
+  onClearBatch: () => void;
 }) {
+  const showingAllFindings = separateByRecommendation && expanded && allFindings != null;
+  const items: ProductGroupSubgroupItem[] = showingAllFindings
+    ? allFindings.map((finding) => ({
+        kind: "finding" as const,
+        id: finding.result_id,
+        bucket: recommendationBucketForFinding(finding),
+        finding,
+      }))
+    : profiles.map((profile) => ({
+        kind: "profile" as const,
+        id: profile.id,
+        bucket: recommendationBucketForProfile(profile),
+        profile,
+      }));
   const recommendationsAvailable = separateByRecommendation &&
-    profiles.length > 0 &&
-    profiles.every((profile) => profile.actionability?.key);
+    (items.length > 0 || (allFindings?.length ?? 0) > 0) &&
+    (showingAllFindings || profiles.every((profile) => profile.actionability?.key));
 
   if (!recommendationsAvailable) {
     return (
@@ -1664,45 +1852,111 @@ function ProductGroupMemberSubgroups({
     );
   }
 
-  const profilesByBucket = new Map<
+  const itemsByBucket = new Map<
     ProductGroupRecommendationBucket,
-    ProductClusterProfile[]
+    ProductGroupSubgroupItem[]
   >();
-  for (const profile of profiles) {
-    const bucket = recommendationBucketForProfile(profile);
-    const bucketProfiles = profilesByBucket.get(bucket) ?? [];
-    bucketProfiles.push(profile);
-    profilesByBucket.set(bucket, bucketProfiles);
+  for (const item of items) {
+    const bucketItems = itemsByBucket.get(item.bucket) ?? [];
+    bucketItems.push(item);
+    itemsByBucket.set(item.bucket, bucketItems);
+  }
+  const findingsByBucket = new Map<ProductGroupRecommendationBucket, IpReviewFinding[]>();
+  for (const finding of allFindings ?? []) {
+    const bucket = recommendationBucketForFinding(finding);
+    const bucketFindings = findingsByBucket.get(bucket) ?? [];
+    bucketFindings.push(finding);
+    findingsByBucket.set(bucket, bucketFindings);
   }
   const previewTruncated = totalCount > profiles.length;
 
   return (
     <div className="mt-3 space-y-2.5">
       {PRODUCT_GROUP_RECOMMENDATION_BUCKETS.map((bucket) => {
-        const bucketProfiles = profilesByBucket.get(bucket.key) ?? [];
-        if (bucketProfiles.length === 0) return null;
+        const bucketItems = itemsByBucket.get(bucket.key) ?? [];
+        const exactBucketCount = allFindings
+          ? (findingsByBucket.get(bucket.key)?.length ?? 0)
+          : null;
+        if (bucketItems.length === 0 && (exactBucketCount ?? 0) === 0) return null;
+        const selectedForBatch = activeBatch?.groupId === groupId &&
+          activeBatch.bucket === bucket.key;
+        const countLabel = exactBucketCount == null
+          ? `${bucketItems.length}${previewTruncated ? " shown" : ""}`
+          : expanded
+            ? `${exactBucketCount} ${exactBucketCount === 1 ? "listing" : "listings"}`
+            : `${bucketItems.length} shown of ${exactBucketCount}`;
         return (
           <section
             key={bucket.key}
             data-product-review-subgroup={bucket.key}
             className={`rounded-xl border p-2.5 ${bucket.className}`}
           >
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p
                 title={bucket.description}
                 className={`text-[10px] font-black uppercase tracking-[0.12em] ${bucket.labelClassName}`}
               >
                 {bucket.label}
               </p>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bucket.countClassName}`}
-              >
-                {bucketProfiles.length}{previewTruncated ? " shown" : ""}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bucket.countClassName}`}
+                >
+                  {countLabel}
+                </span>
+                <button
+                  type="button"
+                  data-product-review-batch={bucket.key}
+                  aria-expanded={selectedForBatch}
+                  disabled={batchDisabled}
+                  onClick={() => onSelectBatch(bucket.key)}
+                  className={`inline-flex items-center gap-1 rounded-md border bg-white px-2 py-1 text-[10px] font-bold shadow-sm transition disabled:cursor-wait disabled:opacity-50 ${
+                    selectedForBatch
+                      ? "border-stone-400 text-stone-900"
+                      : "border-stone-200 text-stone-600 hover:border-stone-300 hover:text-stone-900"
+                  }`}
+                >
+                  <MoreHorizontal size={13} aria-hidden="true" />
+                  {selectedForBatch ? "Close actions" : "Batch actions"}
+                </button>
+              </div>
             </div>
-            <div className={`mt-2 grid gap-2 ${gridClassName}`}>
-              {bucketProfiles.map(renderMember)}
-            </div>
+            {selectedForBatch && (
+              activeBatch.findings == null ? (
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-stone-200 bg-white/80 px-3 py-2 text-xs text-stone-600">
+                  <RefreshCw size={13} className="animate-spin" aria-hidden="true" />
+                  Loading every current listing in this subgroup…
+                </div>
+              ) : (
+                <BatchOperationBar
+                  selectedCount={activeBatch.findings.length}
+                  selectedSummary={[groupName, bucket.label]}
+                  batchProgress={batchProgress}
+                  onAction={onBatchAction}
+                  onClear={onClearBatch}
+                  showResort={false}
+                  placement="inline"
+                  showShortcuts={false}
+                  disabled={batchDisabled}
+                />
+              )
+            )}
+            {bucketItems.length > 0 && (
+              <div className={`mt-2 grid gap-2 ${gridClassName}`}>
+                {bucketItems.map((item) => (
+                  <div key={`${item.kind}:${item.id}`} className="contents">
+                    {item.kind === "finding"
+                      ? renderFinding(item.finding)
+                      : renderMember(item.profile)}
+                  </div>
+                ))}
+              </div>
+            )}
+            {bucketItems.length === 0 && exactBucketCount != null && exactBucketCount > 0 && (
+              <p className="mt-2 rounded-lg border border-dashed border-stone-200 bg-white/70 px-3 py-2 text-[11px] text-stone-600">
+                {exactBucketCount} {exactBucketCount === 1 ? "listing is" : "listings are"} hidden from this preview. Use <span className="font-semibold">View all listings</span> below to inspect them.
+              </p>
+            )}
           </section>
         );
       })}
@@ -1717,14 +1971,20 @@ function SemanticProductGroupsOverview({
   showViewToggle = true,
   activeTaskProfileId,
   loadingTaskProfileId,
-  loadingBatchGroupId,
+  loadingGroupTasksId,
+  loadedGroupTasks,
+  expandedGroupId,
   activeBatch,
   batchProgress,
   savingSemanticCorrectionProfileId,
   loadingMore,
+  onSelectBatch,
   onBatchAction,
+  onClearBatch,
+  onToggleGroupListings,
   onLoadMore,
   onOpenTask,
+  onOpenFinding,
   onCorrectType,
 }: {
   overview: PersistedProductGroupOverview;
@@ -1733,14 +1993,24 @@ function SemanticProductGroupsOverview({
   showViewToggle?: boolean;
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
-  loadingBatchGroupId: string | null;
+  loadingGroupTasksId: string | null;
+  loadedGroupTasks: Record<string, IpReviewFinding[]>;
+  expandedGroupId: string | null;
   activeBatch: ProductGroupBatch | null;
   batchProgress: { done: number; total: number } | null;
   savingSemanticCorrectionProfileId: string | null;
   loadingMore: boolean;
-  onBatchAction: (groupId: string, action: BatchAction) => void;
+  onSelectBatch: (
+    groupId: string,
+    groupName: string,
+    bucket: ProductGroupRecommendationBucket,
+  ) => void;
+  onBatchAction: (action: BatchAction) => void;
+  onClearBatch: () => void;
+  onToggleGroupListings: (groupId: string) => void;
   onLoadMore: () => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
+  onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onCorrectType: (
     group: PersistedProductGroup,
     profile: ProductClusterProfile,
@@ -1824,16 +2094,23 @@ function SemanticProductGroupsOverview({
                 triageProjectionAvailable={overview.triage_projection_available}
                 activeTaskProfileId={activeTaskProfileId}
                 loadingTaskProfileId={loadingTaskProfileId}
-                loadingBatch={loadingBatchGroupId === group.id}
-                batchFindings={activeBatch?.groupId === group.id ? activeBatch.findings : null}
+                allFindings={loadedGroupTasks[group.id] ?? null}
+                expanded={expandedGroupId === group.id}
+                loadingAllFindings={loadingGroupTasksId === group.id}
+                activeBatch={activeBatch}
                 batchProgress={activeBatch?.groupId === group.id ? batchProgress : null}
                 savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
-                batchDisabled={Boolean(
-                  (loadingBatchGroupId && loadingBatchGroupId !== group.id) ||
-                  (batchProgress && activeBatch?.groupId !== group.id)
+                batchDisabled={Boolean(loadingGroupTasksId || batchProgress)}
+                onSelectBatch={(bucket) => onSelectBatch(
+                  group.id,
+                  group.display_name ?? "Product type",
+                  bucket,
                 )}
-                onBatchAction={(action) => onBatchAction(group.id, action)}
+                onBatchAction={onBatchAction}
+                onClearBatch={onClearBatch}
+                onToggleGroupListings={() => onToggleGroupListings(group.id)}
                 onOpenTask={onOpenTask}
+                onOpenFinding={onOpenFinding}
                 onCorrectType={onCorrectType}
               />
               {(childrenByParent.get(group.id)?.length ?? 0) > 0 && (
@@ -1852,16 +2129,23 @@ function SemanticProductGroupsOverview({
                         nested
                         activeTaskProfileId={activeTaskProfileId}
                         loadingTaskProfileId={loadingTaskProfileId}
-                        loadingBatch={loadingBatchGroupId === child.id}
-                        batchFindings={activeBatch?.groupId === child.id ? activeBatch.findings : null}
+                        allFindings={loadedGroupTasks[child.id] ?? null}
+                        expanded={expandedGroupId === child.id}
+                        loadingAllFindings={loadingGroupTasksId === child.id}
+                        activeBatch={activeBatch}
                         batchProgress={activeBatch?.groupId === child.id ? batchProgress : null}
                         savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
-                        batchDisabled={Boolean(
-                          (loadingBatchGroupId && loadingBatchGroupId !== child.id) ||
-                          (batchProgress && activeBatch?.groupId !== child.id)
+                        batchDisabled={Boolean(loadingGroupTasksId || batchProgress)}
+                        onSelectBatch={(bucket) => onSelectBatch(
+                          child.id,
+                          child.display_name ?? "Color variant",
+                          bucket,
                         )}
-                        onBatchAction={(action) => onBatchAction(child.id, action)}
+                        onBatchAction={onBatchAction}
+                        onClearBatch={onClearBatch}
+                        onToggleGroupListings={() => onToggleGroupListings(child.id)}
                         onOpenTask={onOpenTask}
+                        onOpenFinding={onOpenFinding}
                         onCorrectType={onCorrectType}
                       />
                     ))}
@@ -1882,16 +2166,23 @@ function SemanticProductGroupsOverview({
                 triageProjectionAvailable={overview.triage_projection_available}
                 activeTaskProfileId={activeTaskProfileId}
                 loadingTaskProfileId={loadingTaskProfileId}
-                loadingBatch={loadingBatchGroupId === group.id}
-                batchFindings={activeBatch?.groupId === group.id ? activeBatch.findings : null}
+                allFindings={loadedGroupTasks[group.id] ?? null}
+                expanded={expandedGroupId === group.id}
+                loadingAllFindings={loadingGroupTasksId === group.id}
+                activeBatch={activeBatch}
                 batchProgress={activeBatch?.groupId === group.id ? batchProgress : null}
                 savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
-                batchDisabled={Boolean(
-                  (loadingBatchGroupId && loadingBatchGroupId !== group.id) ||
-                  (batchProgress && activeBatch?.groupId !== group.id)
+                batchDisabled={Boolean(loadingGroupTasksId || batchProgress)}
+                onSelectBatch={(bucket) => onSelectBatch(
+                  group.id,
+                  group.display_name ?? "Product type",
+                  bucket,
                 )}
-                onBatchAction={(action) => onBatchAction(group.id, action)}
+                onBatchAction={onBatchAction}
+                onClearBatch={onClearBatch}
+                onToggleGroupListings={() => onToggleGroupListings(group.id)}
                 onOpenTask={onOpenTask}
+                onOpenFinding={onOpenFinding}
                 onCorrectType={onCorrectType}
               />
             </section>
@@ -2034,13 +2325,19 @@ function SemanticProductGroupCard({
   nested = false,
   activeTaskProfileId,
   loadingTaskProfileId,
-  loadingBatch,
-  batchFindings,
+  allFindings,
+  expanded,
+  loadingAllFindings,
+  activeBatch,
   batchProgress,
   batchDisabled,
   savingSemanticCorrectionProfileId,
+  onSelectBatch,
   onBatchAction,
+  onClearBatch,
+  onToggleGroupListings,
   onOpenTask,
+  onOpenFinding,
   onCorrectType,
 }: {
   group: PersistedProductGroup;
@@ -2050,13 +2347,19 @@ function SemanticProductGroupCard({
   nested?: boolean;
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
-  loadingBatch: boolean;
-  batchFindings: IpReviewFinding[] | null;
+  allFindings: IpReviewFinding[] | null;
+  expanded: boolean;
+  loadingAllFindings: boolean;
+  activeBatch: ProductGroupBatch | null;
   batchProgress: { done: number; total: number } | null;
   batchDisabled: boolean;
   savingSemanticCorrectionProfileId: string | null;
+  onSelectBatch: (bucket: ProductGroupRecommendationBucket) => void;
   onBatchAction: (action: BatchAction) => void;
+  onClearBatch: () => void;
+  onToggleGroupListings: () => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
+  onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onCorrectType: (
     group: PersistedProductGroup,
     profile: ProductClusterProfile,
@@ -2123,6 +2426,13 @@ function SemanticProductGroupCard({
         profiles={displayedMembers}
         totalCount={displayedMemberCount}
         separateByRecommendation={showingTriage}
+        allFindings={showingTriage ? allFindings : null}
+        expanded={showingTriage && expanded}
+        groupId={group.id}
+        groupName={group.display_name ?? (nested ? "Color variant" : "Product type")}
+        activeBatch={activeBatch}
+        batchProgress={batchProgress}
+        batchDisabled={batchDisabled}
         gridClassName="grid-cols-3 sm:grid-cols-8"
         renderMember={(profile) => (
           <div key={profile.id} className="group/semantic-member relative min-w-0">
@@ -2140,18 +2450,64 @@ function SemanticProductGroupCard({
             />
           </div>
         )}
+        renderFinding={(finding) => {
+          const profile = productClusterProfileForFinding(finding);
+          return (
+            <div className="relative min-w-0">
+              <ListingTile
+                profile={profile}
+                active={activeTaskProfileId === profile.id}
+                onClick={() => onOpenFinding(finding, group.id)}
+              />
+            </div>
+          );
+        }}
+        onSelectBatch={onSelectBatch}
+        onBatchAction={onBatchAction}
+        onClearBatch={onClearBatch}
       />
 
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="text-xs text-stone-500">
-          {displayedMemberCount > displayedMembers.length
-            ? `+${displayedMemberCount - displayedMembers.length} more listings`
-            : nested
-              ? "A meaningful color subset of the parent type"
-              : `${group.member_count} classified in this product type`}
-        </p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
+          {showingTriage && displayedMemberCount > displayedMembers.length ? (
+            <>
+              <span>
+                {expanded && allFindings
+                  ? `Showing all ${allFindings.length} current to-triage listings`
+                  : `Showing ${displayedMembers.length} of ${displayedMemberCount} to-triage listings`}
+              </span>
+              <button
+                type="button"
+                data-product-group-expand={group.id}
+                aria-expanded={expanded}
+                disabled={loadingAllFindings || Boolean(batchProgress)}
+                onClick={onToggleGroupListings}
+                className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 font-semibold text-stone-700 transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-wait disabled:opacity-60"
+              >
+                {loadingAllFindings ? (
+                  <RefreshCw size={12} className="animate-spin" aria-hidden="true" />
+                ) : expanded ? (
+                  <ChevronUp size={12} aria-hidden="true" />
+                ) : (
+                  <ChevronDown size={12} aria-hidden="true" />
+                )}
+                {loadingAllFindings
+                  ? `Loading all ${displayedMemberCount}…`
+                  : expanded
+                    ? "Collapse to preview"
+                    : `View all ${displayedMemberCount} listings`}
+              </button>
+            </>
+          ) : (
+            <span>
+              {nested
+                ? "A meaningful color subset of the parent type"
+                : `${group.member_count} classified in this product type`}
+            </span>
+          )}
+        </div>
         <Link
-          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}`}
+          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}${taskLinkMode === "pending" ? "&select_all=true" : ""}`}
           className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
             taskLinkMode === "pending"
               ? "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100"
@@ -2166,21 +2522,6 @@ function SemanticProductGroupCard({
               : "View tasks"}
         </Link>
       </div>
-      <BatchOperationBar
-        selectedCount={batchFindings?.length ?? triageMemberCount}
-        selectedSummary={batchFindings
-          ? selectedFindingSummary(batchFindings)
-          : group.display_name
-            ? [group.display_name]
-            : []}
-        batchProgress={batchProgress}
-        onAction={onBatchAction}
-        showResort={false}
-        placement="inline"
-        showShortcuts={false}
-        disabled={batchDisabled}
-        statusMessage={loadingBatch ? "Loading all group tasks…" : null}
-      />
     </div>
   );
 }
@@ -2196,13 +2537,19 @@ function ProductGroupsOverview({
   savingCorrectionProfileId,
   activeTaskProfileId,
   loadingTaskProfileId,
-  loadingBatchGroupId,
+  loadingGroupTasksId,
+  loadedGroupTasks,
+  expandedGroupId,
   activeBatch,
   batchProgress,
   loadingMore,
+  onSelectBatch,
   onBatchAction,
+  onClearBatch,
+  onToggleGroupListings,
   onLoadMore,
   onOpenTask,
+  onOpenFinding,
   onConfirmGroup,
   onUpdateEmbeddingThreshold,
   onCorrectGroupMember,
@@ -2220,13 +2567,23 @@ function ProductGroupsOverview({
   savingCorrectionProfileId: string | null;
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
-  loadingBatchGroupId: string | null;
+  loadingGroupTasksId: string | null;
+  loadedGroupTasks: Record<string, IpReviewFinding[]>;
+  expandedGroupId: string | null;
   activeBatch: ProductGroupBatch | null;
   batchProgress: { done: number; total: number } | null;
   loadingMore: boolean;
-  onBatchAction: (groupId: string, action: BatchAction) => void;
+  onSelectBatch: (
+    groupId: string,
+    groupName: string,
+    bucket: ProductGroupRecommendationBucket,
+  ) => void;
+  onBatchAction: (action: BatchAction) => void;
+  onClearBatch: () => void;
+  onToggleGroupListings: (groupId: string) => void;
   onLoadMore: () => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
+  onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
     groupId: string,
@@ -2335,15 +2692,22 @@ function ProductGroupsOverview({
                   savingCorrectionProfileId={savingCorrectionProfileId}
                   activeTaskProfileId={activeTaskProfileId}
                   loadingTaskProfileId={loadingTaskProfileId}
-                  loadingBatch={loadingBatchGroupId === group.id}
-                  batchFindings={activeBatch?.groupId === group.id ? activeBatch.findings : null}
+                  allFindings={loadedGroupTasks[group.id] ?? null}
+                  expanded={expandedGroupId === group.id}
+                  loadingAllFindings={loadingGroupTasksId === group.id}
+                  activeBatch={activeBatch}
                   batchProgress={activeBatch?.groupId === group.id ? batchProgress : null}
-                  batchDisabled={Boolean(
-                    (loadingBatchGroupId && loadingBatchGroupId !== group.id) ||
-                    (batchProgress && activeBatch?.groupId !== group.id)
+                  batchDisabled={Boolean(loadingGroupTasksId || batchProgress)}
+                  onSelectBatch={(bucket) => onSelectBatch(
+                    group.id,
+                    group.display_name ?? `Visual group ${index + 1}`,
+                    bucket,
                   )}
-                  onBatchAction={(action) => onBatchAction(group.id, action)}
+                  onBatchAction={onBatchAction}
+                  onClearBatch={onClearBatch}
+                  onToggleGroupListings={() => onToggleGroupListings(group.id)}
                   onOpenTask={onOpenTask}
+                  onOpenFinding={onOpenFinding}
                   onConfirmGroup={onConfirmGroup}
                   onUpdateEmbeddingThreshold={onUpdateEmbeddingThreshold}
                   onCorrectGroupMember={onCorrectGroupMember}
@@ -2437,12 +2801,18 @@ function ProductGroupCard({
   savingCorrectionProfileId,
   activeTaskProfileId,
   loadingTaskProfileId,
-  loadingBatch,
-  batchFindings,
+  allFindings,
+  expanded,
+  loadingAllFindings,
+  activeBatch,
   batchProgress,
   batchDisabled,
+  onSelectBatch,
   onBatchAction,
+  onClearBatch,
+  onToggleGroupListings,
   onOpenTask,
+  onOpenFinding,
   onConfirmGroup,
   onUpdateEmbeddingThreshold,
   onCorrectGroupMember,
@@ -2460,12 +2830,18 @@ function ProductGroupCard({
   savingCorrectionProfileId: string | null;
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
-  loadingBatch: boolean;
-  batchFindings: IpReviewFinding[] | null;
+  allFindings: IpReviewFinding[] | null;
+  expanded: boolean;
+  loadingAllFindings: boolean;
+  activeBatch: ProductGroupBatch | null;
   batchProgress: { done: number; total: number } | null;
   batchDisabled: boolean;
+  onSelectBatch: (bucket: ProductGroupRecommendationBucket) => void;
   onBatchAction: (action: BatchAction) => void;
+  onClearBatch: () => void;
+  onToggleGroupListings: () => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
+  onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
     groupId: string,
@@ -3309,6 +3685,13 @@ function ProductGroupCard({
         profiles={displayedMembers}
         totalCount={displayedMemberCount}
         separateByRecommendation={!showingPersistedMembers}
+        allFindings={!showingPersistedMembers ? allFindings : null}
+        expanded={!showingPersistedMembers && expanded}
+        groupId={group.id}
+        groupName={group.display_name ?? `Visual group ${index + 1}`}
+        activeBatch={activeBatch}
+        batchProgress={batchProgress}
+        batchDisabled={batchDisabled}
         gridClassName="grid-cols-3 sm:grid-cols-4"
         renderMember={(profile) => {
           const primaryVisualEvidence = primaryVisualEvidenceByProfileId.get(profile.id);
@@ -3344,6 +3727,21 @@ function ProductGroupCard({
             </div>
           );
         }}
+        renderFinding={(finding) => {
+          const profile = productClusterProfileForFinding(finding);
+          return (
+            <div className="relative min-w-0">
+              <ListingTile
+                profile={profile}
+                active={activeTaskProfileId === profile.id}
+                onClick={() => onOpenFinding(finding, group.id)}
+              />
+            </div>
+          );
+        }}
+        onSelectBatch={onSelectBatch}
+        onBatchAction={onBatchAction}
+        onClearBatch={onClearBatch}
       />
       {correctingProfile && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
@@ -3390,20 +3788,50 @@ function ProductGroupCard({
           </div>
         </div>
       )}
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="text-xs text-stone-500">
-          {displayedMemberCount > displayedMembers.length
-            ? `+${displayedMemberCount - displayedMembers.length} more ${showingPersistedMembers ? "persisted" : "to-triage"} listings`
-            : `Minimum ${mode === "same"
-              ? "same-product"
-              : mode === "related"
-                ? "related-product"
-                : "pairwise image similarity"} ${
-              group.minimum_score?.toFixed(3) ?? "—"
-            }`}
-        </p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
+          {!showingPersistedMembers && displayedMemberCount > displayedMembers.length ? (
+            <>
+              <span>
+                {expanded && allFindings
+                  ? `Showing all ${allFindings.length} current to-triage listings`
+                  : `Showing ${displayedMembers.length} of ${displayedMemberCount} to-triage listings`}
+              </span>
+              <button
+                type="button"
+                data-product-group-expand={group.id}
+                aria-expanded={expanded}
+                disabled={loadingAllFindings || Boolean(batchProgress)}
+                onClick={onToggleGroupListings}
+                className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 font-semibold text-stone-700 transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-wait disabled:opacity-60"
+              >
+                {loadingAllFindings ? (
+                  <RefreshCw size={12} className="animate-spin" aria-hidden="true" />
+                ) : expanded ? (
+                  <ChevronUp size={12} aria-hidden="true" />
+                ) : (
+                  <ChevronDown size={12} aria-hidden="true" />
+                )}
+                {loadingAllFindings
+                  ? `Loading all ${displayedMemberCount}…`
+                  : expanded
+                    ? "Collapse to preview"
+                    : `View all ${displayedMemberCount} listings`}
+              </button>
+            </>
+          ) : (
+            <span>
+              Minimum {mode === "same"
+                ? "same-product"
+                : mode === "related"
+                  ? "related-product"
+                  : "pairwise image similarity"}{" "}
+              {group.minimum_score?.toFixed(3) ?? "—"}
+            </span>
+          )}
+        </div>
         <Link
-          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}`}
+          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}${taskLinkMode === "pending" ? "&select_all=true" : ""}`}
           className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
             taskLinkMode === "pending"
               ? "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100"
@@ -3418,21 +3846,6 @@ function ProductGroupCard({
               : "View tasks"}
         </Link>
       </div>
-      <BatchOperationBar
-        selectedCount={batchFindings?.length ?? triageMemberCount}
-        selectedSummary={batchFindings
-          ? selectedFindingSummary(batchFindings)
-          : group.display_name
-            ? [group.display_name]
-            : []}
-        batchProgress={batchProgress}
-        onAction={onBatchAction}
-        showResort={false}
-        placement="inline"
-        showShortcuts={false}
-        disabled={batchDisabled}
-        statusMessage={loadingBatch ? "Loading all group tasks…" : null}
-      />
     </section>
   );
 }

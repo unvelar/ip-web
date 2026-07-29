@@ -144,6 +144,10 @@ export function MonitoringInboxView() {
     product_group_id: urlIpChanged ? null : urlFilters.product_group_id,
   };
   const campaignBatchId = params.get("campaign_batch");
+  const selectAllProductGroupTasks =
+    params.get("select_all") === "true" &&
+    filters.status === "pending" &&
+    Boolean(filters.ip_id && filters.product_group_id);
 
   const [findings, setFindings] = useState<IpReviewFinding[]>([]);
   const [linkedFinding, setLinkedFinding] = useState<IpReviewFinding | null>(null);
@@ -259,10 +263,19 @@ export function MonitoringInboxView() {
       setLoaded(true);
       return;
     }
-    void loadFirstPage(filters);
+    void loadFirstPage(
+      filters,
+      selectAllProductGroupTasks ? Number.POSITIVE_INFINITY : MONITORING_PAGE_SIZE,
+    );
     // filterKey is enough; parseFilters is pure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIpId, filterKey, loadFirstPage, loadingActiveIp]);
+  }, [
+    activeIpId,
+    filterKey,
+    loadFirstPage,
+    loadingActiveIp,
+    selectAllProductGroupTasks,
+  ]);
 
   // Keep task URLs shareable while the top bar remains the control that owns
   // the IP selection. Changing IP also closes task/campaign detail and clears
@@ -279,7 +292,10 @@ export function MonitoringInboxView() {
       ip_id: activeIpId,
       product_group_id: ipChanged ? null : previousFilters.product_group_id,
     });
-    if (ipChanged) next.delete("campaign_batch");
+    if (ipChanged) {
+      next.delete("campaign_batch");
+      next.delete("select_all");
+    }
     const nextSearch = next.toString();
     navigate({
       pathname: ipChanged && taskId ? "/monitoring/tasks" : location.pathname,
@@ -378,11 +394,15 @@ export function MonitoringInboxView() {
 
   const onFiltersChange = useCallback(
     (next: Partial<InboxFilters>) => {
-      setParams((prev) => writeFilters(prev, {
-        ...filters,
-        ...next,
-        ip_id: activeIpId,
-      }), {
+      setParams((prev) => {
+        const nextParams = writeFilters(prev, {
+          ...filters,
+          ...next,
+          ip_id: activeIpId,
+        });
+        nextParams.delete("select_all");
+        return nextParams;
+      }, {
         replace: true,
       });
     },
@@ -419,6 +439,17 @@ export function MonitoringInboxView() {
     add(linkedFinding);
     return out;
   }, [campaignBatchFindings, findings, linkedFinding]);
+
+  const productGroupBatchReady =
+    selectAllProductGroupTasks && loaded && !err && nextCursor === null;
+  const seedBatchFindings = productGroupBatchReady
+    ? findings
+    : campaignBatchFindings;
+  const seedBatchKey = productGroupBatchReady
+    ? `product-group:${filters.ip_id}:${filters.product_group_id}`
+    : campaignBatchId
+      ? `${campaignBatchId}:${campaignBatchFindings.map((f) => f.result_id).join(",")}`
+      : null;
 
   const queueSummary = useMemo(() => {
     if (!facets) return "Loading…";
@@ -507,12 +538,8 @@ export function MonitoringInboxView() {
           showIpFilter={false}
           activeFindingId={taskId ?? null}
           onActiveFindingChange={onActiveFindingChange}
-          seedBatchFindings={campaignBatchFindings}
-          seedBatchKey={
-            campaignBatchId
-              ? `${campaignBatchId}:${campaignBatchFindings.map((f) => f.result_id).join(",")}`
-              : null
-          }
+          seedBatchFindings={seedBatchFindings}
+          seedBatchKey={seedBatchKey}
         />
       )}
     </div>
