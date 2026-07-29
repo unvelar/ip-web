@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import {
-  autoSendTakedown,
+  autoSendTakedownBatch,
   dismissMonitoringCampaign,
   dismissIpFinding,
   discoverMonitoringCampaigns,
@@ -20,7 +20,6 @@ import {
   listMonitoringCampaigns,
   markIpFindingEnforced,
   markIpFindingNeedsReview,
-  markTakedownSentWithoutEmail,
   updateMonitoringCampaignMember,
   type CaseReviewStatus,
   type IpReviewFinding,
@@ -33,7 +32,14 @@ import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
-import { type BatchAction, runPool, summarizeBatch } from "../components/monitoring/board/batchUtils";
+import { BatchResultNotice } from "../components/monitoring/board/BatchResultNotice";
+import {
+  type BatchResult,
+  type BatchAction,
+  runPool,
+  summarizeBatch,
+  summarizeTakedownBatch,
+} from "../components/monitoring/board/batchUtils";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
 import {
   compactListingTitle,
@@ -316,7 +322,7 @@ function CampaignDetailPanel({
   const [dismissingCampaign, setDismissingCampaign] = useState(false);
   const [confirmAction, setConfirmAction] = useState<BatchAction | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
-  const [batchResult, setBatchResult] = useState<string | null>(null);
+  const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
 
   useEffect(() => {
     setCurrent(campaign);
@@ -427,40 +433,76 @@ function CampaignDetailPanel({
       setBatchResult(summarizeBatch(action, 0, skipCounts, 0));
       return;
     }
-    setBatchProgress({ done: 0, total: eligible.length });
     const bump = (reason: string) => {
       skipCounts[reason] = (skipCounts[reason] ?? 0) + 1;
     };
-    await runPool(
-      eligible,
-      async (finding) => {
-        try {
-          if (action === "send") {
-            const r = await autoSendTakedown(finding.case_id as string);
-            if (r.status === "sent") ok++;
-            else if (canMarkSentWithoutEmail) {
-              await markTakedownSentWithoutEmail(finding.case_id as string);
-              ok++;
-            } else if (r.status === "needs_compose") bump("needs manual compose");
-            else bump("email not configured");
-          } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand") {
-            await dismissIpFinding(finding.ip_id as string, finding.result_id, { reason: action });
-            ok++;
-          } else if (action === "review") {
-            await markIpFindingNeedsReview(finding.ip_id as string, finding.result_id);
-            ok++;
-          } else {
-            await markIpFindingEnforced(finding.ip_id as string, finding.result_id);
-            ok++;
-          }
-        } catch {
-          failed++;
-        } finally {
-          setBatchProgress((progress) => progress ? { ...progress, done: progress.done + 1 } : progress);
+    if (action === "send") {
+      const previousCampaignBatchActive = campaignBatchActive;
+      const previousExtraBatchFindings = extraBatchFindings;
+      setCampaignBatchActive(false);
+      setExtraBatchFindings([]);
+      setActiveMemberId(null);
+      try {
+        const result = await autoSendTakedownBatch(
+          eligible.map((finding) => finding.case_id as string),
+        );
+        for (const item of result.skipped) bump(item.reason);
+        const queued = result.queued_case_ids.length;
+        ok = queued;
+        failed = result.failed.length;
+        setBatchResult(summarizeTakedownBatch(
+          queued,
+          result.email_count,
+          skipCounts,
+          failed,
+        ));
+        if (queued === 0) {
+          setCampaignBatchActive(previousCampaignBatchActive);
+          setExtraBatchFindings(previousExtraBatchFindings);
+        } else {
+          onReload();
         }
-      },
-      4,
-    );
+      } catch (error) {
+        setCampaignBatchActive(previousCampaignBatchActive);
+        setExtraBatchFindings(previousExtraBatchFindings);
+        setBatchResult(
+          `Nothing was queued. ${error instanceof Error ? error.message : "The request failed."}`,
+        );
+      }
+      return;
+    } else {
+      setBatchProgress({ done: 0, total: eligible.length });
+      await runPool(
+        eligible,
+        async (finding) => {
+          try {
+            if (
+              action === "false_positive" ||
+              action === "do_not_pursue" ||
+              action === "second_hand"
+            ) {
+              await dismissIpFinding(finding.ip_id as string, finding.result_id, {
+                reason: action,
+              });
+              ok++;
+            } else if (action === "review") {
+              await markIpFindingNeedsReview(finding.ip_id as string, finding.result_id);
+              ok++;
+            } else {
+              await markIpFindingEnforced(finding.ip_id as string, finding.result_id);
+              ok++;
+            }
+          } catch {
+            failed++;
+          } finally {
+            setBatchProgress((progress) => progress
+              ? { ...progress, done: progress.done + 1 }
+              : progress);
+          }
+        },
+        4,
+      );
+    }
     setBatchProgress(null);
     setCampaignBatchActive(false);
     setBatchResult(summarizeBatch(action, ok, skipCounts, failed));
@@ -664,9 +706,12 @@ function CampaignDetailPanel({
 
         <div className="px-4 py-3">
           {batchResult && (
-            <div className="mb-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-600">
-              {batchResult}
-            </div>
+            <BatchResultNotice
+              result={batchResult}
+              profileIpId={current.ip_catalog_id}
+              onDismiss={() => setBatchResult(null)}
+              className="mb-3"
+            />
           )}
           <div className="mb-2 flex items-center justify-between gap-2">
             <h2 className="text-xs font-bold uppercase tracking-wide text-stone-500">Members</h2>

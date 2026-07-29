@@ -44,7 +44,7 @@ export function BatchConfirmModal({
                 <> from <span className="font-semibold text-stone-900">{scopeLabel}</span></>
               )}
               {action === "send"
-                ? ". Each uses the suggested route + pre-filled draft for its platform."
+                ? ". One consolidated email containing all listing links will be queued in the background. Selections spanning multiple IPs or intake addresses are split into one email per compatible group."
                 : "."}
             </p>
           ) : (

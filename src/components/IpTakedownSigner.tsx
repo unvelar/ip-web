@@ -68,7 +68,7 @@ export default function IpTakedownSigner({ ipId }: { ipId: string }) {
   }
 
   return (
-    <section className="space-y-3">
+    <section id="takedown-signer" className="space-y-3 scroll-mt-6">
       <div>
         <h2 className="text-lg font-black text-stone-900 tracking-tight">Takedown signer</h2>
         <p className="mt-1 text-sm text-stone-500">

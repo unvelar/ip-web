@@ -11,6 +11,7 @@ import {
   restorePersistedProductGroupMember,
   undismissIpFinding,
   autoSendTakedown,
+  autoSendTakedownBatch,
   type CaseReviewStatus,
   type IpReviewFinding,
   type MonitoringCandidateOutcome,
@@ -25,7 +26,15 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { BatchConfirmModal } from "./board/batch";
 import { BatchOperationBar } from "./board/BatchOperationBar";
-import { type BatchAction, runPool, summarizeBatch, summarizeResort } from "./board/batchUtils";
+import { BatchResultNotice } from "./board/BatchResultNotice";
+import {
+  type BatchResult,
+  type BatchAction,
+  runPool,
+  summarizeBatch,
+  summarizeResort,
+  summarizeTakedownBatch,
+} from "./board/batchUtils";
 import {
   CANDIDATE_OUTCOME_LABELS,
   CANDIDATE_OUTCOME_ORDER,
@@ -241,25 +250,49 @@ export function MonitoringBoard({
     const activeFinding = activeId
       ? findings.find((f) => f.result_id === activeId)
       : null;
+    const incompleteFindings = filteredFindings.filter(
+      (f) => !completingResultIds.has(f.result_id),
+    );
     const baseFindings = (
       activeFinding &&
       !completingResultIds.has(activeFinding.result_id) &&
-      !filteredFindings.some((f) => f.result_id === activeFinding.result_id)
+      !incompleteFindings.some((f) => f.result_id === activeFinding.result_id)
     )
-      ? [activeFinding, ...filteredFindings]
-      : filteredFindings;
+      ? [activeFinding, ...incompleteFindings]
+      : incompleteFindings;
 
     if (selectionExtras.size === 0) return baseFindings;
 
     const seen = new Set(baseFindings.map((f) => f.result_id));
     const extraFindings: IpReviewFinding[] = [];
     for (const f of selectionExtras.values()) {
-      if (!selected.has(f.result_id) || seen.has(f.result_id)) continue;
+      if (
+        !selected.has(f.result_id) ||
+        completingResultIds.has(f.result_id) ||
+        seen.has(f.result_id)
+      ) continue;
       seen.add(f.result_id);
       extraFindings.push(f);
     }
     return extraFindings.length > 0 ? [...baseFindings, ...extraFindings] : baseFindings;
   }, [activeId, completingResultIds, filteredFindings, findings, selected, selectionExtras]);
+
+  // Once refreshed data confirms that an optimistic completion left triage,
+  // release its local hide marker so it remains visible in later status views.
+  useEffect(() => {
+    const findingById = new Map(findings.map((finding) => [finding.result_id, finding]));
+    const next = new Set<string>();
+    for (const resultId of completingResultIdsRef.current) {
+      const finding = findingById.get(resultId);
+      const state: CaseReviewStatus = finding?.dismissed_at
+        ? "dismissed"
+        : (finding?.review_status ?? "pending");
+      if (finding && isDecisionState(state)) next.add(resultId);
+    }
+    if (next.size === completingResultIdsRef.current.size) return;
+    completingResultIdsRef.current = next;
+    setCompletingResultIds(next);
+  }, [findings]);
 
   // If filters/refetches remove the active row, the inspector naturally closes
   // until the user selects another visible row.
@@ -539,7 +572,7 @@ export function MonitoringBoard({
   // --- Multi-select + batch operations -------------------------------------
   const [confirmAction, setConfirmAction] = useState<BatchAction | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
-  const [batchResult, setBatchResult] = useState<string | null>(null);
+  const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
 
   // Reset selection when the filter set changes — the rows it referenced are
   // gone. (Pruning on every refetch isn't needed: stale ids are simply ignored.)
@@ -691,40 +724,93 @@ export function MonitoringBoard({
       setBatchResult(summarizeBatch(action, 0, skipCounts, 0));
       return;
     }
-    setBatchProgress({ done: 0, total: eligible.length });
     const bump = (reason: string) => {
       skipCounts[reason] = (skipCounts[reason] ?? 0) + 1;
     };
-    await runPool(
-      eligible,
-      async (f) => {
-        try {
-          if (action === "send") {
-            const r = await autoSendTakedown(f.case_id as string);
-            if (r.status === "sent") ok++;
-            else if (canMarkSentWithoutEmail) {
-              await markTakedownSentWithoutEmail(f.case_id as string);
-              ok++;
-            } else if (r.status === "needs_compose") bump("needs manual compose");
-            else bump("email not configured");
-          } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand") {
-            await dismissIpFinding((f.ip_id ?? ipId) as string, f.result_id, { reason: action });
-            ok++;
-          } else if (action === "review") {
-            await markIpFindingNeedsReview((f.ip_id ?? ipId) as string, f.result_id);
-            ok++;
-          } else {
-            await markIpFindingEnforced((f.ip_id ?? ipId) as string, f.result_id);
-            ok++;
+    if (action === "send") {
+      const originalSelection = selectedActionFindings.filter((finding) =>
+        selected.has(finding.result_id));
+      const restoreSelection = (findingsToRestore: IpReviewFinding[]) => {
+        setSelectionExtras((current) => {
+          const next = new Map(current);
+          for (const finding of findingsToRestore) {
+            next.set(finding.result_id, finding);
           }
-        } catch {
-          failed++;
-        } finally {
-          setBatchProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
+          return next;
+        });
+        setSelected(new Set(findingsToRestore.map((finding) => finding.result_id)));
+      };
+      for (const finding of eligible) {
+        setResultCompleting(finding.result_id, true);
+      }
+      if (activeId && eligible.some((finding) => finding.result_id === activeId)) {
+        setActiveFinding(null);
+      }
+      clearSelection();
+      try {
+        const result = await autoSendTakedownBatch(
+          eligible.map((f) => f.case_id as string),
+        );
+        for (const item of result.skipped) bump(item.reason);
+        const queued = result.queued_case_ids.length;
+        const queuedCaseIds = new Set(result.queued_case_ids);
+        const unqueuedFindings = originalSelection.filter(
+          (finding) => !finding.case_id || !queuedCaseIds.has(finding.case_id),
+        );
+        for (const finding of unqueuedFindings) {
+          setResultCompleting(finding.result_id, false);
         }
-      },
-      4,
-    );
+        if (unqueuedFindings.length > 0) restoreSelection(unqueuedFindings);
+        ok = queued;
+        failed = result.failed.length;
+        setBatchResult(summarizeTakedownBatch(
+          queued,
+          result.email_count,
+          skipCounts,
+          failed,
+        ));
+        if (queued > 0) onRefresh();
+      } catch (error) {
+        for (const finding of eligible) {
+          setResultCompleting(finding.result_id, false);
+        }
+        restoreSelection(originalSelection);
+        setBatchResult(
+          `Nothing was queued. ${error instanceof Error ? error.message : "The request failed."}`,
+        );
+      }
+      return;
+    } else {
+      setBatchProgress({ done: 0, total: eligible.length });
+      await runPool(
+        eligible,
+        async (f) => {
+          try {
+            if (
+              action === "false_positive" ||
+              action === "do_not_pursue" ||
+              action === "second_hand"
+            ) {
+              await dismissIpFinding((f.ip_id ?? ipId) as string, f.result_id, {
+                reason: action,
+              });
+              ok++;
+            } else if (action === "review") {
+              await markIpFindingNeedsReview((f.ip_id ?? ipId) as string, f.result_id);
+              ok++;
+            } else {
+              await markIpFindingEnforced((f.ip_id ?? ipId) as string, f.result_id);
+              ok++;
+            }
+          } catch {
+            failed++;
+          } finally {
+            setBatchProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
+          }
+        },
+        4,
+      );
+    }
     setBatchProgress(null);
     clearSelection();
     setBatchResult(summarizeBatch(action, ok, skipCounts, failed));
@@ -1094,16 +1180,12 @@ export function MonitoringBoard({
 
       <div ref={queueRef} className="rounded-lg border border-stone-200 bg-white overflow-hidden">
         {batchResult && (
-          <div className="px-5 py-2 border-b border-stone-100 bg-stone-50 text-xs text-stone-600 flex items-center justify-between gap-3">
-            <span>{batchResult}</span>
-            <button
-              type="button"
-              onClick={() => setBatchResult(null)}
-              className="text-stone-400 hover:text-stone-600 font-semibold shrink-0"
-            >
-              Dismiss
-            </button>
-          </div>
+          <BatchResultNotice
+            result={batchResult}
+            profileIpId={filters.ip_id ?? ipId}
+            onDismiss={() => setBatchResult(null)}
+            className="m-3"
+          />
         )}
         {displayFindings.length === 0 ? (
           <div className="px-5 py-8 text-sm text-stone-400 text-center">

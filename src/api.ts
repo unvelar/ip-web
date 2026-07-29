@@ -432,6 +432,7 @@ export function deleteCaseComment(caseId: string, commentId: string) {
 
 export type TakedownRequestStatus =
   | "queued"
+  | "sending"
   | "sent"
   | "failed"
   | "replied"
@@ -530,6 +531,30 @@ export function sendTakedown(
   );
 }
 
+export interface BatchTakedownCaseResult {
+  case_id: string;
+  reason: string;
+}
+
+export interface BatchTakedownSendResponse {
+  queued_case_ids: string[];
+  email_count: number;
+  requests: TakedownRequest[];
+  skipped: BatchTakedownCaseResult[];
+  failed: BatchTakedownCaseResult[];
+}
+
+/** Resolve and queue a selection as one API request. Compatible cases (same
+ *  IP and intake route) share one notice containing all listing links. */
+export function autoSendTakedownBatch(caseIds: string[]) {
+  return request<BatchTakedownSendResponse>("/api/takedowns/batch/send", {
+    method: "POST",
+    body: JSON.stringify({
+      case_ids: Array.from(new Set(caseIds)),
+    }),
+  });
+}
+
 export function markTakedownSentWithoutEmail(caseId: string) {
   return request<{ ok: boolean; emailed: false }>(
     `/api/cases/${caseId}/takedown/mark-sent`,
@@ -538,9 +563,9 @@ export function markTakedownSentWithoutEmail(caseId: string) {
 }
 
 /** Send the suggested-route takedown draft for a case without opening the
- *  editor — the quick path shared by the single-row "Send takedown" and the
- *  board's batch send. Returns a discriminated status so callers can fall back
- *  to manual compose (no route/draft) or surface "email not configured". */
+ *  editor — the single-listing quick path. Returns a discriminated status so
+ *  callers can fall back to manual compose (no route/draft) or surface
+ *  "email not configured". */
 export async function autoSendTakedown(
   caseId: string,
 ): Promise<
@@ -2408,6 +2433,12 @@ export interface ProductClusterGraph {
   truncated: boolean;
 }
 
+export interface ProductGroupRecommendationCounts {
+  takedown: number;
+  second_hand: number;
+  review: number;
+}
+
 export interface PersistedProductGroup {
   id: string;
   display_name: string | null;
@@ -2420,6 +2451,7 @@ export interface PersistedProductGroup {
   semantic_definition: Record<string, string> | null;
   member_count: number;
   triage_member_count: number | null;
+  triage_recommendation_counts?: ProductGroupRecommendationCounts | null;
   average_score: number | null;
   minimum_score: number | null;
   threshold: number;
@@ -2574,6 +2606,19 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
     rules: Array.isArray(group.rules) ? group.rules : [],
     triage_member_count: Number.isFinite(group.triage_member_count)
       ? Number(group.triage_member_count)
+      : null,
+    triage_recommendation_counts: group.triage_recommendation_counts &&
+        Number.isFinite(group.triage_recommendation_counts.takedown) &&
+        Number.isFinite(group.triage_recommendation_counts.second_hand) &&
+        Number.isFinite(group.triage_recommendation_counts.review)
+      ? {
+          takedown: Math.max(0, Math.trunc(group.triage_recommendation_counts.takedown)),
+          second_hand: Math.max(
+            0,
+            Math.trunc(group.triage_recommendation_counts.second_hand),
+          ),
+          review: Math.max(0, Math.trunc(group.triage_recommendation_counts.review)),
+        }
       : null,
     triage_members: Array.isArray(group.triage_members) ? group.triage_members : [],
     embedding_match_threshold:

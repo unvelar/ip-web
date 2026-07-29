@@ -16,6 +16,7 @@ import { useAuth } from "../context/AuthContext";
 
 const STATUS_META: Record<TakedownRequestStatus, { label: string; cls: string }> = {
   queued: { label: "Queued", cls: "bg-stone-100 text-stone-600" },
+  sending: { label: "Sending", cls: "bg-amber-50 text-amber-700" },
   sent: { label: "Sent", cls: "bg-amber-50 text-amber-700" },
   failed: { label: "Failed", cls: "bg-red-50 text-red-700" },
   replied: { label: "Reply received", cls: "bg-blue-50 text-blue-700" },
