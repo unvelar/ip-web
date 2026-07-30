@@ -53,6 +53,8 @@ import {
   type ProductClusterProfile,
   type ProductClusterScope,
   type ProductGroupCorrectionReason,
+  type ProductGroupPriceSignal,
+  type ProductGroupPriceSummary,
   type ProductGroupRecommendationCounts,
   type ProductGroupRule,
   type ProductGroupVisualEvidence,
@@ -1873,7 +1875,36 @@ function findingProfileId(finding: IpReviewFinding) {
   return `finding:${finding.result_id}`;
 }
 
-function productClusterProfileForFinding(finding: IpReviewFinding): ProductClusterProfile {
+function productGroupPriceSignalForUsd(
+  priceValueUsd: number | null | undefined,
+  actionabilityKey: string | null | undefined,
+  priceSummary: ProductGroupPriceSummary | null,
+): ProductGroupPriceSignal | null {
+  const price = Number(priceValueUsd);
+  if (
+    !priceSummary ||
+    !Number.isFinite(price) ||
+    price <= 0 ||
+    priceSummary.unusually_low_threshold_usd <= 0 ||
+    price >= priceSummary.unusually_low_threshold_usd ||
+    (actionabilityKey !== "send_takedown" && actionabilityKey !== "needs_review")
+  ) {
+    return null;
+  }
+  return {
+    unusually_low: true,
+    percent_below_reference: Math.max(
+      1,
+      Math.min(99, Math.round((1 - price / priceSummary.median_usd) * 100)),
+    ),
+    reference_median_usd: priceSummary.median_usd,
+  };
+}
+
+function productClusterProfileForFinding(
+  finding: IpReviewFinding,
+  priceSummary: ProductGroupPriceSummary | null = null,
+): ProductClusterProfile {
   return {
     id: findingProfileId(finding),
     case_id: finding.case_id ?? finding.result_id,
@@ -1884,11 +1915,30 @@ function productClusterProfileForFinding(finding: IpReviewFinding): ProductClust
     profile_text: "",
     price_value: finding.price_value,
     price_currency: finding.price_currency,
+    price_value_usd: finding.price_value_usd,
+    price_signal: productGroupPriceSignalForUsd(
+      finding.price_value_usd,
+      finding.actionability?.key,
+      priceSummary,
+    ),
     image_count: finding.image_urls?.length ?? (finding.image_url ? 1 : 0),
     image_url: finding.image_url ?? finding.screenshot_url,
     actionability: finding.actionability,
     updated_at: finding.updated_at,
   };
+}
+
+function compareProductProfilesByPriceSignal(
+  left: ProductClusterProfile,
+  right: ProductClusterProfile,
+) {
+  const leftSignal = left.price_signal?.unusually_low ? left.price_signal : null;
+  const rightSignal = right.price_signal?.unusually_low ? right.price_signal : null;
+  if (Boolean(leftSignal) !== Boolean(rightSignal)) return leftSignal ? -1 : 1;
+  if (leftSignal && rightSignal) {
+    return rightSignal.percent_below_reference - leftSignal.percent_below_reference;
+  }
+  return 0;
 }
 
 function productGroupSubgroupKey(
@@ -1940,6 +1990,7 @@ function fillProductGroupSubgroupPreview(
 
 function ProductGroupMemberSubgroups({
   profiles,
+  priceSummary,
   totalCount,
   recommendationCounts,
   separateByRecommendation,
@@ -1963,6 +2014,7 @@ function ProductGroupMemberSubgroups({
   onToggleSubgroupListings,
 }: {
   profiles: ProductClusterProfile[];
+  priceSummary: ProductGroupPriceSummary | null;
   totalCount: number;
   recommendationCounts: ProductGroupRecommendationCounts | null;
   separateByRecommendation: boolean;
@@ -1985,7 +2037,8 @@ function ProductGroupMemberSubgroups({
   onSetAllBatchFindings: (selected: boolean) => void;
   onToggleSubgroupListings: (bucket: ProductGroupRecommendationBucket) => void;
 }) {
-  const items: ProductGroupSubgroupItem[] = profiles.map((profile) => ({
+  const sortedProfiles = [...profiles].sort(compareProductProfilesByPriceSignal);
+  const items: ProductGroupSubgroupItem[] = sortedProfiles.map((profile) => ({
     kind: "profile" as const,
     id: profile.id,
     bucket: recommendationBucketForProfile(profile),
@@ -1998,7 +2051,7 @@ function ProductGroupMemberSubgroups({
   if (!recommendationsAvailable) {
     return (
       <div className={`mt-3 grid gap-2 ${gridClassName}`}>
-        {profiles.map(renderMember)}
+        {sortedProfiles.map(renderMember)}
       </div>
     );
   }
@@ -2012,12 +2065,42 @@ function ProductGroupMemberSubgroups({
     bucketItems.push(item);
     itemsByBucket.set(item.bucket, bucketItems);
   }
+  for (const bucketItems of itemsByBucket.values()) {
+    bucketItems.sort((left, right) => {
+      const leftProfile = left.kind === "profile"
+        ? left.profile
+        : productClusterProfileForFinding(left.finding, priceSummary);
+      const rightProfile = right.kind === "profile"
+        ? right.profile
+        : productClusterProfileForFinding(right.finding, priceSummary);
+      return compareProductProfilesByPriceSignal(leftProfile, rightProfile);
+    });
+  }
   const findingsByBucket = new Map<ProductGroupRecommendationBucket, IpReviewFinding[]>();
   for (const finding of allFindings ?? []) {
     const bucket = recommendationBucketForFinding(finding);
     const bucketFindings = findingsByBucket.get(bucket) ?? [];
     bucketFindings.push(finding);
     findingsByBucket.set(bucket, bucketFindings);
+  }
+  for (const bucketFindings of findingsByBucket.values()) {
+    bucketFindings.sort((left, right) => {
+      const leftSignal = productGroupPriceSignalForUsd(
+        left.price_value_usd,
+        left.actionability?.key,
+        priceSummary,
+      );
+      const rightSignal = productGroupPriceSignalForUsd(
+        right.price_value_usd,
+        right.actionability?.key,
+        priceSummary,
+      );
+      if (Boolean(leftSignal) !== Boolean(rightSignal)) return leftSignal ? -1 : 1;
+      if (leftSignal && rightSignal) {
+        return rightSignal.percent_below_reference - leftSignal.percent_below_reference;
+      }
+      return 0;
+    });
   }
   const previewTruncated = totalCount > profiles.length;
   const activeBatchFindings = activeBatch?.groupId === groupId
@@ -2744,6 +2827,7 @@ function SemanticProductGroupCard({
 
       <ProductGroupMemberSubgroups
         profiles={displayedMembers}
+        priceSummary={null}
         totalCount={displayedMemberCount}
         recommendationCounts={showingTriage
           ? group.triage_recommendation_counts ?? null
@@ -3097,6 +3181,43 @@ function ProductGroupsOverview({
   );
 }
 
+function ProductGroupPriceSummaryView({
+  summary,
+}: {
+  summary: ProductGroupPriceSummary;
+}) {
+  const typicalPrice = summary.typical_low_usd === summary.typical_high_usd
+    ? formatMoney(summary.typical_low_usd, "USD")
+    : `${formatMoney(summary.typical_low_usd, "USD")}–${formatMoney(summary.typical_high_usd, "USD")}`;
+  const learningLabel = summary.reference_source === "reviewed"
+    ? `Learned from ${summary.reviewed_clear_count} cleared reviews`
+    : "Group baseline · learns from cleared reviews";
+  const title = [
+    "Only USD-normalized prices are compared.",
+    `The typical range and low-price cutoff use ${summary.reference_count} reference listings.`,
+    "Second-hand and false-positive outcomes are kept out of the baseline.",
+    "An unusually low price is supporting evidence for review, not an automatic counterfeit verdict.",
+  ].join(" ");
+
+  return (
+    <div className="mt-1.5" title={title} data-product-group-price-summary="USD">
+      <div className="flex flex-wrap justify-end gap-1">
+        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-800 ring-1 ring-inset ring-sky-200">
+          USD typical {typicalPrice}
+        </span>
+        {summary.unusually_low_count > 0 && (
+          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-800 ring-1 ring-inset ring-red-200">
+            {summary.unusually_low_count} unusually low
+          </span>
+        )}
+      </div>
+      <p className="mt-1 text-[9px] font-medium text-stone-500">
+        {learningLabel}
+      </p>
+    </div>
+  );
+}
+
 function ProductGroupCard({
   group,
   index,
@@ -3378,6 +3499,9 @@ function ProductGroupCard({
                 : "image similarity"}{" "}
             {group.average_score?.toFixed(3) ?? "—"}
           </p>
+          {group.price_summary && (
+            <ProductGroupPriceSummaryView summary={group.price_summary} />
+          )}
           {showingPersistedMembers && triageProjectionAvailable && (
             <p className={`mt-0.5 text-[10px] font-semibold ${
               triageMemberCount > 0 ? "text-red-700" : "text-emerald-700"
@@ -3994,6 +4118,7 @@ function ProductGroupCard({
 
       <ProductGroupMemberSubgroups
         profiles={displayedMembers}
+        priceSummary={group.price_summary}
         totalCount={displayedMemberCount}
         recommendationCounts={!showingPersistedMembers
           ? group.triage_recommendation_counts ?? null
@@ -4044,7 +4169,7 @@ function ProductGroupCard({
           );
         }}
         renderFinding={(finding) => {
-          const profile = productClusterProfileForFinding(finding);
+          const profile = productClusterProfileForFinding(finding, group.price_summary);
           return (
             <div className="relative min-w-0">
               <ListingTile
@@ -4189,22 +4314,34 @@ function ListingTile({
   visualSupportIsReference?: boolean;
 }) {
   const hasGroupImageSimilarity = groupImageSimilarity !== undefined;
-  const priceValue = profile.price_value == null ? null : Number(profile.price_value);
-  const price = priceValue != null && Number.isFinite(priceValue) && profile.price_currency
-    ? formatMoney(priceValue, profile.price_currency)
+  const priceValueUsd = profile.price_value_usd == null
+    ? null
+    : Number(profile.price_value_usd);
+  const price = priceValueUsd != null && Number.isFinite(priceValueUsd)
+    ? formatMoney(priceValueUsd, "USD")
     : null;
+  const unusualPrice = profile.price_signal?.unusually_low === true
+    ? profile.price_signal
+    : null;
+  const taskTitle = onClick
+    ? `Open task details: ${profileTitle(profile)}`
+    : `Task details unavailable: ${profileTitle(profile)}`;
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      title={onClick
-        ? `Open task details: ${profileTitle(profile)}`
-        : `Task details unavailable: ${profileTitle(profile)}`}
+      title={unusualPrice
+        ? `${taskTitle}. Price is ${unusualPrice.percent_below_reference}% below the learned USD group median; treat this as review evidence, not an automatic verdict.`
+        : taskTitle}
+      data-product-price-currency={price ? "USD" : undefined}
+      data-product-price-signal={unusualPrice ? "unusually-low" : undefined}
       className={`w-full min-w-0 rounded-lg border p-1.5 text-left transition disabled:cursor-default ${
         active
           ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
-          : "border-stone-200 bg-stone-50 enabled:hover:border-blue-300 enabled:hover:bg-blue-50"
+          : unusualPrice
+            ? "border-red-300 bg-red-50 enabled:hover:border-red-400 enabled:hover:bg-red-100"
+            : "border-stone-200 bg-stone-50 enabled:hover:border-blue-300 enabled:hover:bg-blue-50"
       }`}
     >
       <span className="relative block aspect-square overflow-hidden rounded-md bg-stone-100">
@@ -4216,8 +4353,15 @@ function ListingTile({
           </span>
         )}
         {price && (
-          <span className="absolute bottom-1.5 right-1.5 max-w-[calc(100%-0.75rem)] truncate rounded-md bg-stone-950/90 px-2 py-1 text-xs font-extrabold tracking-tight text-white shadow-md ring-1 ring-white/30">
+          <span className={`absolute bottom-1.5 right-1.5 max-w-[calc(100%-0.75rem)] truncate rounded-md px-2 py-1 text-xs font-extrabold tracking-tight text-white shadow-md ring-1 ring-white/30 ${
+            unusualPrice ? "bg-red-700/95" : "bg-stone-950/90"
+          }`}>
             {price}
+          </span>
+        )}
+        {unusualPrice && (
+          <span className="absolute right-1.5 top-1.5 rounded bg-red-700/95 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm">
+            {unusualPrice.percent_below_reference}% below typical
           </span>
         )}
         {hasGroupImageSimilarity && groupImagePosition != null && (

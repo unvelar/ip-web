@@ -2328,6 +2328,8 @@ export interface ProductClusterProfile {
   profile_text: string;
   price_value: number | null;
   price_currency: string | null;
+  price_value_usd: number | null;
+  price_signal: ProductGroupPriceSignal | null;
   image_count: number;
   image_url: string | null;
   group_image_id?: string | null;
@@ -2439,6 +2441,27 @@ export interface ProductGroupRecommendationCounts {
   review: number;
 }
 
+export interface ProductGroupPriceSignal {
+  unusually_low: boolean;
+  percent_below_reference: number;
+  reference_median_usd: number;
+}
+
+export interface ProductGroupPriceSummary {
+  currency: "USD";
+  reference_source: "group" | "reviewed";
+  reference_count: number;
+  comparable_count: number;
+  reviewed_clear_count: number;
+  reviewed_resale_count: number;
+  actioned_count: number;
+  median_usd: number;
+  typical_low_usd: number;
+  typical_high_usd: number;
+  unusually_low_threshold_usd: number;
+  unusually_low_count: number;
+}
+
 export interface PersistedProductGroup {
   id: string;
   display_name: string | null;
@@ -2452,6 +2475,7 @@ export interface PersistedProductGroup {
   member_count: number;
   triage_member_count: number | null;
   triage_recommendation_counts?: ProductGroupRecommendationCounts | null;
+  price_summary: ProductGroupPriceSummary | null;
   average_score: number | null;
   minimum_score: number | null;
   threshold: number;
@@ -2593,6 +2617,84 @@ export function getProductClusterGraph(
   );
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function normalizeProductGroupPriceSignal(
+  signal: ProductGroupPriceSignal | null | undefined,
+): ProductGroupPriceSignal | null {
+  if (
+    signal?.unusually_low !== true ||
+    !isFiniteNumber(signal.percent_below_reference) ||
+    !isFiniteNumber(signal.reference_median_usd)
+  ) {
+    return null;
+  }
+  return {
+    unusually_low: true,
+    percent_below_reference: Math.max(
+      1,
+      Math.min(99, Math.round(signal.percent_below_reference)),
+    ),
+    reference_median_usd: Math.max(0, signal.reference_median_usd),
+  };
+}
+
+function normalizeProductClusterProfile(
+  profile: ProductClusterProfile,
+): ProductClusterProfile {
+  const nativePrice = isFiniteNumber(profile.price_value)
+    ? profile.price_value
+    : null;
+  // Staged API compatibility: a native value is safe as a fallback only when
+  // it is already USD. Never compare or relabel another currency in the UI.
+  const priceValueUsd = isFiniteNumber(profile.price_value_usd)
+    ? profile.price_value_usd
+    : profile.price_currency?.toUpperCase() === "USD" && nativePrice != null
+      ? nativePrice
+      : null;
+  return {
+    ...profile,
+    price_value_usd: priceValueUsd,
+    price_signal: normalizeProductGroupPriceSignal(profile.price_signal),
+  };
+}
+
+function normalizeProductGroupPriceSummary(
+  summary: ProductGroupPriceSummary | null | undefined,
+): ProductGroupPriceSummary | null {
+  if (
+    summary?.currency !== "USD" ||
+    (summary.reference_source !== "group" && summary.reference_source !== "reviewed") ||
+    !isFiniteNumber(summary.reference_count) ||
+    !isFiniteNumber(summary.comparable_count) ||
+    !isFiniteNumber(summary.reviewed_clear_count) ||
+    !isFiniteNumber(summary.reviewed_resale_count) ||
+    !isFiniteNumber(summary.actioned_count) ||
+    !isFiniteNumber(summary.median_usd) ||
+    !isFiniteNumber(summary.typical_low_usd) ||
+    !isFiniteNumber(summary.typical_high_usd) ||
+    !isFiniteNumber(summary.unusually_low_threshold_usd) ||
+    !isFiniteNumber(summary.unusually_low_count)
+  ) {
+    return null;
+  }
+  return {
+    ...summary,
+    reference_count: Math.max(0, Math.trunc(summary.reference_count)),
+    comparable_count: Math.max(0, Math.trunc(summary.comparable_count)),
+    reviewed_clear_count: Math.max(0, Math.trunc(summary.reviewed_clear_count)),
+    reviewed_resale_count: Math.max(0, Math.trunc(summary.reviewed_resale_count)),
+    actioned_count: Math.max(0, Math.trunc(summary.actioned_count)),
+    median_usd: Math.max(0, summary.median_usd),
+    typical_low_usd: Math.max(0, summary.typical_low_usd),
+    typical_high_usd: Math.max(0, summary.typical_high_usd),
+    unusually_low_threshold_usd: Math.max(0, summary.unusually_low_threshold_usd),
+    unusually_low_count: Math.max(0, Math.trunc(summary.unusually_low_count)),
+  };
+}
+
 function normalizePersistedProductGroupOverview(overview: PersistedProductGroupOverview) {
   const groups = overview.groups.map((group) => ({
     ...group,
@@ -2620,7 +2722,13 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
           review: Math.max(0, Math.trunc(group.triage_recommendation_counts.review)),
         }
       : null,
-    triage_members: Array.isArray(group.triage_members) ? group.triage_members : [],
+    price_summary: normalizeProductGroupPriceSummary(group.price_summary),
+    members: Array.isArray(group.members)
+      ? group.members.map(normalizeProductClusterProfile)
+      : [],
+    triage_members: Array.isArray(group.triage_members)
+      ? group.triage_members.map(normalizeProductClusterProfile)
+      : [],
     embedding_match_threshold:
       typeof group.embedding_match_threshold === "number"
         ? group.embedding_match_threshold
@@ -2665,8 +2773,11 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
     triage_ungrouped_count: triageProjectionAvailable
       ? Number(overview.triage_ungrouped_count)
       : null,
+    ungrouped: Array.isArray(overview.ungrouped)
+      ? overview.ungrouped.map(normalizeProductClusterProfile)
+      : [],
     triage_ungrouped: Array.isArray(overview.triage_ungrouped)
-      ? overview.triage_ungrouped
+      ? overview.triage_ungrouped.map(normalizeProductClusterProfile)
       : [],
     triage_projection_available: triageProjectionAvailable,
     snapshot_profile_count: snapshotProfileCount,
