@@ -2445,6 +2445,16 @@ export interface ProductGroupPriceSignal {
   unusually_low: boolean;
   percent_below_reference: number;
   reference_median_usd: number;
+  comparison_scope?: "group" | "visual_cohort";
+  source_group_id?: string | null;
+  source_group_name?: string | null;
+}
+
+export interface ProductGroupPriceSignalMember {
+  profile_id: string;
+  case_id: string;
+  price_value_usd: number;
+  price_signal: ProductGroupPriceSignal;
 }
 
 export interface ProductGroupPriceSummary {
@@ -2476,6 +2486,7 @@ export interface PersistedProductGroup {
   triage_member_count: number | null;
   triage_recommendation_counts?: ProductGroupRecommendationCounts | null;
   price_summary: ProductGroupPriceSummary | null;
+  price_signal_members: ProductGroupPriceSignalMember[];
   average_score: number | null;
   minimum_score: number | null;
   threshold: number;
@@ -2638,7 +2649,39 @@ function normalizeProductGroupPriceSignal(
       Math.min(99, Math.round(signal.percent_below_reference)),
     ),
     reference_median_usd: Math.max(0, signal.reference_median_usd),
+    comparison_scope: signal.comparison_scope === "visual_cohort"
+      ? "visual_cohort"
+      : "group",
+    source_group_id: typeof signal.source_group_id === "string"
+      ? signal.source_group_id
+      : null,
+    source_group_name: typeof signal.source_group_name === "string"
+      ? signal.source_group_name
+      : null,
   };
+}
+
+function normalizeProductGroupPriceSignalMembers(
+  members: ProductGroupPriceSignalMember[] | null | undefined,
+): ProductGroupPriceSignalMember[] {
+  if (!Array.isArray(members)) return [];
+  return members.flatMap((member) => {
+    const signal = normalizeProductGroupPriceSignal(member?.price_signal);
+    if (
+      !signal ||
+      typeof member?.profile_id !== "string" ||
+      typeof member?.case_id !== "string" ||
+      !isFiniteNumber(member?.price_value_usd)
+    ) {
+      return [];
+    }
+    return [{
+      profile_id: member.profile_id,
+      case_id: member.case_id,
+      price_value_usd: Math.max(0, member.price_value_usd),
+      price_signal: signal,
+    }];
+  });
 }
 
 function normalizeProductClusterProfile(
@@ -2723,6 +2766,9 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
         }
       : null,
     price_summary: normalizeProductGroupPriceSummary(group.price_summary),
+    price_signal_members: normalizeProductGroupPriceSignalMembers(
+      group.price_signal_members,
+    ),
     members: Array.isArray(group.members)
       ? group.members.map(normalizeProductClusterProfile)
       : [],

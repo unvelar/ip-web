@@ -1898,12 +1898,38 @@ function productGroupPriceSignalForUsd(
       Math.min(99, Math.round((1 - price / priceSummary.median_usd) * 100)),
     ),
     reference_median_usd: priceSummary.median_usd,
+    comparison_scope: "group",
+    source_group_id: null,
+    source_group_name: null,
   };
+}
+
+function productGroupPriceSignalForFinding(
+  finding: IpReviewFinding,
+  priceSummary: ProductGroupPriceSummary | null,
+  priceSignalByCaseId: ReadonlyMap<string, ProductGroupPriceSignal> | null,
+) {
+  const propagatedSignal = finding.case_id
+    ? priceSignalByCaseId?.get(finding.case_id) ?? null
+    : null;
+  if (
+    propagatedSignal?.unusually_low === true &&
+    (finding.actionability?.key === "send_takedown" ||
+      finding.actionability?.key === "needs_review")
+  ) {
+    return propagatedSignal;
+  }
+  return productGroupPriceSignalForUsd(
+    finding.price_value_usd,
+    finding.actionability?.key,
+    priceSummary,
+  );
 }
 
 function productClusterProfileForFinding(
   finding: IpReviewFinding,
   priceSummary: ProductGroupPriceSummary | null = null,
+  priceSignalByCaseId: ReadonlyMap<string, ProductGroupPriceSignal> | null = null,
 ): ProductClusterProfile {
   return {
     id: findingProfileId(finding),
@@ -1916,10 +1942,10 @@ function productClusterProfileForFinding(
     price_value: finding.price_value,
     price_currency: finding.price_currency,
     price_value_usd: finding.price_value_usd,
-    price_signal: productGroupPriceSignalForUsd(
-      finding.price_value_usd,
-      finding.actionability?.key,
+    price_signal: productGroupPriceSignalForFinding(
+      finding,
       priceSummary,
+      priceSignalByCaseId,
     ),
     image_count: finding.image_urls?.length ?? (finding.image_url ? 1 : 0),
     image_url: finding.image_url ?? finding.screenshot_url,
@@ -1991,6 +2017,7 @@ function fillProductGroupSubgroupPreview(
 function ProductGroupMemberSubgroups({
   profiles,
   priceSummary,
+  priceSignalByCaseId,
   totalCount,
   recommendationCounts,
   separateByRecommendation,
@@ -2015,6 +2042,7 @@ function ProductGroupMemberSubgroups({
 }: {
   profiles: ProductClusterProfile[];
   priceSummary: ProductGroupPriceSummary | null;
+  priceSignalByCaseId: ReadonlyMap<string, ProductGroupPriceSignal> | null;
   totalCount: number;
   recommendationCounts: ProductGroupRecommendationCounts | null;
   separateByRecommendation: boolean;
@@ -2069,10 +2097,18 @@ function ProductGroupMemberSubgroups({
     bucketItems.sort((left, right) => {
       const leftProfile = left.kind === "profile"
         ? left.profile
-        : productClusterProfileForFinding(left.finding, priceSummary);
+        : productClusterProfileForFinding(
+          left.finding,
+          priceSummary,
+          priceSignalByCaseId,
+        );
       const rightProfile = right.kind === "profile"
         ? right.profile
-        : productClusterProfileForFinding(right.finding, priceSummary);
+        : productClusterProfileForFinding(
+          right.finding,
+          priceSummary,
+          priceSignalByCaseId,
+        );
       return compareProductProfilesByPriceSignal(leftProfile, rightProfile);
     });
   }
@@ -2085,15 +2121,15 @@ function ProductGroupMemberSubgroups({
   }
   for (const bucketFindings of findingsByBucket.values()) {
     bucketFindings.sort((left, right) => {
-      const leftSignal = productGroupPriceSignalForUsd(
-        left.price_value_usd,
-        left.actionability?.key,
+      const leftSignal = productGroupPriceSignalForFinding(
+        left,
         priceSummary,
+        priceSignalByCaseId,
       );
-      const rightSignal = productGroupPriceSignalForUsd(
-        right.price_value_usd,
-        right.actionability?.key,
+      const rightSignal = productGroupPriceSignalForFinding(
+        right,
         priceSummary,
+        priceSignalByCaseId,
       );
       if (Boolean(leftSignal) !== Boolean(rightSignal)) return leftSignal ? -1 : 1;
       if (leftSignal && rightSignal) {
@@ -2780,6 +2816,13 @@ function SemanticProductGroupCard({
     ? "status=pending"
     : "status=all&show_dismissed=true";
   const color = group.semantic_definition?.variant_color;
+  const priceSignalByCaseId = new Map(
+    group.price_signal_members.map((member) => [
+      member.case_id,
+      member.price_signal,
+    ]),
+  );
+  const unusualPriceCount = priceSignalByCaseId.size;
 
   return (
     <div
@@ -2813,6 +2856,20 @@ function SemanticProductGroupCard({
           <p className="mt-0.5 text-[10px] text-stone-500">
             Classifier confidence {group.average_score?.toFixed(2) ?? "—"}
           </p>
+          {unusualPriceCount > 0 && (
+            <div
+              className="mt-1.5"
+              title="Each USD-normalized price is compared with the listing's best-matching exact visual cohort. It is supporting evidence for review, not an automatic counterfeit verdict."
+              data-product-type-price-warning-count={unusualPriceCount}
+            >
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-800 ring-1 ring-inset ring-red-200">
+                {unusualPriceCount} unusual {unusualPriceCount === 1 ? "price" : "prices"}
+              </span>
+              <p className="mt-1 text-[9px] font-medium text-stone-500">
+                Compared within visual cohorts · USD
+              </p>
+            </div>
+          )}
           {!showingTriage && triageProjectionAvailable && (
             <p className={`mt-0.5 text-[10px] font-semibold ${
               triageMemberCount > 0 ? "text-red-700" : "text-emerald-700"
@@ -2828,6 +2885,7 @@ function SemanticProductGroupCard({
       <ProductGroupMemberSubgroups
         profiles={displayedMembers}
         priceSummary={null}
+        priceSignalByCaseId={priceSignalByCaseId}
         totalCount={displayedMemberCount}
         recommendationCounts={showingTriage
           ? group.triage_recommendation_counts ?? null
@@ -2860,7 +2918,11 @@ function SemanticProductGroupCard({
           </div>
         )}
         renderFinding={(finding) => {
-          const profile = productClusterProfileForFinding(finding);
+          const profile = productClusterProfileForFinding(
+            finding,
+            null,
+            priceSignalByCaseId,
+          );
           return (
             <div className="relative min-w-0">
               <ListingTile
@@ -4119,6 +4181,7 @@ function ProductGroupCard({
       <ProductGroupMemberSubgroups
         profiles={displayedMembers}
         priceSummary={group.price_summary}
+        priceSignalByCaseId={null}
         totalCount={displayedMemberCount}
         recommendationCounts={!showingPersistedMembers
           ? group.triage_recommendation_counts ?? null
@@ -4323,6 +4386,10 @@ function ListingTile({
   const unusualPrice = profile.price_signal?.unusually_low === true
     ? profile.price_signal
     : null;
+  const visualCohortPriceSignal = unusualPrice?.comparison_scope === "visual_cohort";
+  const priceSignalReference = visualCohortPriceSignal
+    ? unusualPrice?.source_group_name?.trim() || "its exact visual cohort"
+    : "the learned group";
   const taskTitle = onClick
     ? `Open task details: ${profileTitle(profile)}`
     : `Task details unavailable: ${profileTitle(profile)}`;
@@ -4332,10 +4399,11 @@ function ListingTile({
       onClick={onClick}
       disabled={!onClick}
       title={unusualPrice
-        ? `${taskTitle}. Price is ${unusualPrice.percent_below_reference}% below the learned USD group median; treat this as review evidence, not an automatic verdict.`
+        ? `${taskTitle}. Price is ${unusualPrice.percent_below_reference}% below the USD median for ${priceSignalReference}; treat this as review evidence, not an automatic verdict.`
         : taskTitle}
       data-product-price-currency={price ? "USD" : undefined}
       data-product-price-signal={unusualPrice ? "unusually-low" : undefined}
+      data-product-price-comparison={unusualPrice?.comparison_scope}
       className={`w-full min-w-0 rounded-lg border p-1.5 text-left transition disabled:cursor-default ${
         active
           ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
@@ -4360,8 +4428,10 @@ function ListingTile({
           </span>
         )}
         {unusualPrice && (
-          <span className="absolute right-1.5 top-1.5 rounded bg-red-700/95 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm">
-            {unusualPrice.percent_below_reference}% below typical
+          <span className="absolute left-1.5 top-1.5 rounded bg-red-700/95 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm">
+            {unusualPrice.percent_below_reference}% below {visualCohortPriceSignal
+              ? "visual cohort"
+              : "typical"}
           </span>
         )}
         {hasGroupImageSimilarity && groupImagePosition != null && (
