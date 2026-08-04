@@ -214,15 +214,17 @@ export default function ProductClusters() {
   const batchRequestSequence = useRef(0);
   const semanticPageRequestSequence = useRef(0);
   const visualPageRequestSequence = useRef(0);
+  const taskRouteRef = useRef({ linkedTaskId, search: location.search });
+  taskRouteRef.current = { linkedTaskId, search: location.search };
   const canMarkSentWithoutEmail = user?.role === "admin";
   const closeTask = useCallback(() => {
     taskRequestSequence.current += 1;
     setActiveTask(null);
     setLoadingTaskProfileId(null);
-    if (linkedTaskId) {
-      navigate({ pathname: "/monitoring/products", search: location.search });
+    if (taskRouteRef.current.linkedTaskId) {
+      navigate({ pathname: "/monitoring/products", search: taskRouteRef.current.search });
     }
-  }, [linkedTaskId, location.search, navigate]);
+  }, [navigate]);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
     `${scopesRequestKey}:${selectedIpId ?? ""}:semantic+visual:${productGroupView}`;
@@ -333,12 +335,14 @@ export default function ProductClusters() {
     setConfirmBatchAction(null);
     setBatchProgress(null);
     batchRequestSequence.current += 1;
-    if (!linkedTaskId) closeTask();
+    // Opening a task updates the route. Keep the currently expanded product groups
+    // intact when that happens; this reset is only for a tenant or IP change.
+    if (!taskRouteRef.current.linkedTaskId) closeTask();
     setSemanticCorrectionTarget(null);
     setSemanticFeedbackNotice(null);
     setSemanticTaxonomy([]);
     setSemanticTaxonomyLoaded(false);
-  }, [actingTenantId, closeTask, linkedTaskId, selectedIpId]);
+  }, [actingTenantId, closeTask, selectedIpId]);
 
   useEffect(() => {
     if (!linkedTaskId || !linkedGroupId) return;
