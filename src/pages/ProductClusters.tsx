@@ -17,7 +17,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   DEFAULT_PRODUCT_SEMANTIC_COLORS,
   DEFAULT_PRODUCT_SEMANTIC_TAXONOMY,
@@ -160,6 +160,12 @@ function appendProductGroupPage(
 }
 
 export default function ProductClusters() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { groupId: linkedGroupId, taskId: linkedTaskId } = useParams<{
+    groupId: string;
+    taskId: string;
+  }>();
   const { actingTenantId, user } = useAuth();
   const {
     activeIpId: selectedIpId,
@@ -213,7 +219,10 @@ export default function ProductClusters() {
     taskRequestSequence.current += 1;
     setActiveTask(null);
     setLoadingTaskProfileId(null);
-  }, []);
+    if (linkedTaskId) {
+      navigate({ pathname: "/monitoring/products", search: location.search });
+    }
+  }, [linkedTaskId, location.search, navigate]);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
     `${scopesRequestKey}:${selectedIpId ?? ""}:semantic+visual:${productGroupView}`;
@@ -324,12 +333,32 @@ export default function ProductClusters() {
     setConfirmBatchAction(null);
     setBatchProgress(null);
     batchRequestSequence.current += 1;
-    closeTask();
+    if (!linkedTaskId) closeTask();
     setSemanticCorrectionTarget(null);
     setSemanticFeedbackNotice(null);
     setSemanticTaxonomy([]);
     setSemanticTaxonomyLoaded(false);
-  }, [actingTenantId, closeTask, selectedIpId]);
+  }, [actingTenantId, closeTask, linkedTaskId, selectedIpId]);
+
+  useEffect(() => {
+    if (!linkedTaskId || !linkedGroupId) return;
+    if (activeTask?.finding.result_id === linkedTaskId) return;
+    const requestSequence = ++taskRequestSequence.current;
+    setTaskError(null);
+    void getMonitoringFinding(linkedTaskId)
+      .then(({ finding }) => {
+        if (taskRequestSequence.current !== requestSequence) return;
+        setActiveTask({
+          profileId: findingProfileId(finding),
+          groupId: linkedGroupId,
+          finding,
+        });
+      })
+      .catch((caught: unknown) => {
+        if (taskRequestSequence.current !== requestSequence) return;
+        setTaskError(errorMessage(caught, "Unable to open the linked task."));
+      });
+  }, [activeTask?.finding.result_id, linkedGroupId, linkedTaskId]);
 
   useEffect(() => {
     batchRequestSequence.current += 1;
@@ -396,6 +425,12 @@ export default function ProductClusters() {
       const { finding } = await getMonitoringFindingForCase(profile.case_id);
       if (taskRequestSequence.current !== requestSequence) return;
       setActiveTask({ profileId: profile.id, groupId, finding });
+      if (groupId) {
+        navigate({
+          pathname: `/monitoring/products/${encodeURIComponent(groupId)}/tasks/${encodeURIComponent(finding.result_id)}`,
+          search: location.search,
+        });
+      }
     } catch (caught: unknown) {
       if (taskRequestSequence.current !== requestSequence) return;
       setTaskError(errorMessage(caught, "Unable to open task details."));
@@ -414,6 +449,10 @@ export default function ProductClusters() {
       profileId: findingProfileId(finding),
       groupId,
       finding,
+    });
+    navigate({
+      pathname: `/monitoring/products/${encodeURIComponent(groupId)}/tasks/${encodeURIComponent(finding.result_id)}`,
+      search: location.search,
     });
   }
 
