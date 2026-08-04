@@ -226,7 +226,8 @@ export default function ProductClusters() {
 
   useEffect(() => {
     let alive = true;
-    void listProductClusterScopes()
+    const controller = new AbortController();
+    void listProductClusterScopes(controller.signal)
       .then(({ scopes: nextScopes }) => {
         if (!alive) return;
         setScopes(nextScopes);
@@ -247,6 +248,7 @@ export default function ProductClusters() {
       });
     return () => {
       alive = false;
+      controller.abort();
     };
   }, [actingTenantId, refreshVersion, scopesRequestKey]);
 
@@ -261,6 +263,7 @@ export default function ProductClusters() {
       return;
     }
     let alive = true;
+    const controller = new AbortController();
     let loadError: unknown = null;
     setSemanticOverview(null);
     setVisualOverview(null);
@@ -270,6 +273,7 @@ export default function ProductClusters() {
       productGroupView,
       {
         limit: SEMANTIC_GROUP_PAGE_SIZE,
+        signal: controller.signal,
       },
     ).then((nextOverview) => {
       if (alive) setSemanticOverview(nextOverview);
@@ -282,6 +286,7 @@ export default function ProductClusters() {
       productGroupView,
       {
         limit: VISUAL_GROUP_PAGE_SIZE,
+        signal: controller.signal,
       },
     ).then((nextOverview) => {
       if (alive) setVisualOverview(nextOverview);
@@ -297,6 +302,7 @@ export default function ProductClusters() {
       .catch(() => undefined);
     return () => {
       alive = false;
+      controller.abort();
     };
   }, [
     selectedIpId,

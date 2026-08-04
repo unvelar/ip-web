@@ -136,8 +136,17 @@ export interface TrademarkImage {
   created_at: string;
 }
 
+export interface TrademarkSelector {
+  id: string;
+  name: string;
+}
+
 export function listTrademarks() {
   return request<{ trademarks: Trademark[] }>("/api/ip");
+}
+
+export function listTrademarkSelectors(signal?: AbortSignal) {
+  return request<{ ips: TrademarkSelector[] }>("/api/ip/selector", { signal });
 }
 
 export function listPublicTrademarks() {
@@ -2299,12 +2308,13 @@ export interface DashboardGroups {
   }>;
 }
 
-export function getDashboardGroups(days?: number) {
+export function getDashboardGroups(days?: number, signal?: AbortSignal) {
   const params = new URLSearchParams();
   if (days) params.set("days", String(days));
   const qs = params.toString();
   return request<DashboardGroups>(
     `/api/monitoring/dashboard/groups${qs ? `?${qs}` : ""}`,
+    { signal },
   );
 }
 
@@ -2602,8 +2612,8 @@ export interface ProductSemanticCorrection {
   created_at: string;
 }
 
-export function listProductClusterScopes() {
-  return request<{ scopes: ProductClusterScope[] }>("/api/product-clusters/scopes");
+export function listProductClusterScopes(signal?: AbortSignal) {
+  return request<{ scopes: ProductClusterScope[] }>("/api/product-clusters/scopes", { signal });
 }
 
 export function getProductSemanticTaxonomy(ipId: string) {
@@ -2842,7 +2852,12 @@ export async function getPersistedProductGroups(
   ipId: string,
   relationship: "same" | "related" | "visual" | "semantic",
   view: "triage" | "all" = "triage",
-  options: { limit?: number; cursor?: string | null; includeUngrouped?: boolean } = {},
+  options: {
+    limit?: number;
+    cursor?: string | null;
+    includeUngrouped?: boolean;
+    signal?: AbortSignal;
+  } = {},
 ) {
   const params = new URLSearchParams({ relationship, view });
   params.set("include_ungrouped", String(options.includeUngrouped ?? false));
@@ -2850,6 +2865,7 @@ export async function getPersistedProductGroups(
   if (options.cursor) params.set("cursor", options.cursor);
   const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups?${params.toString()}`,
+    { signal: options.signal },
   );
   return normalizePersistedProductGroupOverview(overview);
 }

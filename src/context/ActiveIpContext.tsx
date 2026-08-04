@@ -8,13 +8,13 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation } from "react-router-dom";
-import { listTrademarks, type Trademark } from "../api";
+import { listTrademarkSelectors, type TrademarkSelector } from "../api";
 import { useAuth } from "./AuthContext";
 
 interface ActiveIpContextValue {
-  ips: Trademark[];
+  ips: TrademarkSelector[];
   activeIpId: string | null;
-  activeIp: Trademark | null;
+  activeIp: TrademarkSelector | null;
   loading: boolean;
   error: string | null;
   selectIp: (ipId: string) => void;
@@ -48,7 +48,7 @@ function persistIp(tenantId: string, ipId: string | null) {
 export function ActiveIpProvider({ children }: { children: ReactNode }) {
   const { actingTenantId } = useAuth();
   const location = useLocation();
-  const [ips, setIps] = useState<Trademark[]>([]);
+  const [ips, setIps] = useState<TrademarkSelector[]>([]);
   const [activeIpId, setActiveIpId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,18 +65,20 @@ export function ActiveIpProvider({ children }: { children: ReactNode }) {
     }
 
     let alive = true;
+    const controller = new AbortController();
+    const urlIpId = new URLSearchParams(window.location.search).get("ip_id");
+    const storedIpId = readStoredIp(actingTenantId);
+    setActiveIpId(urlIpId ?? storedIpId);
     setLoading(true);
     setError(null);
 
-    void listTrademarks()
-      .then(({ trademarks }) => {
+    void listTrademarkSelectors(controller.signal)
+      .then(({ ips: selectorIps }) => {
         if (!alive) return;
-        const nextIps = [...trademarks].sort((left, right) =>
+        const nextIps = [...selectorIps].sort((left, right) =>
           left.name.localeCompare(right.name)
         );
         const available = new Set(nextIps.map((ip) => ip.id));
-        const urlIpId = new URLSearchParams(window.location.search).get("ip_id");
-        const storedIpId = readStoredIp(actingTenantId);
 
         setIps(nextIps);
         setActiveIpId((current) => {
@@ -100,6 +102,7 @@ export function ActiveIpProvider({ children }: { children: ReactNode }) {
 
     return () => {
       alive = false;
+      controller.abort();
     };
   }, [actingTenantId, registryRouteKey]);
 

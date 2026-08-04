@@ -55,17 +55,20 @@ export default function Dashboard() {
   const {
     activeIpId: selectedIpId,
     activeIp,
-    loading: loadingActiveIp,
   } = useActiveIp();
   const [data, setData] = useState<DashboardGroups | null>(null);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     let alive = true;
-    getDashboardGroups(days)
+    const controller = new AbortController();
+    getDashboardGroups(days, controller.signal)
       .then((d) => { if (alive) { setData(d); setErr(""); } })
       .catch((e) => { if (alive) setErr(e instanceof Error ? e.message : String(e)); });
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+      controller.abort();
+    };
   }, [days]);
 
   const colors = useMemo(() => {
@@ -84,7 +87,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!data || loadingActiveIp) {
+  if (!data) {
     return (
       <div className="max-w-7xl mx-auto px-6 py-6">
         <DashboardSkeleton />
