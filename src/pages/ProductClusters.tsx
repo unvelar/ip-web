@@ -211,18 +211,23 @@ export default function ProductClusters() {
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
   const taskRequestSequence = useRef(0);
+  const closingTaskRouteRef = useRef<string | null>(null);
   const batchRequestSequence = useRef(0);
   const semanticPageRequestSequence = useRef(0);
   const visualPageRequestSequence = useRef(0);
+  const taskRouteRef = useRef({ linkedTaskId, search: location.search });
+  taskRouteRef.current = { linkedTaskId, search: location.search };
   const canMarkSentWithoutEmail = user?.role === "admin";
   const closeTask = useCallback(() => {
     taskRequestSequence.current += 1;
+    const closingLinkedTaskId = taskRouteRef.current.linkedTaskId;
+    if (closingLinkedTaskId) {
+      closingTaskRouteRef.current = closingLinkedTaskId;
+      navigate({ pathname: "/monitoring/products", search: taskRouteRef.current.search });
+    }
     setActiveTask(null);
     setLoadingTaskProfileId(null);
-    if (linkedTaskId) {
-      navigate({ pathname: "/monitoring/products", search: location.search });
-    }
-  }, [linkedTaskId, location.search, navigate]);
+  }, [navigate]);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
     `${scopesRequestKey}:${selectedIpId ?? ""}:semantic+visual:${productGroupView}`;
@@ -333,15 +338,22 @@ export default function ProductClusters() {
     setConfirmBatchAction(null);
     setBatchProgress(null);
     batchRequestSequence.current += 1;
-    if (!linkedTaskId) closeTask();
+    taskRequestSequence.current += 1;
+    setActiveTask(null);
+    setLoadingTaskProfileId(null);
     setSemanticCorrectionTarget(null);
     setSemanticFeedbackNotice(null);
     setSemanticTaxonomy([]);
     setSemanticTaxonomyLoaded(false);
-  }, [actingTenantId, closeTask, linkedTaskId, selectedIpId]);
+  }, [actingTenantId, selectedIpId]);
 
   useEffect(() => {
-    if (!linkedTaskId || !linkedGroupId) return;
+    if (!linkedTaskId || !linkedGroupId) {
+      closingTaskRouteRef.current = null;
+      return;
+    }
+    if (closingTaskRouteRef.current === linkedTaskId) return;
+    closingTaskRouteRef.current = null;
     if (activeTask?.finding.result_id === linkedTaskId) return;
     const requestSequence = ++taskRequestSequence.current;
     setTaskError(null);
@@ -417,6 +429,7 @@ export default function ProductClusters() {
   }, [activeTask, closeTask]);
 
   async function openTask(profile: ProductClusterProfile, groupId: string | null) {
+    closingTaskRouteRef.current = null;
     const requestSequence = ++taskRequestSequence.current;
     setActiveTask(null);
     setLoadingTaskProfileId(profile.id);
@@ -442,6 +455,7 @@ export default function ProductClusters() {
   }
 
   function openLoadedFinding(finding: IpReviewFinding, groupId: string) {
+    closingTaskRouteRef.current = null;
     taskRequestSequence.current += 1;
     setLoadingTaskProfileId(null);
     setTaskError(null);
