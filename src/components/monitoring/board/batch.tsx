@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { IpReviewFinding } from "../../../api";
 import { BATCH_META, type BatchAction } from "./batchUtils";
 
@@ -13,11 +14,13 @@ export function BatchConfirmModal({
   scopeLabel?: string;
   eligible: IpReviewFinding[];
   skipped: Record<string, number>;
-  onConfirm: () => void;
+  onConfirm: (decisionReason?: string) => void;
   onCancel: () => void;
 }) {
+  const [decisionReason, setDecisionReason] = useState("");
   const meta = BATCH_META[action];
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
+  const reasonValid = action !== "send" || decisionReason.trim().length >= 3;
   return (
     <div
       onClick={onCancel}
@@ -64,6 +67,29 @@ export function BatchConfirmModal({
               </ul>
             </div>
           )}
+          {action === "send" && eligible.length > 0 && (
+            <div className="space-y-1.5">
+              <label
+                htmlFor="batch-takedown-decision-reason"
+                className="text-xs font-semibold text-stone-800"
+              >
+                Why is takedown the right decision?
+              </label>
+              <textarea
+                id="batch-takedown-decision-reason"
+                value={decisionReason}
+                onChange={(event) => setDecisionReason(event.target.value)}
+                rows={3}
+                maxLength={2000}
+                autoFocus
+                placeholder="What in these images or listing descriptions made the batch actionable?"
+                className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 focus:border-stone-400 focus:outline-none"
+              />
+              <p className="text-[11px] text-stone-500">
+                Asked once for this batch. The same internal note teaches each selected IP and is not sent to marketplaces.
+              </p>
+            </div>
+          )}
         </div>
         <div className="px-5 py-3 border-t border-stone-100 flex items-center justify-end gap-2">
           <button
@@ -75,8 +101,8 @@ export function BatchConfirmModal({
           </button>
           <button
             type="button"
-            onClick={onConfirm}
-            disabled={eligible.length === 0}
+            onClick={() => onConfirm(action === "send" ? decisionReason.trim() : undefined)}
+            disabled={eligible.length === 0 || !reasonValid}
             className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {meta.label}

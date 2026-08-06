@@ -532,7 +532,12 @@ export function getTakedownDraft(caseId: string) {
 
 export function sendTakedown(
   caseId: string,
-  payload: { target_id: string; subject: string; body: string },
+  payload: {
+    target_id: string;
+    subject: string;
+    body: string;
+    decision_reason: string;
+  },
 ) {
   return request<{ request: TakedownRequest }>(
     `/api/cases/${caseId}/takedown/send`,
@@ -555,19 +560,23 @@ export interface BatchTakedownSendResponse {
 
 /** Resolve and queue a selection as one API request. Compatible cases (same
  *  IP and intake route) share one notice containing all listing links. */
-export function autoSendTakedownBatch(caseIds: string[]) {
+export function autoSendTakedownBatch(caseIds: string[], decisionReason: string) {
   return request<BatchTakedownSendResponse>("/api/takedowns/batch/send", {
     method: "POST",
     body: JSON.stringify({
       case_ids: Array.from(new Set(caseIds)),
+      decision_reason: decisionReason.trim(),
     }),
   });
 }
 
-export function markTakedownSentWithoutEmail(caseId: string) {
+export function markTakedownSentWithoutEmail(caseId: string, decisionReason: string) {
   return request<{ ok: boolean; emailed: false }>(
     `/api/cases/${caseId}/takedown/mark-sent`,
-    { method: "POST" },
+    {
+      method: "POST",
+      body: JSON.stringify({ decision_reason: decisionReason.trim() }),
+    },
   );
 }
 
@@ -577,6 +586,7 @@ export function markTakedownSentWithoutEmail(caseId: string) {
  *  "email not configured". */
 export async function autoSendTakedown(
   caseId: string,
+  decisionReason: string,
 ): Promise<
   | { status: "sent"; request: TakedownRequest }
   | { status: "needs_compose" }
@@ -590,6 +600,7 @@ export async function autoSendTakedown(
     target_id,
     subject: d.draft.subject,
     body: d.draft.body,
+    decision_reason: decisionReason.trim(),
   });
   return { status: "sent", request };
 }
@@ -2351,12 +2362,25 @@ export interface ProductClusterProfile {
   semantic_source_category_key?: string | null;
   semantic_source_category_label?: string | null;
   semantic_variant_colors?: ProductSemanticVariantColor[];
+  variant_attributes?: ProductVariantAttribute[];
+  commercial_subgroup_key?: string | null;
   actionability?: MonitoringActionability | null;
   updated_at: string;
 }
 
 export interface ProductSemanticVariantColor {
   color: string;
+  confidence: number;
+  evidence_image_positions: number[];
+}
+
+export type ProductVariantAttributeUnit = "ml" | "g" | "mm" | "count" | "text";
+
+export interface ProductVariantAttribute {
+  key: string;
+  value: string;
+  normalized_values: number[];
+  normalized_unit: ProductVariantAttributeUnit;
   confidence: number;
   evidence_image_positions: number[];
 }
@@ -2448,14 +2472,17 @@ export interface ProductClusterGraph {
 export interface ProductGroupRecommendationCounts {
   takedown: number;
   second_hand: number;
-  review: number;
+  might_be_ok: number;
+  needs_review: number;
+  /** @deprecated Backward-compatible aggregate from older API responses. */
+  review?: number;
 }
 
 export interface ProductGroupPriceSignal {
   unusually_low: boolean;
   percent_below_reference: number;
   reference_median_usd: number;
-  comparison_scope?: "group" | "visual_cohort";
+  comparison_scope?: "group" | "visual_cohort" | "commercial_variant";
   source_group_id?: string | null;
   source_group_name?: string | null;
 }
@@ -2482,6 +2509,33 @@ export interface ProductGroupPriceSummary {
   unusually_low_count: number;
 }
 
+export type ProductCommercialPriceBand =
+  | "unusually_low"
+  | "other_priced"
+  | "unpriced";
+
+export interface ProductCommercialPriceRange {
+  currency: "USD";
+  count: number;
+  minimum: number;
+  median: number;
+  maximum: number;
+}
+
+export interface ProductGroupCommercialSubgroup {
+  key: string;
+  variant_key: string;
+  variant_label: string;
+  variant_attributes: ProductVariantAttribute[];
+  price_band: ProductCommercialPriceBand;
+  price_range: ProductCommercialPriceRange | null;
+  member_count: number;
+  triage_member_count: number;
+  triage_recommendation_counts: ProductGroupRecommendationCounts;
+  triage_case_ids: string[];
+  price_summary: ProductGroupPriceSummary | null;
+}
+
 export interface PersistedProductGroup {
   id: string;
   display_name: string | null;
@@ -2497,6 +2551,7 @@ export interface PersistedProductGroup {
   triage_recommendation_counts?: ProductGroupRecommendationCounts | null;
   price_summary: ProductGroupPriceSummary | null;
   price_signal_members: ProductGroupPriceSignalMember[];
+  commercial_subgroups: ProductGroupCommercialSubgroup[];
   average_score: number | null;
   minimum_score: number | null;
   threshold: number;
@@ -2661,7 +2716,9 @@ function normalizeProductGroupPriceSignal(
     reference_median_usd: Math.max(0, signal.reference_median_usd),
     comparison_scope: signal.comparison_scope === "visual_cohort"
       ? "visual_cohort"
-      : "group",
+      : signal.comparison_scope === "commercial_variant"
+        ? "commercial_variant"
+        : "group",
     source_group_id: typeof signal.source_group_id === "string"
       ? signal.source_group_id
       : null,
@@ -2669,6 +2726,44 @@ function normalizeProductGroupPriceSignal(
       ? signal.source_group_name
       : null,
   };
+}
+
+function normalizeProductVariantAttributes(value: unknown): ProductVariantAttribute[] {
+  if (!Array.isArray(value)) return [];
+  const allowedUnits = new Set<ProductVariantAttributeUnit>([
+    "ml",
+    "g",
+    "mm",
+    "count",
+    "text",
+  ]);
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+    const attribute = raw as Partial<ProductVariantAttribute>;
+    const normalizedValues = Array.isArray(attribute.normalized_values)
+      ? attribute.normalized_values.filter(isFiniteNumber).slice(0, 3)
+      : [];
+    const evidencePositions = Array.isArray(attribute.evidence_image_positions)
+      ? attribute.evidence_image_positions
+        .filter(isFiniteNumber)
+        .map((position) => Math.max(0, Math.trunc(position)))
+        .slice(0, 16)
+      : [];
+    if (
+      typeof attribute.key !== "string" ||
+      typeof attribute.value !== "string" ||
+      !attribute.normalized_unit || !allowedUnits.has(attribute.normalized_unit) ||
+      !isFiniteNumber(attribute.confidence)
+    ) return [];
+    return [{
+      key: attribute.key,
+      value: attribute.value,
+      normalized_values: normalizedValues,
+      normalized_unit: attribute.normalized_unit,
+      confidence: Math.max(0, Math.min(1, attribute.confidence)),
+      evidence_image_positions: evidencePositions,
+    }];
+  });
 }
 
 function normalizeProductGroupPriceSignalMembers(
@@ -2711,6 +2806,10 @@ function normalizeProductClusterProfile(
     ...profile,
     price_value_usd: priceValueUsd,
     price_signal: normalizeProductGroupPriceSignal(profile.price_signal),
+    variant_attributes: normalizeProductVariantAttributes(profile.variant_attributes),
+    commercial_subgroup_key: typeof profile.commercial_subgroup_key === "string"
+      ? profile.commercial_subgroup_key
+      : null,
   };
 }
 
@@ -2748,6 +2847,83 @@ function normalizeProductGroupPriceSummary(
   };
 }
 
+function normalizeProductGroupRecommendationCounts(
+  counts: ProductGroupRecommendationCounts | null | undefined,
+): ProductGroupRecommendationCounts | null {
+  if (
+    !counts ||
+    !isFiniteNumber(counts.takedown) ||
+    !isFiniteNumber(counts.second_hand) ||
+    !isFiniteNumber(counts.might_be_ok) ||
+    !isFiniteNumber(counts.needs_review)
+  ) {
+    // Older APIs expose one combined `review` count, which cannot be divided
+    // truthfully between Might be OK and Needs review. Returning null lets the
+    // page label those lanes from the visible preview until the new contract is
+    // deployed instead of displaying contradictory exact totals.
+    return null;
+  }
+  const mightBeOk = counts.might_be_ok;
+  const needsReview = counts.needs_review;
+  return {
+    takedown: Math.max(0, Math.trunc(counts.takedown)),
+    second_hand: Math.max(0, Math.trunc(counts.second_hand)),
+    might_be_ok: Math.max(0, Math.trunc(mightBeOk)),
+    needs_review: Math.max(0, Math.trunc(needsReview)),
+    review: Math.max(0, Math.trunc(mightBeOk + needsReview)),
+  };
+}
+
+function normalizeProductCommercialSubgroups(
+  value: ProductGroupCommercialSubgroup[] | null | undefined,
+): ProductGroupCommercialSubgroup[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((subgroup) => {
+    const counts = normalizeProductGroupRecommendationCounts(
+      subgroup?.triage_recommendation_counts,
+    );
+    const priceBand = subgroup?.price_band;
+    if (
+      typeof subgroup?.key !== "string" ||
+      typeof subgroup.variant_key !== "string" ||
+      typeof subgroup.variant_label !== "string" ||
+      !["unusually_low", "other_priced", "unpriced"].includes(priceBand) ||
+      !isFiniteNumber(subgroup.member_count) ||
+      !isFiniteNumber(subgroup.triage_member_count) ||
+      !counts
+    ) return [];
+    const rawRange = subgroup.price_range;
+    const priceRange = rawRange?.currency === "USD" &&
+        isFiniteNumber(rawRange.count) &&
+        isFiniteNumber(rawRange.minimum) &&
+        isFiniteNumber(rawRange.median) &&
+        isFiniteNumber(rawRange.maximum)
+      ? {
+          currency: "USD" as const,
+          count: Math.max(0, Math.trunc(rawRange.count)),
+          minimum: Math.max(0, rawRange.minimum),
+          median: Math.max(0, rawRange.median),
+          maximum: Math.max(0, rawRange.maximum),
+        }
+      : null;
+    return [{
+      key: subgroup.key,
+      variant_key: subgroup.variant_key,
+      variant_label: subgroup.variant_label,
+      variant_attributes: normalizeProductVariantAttributes(subgroup.variant_attributes),
+      price_band: priceBand,
+      price_range: priceRange,
+      member_count: Math.max(0, Math.trunc(subgroup.member_count)),
+      triage_member_count: Math.max(0, Math.trunc(subgroup.triage_member_count)),
+      triage_recommendation_counts: counts,
+      triage_case_ids: Array.isArray(subgroup.triage_case_ids)
+        ? [...new Set(subgroup.triage_case_ids.filter((caseId) => typeof caseId === "string"))]
+        : [],
+      price_summary: normalizeProductGroupPriceSummary(subgroup.price_summary),
+    }];
+  });
+}
+
 function normalizePersistedProductGroupOverview(overview: PersistedProductGroupOverview) {
   const groups = overview.groups.map((group) => ({
     ...group,
@@ -2762,22 +2938,15 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
     triage_member_count: Number.isFinite(group.triage_member_count)
       ? Number(group.triage_member_count)
       : null,
-    triage_recommendation_counts: group.triage_recommendation_counts &&
-        Number.isFinite(group.triage_recommendation_counts.takedown) &&
-        Number.isFinite(group.triage_recommendation_counts.second_hand) &&
-        Number.isFinite(group.triage_recommendation_counts.review)
-      ? {
-          takedown: Math.max(0, Math.trunc(group.triage_recommendation_counts.takedown)),
-          second_hand: Math.max(
-            0,
-            Math.trunc(group.triage_recommendation_counts.second_hand),
-          ),
-          review: Math.max(0, Math.trunc(group.triage_recommendation_counts.review)),
-        }
-      : null,
+    triage_recommendation_counts: normalizeProductGroupRecommendationCounts(
+      group.triage_recommendation_counts,
+    ),
     price_summary: normalizeProductGroupPriceSummary(group.price_summary),
     price_signal_members: normalizeProductGroupPriceSignalMembers(
       group.price_signal_members,
+    ),
+    commercial_subgroups: normalizeProductCommercialSubgroups(
+      group.commercial_subgroups,
     ),
     members: Array.isArray(group.members)
       ? group.members.map(normalizeProductClusterProfile)

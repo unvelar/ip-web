@@ -424,7 +424,7 @@ function CampaignDetailPanel({
     return { eligible, skipped };
   }
 
-  async function runCampaignBatch(action: BatchAction) {
+  async function runCampaignBatch(action: BatchAction, decisionReason?: string) {
     const { eligible, skipped } = partitionCampaignSelection(action);
     const skipCounts: Record<string, number> = { ...skipped };
     let ok = 0;
@@ -445,6 +445,7 @@ function CampaignDetailPanel({
       try {
         const result = await autoSendTakedownBatch(
           eligible.map((finding) => finding.case_id as string),
+          decisionReason ?? "",
         );
         for (const item of result.skipped) bump(item.reason);
         const queued = result.queued_case_ids.length;
@@ -784,10 +785,10 @@ function CampaignDetailPanel({
           action={confirmAction}
           eligible={partitionCampaignSelection(confirmAction).eligible}
           skipped={partitionCampaignSelection(confirmAction).skipped}
-          onConfirm={() => {
+          onConfirm={(decisionReason) => {
             const action = confirmAction;
             setConfirmAction(null);
-            void runCampaignBatch(action);
+            void runCampaignBatch(action, decisionReason);
           }}
           onCancel={() => setConfirmAction(null)}
         />

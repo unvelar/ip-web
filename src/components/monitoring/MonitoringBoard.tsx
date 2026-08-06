@@ -24,6 +24,7 @@ import {
   type ProductGroupCorrectionReason,
 } from "../../api";
 import { useAuth } from "../../context/AuthContext";
+import { ConfirmSendModal } from "../TakedownPanel";
 import { BatchConfirmModal } from "./board/batch";
 import { BatchOperationBar } from "./board/BatchOperationBar";
 import { BatchResultNotice } from "./board/BatchResultNotice";
@@ -571,6 +572,9 @@ export function MonitoringBoard({
 
   // --- Multi-select + batch operations -------------------------------------
   const [confirmAction, setConfirmAction] = useState<BatchAction | null>(null);
+  const [shortcutSendFinding, setShortcutSendFinding] = useState<IpReviewFinding | null>(null);
+  const [shortcutSending, setShortcutSending] = useState(false);
+  const [shortcutSendError, setShortcutSendError] = useState("");
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
 
@@ -715,7 +719,7 @@ export function MonitoringBoard({
     return { eligible, skipped };
   }
 
-  async function runBatch(action: BatchAction) {
+  async function runBatch(action: BatchAction, decisionReason?: string) {
     const { eligible, skipped } = partitionSelection(action);
     const skipCounts: Record<string, number> = { ...skipped };
     let ok = 0;
@@ -750,6 +754,7 @@ export function MonitoringBoard({
       try {
         const result = await autoSendTakedownBatch(
           eligible.map((f) => f.case_id as string),
+          decisionReason ?? "",
         );
         for (const item of result.skipped) bump(item.reason);
         const queued = result.queued_case_ids.length;
@@ -842,6 +847,41 @@ export function MonitoringBoard({
     onRefresh();
   }
 
+  async function confirmShortcutTakedown(decisionReason: string) {
+    const targetFinding = shortcutSendFinding;
+    const targetCaseId = targetFinding?.case_id;
+    if (!targetFinding || !targetCaseId || shortcutSending) return;
+
+    setShortcutSending(true);
+    setShortcutSendError("");
+    setResultCompleting(targetFinding.result_id, true);
+    advanceAfterAction(targetFinding.result_id);
+    try {
+      const result = await autoSendTakedown(targetCaseId, decisionReason);
+      if (result.status !== "sent") {
+        if (!canMarkSentWithoutEmail) {
+          throw new Error(
+            result.status === "needs_compose"
+              ? "This takedown needs manual compose. Open the finding to edit it."
+              : "Email is not configured.",
+          );
+        }
+        await markTakedownSentWithoutEmail(targetCaseId, decisionReason);
+      }
+      setShortcutSendFinding(null);
+      rememberTakedownAction(targetFinding);
+      onRefresh(targetFinding.result_id);
+    } catch (error) {
+      setResultCompleting(targetFinding.result_id, false);
+      setActiveFinding(targetFinding.result_id);
+      setShortcutSendError(
+        error instanceof Error ? error.message : "Failed to send takedown",
+      );
+    } finally {
+      setShortcutSending(false);
+    }
+  }
+
   const runShortcutAction = useCallback(async (action: "false_positive" | "do_not_pursue" | "send" | "second_hand" | "review") => {
     if (selected.size > 0) {
       setConfirmAction(action);
@@ -864,37 +904,16 @@ export function MonitoringBoard({
       return;
     }
 
-    let targetCaseId: string | null = null;
     if (action === "send") {
       if (!targetFinding.case_id) {
         alert("Finding is still preparing.");
         return;
       }
-      targetCaseId = targetFinding.case_id;
-      setResultCompleting(targetFinding.result_id, true);
-      advanceAfterAction(targetFinding.result_id);
+      setShortcutSendError("");
+      setShortcutSendFinding(targetFinding);
+      return;
     }
     try {
-      if (action === "send") {
-        if (!targetCaseId) return;
-        const r = await autoSendTakedown(targetCaseId);
-        if (r.status === "sent") {
-          rememberTakedownAction(targetFinding);
-          onRefresh(targetFinding.result_id);
-          return;
-        }
-        if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(targetCaseId);
-          rememberTakedownAction(targetFinding);
-          onRefresh(targetFinding.result_id);
-          return;
-        }
-        throw new Error(
-          r.status === "needs_compose"
-            ? "This takedown needs manual compose."
-          : "Email is not configured.",
-        );
-      }
       if (action === "review") {
         if (!targetFinding.case_id) {
           alert("Finding is still preparing.");
@@ -913,24 +932,16 @@ export function MonitoringBoard({
       }
       await handleDismiss(targetFinding, action);
     } catch (e) {
-      if (action === "send") {
-        setResultCompleting(targetFinding.result_id, false);
-        setActiveFinding(targetFinding.result_id);
-      }
       alert(e instanceof Error ? e.message : "Failed to update finding");
     }
   }, [
     advanceAfterAction,
-    canMarkSentWithoutEmail,
     activeFinding,
     handleDismiss,
     ipId,
     onRefresh,
     rememberNeedsReviewAction,
-    rememberTakedownAction,
     selected,
-    setActiveFinding,
-    setResultCompleting,
     visibleActionableFindings,
   ]);
 
@@ -943,6 +954,7 @@ export function MonitoringBoard({
     function onKeyDown(e: KeyboardEvent) {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (editableTarget(e.target)) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
       if (e.key === "Escape" && activeFinding) {
         e.preventDefault();
         setActiveFinding(null);
@@ -1341,15 +1353,34 @@ export function MonitoringBoard({
         />
       )}
 
+      {shortcutSendFinding && (
+        <ConfirmSendModal
+          platform={shortcutSendFinding.domain}
+          sending={shortcutSending}
+          error={shortcutSendError}
+          noEmailMode={
+            canMarkSentWithoutEmail && shortcutSendFinding.signer_ready === false
+          }
+          onSend={(decisionReason) => {
+            void confirmShortcutTakedown(decisionReason);
+          }}
+          onCancel={() => {
+            if (shortcutSending) return;
+            setShortcutSendFinding(null);
+            setShortcutSendError("");
+          }}
+        />
+      )}
+
       {confirmAction && (
         <BatchConfirmModal
           action={confirmAction}
           {...partitionSelection(confirmAction)}
           onCancel={() => setConfirmAction(null)}
-          onConfirm={() => {
+          onConfirm={(decisionReason) => {
             const a = confirmAction;
             setConfirmAction(null);
-            void runBatch(a);
+            void runBatch(a, decisionReason);
           }}
         />
       )}

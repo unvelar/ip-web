@@ -59,6 +59,7 @@ export function FindingActions({
   const [busy, setBusy] = useState<string | null>(null);
   const [licensing, setLicensing] = useState(false);
   const [composing, setComposing] = useState(false);
+  const [composeDecisionReason, setComposeDecisionReason] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [directSending, setDirectSending] = useState(false);
   const [sendErr, setSendErr] = useState("");
@@ -69,15 +70,15 @@ export function FindingActions({
   // Quick path from the confirm dialog: send the pre-filled draft for the
   // suggested route without opening the editor. Falls back to the editor when
   // there's no route/draft to auto-send.
-  async function sendDirect() {
+  async function sendDirect(decisionReason: string) {
     if (!f.case_id) return;
     setDirectSending(true);
     setSendErr("");
     try {
-      const r = await autoSendTakedown(f.case_id);
+      const r = await autoSendTakedown(f.case_id, decisionReason);
       if (r.status === "unconfigured") {
         if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(f.case_id);
+          await markTakedownSentWithoutEmail(f.case_id, decisionReason);
           setConfirming(false);
           onTakedownSent();
           onActionComplete();
@@ -89,13 +90,14 @@ export function FindingActions({
       }
       if (r.status === "needs_compose") {
         if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(f.case_id);
+          await markTakedownSentWithoutEmail(f.case_id, decisionReason);
           setConfirming(false);
           onTakedownSent();
           onActionComplete();
           onUpdated({ completed: true });
           return;
         }
+        setComposeDecisionReason(decisionReason);
         setConfirming(false);
         setComposing(true);
         return;
@@ -392,6 +394,7 @@ export function FindingActions({
           )}
           onClick={() => {
             setSendErr("");
+            setComposeDecisionReason("");
             setConfirming(true);
           }}
           className={actionClass("send_takedown")}
@@ -430,6 +433,7 @@ export function FindingActions({
           )}
           onClick={() => {
             setSendErr("");
+            setComposeDecisionReason("");
             setConfirming(true);
           }}
           className={actionClass("send_takedown")}
@@ -522,7 +526,8 @@ export function FindingActions({
           error={sendErr}
           noEmailMode={canMarkSentWithoutEmail && f.signer_ready === false}
           onSend={sendDirect}
-          onEdit={() => {
+          onEdit={(decisionReason) => {
+            setComposeDecisionReason(decisionReason);
             setConfirming(false);
             setComposing(true);
           }}
@@ -537,9 +542,14 @@ export function FindingActions({
         <ComposeModal
           caseId={f.case_id}
           ipId={f.ip_id}
-          onClose={() => setComposing(false)}
+          initialDecisionReason={composeDecisionReason}
+          onClose={() => {
+            setComposing(false);
+            setComposeDecisionReason("");
+          }}
           onSent={() => {
             setComposing(false);
+            setComposeDecisionReason("");
             onTakedownSent();
             onActionComplete();
             onUpdated({ completed: true }); // case flips to takedown_sent; board refresh re-renders the row

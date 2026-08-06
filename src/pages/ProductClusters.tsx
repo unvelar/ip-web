@@ -53,6 +53,7 @@ import {
   type ProductClusterProfile,
   type ProductClusterScope,
   type ProductGroupCorrectionReason,
+  type ProductGroupCommercialSubgroup,
   type ProductGroupPriceSignal,
   type ProductGroupPriceSummary,
   type ProductGroupRecommendationCounts,
@@ -86,7 +87,10 @@ type ActiveProductTask = {
 };
 type ProductGroupBatch = {
   groupId: string;
+  scopeId: string;
   groupName: string;
+  commercialSubgroupKey: string | null;
+  commercialCaseIds: Set<string> | null;
   bucket: ProductGroupRecommendationBucket;
   findings: IpReviewFinding[] | null;
   selectedResultIds: Set<string>;
@@ -96,10 +100,14 @@ type SemanticCorrectionTarget = {
   profile: ProductClusterProfile;
 };
 
+const PRODUCT_GROUP_PAGE_SIZE = 8;
 const SEMANTIC_GROUP_PAGE_SIZE = 4;
-const VISUAL_GROUP_PAGE_SIZE = 8;
 const NEW_PRODUCT_TYPE_VALUE = "__new_product_type__";
-type ProductGroupRecommendationBucket = "takedown" | "second_hand" | "review";
+type ProductGroupRecommendationBucket =
+  | "takedown"
+  | "second_hand"
+  | "might_be_ok"
+  | "needs_review";
 
 const PRODUCT_GROUP_RECOMMENDATION_BUCKETS: Array<{
   key: ProductGroupRecommendationBucket;
@@ -111,7 +119,7 @@ const PRODUCT_GROUP_RECOMMENDATION_BUCKETS: Array<{
 }> = [
   {
     key: "takedown",
-    label: "Should be taken down",
+    label: "Likely counterfeit",
     description: "The current evidence recommends a takedown.",
     className: "border-red-200 bg-red-50/60",
     labelClassName: "text-red-900",
@@ -126,9 +134,17 @@ const PRODUCT_GROUP_RECOMMENDATION_BUCKETS: Array<{
     countClassName: "bg-white/80 text-purple-800",
   },
   {
-    key: "review",
-    label: "Might be OK — review",
-    description: "The evidence is inconclusive or points toward clearance; review before deciding.",
+    key: "might_be_ok",
+    label: "Might be OK",
+    description: "The current evidence points toward a licensed seller or false positive.",
+    className: "border-emerald-200 bg-emerald-50/60",
+    labelClassName: "text-emerald-950",
+    countClassName: "bg-white/80 text-emerald-800",
+  },
+  {
+    key: "needs_review",
+    label: "Needs review",
+    description: "The current evidence is inconclusive and needs a reviewer decision.",
     className: "border-amber-200 bg-amber-50/60",
     labelClassName: "text-amber-950",
     countClassName: "bg-white/80 text-amber-800",
@@ -195,7 +211,7 @@ export default function ProductClusters() {
     () => [...DEFAULT_PRODUCT_SEMANTIC_COLORS],
   );
   const [semanticTaxonomyLoaded, setSemanticTaxonomyLoaded] = useState(false);
-  const [semanticFeedbackNotice, setSemanticFeedbackNotice] = useState<string | null>(null);
+  const [, setSemanticFeedbackNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<ActiveProductTask | null>(null);
   const [loadingTaskProfileId, setLoadingTaskProfileId] = useState<string | null>(null);
@@ -230,7 +246,7 @@ export default function ProductClusters() {
   }, [navigate]);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
-    `${scopesRequestKey}:${selectedIpId ?? ""}:semantic+visual:${productGroupView}`;
+    `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${productGroupView}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
   const selectedScopeAvailable =
     scopesLoadedKey === scopesRequestKey && selectedScope != null;
@@ -267,9 +283,7 @@ export default function ProductClusters() {
   }, [actingTenantId, refreshVersion, scopesRequestKey]);
 
   useEffect(() => {
-    semanticPageRequestSequence.current += 1;
     visualPageRequestSequence.current += 1;
-    setLoadingMoreSemanticGroups(false);
     setLoadingMoreVisualGroups(false);
     if (!selectedIpId || !selectedScopeAvailable) {
       setSemanticOverview(null);
@@ -278,42 +292,25 @@ export default function ProductClusters() {
     }
     let alive = true;
     const controller = new AbortController();
-    let loadError: unknown = null;
     setSemanticOverview(null);
     setVisualOverview(null);
-    const loadSemantic = getPersistedProductGroups(
+    void getPersistedProductGroups(
       selectedIpId,
-      "semantic",
+      "same",
       productGroupView,
       {
-        limit: SEMANTIC_GROUP_PAGE_SIZE,
+        limit: PRODUCT_GROUP_PAGE_SIZE,
         signal: controller.signal,
       },
     ).then((nextOverview) => {
-      if (alive) setSemanticOverview(nextOverview);
+      if (!alive) return;
+      setVisualOverview(nextOverview);
+      setError(null);
     }).catch((caught: unknown) => {
-      loadError ??= caught;
+      if (alive) setError(errorMessage(caught));
+    }).finally(() => {
+      if (alive) setGroupsLoadedKey(groupsRequestKey);
     });
-    const loadVisual = getPersistedProductGroups(
-      selectedIpId,
-      "visual",
-      productGroupView,
-      {
-        limit: VISUAL_GROUP_PAGE_SIZE,
-        signal: controller.signal,
-      },
-    ).then((nextOverview) => {
-      if (alive) setVisualOverview(nextOverview);
-    }).catch((caught: unknown) => {
-      loadError ??= caught;
-    });
-    void Promise.all([loadSemantic, loadVisual])
-      .then(() => {
-        if (!alive) return;
-        setError(loadError == null ? null : errorMessage(loadError));
-        setGroupsLoadedKey(groupsRequestKey);
-      })
-      .catch(() => undefined);
     return () => {
       alive = false;
       controller.abort();
@@ -524,19 +521,13 @@ export default function ProductClusters() {
     if (selectedIpId && selectedScopeAvailable) {
       setRefreshingGroups(true);
       try {
-        const nextSemanticOverview = await refreshPersistedProductGroups(
+        const nextOverview = await refreshPersistedProductGroups(
           selectedIpId,
-          "semantic",
+          "same",
           productGroupView,
-          { limit: SEMANTIC_GROUP_PAGE_SIZE },
+          { limit: PRODUCT_GROUP_PAGE_SIZE },
         );
-        setSemanticOverview(nextSemanticOverview);
-        setVisualOverview(await getPersistedProductGroups(
-          selectedIpId,
-          "visual",
-          productGroupView,
-          { limit: VISUAL_GROUP_PAGE_SIZE },
-        ));
+        setVisualOverview(nextOverview);
       } catch (caught: unknown) {
         setError(errorMessage(caught));
       } finally {
@@ -544,36 +535,6 @@ export default function ProductClusters() {
       }
     }
     setRefreshVersion((version) => version + 1);
-  }
-
-  async function loadMoreSemanticGroupTypes() {
-    const cursor = semanticOverview?.next_cursor;
-    if (!selectedIpId || !cursor || loadingMoreSemanticGroups) return;
-    const requestSequence = ++semanticPageRequestSequence.current;
-    setLoadingMoreSemanticGroups(true);
-    setError(null);
-    try {
-      const nextOverview = await getPersistedProductGroups(
-        selectedIpId,
-        "semantic",
-        productGroupView,
-        { limit: SEMANTIC_GROUP_PAGE_SIZE, cursor },
-      );
-      if (semanticPageRequestSequence.current !== requestSequence) return;
-      setSemanticOverview((current) =>
-        current && current.next_cursor === cursor
-          ? appendProductGroupPage(current, nextOverview)
-          : current
-      );
-    } catch (caught: unknown) {
-      if (semanticPageRequestSequence.current === requestSequence) {
-        setError(errorMessage(caught, "Unable to load more product types."));
-      }
-    } finally {
-      if (semanticPageRequestSequence.current === requestSequence) {
-        setLoadingMoreSemanticGroups(false);
-      }
-    }
   }
 
   async function loadMoreVisualGroups() {
@@ -585,9 +546,9 @@ export default function ProductClusters() {
     try {
       const nextOverview = await getPersistedProductGroups(
         selectedIpId,
-        "visual",
+        "same",
         productGroupView,
-        { limit: VISUAL_GROUP_PAGE_SIZE, cursor },
+        { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
       );
       if (visualPageRequestSequence.current !== requestSequence) return;
       setVisualOverview((current) =>
@@ -597,7 +558,7 @@ export default function ProductClusters() {
       );
     } catch (caught: unknown) {
       if (visualPageRequestSequence.current === requestSequence) {
-        setError(errorMessage(caught, "Unable to load more visual groups."));
+        setError(errorMessage(caught, "Unable to load more product groups."));
       }
     } finally {
       if (visualPageRequestSequence.current === requestSequence) {
@@ -634,16 +595,18 @@ export default function ProductClusters() {
   async function toggleGroupSubgroupListings(
     groupId: string,
     bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup: ProductGroupCommercialSubgroup | null = null,
   ) {
     if (batchProgress || loadingGroupTasksId) return;
-    const key = productGroupSubgroupKey(groupId, bucket);
+    const scopeId = productCommercialReviewScopeId(groupId, commercialSubgroup?.key ?? null);
+    const key = productGroupSubgroupKey(scopeId, bucket);
     if (expandedSubgroupKeys.has(key)) {
       setExpandedSubgroupKeys((current) => {
         const next = new Set(current);
         next.delete(key);
         return next;
       });
-      if (activeBatch?.groupId === groupId && activeBatch.bucket === bucket) {
+      if (activeBatch?.scopeId === scopeId && activeBatch.bucket === bucket) {
         setActiveBatch(null);
         setConfirmBatchAction(null);
       }
@@ -664,21 +627,36 @@ export default function ProductClusters() {
     groupId: string,
     groupName: string,
     bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup: ProductGroupCommercialSubgroup | null = null,
   ) {
     if (batchProgress || loadingGroupTasksId) return;
-    if (activeBatch?.groupId === groupId && activeBatch.bucket === bucket) {
+    const scopeId = productCommercialReviewScopeId(groupId, commercialSubgroup?.key ?? null);
+    if (activeBatch?.scopeId === scopeId && activeBatch.bucket === bucket) {
       setActiveBatch(null);
       setConfirmBatchAction(null);
       return;
     }
 
     const cached = loadedGroupTasks[groupId] ?? null;
+    const commercialCaseIds = commercialSubgroup
+      ? new Set(commercialSubgroup.triage_case_ids)
+      : null;
+    const scopedGroupName = commercialSubgroup
+      ? `${groupName} · ${commercialSubgroup.variant_label}`
+      : groupName;
     const cachedScope = cached
-      ? cached.filter((finding) => recommendationBucketForFinding(finding) === bucket)
+      ? cached.filter((finding) =>
+          (!commercialCaseIds || Boolean(
+            finding.case_id && commercialCaseIds.has(finding.case_id)
+          )) && recommendationBucketForFinding(finding) === bucket
+        )
       : null;
     setActiveBatch({
       groupId,
-      groupName,
+      scopeId,
+      groupName: scopedGroupName,
+      commercialSubgroupKey: commercialSubgroup?.key ?? null,
+      commercialCaseIds,
       bucket,
       findings: cachedScope,
       selectedResultIds: new Set(cachedScope?.map((finding) => finding.result_id) ?? []),
@@ -700,7 +678,10 @@ export default function ProductClusters() {
       return;
     }
     const scopedFindings = findings.filter(
-      (finding) => recommendationBucketForFinding(finding) === bucket,
+      (finding) =>
+        (!commercialCaseIds || Boolean(
+          finding.case_id && commercialCaseIds.has(finding.case_id)
+        )) && recommendationBucketForFinding(finding) === bucket,
     );
     if (scopedFindings.length === 0) {
       const bucketLabel = productGroupRecommendationBucket(bucket).label;
@@ -710,7 +691,10 @@ export default function ProductClusters() {
     }
     setActiveBatch({
       groupId,
-      groupName,
+      scopeId,
+      groupName: scopedGroupName,
+      commercialSubgroupKey: commercialSubgroup?.key ?? null,
+      commercialCaseIds,
       bucket,
       findings: scopedFindings,
       selectedResultIds: new Set(scopedFindings.map((finding) => finding.result_id)),
@@ -789,7 +773,7 @@ export default function ProductClusters() {
     return { eligible, skipped };
   }
 
-  async function runGroupBatch(action: BatchAction) {
+  async function runGroupBatch(action: BatchAction, decisionReason?: string) {
     const { eligible, skipped } = partitionGroupBatch(action);
     const completedBatch = activeBatch;
     const skipCounts = { ...skipped };
@@ -809,6 +793,7 @@ export default function ProductClusters() {
       try {
         const result = await autoSendTakedownBatch(
           eligible.map((finding) => finding.case_id as string),
+          decisionReason ?? "",
         );
         for (const item of result.skipped) bump(item.reason);
         const queued = result.queued_case_ids.length;
@@ -896,9 +881,9 @@ export default function ProductClusters() {
       );
       setVisualOverview(await getPersistedProductGroups(
         selectedIpId,
-        "visual",
+        "same",
         productGroupView,
-        { limit: VISUAL_GROUP_PAGE_SIZE },
+        { limit: PRODUCT_GROUP_PAGE_SIZE },
       ));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
@@ -925,9 +910,9 @@ export default function ProductClusters() {
       });
       setVisualOverview(await getPersistedProductGroups(
         selectedIpId,
-        "visual",
+        "same",
         productGroupView,
-        { limit: VISUAL_GROUP_PAGE_SIZE },
+        { limit: PRODUCT_GROUP_PAGE_SIZE },
       ));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
@@ -1177,8 +1162,8 @@ export default function ProductClusters() {
     }
   }
 
-  const primaryOverview = semanticOverview ?? visualOverview;
-  const workloadOverview = semanticOverview ?? visualOverview;
+  const primaryOverview = visualOverview;
+  const workloadOverview = visualOverview;
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-6">
@@ -1186,15 +1171,15 @@ export default function ProductClusters() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-black tracking-tight text-stone-900">
-              Product Clustering Lab
+              Product Lab
             </h1>
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
               Beta
             </span>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Groups can overlap. A listing may belong to a product type such as home
-            decor and, independently, to one or more visually similar groups.
+            Review in order: the underlying product, then comparable size and price,
+            then the recommended decision for each listing.
           </p>
         </div>
         <button
@@ -1221,16 +1206,16 @@ export default function ProductClusters() {
               <strong className="text-stone-800">{primaryOverview.scope.profile_count}</strong>{" "}
               profiled listings
             </span>
-            {semanticOverview?.snapshot_profile_count != null && (
+            {primaryOverview.snapshot_profile_count != null && (
               <span>
-                <strong className="text-stone-800">{semanticOverview.snapshot_profile_count}</strong>{" "}
-                classified
+                <strong className="text-stone-800">{primaryOverview.snapshot_profile_count}</strong>{" "}
+                grouped by product identity
               </span>
             )}
-            {(semanticOverview?.pending_snapshot_count ?? 0) > 0 && (
+            {(primaryOverview.pending_snapshot_count ?? 0) > 0 && (
               <span className="text-violet-700">
-                <strong>{semanticOverview?.pending_snapshot_count}</strong>{" "}
-                awaiting classification
+                <strong>{primaryOverview.pending_snapshot_count}</strong>{" "}
+                awaiting product grouping
               </span>
             )}
             {productGroupView === "triage" && workloadOverview?.triage_projection_available && (
@@ -1239,32 +1224,20 @@ export default function ProductClusters() {
                   <strong className="text-stone-800">{workloadOverview.triage_profile_count ?? 0}</strong>{" "}
                   {(workloadOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
                 </span>
-                {semanticOverview && (
-                  <span>
-                    <strong className="text-stone-800">{semanticOverview.triage_group_count ?? 0}</strong>{" "}
-                    type/variant groups with work
-                  </span>
-                )}
                 {visualOverview && (
                   <span>
                     <strong className="text-stone-800">{visualOverview.triage_group_count ?? 0}</strong>{" "}
-                    visual groups with work
+                    products with work
                   </span>
                 )}
               </>
             )}
             {productGroupView === "all" && (
               <>
-                {semanticOverview && (
-                  <span>
-                    <strong className="text-stone-800">{semanticOverview.group_count}</strong>{" "}
-                    type/variant groups
-                  </span>
-                )}
                 {visualOverview && (
                   <span>
                     <strong className="text-stone-800">{visualOverview.group_count}</strong>{" "}
-                    visual groups
+                    product groups
                   </span>
                 )}
                 {workloadOverview?.triage_projection_available && (
@@ -1320,85 +1293,25 @@ export default function ProductClusters() {
             view={productGroupView}
             onChange={setProductGroupView}
           />
-          {semanticOverview && (
-            <section className="mt-7" aria-labelledby="semantic-groups-heading">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">
-                Product classification
-              </p>
-              <h2 id="semantic-groups-heading" className="mt-1 text-lg font-black text-stone-900">
-                Product types and useful variants
-              </h2>
-              <p className="mt-1 max-w-3xl text-sm text-stone-500">
-                Functional categories such as home decor, plush toys, and keychains,
-                with meaningful variants nested beneath them.
-              </p>
-              {semanticFeedbackNotice && (
-                <div className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">
-                  <span>{semanticFeedbackNotice}</span>
-                  <button
-                    type="button"
-                    aria-label="Dismiss semantic correction status"
-                    onClick={() => setSemanticFeedbackNotice(null)}
-                    className="shrink-0 rounded p-0.5 text-emerald-700 hover:bg-emerald-100"
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-              )}
-              <SemanticProductGroupsOverview
-                overview={semanticOverview}
-                groupView={productGroupView}
-                onGroupViewChange={setProductGroupView}
-                showViewToggle={false}
-                activeTaskProfileId={activeTask?.profileId ?? null}
-                loadingTaskProfileId={loadingTaskProfileId}
-                loadingGroupTasksId={loadingGroupTasksId}
-                loadedGroupTasks={loadedGroupTasks}
-                expandedSubgroupKeys={expandedSubgroupKeys}
-                activeBatch={activeBatch}
-                batchProgress={batchProgress}
-                savingSemanticCorrectionProfileId={savingSemanticCorrectionProfileId}
-                loadingMore={loadingMoreSemanticGroups}
-                onSelectBatch={(groupId, groupName, bucket) =>
-                  void selectGroupBatch(groupId, groupName, bucket)}
-                onBatchAction={(action) => {
-                  if (selectedProductGroupBatchFindings(activeBatch).length > 0) {
-                    setConfirmBatchAction(action);
-                  }
-                }}
-                onClearBatch={clearGroupBatch}
-                onToggleBatchFinding={toggleGroupBatchFinding}
-                onSetAllBatchFindings={setAllGroupBatchFindings}
-                onToggleSubgroupListings={(groupId, bucket) =>
-                  void toggleGroupSubgroupListings(groupId, bucket)}
-                onLoadMore={() => void loadMoreSemanticGroupTypes()}
-                onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
-                onOpenFinding={openLoadedFinding}
-                onCorrectType={(group, profile) => {
-                  setSemanticCorrectionTarget({ group, profile });
-                }}
-              />
-            </section>
-          )}
           {visualOverview && (
-            <section className="mt-10 border-t border-stone-200 pt-7" aria-labelledby="visual-groups-heading">
+            <section className="mt-7" aria-labelledby="product-groups-heading">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-700">
-                Visual similarity
+                Product identity
               </p>
-              <h2 id="visual-groups-heading" className="mt-1 text-lg font-black text-stone-900">
-                Visually similar groups
+              <h2 id="product-groups-heading" className="mt-1 text-lg font-black text-stone-900">
+                Same products
               </h2>
               <p className="mt-1 max-w-3xl text-sm text-stone-500">
-                Independent cohorts formed from shared gallery appearance. The same
-                listing can appear here, in another visual group, and in a product-type group above.
+                Each parent contains listings for the same underlying product. Inside,
+                comparable size and price groups are separated before the review recommendation.
               </p>
               <ProductGroupsOverview
                 overview={visualOverview}
-                mode="visual"
+                mode="same"
                 groupView={productGroupView}
                 onGroupViewChange={setProductGroupView}
                 showViewToggle={false}
-                showUngrouped={false}
+                showUngrouped
                 savingGroupId={savingGroupId}
                 savingCorrectionProfileId={savingCorrectionProfileId}
                 activeTaskProfileId={activeTask?.profileId ?? null}
@@ -1409,8 +1322,8 @@ export default function ProductClusters() {
                 activeBatch={activeBatch}
                 batchProgress={batchProgress}
                 loadingMore={loadingMoreVisualGroups}
-                onSelectBatch={(groupId, groupName, bucket) =>
-                  void selectGroupBatch(groupId, groupName, bucket)}
+                onSelectBatch={(groupId, groupName, bucket, commercialSubgroup) =>
+                  void selectGroupBatch(groupId, groupName, bucket, commercialSubgroup)}
                 onBatchAction={(action) => {
                   if (selectedProductGroupBatchFindings(activeBatch).length > 0) {
                     setConfirmBatchAction(action);
@@ -1419,8 +1332,8 @@ export default function ProductClusters() {
                 onClearBatch={clearGroupBatch}
                 onToggleBatchFinding={toggleGroupBatchFinding}
                 onSetAllBatchFindings={setAllGroupBatchFindings}
-                onToggleSubgroupListings={(groupId, bucket) =>
-                  void toggleGroupSubgroupListings(groupId, bucket)}
+                onToggleSubgroupListings={(groupId, bucket, commercialSubgroup) =>
+                  void toggleGroupSubgroupListings(groupId, bucket, commercialSubgroup)}
                 onLoadMore={() => void loadMoreVisualGroups()}
                 onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
                 onOpenFinding={openLoadedFinding}
@@ -1468,10 +1381,10 @@ export default function ProductClusters() {
           scopeLabel={productGroupRecommendationBucket(activeBatch.bucket).label}
           {...partitionGroupBatch(confirmBatchAction)}
           onCancel={() => setConfirmBatchAction(null)}
-          onConfirm={() => {
+          onConfirm={(decisionReason) => {
             const action = confirmBatchAction;
             setConfirmBatchAction(null);
-            void runGroupBatch(action);
+            void runGroupBatch(action, decisionReason);
           }}
         />
       )}
@@ -1904,7 +1817,7 @@ function ProductGroupViewToggle({
 
 function productGroupRecommendationBucket(key: ProductGroupRecommendationBucket) {
   return PRODUCT_GROUP_RECOMMENDATION_BUCKETS.find((bucket) => bucket.key === key) ??
-    PRODUCT_GROUP_RECOMMENDATION_BUCKETS[2];
+    PRODUCT_GROUP_RECOMMENDATION_BUCKETS[3];
 }
 
 function recommendationBucketForActionability(
@@ -1912,7 +1825,8 @@ function recommendationBucketForActionability(
 ): ProductGroupRecommendationBucket {
   if (key === "send_takedown") return "takedown";
   if (key === "allowed_resale") return "second_hand";
-  return "review";
+  if (key === "licensed_seller" || key === "false_positive") return "might_be_ok";
+  return "needs_review";
 }
 
 function recommendationBucketForProfile(profile: ProductClusterProfile) {
@@ -2033,6 +1947,15 @@ function productGroupSubgroupKey(
   return `${groupId}:${bucket}`;
 }
 
+function productCommercialReviewScopeId(
+  groupId: string,
+  commercialSubgroupKey: string | null,
+) {
+  return commercialSubgroupKey
+    ? `${groupId}:commercial:${commercialSubgroupKey}`
+    : groupId;
+}
+
 type ProductGroupSubgroupItem =
   | { kind: "profile"; id: string; bucket: ProductGroupRecommendationBucket; profile: ProductClusterProfile }
   | { kind: "finding"; id: string; bucket: ProductGroupRecommendationBucket; finding: IpReviewFinding };
@@ -2117,12 +2040,18 @@ function ProductGroupMemberSubgroups({
   gridClassName: string;
   renderMember: (profile: ProductClusterProfile) => ReactNode;
   renderFinding: (finding: IpReviewFinding) => ReactNode;
-  onSelectBatch: (bucket: ProductGroupRecommendationBucket) => void;
+  onSelectBatch: (
+    bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup?: ProductGroupCommercialSubgroup | null,
+  ) => void;
   onBatchAction: (action: BatchAction) => void;
   onClearBatch: () => void;
   onToggleBatchFinding: (resultId: string) => void;
   onSetAllBatchFindings: (selected: boolean) => void;
-  onToggleSubgroupListings: (bucket: ProductGroupRecommendationBucket) => void;
+  onToggleSubgroupListings: (
+    bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup?: ProductGroupCommercialSubgroup | null,
+  ) => void;
 }) {
   const sortedProfiles = [...profiles].sort(compareProductProfilesByPriceSignal);
   const items: ProductGroupSubgroupItem[] = sortedProfiles.map((profile) => ({
@@ -2198,7 +2127,7 @@ function ProductGroupMemberSubgroups({
     });
   }
   const previewTruncated = totalCount > profiles.length;
-  const activeBatchFindings = activeBatch?.groupId === groupId
+  const activeBatchFindings = activeBatch?.scopeId === groupId
     ? activeBatch.findings
     : null;
   const batchFindingByResultId = new Map<string, IpReviewFinding>();
@@ -2258,7 +2187,7 @@ function ProductGroupMemberSubgroups({
               finding,
             }))
           : previewItems;
-        const selectedForBatch = activeBatch?.groupId === groupId &&
+        const selectedForBatch = activeBatch?.scopeId === groupId &&
           activeBatch.bucket === bucket.key;
         const batchFindingCount = selectedForBatch
           ? activeBatch.findings?.length ?? 0
@@ -2442,7 +2371,7 @@ function ProductGroupMemberSubgroups({
   );
 }
 
-function SemanticProductGroupsOverview({
+export function SemanticProductGroupsOverview({
   overview,
   groupView,
   onGroupViewChange,
@@ -2484,6 +2413,7 @@ function SemanticProductGroupsOverview({
     groupId: string,
     groupName: string,
     bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup?: ProductGroupCommercialSubgroup | null,
   ) => void;
   onBatchAction: (action: BatchAction) => void;
   onClearBatch: () => void;
@@ -2492,6 +2422,7 @@ function SemanticProductGroupsOverview({
   onToggleSubgroupListings: (
     groupId: string,
     bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup?: ProductGroupCommercialSubgroup | null,
   ) => void;
   onLoadMore: () => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
@@ -3081,6 +3012,7 @@ function ProductGroupsOverview({
     groupId: string,
     groupName: string,
     bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup?: ProductGroupCommercialSubgroup | null,
   ) => void;
   onBatchAction: (action: BatchAction) => void;
   onClearBatch: () => void;
@@ -3089,6 +3021,7 @@ function ProductGroupsOverview({
   onToggleSubgroupListings: (
     groupId: string,
     bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup?: ProductGroupCommercialSubgroup | null,
   ) => void;
   onLoadMore: () => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
@@ -3207,17 +3140,18 @@ function ProductGroupsOverview({
                   activeBatch={activeBatch}
                   batchProgress={activeBatch?.groupId === group.id ? batchProgress : null}
                   batchDisabled={Boolean(loadingGroupTasksId || batchProgress)}
-                  onSelectBatch={(bucket) => onSelectBatch(
+                  onSelectBatch={(bucket, commercialSubgroup) => onSelectBatch(
                     group.id,
-                    group.display_name ?? `Visual group ${index + 1}`,
+                    group.display_name ?? `Product group ${index + 1}`,
                     bucket,
+                    commercialSubgroup,
                   )}
                   onBatchAction={onBatchAction}
                   onClearBatch={onClearBatch}
                   onToggleBatchFinding={onToggleBatchFinding}
                   onSetAllBatchFindings={onSetAllBatchFindings}
-                  onToggleSubgroupListings={(bucket) =>
-                    onToggleSubgroupListings(group.id, bucket)}
+                  onToggleSubgroupListings={(bucket, commercialSubgroup) =>
+                    onToggleSubgroupListings(group.id, bucket, commercialSubgroup)}
                   onOpenTask={onOpenTask}
                   onOpenFinding={onOpenFinding}
                   onConfirmGroup={onConfirmGroup}
@@ -3235,8 +3169,8 @@ function ProductGroupsOverview({
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3">
               <p className="text-xs text-stone-600">
                 Showing {displayedGroups.length} of {overview.pagination_group_count} {showingTriage
-                  ? "visual groups with work"
-                  : "visual groups"}.
+                  ? "products with work"
+                  : "product groups"}.
               </p>
               <button
                 type="button"
@@ -3245,12 +3179,14 @@ function ProductGroupsOverview({
                 className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800 transition hover:bg-indigo-100 disabled:cursor-wait disabled:opacity-60"
               >
                 {loadingMore && <RefreshCw size={13} className="animate-spin" />}
-                {loadingMore ? "Loading…" : "Load more visual groups"}
+                {loadingMore ? "Loading…" : mode === "visual"
+                  ? "Load more visual groups"
+                  : "Load more products"}
               </button>
             </div>
           ) : overview.truncated ? (
             <p className="mt-3 text-xs text-amber-700">
-              More visual groups exist, but this API version cannot page through them yet.
+              More {mode === "visual" ? "visual groups" : "product groups"} exist, but this API version cannot page through them yet.
             </p>
           ) : null}
 
@@ -3312,7 +3248,7 @@ function ProductGroupPriceSummaryView({
     : `${formatMoney(summary.typical_low_usd, "USD")}–${formatMoney(summary.typical_high_usd, "USD")}`;
   const learningLabel = summary.reference_source === "reviewed"
     ? `Learned from ${summary.reviewed_clear_count} cleared reviews`
-    : "Group baseline · learns from cleared reviews";
+    : "Comparable-variant baseline · learns from cleared reviews";
   const title = [
     "Only USD-normalized prices are compared.",
     `The typical range and low-price cutoff use ${summary.reference_count} reference listings.`,
@@ -3387,12 +3323,18 @@ function ProductGroupCard({
   activeBatch: ProductGroupBatch | null;
   batchProgress: { done: number; total: number } | null;
   batchDisabled: boolean;
-  onSelectBatch: (bucket: ProductGroupRecommendationBucket) => void;
+  onSelectBatch: (
+    bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup?: ProductGroupCommercialSubgroup | null,
+  ) => void;
   onBatchAction: (action: BatchAction) => void;
   onClearBatch: () => void;
   onToggleBatchFinding: (resultId: string) => void;
   onSetAllBatchFindings: (selected: boolean) => void;
-  onToggleSubgroupListings: (bucket: ProductGroupRecommendationBucket) => void;
+  onToggleSubgroupListings: (
+    bucket: ProductGroupRecommendationBucket,
+    commercialSubgroup?: ProductGroupCommercialSubgroup | null,
+  ) => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
@@ -3559,6 +3501,65 @@ function ProductGroupCard({
     }
   }
 
+  const displayedCommercialSubgroups = mode === "same"
+    ? group.commercial_subgroups.filter((subgroup) =>
+        showingPersistedMembers
+          ? subgroup.member_count > 0
+          : subgroup.triage_member_count > 0
+      )
+    : [];
+
+  const renderProductMember = (profile: ProductClusterProfile) => {
+    const primaryVisualEvidence = primaryVisualEvidenceByProfileId.get(profile.id);
+    return (
+      <div key={profile.id} className="group/member relative min-w-0">
+        <ListingTile
+          profile={profile}
+          active={activeTaskProfileId === profile.id}
+          loading={loadingTaskProfileId === profile.id}
+          onClick={() => onOpenTask(profile, group.id)}
+          groupImageSimilarity={mode === "visual"
+            ? profile.group_image_similarity
+            : undefined}
+          groupImagePosition={mode === "visual"
+            ? profile.group_image_position
+            : undefined}
+          visualSupportIsReference={primaryVisualEvidence?.is_reference}
+        />
+        {canConfirm && group.member_count > 1 && (!confirmed || managing) && (
+          <button
+            type="button"
+            aria-label={`Remove ${profileTitle(profile)} from this product`}
+            title="This listing belongs to a different underlying product"
+            disabled={Boolean(savingCorrectionProfileId)}
+            onClick={() => setCorrectingProfileId(profile.id)}
+            className={`absolute right-2 top-10 inline-flex h-7 items-center justify-center rounded-full border border-red-200 bg-white/95 px-2.5 text-[10px] font-bold text-red-700 shadow-sm transition hover:bg-red-50 focus:opacity-100 disabled:opacity-40 ${
+              confirmed ? "opacity-0 group-hover/member:opacity-100" : "opacity-100"
+            }`}
+          >
+            Wrong product
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderProductFinding = (
+    finding: IpReviewFinding,
+    priceSummary: ProductGroupPriceSummary | null,
+  ) => {
+    const profile = productClusterProfileForFinding(finding, priceSummary);
+    return (
+      <div className="relative min-w-0">
+        <ListingTile
+          profile={profile}
+          active={activeTaskProfileId === profile.id}
+          onClick={() => onOpenFinding(finding, group.id)}
+        />
+      </div>
+    );
+  };
+
   return (
     <section
       data-product-group-id={group.id}
@@ -3620,7 +3621,7 @@ function ProductGroupCard({
                 : "image similarity"}{" "}
             {group.average_score?.toFixed(3) ?? "—"}
           </p>
-          {group.price_summary && (
+          {group.price_summary && displayedCommercialSubgroups.length === 0 && (
             <ProductGroupPriceSummaryView summary={group.price_summary} />
           )}
           {showingPersistedMembers && triageProjectionAvailable && (
@@ -4183,7 +4184,7 @@ function ProductGroupCard({
               ))}
               {group.rules.length === 0 && (
                 <p className="rounded-lg border border-dashed border-stone-300 bg-white/70 px-3 py-3 text-xs text-stone-500">
-                  No product-specific rules yet. Add only characteristics that distinguish this exact product or variant.
+                  No product-specific rules yet. Add only characteristics that distinguish this underlying product from a different design or model.
                 </p>
               )}
             </div>
@@ -4208,7 +4209,7 @@ function ProductGroupCard({
                 value={ruleDraft}
                 maxLength={1000}
                 rows={3}
-                placeholder='Example: "For this exact product, the case should show a lot number in the bottom-right corner."'
+                placeholder='Example: "This product is the Bianco Latte fragrance, not another Giardini di Toscana fragrance."'
                 onChange={(event) => setRuleDraft(event.target.value)}
                 className="w-full resize-y rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
@@ -4237,86 +4238,150 @@ function ProductGroupCard({
         </div>
       )}
 
-      <ProductGroupMemberSubgroups
-        profiles={displayedMembers}
-        priceSummary={group.price_summary}
-        priceSignalByCaseId={null}
-        totalCount={displayedMemberCount}
-        recommendationCounts={!showingPersistedMembers
-          ? group.triage_recommendation_counts ?? null
-          : null}
-        separateByRecommendation={!showingPersistedMembers}
-        allFindings={!showingPersistedMembers ? allFindings : null}
-        expandedSubgroupKeys={expandedSubgroupKeys}
-        loadingAllFindings={loadingAllFindings}
-        groupId={group.id}
-        groupName={group.display_name ?? `Visual group ${index + 1}`}
-        activeBatch={activeBatch}
-        batchProgress={batchProgress}
-        batchDisabled={batchDisabled}
-        previewLimit={4}
-        gridClassName="grid-cols-3 sm:grid-cols-4"
-        renderMember={(profile) => {
-          const primaryVisualEvidence = primaryVisualEvidenceByProfileId.get(profile.id);
-          return (
-            <div key={profile.id} className="group/member relative min-w-0">
-              <ListingTile
-                profile={profile}
-                active={activeTaskProfileId === profile.id}
-                loading={loadingTaskProfileId === profile.id}
-                onClick={() => onOpenTask(profile, group.id)}
-                groupImageSimilarity={mode === "visual"
-                  ? profile.group_image_similarity
-                  : undefined}
-                groupImagePosition={mode === "visual"
-                  ? profile.group_image_position
-                  : undefined}
-                visualSupportIsReference={primaryVisualEvidence?.is_reference}
-              />
-              {canConfirm && group.member_count > 1 && (!confirmed || managing) && (
-                <button
-                  type="button"
-                  aria-label={`Exclude ${profileTitle(profile)} from this group`}
-                  title="Exclude this gallery view from this group"
-                  disabled={Boolean(savingCorrectionProfileId)}
-                  onClick={() => setCorrectingProfileId(profile.id)}
-                  className={`absolute right-2 top-10 inline-flex h-7 items-center justify-center rounded-full border border-red-200 bg-white/95 px-2.5 text-[10px] font-bold text-red-700 shadow-sm transition hover:bg-red-50 focus:opacity-100 disabled:opacity-40 ${
-                    confirmed ? "opacity-0 group-hover/member:opacity-100" : "opacity-100"
-                  }`}
-                >
-                  Exclude
-                </button>
-              )}
-            </div>
-          );
-        }}
-        renderFinding={(finding) => {
-          const profile = productClusterProfileForFinding(finding, group.price_summary);
-          return (
-            <div className="relative min-w-0">
-              <ListingTile
-                profile={profile}
-                active={activeTaskProfileId === profile.id}
-                onClick={() => onOpenFinding(finding, group.id)}
-              />
-            </div>
-          );
-        }}
-        onSelectBatch={onSelectBatch}
-        onBatchAction={onBatchAction}
-        onClearBatch={onClearBatch}
-        onToggleBatchFinding={onToggleBatchFinding}
-        onSetAllBatchFindings={onSetAllBatchFindings}
-        onToggleSubgroupListings={onToggleSubgroupListings}
-      />
+      {displayedCommercialSubgroups.length > 0 ? (
+        <div className="mt-4 space-y-3" data-product-commercial-groups>
+          {displayedCommercialSubgroups.map((commercialSubgroup) => {
+            const scopeId = productCommercialReviewScopeId(
+              group.id,
+              commercialSubgroup.key,
+            );
+            const profiles = displayedMembers.filter(
+              (profile) => profile.commercial_subgroup_key === commercialSubgroup.key,
+            );
+            const commercialCaseIds = new Set(commercialSubgroup.triage_case_ids);
+            const subgroupFindings = !showingPersistedMembers && allFindings
+              ? allFindings.filter((finding) =>
+                  Boolean(finding.case_id && commercialCaseIds.has(finding.case_id))
+                )
+              : null;
+            const priceRange = commercialSubgroup.price_range;
+            const priceRangeLabel = !priceRange
+              ? "Price unavailable"
+              : priceRange.minimum === priceRange.maximum
+                ? formatMoney(priceRange.minimum, "USD")
+                : `${formatMoney(priceRange.minimum, "USD")}–${formatMoney(
+                    priceRange.maximum,
+                    "USD",
+                  )}`;
+            return (
+              <section
+                key={commercialSubgroup.key}
+                data-product-commercial-subgroup={commercialSubgroup.key}
+                className={`rounded-xl border p-3 ${
+                  commercialSubgroup.price_band === "unusually_low"
+                    ? "border-red-200 bg-red-50/40"
+                    : "border-stone-200 bg-stone-50/70"
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">
+                      Comparable offer
+                    </p>
+                    <h3 className="mt-0.5 text-sm font-black text-stone-900">
+                      {commercialSubgroup.variant_label}
+                    </h3>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-1.5 text-right">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      commercialSubgroup.price_band === "unusually_low"
+                        ? "bg-red-100 text-red-800"
+                        : commercialSubgroup.price_band === "unpriced"
+                          ? "bg-stone-200 text-stone-700"
+                          : "bg-emerald-100 text-emerald-800"
+                    }`}>
+                      {commercialSubgroup.price_band === "unusually_low"
+                        ? `Unusually low · ${priceRangeLabel}`
+                        : priceRangeLabel}
+                    </span>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-stone-600 ring-1 ring-inset ring-stone-200">
+                      {showingPersistedMembers
+                        ? commercialSubgroup.member_count
+                        : commercialSubgroup.triage_member_count} listings
+                    </span>
+                  </div>
+                </div>
+                <ProductGroupMemberSubgroups
+                  profiles={profiles}
+                  priceSummary={commercialSubgroup.price_summary}
+                  priceSignalByCaseId={null}
+                  totalCount={showingPersistedMembers
+                    ? commercialSubgroup.member_count
+                    : commercialSubgroup.triage_member_count}
+                  recommendationCounts={!showingPersistedMembers
+                    ? commercialSubgroup.triage_recommendation_counts
+                    : null}
+                  separateByRecommendation={!showingPersistedMembers}
+                  allFindings={subgroupFindings}
+                  expandedSubgroupKeys={expandedSubgroupKeys}
+                  loadingAllFindings={loadingAllFindings}
+                  groupId={scopeId}
+                  groupName={`${group.display_name ?? `Product group ${index + 1}`} · ${commercialSubgroup.variant_label}`}
+                  activeBatch={activeBatch}
+                  batchProgress={batchProgress}
+                  batchDisabled={batchDisabled}
+                  previewLimit={4}
+                  gridClassName="grid-cols-3 sm:grid-cols-4"
+                  renderMember={renderProductMember}
+                  renderFinding={(finding) => renderProductFinding(
+                    finding,
+                    commercialSubgroup.price_summary,
+                  )}
+                  onSelectBatch={(bucket) => onSelectBatch(bucket, commercialSubgroup)}
+                  onBatchAction={onBatchAction}
+                  onClearBatch={onClearBatch}
+                  onToggleBatchFinding={onToggleBatchFinding}
+                  onSetAllBatchFindings={onSetAllBatchFindings}
+                  onToggleSubgroupListings={(bucket) =>
+                    onToggleSubgroupListings(bucket, commercialSubgroup)}
+                />
+                {profiles.length === 0 && (
+                  <p className="mt-2 text-[11px] text-stone-500">
+                    This comparable group is not represented in the current preview.
+                  </p>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <ProductGroupMemberSubgroups
+          profiles={displayedMembers}
+          priceSummary={group.price_summary}
+          priceSignalByCaseId={null}
+          totalCount={displayedMemberCount}
+          recommendationCounts={!showingPersistedMembers
+            ? group.triage_recommendation_counts ?? null
+            : null}
+          separateByRecommendation={!showingPersistedMembers}
+          allFindings={!showingPersistedMembers ? allFindings : null}
+          expandedSubgroupKeys={expandedSubgroupKeys}
+          loadingAllFindings={loadingAllFindings}
+          groupId={group.id}
+          groupName={group.display_name ?? `Product group ${index + 1}`}
+          activeBatch={activeBatch}
+          batchProgress={batchProgress}
+          batchDisabled={batchDisabled}
+          previewLimit={4}
+          gridClassName="grid-cols-3 sm:grid-cols-4"
+          renderMember={renderProductMember}
+          renderFinding={(finding) => renderProductFinding(finding, group.price_summary)}
+          onSelectBatch={onSelectBatch}
+          onBatchAction={onBatchAction}
+          onClearBatch={onClearBatch}
+          onToggleBatchFinding={onToggleBatchFinding}
+          onSetAllBatchFindings={onSetAllBatchFindings}
+          onToggleSubgroupListings={onToggleSubgroupListings}
+        />
+      )}
       {correctingProfile && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
           <p className="text-xs font-bold text-amber-950">
-            Remove “{profileTitle(correctingProfile)}” from this group?
+            Mark “{profileTitle(correctingProfile)}” as a different product?
           </p>
           <p className="mt-1 text-[11px] text-amber-800">
-            The exact gallery-image placement will be categorized again, but it will
-            not be paired with these same group images after a refresh.
+            Size, price, condition, and counterfeit suspicion belong inside this product.
+            Remove it only when the underlying design or model is different.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
@@ -4329,19 +4394,7 @@ function ProductGroupCard({
               }}
               className="rounded-lg bg-amber-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-950 disabled:opacity-50"
             >
-              Exclude
-            </button>
-            <button
-              type="button"
-              disabled={Boolean(savingCorrectionProfileId)}
-              onClick={() => {
-                void onCorrectGroupMember(group.id, correctingProfile.id, "different_variant")
-                  .then(() => setCorrectingProfileId(null))
-                  .catch(() => undefined);
-              }}
-              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50"
-            >
-              Different variant
+              Different product
             </button>
             <button
               type="button"
@@ -4445,10 +4498,16 @@ function ListingTile({
   const unusualPrice = profile.price_signal?.unusually_low === true
     ? profile.price_signal
     : null;
-  const visualCohortPriceSignal = unusualPrice?.comparison_scope === "visual_cohort";
-  const priceSignalReference = visualCohortPriceSignal
+  const priceSignalReference = unusualPrice?.comparison_scope === "visual_cohort"
     ? unusualPrice?.source_group_name?.trim() || "its exact visual cohort"
-    : "the learned group";
+    : unusualPrice?.comparison_scope === "commercial_variant"
+      ? "the same size or commercial variant"
+      : "the learned group";
+  const priceComparisonLabel = unusualPrice?.comparison_scope === "visual_cohort"
+    ? "visual cohort"
+    : unusualPrice?.comparison_scope === "commercial_variant"
+      ? "same variant"
+      : "typical";
   const taskTitle = onClick
     ? `Open task details: ${profileTitle(profile)}`
     : `Task details unavailable: ${profileTitle(profile)}`;
@@ -4488,9 +4547,7 @@ function ListingTile({
         )}
         {unusualPrice && (
           <span className="absolute left-1.5 top-1.5 rounded bg-red-700/95 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm">
-            {unusualPrice.percent_below_reference}% below {visualCohortPriceSignal
-              ? "visual cohort"
-              : "typical"}
+            {unusualPrice.percent_below_reference}% below {priceComparisonLabel}
           </span>
         )}
         {hasGroupImageSimilarity && groupImagePosition != null && (

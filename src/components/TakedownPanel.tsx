@@ -52,6 +52,7 @@ export default function TakedownPanel({
   const [confirming, setConfirming] = useState(false);
   const [directSending, setDirectSending] = useState(false);
   const [composing, setComposing] = useState(false);
+  const [composeDecisionReason, setComposeDecisionReason] = useState("");
   const [replyDraft, setReplyDraft] = useState("");
   const [replying, setReplying] = useState(false);
   const [error, setError] = useState("");
@@ -102,14 +103,14 @@ export default function TakedownPanel({
   // Quick path from the confirm dialog: send the pre-filled draft for the
   // suggested route without opening the editor. Falls back to the editor if
   // there's no route/draft to auto-send.
-  async function sendDirect() {
+  async function sendDirect(decisionReason: string) {
     setDirectSending(true);
     setError("");
     try {
-      const r = await autoSendTakedown(caseId);
+      const r = await autoSendTakedown(caseId, decisionReason);
       if (r.status === "unconfigured") {
         if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(caseId);
+          await markTakedownSentWithoutEmail(caseId, decisionReason);
           setConfirming(false);
           await reload();
           return;
@@ -119,11 +120,12 @@ export default function TakedownPanel({
       }
       if (r.status === "needs_compose") {
         if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(caseId);
+          await markTakedownSentWithoutEmail(caseId, decisionReason);
           setConfirming(false);
           await reload();
           return;
         }
+        setComposeDecisionReason(decisionReason);
         setConfirming(false);
         setComposing(true);
         return;
@@ -170,6 +172,7 @@ export default function TakedownPanel({
           <button
             onClick={() => {
               setError("");
+              setComposeDecisionReason("");
               setConfirming(true);
             }}
             className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-xs font-semibold text-stone-700"
@@ -198,6 +201,7 @@ export default function TakedownPanel({
           <button
             onClick={() => {
               setError("");
+              setComposeDecisionReason("");
               setConfirming(true);
             }}
             className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-sm font-semibold text-white"
@@ -268,7 +272,8 @@ export default function TakedownPanel({
           sending={directSending}
           error={error}
           onSend={sendDirect}
-          onEdit={() => {
+          onEdit={(decisionReason) => {
+            setComposeDecisionReason(decisionReason);
             setConfirming(false);
             setComposing(true);
           }}
@@ -284,9 +289,14 @@ export default function TakedownPanel({
         <ComposeModal
           caseId={caseId}
           ipId={ipId}
-          onClose={() => setComposing(false)}
+          initialDecisionReason={composeDecisionReason}
+          onClose={() => {
+            setComposing(false);
+            setComposeDecisionReason("");
+          }}
           onSent={async () => {
             setComposing(false);
+            setComposeDecisionReason("");
             await reload();
           }}
         />
@@ -307,6 +317,7 @@ export function ConfirmSendModal({
   sending,
   error,
   noEmailMode = false,
+  initialDecisionReason = "",
   onSend,
   onEdit,
   onCancel,
@@ -315,10 +326,13 @@ export function ConfirmSendModal({
   sending: boolean;
   error: string;
   noEmailMode?: boolean;
-  onSend: () => void;
-  onEdit: () => void;
+  initialDecisionReason?: string;
+  onSend: (decisionReason: string) => void;
+  onEdit?: (decisionReason: string) => void;
   onCancel: () => void;
 }) {
+  const [decisionReason, setDecisionReason] = useState(initialDecisionReason);
+  const reasonValid = decisionReason.trim().length >= 3;
   return (
     <div
       onClick={onCancel}
@@ -351,6 +365,27 @@ export function ConfirmSendModal({
               </>
             )}
           </p>
+          <div className="space-y-1.5">
+            <label
+              htmlFor="takedown-decision-reason"
+              className="text-xs font-semibold text-stone-800"
+            >
+              Why is takedown the right decision?
+            </label>
+            <textarea
+              id="takedown-decision-reason"
+              value={decisionReason}
+              onChange={(event) => setDecisionReason(event.target.value)}
+              rows={3}
+              maxLength={2000}
+              autoFocus
+              placeholder="What in the images or listing description made this actionable?"
+              className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 focus:border-stone-400 focus:outline-none"
+            />
+            <p className="text-[11px] text-stone-500">
+              This is not sent to the marketplace. It helps improve future suggestions for this IP.
+            </p>
+          </div>
           {error && (
             <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-3 py-2">
               {error}
@@ -365,16 +400,18 @@ export function ConfirmSendModal({
           >
             Cancel
           </button>
+          {onEdit && (
+            <button
+              onClick={() => onEdit(decisionReason.trim())}
+              disabled={sending || noEmailMode}
+              className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-xs font-semibold text-stone-700 disabled:opacity-50"
+            >
+              Edit before sending
+            </button>
+          )}
           <button
-            onClick={onEdit}
-            disabled={sending || noEmailMode}
-            className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-xs font-semibold text-stone-700 disabled:opacity-50"
-          >
-            Edit before sending
-          </button>
-          <button
-            onClick={onSend}
-            disabled={sending}
+            onClick={() => onSend(decisionReason.trim())}
+            disabled={sending || !reasonValid}
             className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sending ? (noEmailMode ? "Marking…" : "Sending…") : noEmailMode ? "Mark sent" : "Send"}
@@ -412,12 +449,14 @@ function MessageRow({ message }: { message: TakedownMessage }) {
 export function ComposeModal({
   caseId,
   ipId,
+  initialDecisionReason = "",
   onClose,
   onSent,
 }: {
   caseId: string;
   /** IP the case belongs to — links the incomplete-signer notice to /ips/{ipId}. */
   ipId?: string;
+  initialDecisionReason?: string;
   onClose: () => void;
   onSent: () => Promise<void> | void;
 }) {
@@ -426,6 +465,7 @@ export function ComposeModal({
   const [targetId, setTargetId] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [decisionReason, setDecisionReason] = useState(initialDecisionReason);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const { user } = useAuth();
@@ -456,16 +496,18 @@ export function ComposeModal({
 
   const routes = resp?.routes ?? [];
   const missing = resp?.draft?.missing_fields ?? [];
-  const canMarkSent = !!resp && canMarkSentWithoutEmail && routes.length === 0 && !sending;
+  const reasonValid = decisionReason.trim().length >= 3;
+  const canMarkSent =
+    !!resp && canMarkSentWithoutEmail && routes.length === 0 && reasonValid && !sending;
   const canSend =
-    !!resp?.configured && !!targetId && !!subject.trim() && !!body.trim() && !sending;
+    !!resp?.configured && !!targetId && !!subject.trim() && !!body.trim() && reasonValid && !sending;
 
   async function submit() {
     if (canMarkSent) {
       setSending(true);
       setError("");
       try {
-        await markTakedownSentWithoutEmail(caseId);
+        await markTakedownSentWithoutEmail(caseId, decisionReason.trim());
         await onSent();
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -481,6 +523,7 @@ export function ComposeModal({
         target_id: targetId,
         subject: subject.trim(),
         body: body.trim(),
+        decision_reason: decisionReason.trim(),
       });
       await onSent();
     } catch (e) {
@@ -588,6 +631,27 @@ export function ComposeModal({
                   </p>
                 </div>
               )}
+
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="compose-takedown-decision-reason"
+                  className="text-[10px] font-bold text-stone-400 uppercase tracking-wider"
+                >
+                  Why is takedown the right decision?
+                </label>
+                <textarea
+                  id="compose-takedown-decision-reason"
+                  value={decisionReason}
+                  onChange={(event) => setDecisionReason(event.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="What in the images or listing description made this actionable?"
+                  className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-800 focus:border-stone-400 focus:outline-none"
+                />
+                <p className="text-[11px] text-stone-500">
+                  Internal learning note only — it is not included in the marketplace email.
+                </p>
+              </div>
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
