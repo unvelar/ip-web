@@ -10,9 +10,17 @@
     var previewBase = window.location.pathname.match(/^\/pr-preview\/pr-\d+(?:\/|$)/);
     var appBase = previewBase ? previewBase[0] : '/';
     if (!appBase.endsWith('/')) appBase += '/';
-    var path = window.location.pathname + window.location.search + window.location.hash;
+
+    // Use the concrete preview entry point. Redirecting a missing preview route
+    // back to the preview directory can be handled as another 404 by the host,
+    // causing each pass to wrap the previous `p` value in a new `p` value.
+    var entryPoint = previewBase ? appBase + 'index.html' : appBase;
+    var query = new URLSearchParams(window.location.search);
+    var path = query.get('p') || (
+      window.location.pathname + window.location.search + window.location.hash
+    );
     window.location.replace(
-      window.location.origin + appBase + '?p=' + encodeURIComponent(path)
+      window.location.origin + entryPoint + '?p=' + encodeURIComponent(path)
     );
   </script>
 </head>
