@@ -184,7 +184,7 @@ function AppShellContent() {
   const renderSidebar = (collapsed = false, collapsible = false) => (
     <aside className="h-full flex flex-col bg-cream border-r border-stone-200/60">
       {/* Logo + brand */}
-      <div className={`flex h-16 items-center justify-between ${collapsed ? "px-1" : "px-5"}`}>
+      <div className={`flex h-16 items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>
         <Link
           to="/"
           className="flex min-w-0 items-center gap-2"
@@ -194,21 +194,32 @@ function AppShellContent() {
           <BrandMark className={`${collapsed ? "h-6 w-6" : "h-7 w-7"} shrink-0`} />
           {!collapsed && <span className="text-sm font-bold tracking-tight text-stone-900">Unvelar</span>}
         </Link>
-        {collapsible && (
+        {collapsible && !collapsed && (
           <button
             type="button"
             onClick={() => setSidebarCollapsed((value) => !value)}
-            className={`flex shrink-0 items-center justify-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 ${collapsed ? "h-6 w-6" : "h-7 w-7"}`}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={16} />}
+            <PanelLeftClose size={16} />
           </button>
         )}
       </div>
 
       {/* Nav */}
       <nav className={`flex-1 overflow-y-auto ${collapsed ? "px-2" : "px-3"}`}>
+        {collapsible && collapsed && (
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(false)}
+            className="mb-3 flex w-full items-center justify-center rounded-lg py-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+        )}
         <NavItem
           to="/dashboard"
           icon={<Home size={18} />}
@@ -474,7 +485,7 @@ function NavItem({
         <span
           title={`${badge} item${badge === 1 ? "" : "s"}`}
           className={collapsed
-            ? "absolute ml-5 -mt-5 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-600 px-1 text-[8px] font-bold leading-none text-white"
+            ? "absolute right-0.5 top-0.5 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-600 px-1 text-[8px] font-bold leading-none text-white"
             : "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold leading-none"}
         >
           {badge > 99 ? "99+" : badge}
@@ -500,7 +511,22 @@ function NavGroup({
   collapsed?: boolean;
 }) {
   if (collapsed) {
-    return <div className="mt-3 space-y-0.5 border-t border-stone-200/60 pt-3">{children}</div>;
+    return (
+      <div
+        className="mt-3 space-y-1 border-t border-stone-200/60 pt-2.5"
+        role="group"
+        aria-label={label}
+      >
+        <div
+          className="flex h-5 items-center justify-center text-stone-400"
+          title={label}
+          aria-hidden
+        >
+          {icon}
+        </div>
+        {children}
+      </div>
+    );
   }
   return (
     <div className="mt-3">
