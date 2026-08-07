@@ -866,7 +866,7 @@ export function MonitoringBoard({
               : "Email is not configured.",
           );
         }
-        await markTakedownSentWithoutEmail(targetCaseId, decisionReason);
+        await markTakedownSentWithoutEmail(targetCaseId);
       }
       setShortcutSendFinding(null);
       rememberTakedownAction(targetFinding);

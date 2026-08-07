@@ -78,7 +78,7 @@ export function FindingActions({
       const r = await autoSendTakedown(f.case_id, decisionReason);
       if (r.status === "unconfigured") {
         if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(f.case_id, decisionReason);
+          await markTakedownSentWithoutEmail(f.case_id);
           setConfirming(false);
           onTakedownSent();
           onActionComplete();
@@ -90,7 +90,7 @@ export function FindingActions({
       }
       if (r.status === "needs_compose") {
         if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(f.case_id, decisionReason);
+          await markTakedownSentWithoutEmail(f.case_id);
           setConfirming(false);
           onTakedownSent();
           onActionComplete();
