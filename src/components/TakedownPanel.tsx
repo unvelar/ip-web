@@ -4,7 +4,7 @@ import {
   getTakedownThread,
   getTakedownDraft,
   sendTakedown,
-  markTakedownSentWithoutEmail,
+  approveTakedown,
   autoSendTakedown,
   replyTakedown,
   type TakedownDraftResponse,
@@ -12,7 +12,7 @@ import {
   type TakedownRequestStatus,
   type TakedownThread,
 } from "../api";
-import { useAuth } from "../context/AuthContext";
+import { legalQueueReasonLabel } from "./monitoring/board/utils";
 
 const STATUS_META: Record<TakedownRequestStatus, { label: string; cls: string }> = {
   queued: { label: "Queued", cls: "bg-stone-100 text-stone-600" },
@@ -56,8 +56,6 @@ export default function TakedownPanel({
   const [replyDraft, setReplyDraft] = useState("");
   const [replying, setReplying] = useState(false);
   const [error, setError] = useState("");
-  const { user } = useAuth();
-  const canMarkSentWithoutEmail = user?.role === "admin";
 
   useEffect(() => {
     let alive = true;
@@ -100,35 +98,32 @@ export default function TakedownPanel({
     onStatusChange?.();
   }
 
-  // Quick path from the confirm dialog: send the pre-filled draft for the
-  // suggested route without opening the editor. Falls back to the editor if
-  // there's no route/draft to auto-send.
+  // Resolve the decision through the automatic/manual routing API.
   async function sendDirect(decisionReason: string) {
     setDirectSending(true);
     setError("");
     try {
-      const r = await autoSendTakedown(caseId, decisionReason);
-      if (r.status === "unconfigured") {
-        if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(caseId, decisionReason);
-          setConfirming(false);
-          await reload();
+      if (thread) {
+        const result = await autoSendTakedown(caseId, decisionReason);
+        if (result.status === "unconfigured") {
+          setError("Email isn't configured yet — contact your administrator.");
           return;
         }
-        setError("Email isn't configured yet — contact your administrator.");
+        if (result.status === "needs_compose") {
+          setComposeDecisionReason(decisionReason);
+          setConfirming(false);
+          setComposing(true);
+          return;
+        }
+        setConfirming(false);
+        await reload();
         return;
       }
-      if (r.status === "needs_compose") {
-        if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(caseId, decisionReason);
-          setConfirming(false);
-          await reload();
-          return;
-        }
-        setComposeDecisionReason(decisionReason);
-        setConfirming(false);
-        setComposing(true);
-        return;
+      const result = await approveTakedown(caseId, decisionReason);
+      if (result.status === "legal_queue") {
+        window.alert(
+          `Added to the legal queue. ${legalQueueReasonLabel(result.reason)}.`,
+        );
       }
       setConfirming(false);
       await reload();
@@ -271,6 +266,7 @@ export default function TakedownPanel({
           platform={platform}
           sending={directSending}
           error={error}
+          legalFallback={!thread}
           onSend={sendDirect}
           onEdit={(decisionReason) => {
             setComposeDecisionReason(decisionReason);
@@ -294,9 +290,12 @@ export default function TakedownPanel({
             setComposing(false);
             setComposeDecisionReason("");
           }}
-          onSent={async () => {
+          onSent={async (outcome) => {
             setComposing(false);
             setComposeDecisionReason("");
+            if (outcome === "legal_queue") {
+              window.alert("Added to the legal queue for manual review and submission.");
+            }
             await reload();
           }}
         />
@@ -316,7 +315,7 @@ export function ConfirmSendModal({
   platform,
   sending,
   error,
-  noEmailMode = false,
+  legalFallback = true,
   initialDecisionReason = "",
   onSend,
   onEdit,
@@ -325,7 +324,7 @@ export function ConfirmSendModal({
   platform?: string;
   sending: boolean;
   error: string;
-  noEmailMode?: boolean;
+  legalFallback?: boolean;
   initialDecisionReason?: string;
   onSend: (decisionReason: string) => void;
   onEdit?: (decisionReason: string) => void;
@@ -338,7 +337,7 @@ export function ConfirmSendModal({
       onClick={onCancel}
       role="dialog"
       aria-modal="true"
-      aria-label={noEmailMode ? "Mark takedown as sent" : "Send takedown notice"}
+      aria-label="Takedown"
       className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
     >
       <div
@@ -346,22 +345,22 @@ export function ConfirmSendModal({
         className="bg-white rounded-2xl border border-stone-200 max-w-md w-full overflow-hidden"
       >
         <div className="px-5 py-4 border-b border-stone-100">
-          <h3 className="font-bold text-stone-900">
-            {noEmailMode ? "Mark takedown as sent" : "Send takedown notice"}
-          </h3>
+          <h3 className="font-bold text-stone-900">Takedown</h3>
         </div>
         <div className="px-5 py-4 space-y-3">
           <p className="text-sm text-stone-600">
-            {noEmailMode ? (
+            {legalFallback ? (
               <>
-                No email route or sender is available, so this admin action will
-                only move the finding to <span className="font-semibold text-stone-900">Sent</span>.
+                An automatic notice will be submitted to{" "}
+                <span className="font-semibold text-stone-900">{prettyPlatform(platform)}</span>{" "}
+                when a complete email route is available. Otherwise, the listing will
+                move to the legal queue for manual review and submission.
               </>
             ) : (
               <>
-                You're about to email{" "}
-                <span className="font-semibold text-stone-900">{prettyPlatform(platform)}</span>{" "}
-                a takedown notice for this listing. Their reply will be tracked here.
+                You're about to send another takedown notice to{" "}
+                <span className="font-semibold text-stone-900">{prettyPlatform(platform)}</span>.
+                Their reply will be tracked in the existing thread.
               </>
             )}
           </p>
@@ -403,7 +402,7 @@ export function ConfirmSendModal({
           {onEdit && (
             <button
               onClick={() => onEdit(decisionReason.trim())}
-              disabled={sending || noEmailMode}
+              disabled={sending}
               className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-xs font-semibold text-stone-700 disabled:opacity-50"
             >
               Edit before sending
@@ -414,7 +413,7 @@ export function ConfirmSendModal({
             disabled={sending || !reasonValid}
             className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {sending ? (noEmailMode ? "Marking…" : "Sending…") : noEmailMode ? "Mark sent" : "Send"}
+            {sending ? "Processing…" : "Takedown"}
           </button>
         </div>
       </div>
@@ -458,7 +457,7 @@ export function ComposeModal({
   ipId?: string;
   initialDecisionReason?: string;
   onClose: () => void;
-  onSent: () => Promise<void> | void;
+  onSent: (outcome: "sent" | "legal_queue") => Promise<void> | void;
 }) {
   const [loading, setLoading] = useState(true);
   const [resp, setResp] = useState<TakedownDraftResponse | null>(null);
@@ -468,8 +467,6 @@ export function ComposeModal({
   const [decisionReason, setDecisionReason] = useState(initialDecisionReason);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const { user } = useAuth();
-  const canMarkSentWithoutEmail = user?.role === "admin";
 
   useEffect(() => {
     let alive = true;
@@ -497,18 +494,18 @@ export function ComposeModal({
   const routes = resp?.routes ?? [];
   const missing = resp?.draft?.missing_fields ?? [];
   const reasonValid = decisionReason.trim().length >= 3;
-  const canMarkSent =
-    !!resp && canMarkSentWithoutEmail && routes.length === 0 && reasonValid && !sending;
+  const canQueueLegal =
+    !!resp && (!resp.configured || routes.length === 0) && reasonValid && !sending;
   const canSend =
     !!resp?.configured && !!targetId && !!subject.trim() && !!body.trim() && reasonValid && !sending;
 
   async function submit() {
-    if (canMarkSent) {
+    if (canQueueLegal) {
       setSending(true);
       setError("");
       try {
-        await markTakedownSentWithoutEmail(caseId, decisionReason.trim());
-        await onSent();
+        const result = await approveTakedown(caseId, decisionReason.trim());
+        await onSent(result.status === "automatic" ? "sent" : "legal_queue");
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
         setSending(false);
@@ -525,7 +522,7 @@ export function ComposeModal({
         body: body.trim(),
         decision_reason: decisionReason.trim(),
       });
-      await onSent();
+      await onSent("sent");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setSending(false);
@@ -576,12 +573,8 @@ export function ComposeModal({
 
               {routes.length === 0 ? (
                 <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-xs text-stone-600">
-                  No takedown intake route is configured for this platform yet.
-                  {canMarkSentWithoutEmail && (
-                    <span className="block mt-1 text-stone-500">
-                      As an admin, you can still mark this finding as sent without sending email.
-                    </span>
-                  )}
+                  This platform requires a manual takedown route. Continue to add
+                  the listing to the legal queue for review and submission.
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -690,10 +683,10 @@ export function ComposeModal({
             </button>
             <button
               onClick={submit}
-              disabled={!(canSend || canMarkSent)}
+              disabled={!(canSend || canQueueLegal)}
               className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {sending ? (canMarkSent ? "Marking…" : "Sending…") : canMarkSent ? "Mark sent" : "Send takedown"}
+              {sending ? "Processing…" : canQueueLegal ? "Add to legal queue" : "Send takedown"}
             </button>
           </div>
         </div>

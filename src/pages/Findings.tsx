@@ -54,7 +54,8 @@ function parseFilters(params: URLSearchParams): InboxFilters {
       status === "all"
         ? null
         : status === "preparing" || status === "pending" || status === "review" ||
-            status === "takedown_sent" || status === "enforced" || status === "dismissed"
+            status === "takedown_pending" || status === "takedown_sent" ||
+            status === "enforced" || status === "dismissed"
           ? status
           : status === null
             ? "pending"
@@ -453,7 +454,9 @@ export function MonitoringInboxView() {
 
   const queueSummary = useMemo(() => {
     if (!facets) return "Loading…";
-    const count = facets.total;
+    const count = filters.status === "takedown_pending"
+      ? (facets.statuses.takedown_pending ?? 0)
+      : facets.total;
     const statusLabel =
       filters.status === "preparing"
         ? "preparing"
@@ -461,6 +464,8 @@ export function MonitoringInboxView() {
         ? "to triage"
         : filters.status === "review"
           ? "in review"
+        : filters.status === "takedown_pending"
+          ? "awaiting legal action"
         : filters.status === "takedown_sent"
           ? "with takedowns sent"
           : filters.status === "enforced"

@@ -35,6 +35,7 @@ const EMPTY_KPIS: DashboardGroups["kpis"] = {
   triaged: 0,
   acknowledged_infringement: 0,
   second_hand_market: 0,
+  legal_queue: 0,
   in_progress: 0,
   enforced_30d: 0,
   high_risk: 0,
@@ -186,6 +187,7 @@ function kpisForIp(ip: Ip): DashboardGroups["kpis"] {
     triaged: ip.triaged ?? 0,
     acknowledged_infringement: ip.acknowledged_infringement ?? 0,
     second_hand_market: ip.second_hand_market ?? 0,
+    legal_queue: ip.legal_queue ?? 0,
     in_progress: ip.in_progress ?? 0,
     enforced_30d: ip.enforced_30d ?? 0,
     high_risk: ip.high_risk ?? 0,
@@ -259,6 +261,7 @@ function KpiRow({ kpis, ipId }: { kpis: DashboardGroups["kpis"]; ipId: string | 
     { label: "Triaged", value: kpis.triaged ?? 0, to: null, accent: "text-indigo-700" },
     { label: "Takedowns", value: kpis.acknowledged_infringement ?? 0, to: null, accent: "text-blue-700" },
     { label: "Second hand", value: kpis.second_hand_market ?? 0, to: "/monitoring/tasks?status=dismissed&dismissal_reason=second_hand&show_dismissed=true", accent: "text-teal-700" },
+    { label: "Legal queue", value: kpis.legal_queue ?? 0, to: "/monitoring/tasks?status=takedown_pending", accent: "text-violet-700" },
     { label: "In progress", value: kpis.in_progress ?? 0, to: "/monitoring/tasks?status=takedown_sent", accent: "text-amber-700" },
     { label: "Enforced (30d)", value: kpis.enforced_30d ?? 0, to: "/monitoring/tasks?status=enforced", accent: "text-emerald-700" },
     { label: "High risk", value: kpis.high_risk ?? 0, to: "/monitoring/tasks", accent: "text-red-700" },
@@ -266,7 +269,7 @@ function KpiRow({ kpis, ipId }: { kpis: DashboardGroups["kpis"]; ipId: string | 
     { label: "Platforms monitored", value: kpis.platforms_monitored ?? 0, to: "/monitoring/settings" },
   ];
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-9 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-10 gap-3">
       {tiles.map((t) => (
         <KpiTile key={t.label} {...t} to={withIpFilter(t.to, ipId)} />
       ))}

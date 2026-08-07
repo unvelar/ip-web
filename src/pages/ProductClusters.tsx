@@ -21,7 +21,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   DEFAULT_PRODUCT_SEMANTIC_COLORS,
   DEFAULT_PRODUCT_SEMANTIC_TAXONOMY,
-  autoSendTakedownBatch,
+  approveTakedownBatch,
   calculatePersistedProductGroupVisualEvidence,
   confirmPersistedProductGroup,
   correctProductSemanticGroupMember,
@@ -182,7 +182,7 @@ export default function ProductClusters() {
     groupId: string;
     taskId: string;
   }>();
-  const { actingTenantId, user } = useAuth();
+  const { actingTenantId } = useAuth();
   const {
     activeIpId: selectedIpId,
     activeIp,
@@ -234,7 +234,6 @@ export default function ProductClusters() {
   const taskRouteScrollPosition = useRef<{ main: number; window: number } | null>(null);
   const taskRouteRef = useRef({ linkedTaskId, search: location.search });
   taskRouteRef.current = { linkedTaskId, search: location.search };
-  const canMarkSentWithoutEmail = user?.role === "admin";
   const rememberTaskRouteScrollPosition = useCallback(() => {
     taskRouteScrollPosition.current = {
       main: document.querySelector("main")?.scrollTop ?? 0,
@@ -770,9 +769,7 @@ export default function ProductClusters() {
       if (action === "send") {
         if (!isDecisionState(state)) skip("already sent or closed");
         else if (!finding.case_id) skip("still preparing");
-        else if (finding.signer_ready === false && !canMarkSentWithoutEmail) {
-          skip("missing signer information");
-        } else eligible.push(finding);
+        else eligible.push(finding);
       } else if (action === "review") {
         if (state !== "pending") skip("not in triage");
         else if (!finding.case_id) skip("still preparing");
@@ -813,17 +810,24 @@ export default function ProductClusters() {
       setActiveBatch(null);
       closeTask();
       try {
-        const result = await autoSendTakedownBatch(
+        const result = await approveTakedownBatch(
           eligible.map((finding) => finding.case_id as string),
           decisionReason ?? "",
         );
         for (const item of result.skipped) bump(item.reason);
         const queued = result.queued_case_ids.length;
+        const legalQueue = result.legal_queue ?? [];
+        const legalQueueCounts: Record<string, number> = {};
+        for (const item of legalQueue) {
+          legalQueueCounts[item.reason] = (legalQueueCounts[item.reason] ?? 0) + 1;
+        }
+        const handled = queued + legalQueue.length;
         ok = queued;
         failed = result.failed.length;
         const sendSummary = summarizeTakedownBatch(
           queued,
           result.email_count,
+          legalQueueCounts,
           skipCounts,
           failed,
         );
@@ -833,7 +837,7 @@ export default function ProductClusters() {
         setBatchResult(scopeLabel
           ? { ...sendSummary, title: `${scopeLabel}: ${sendSummary.title}` }
           : sendSummary);
-        if (queued === 0) {
+        if (handled === 0) {
           setActiveBatch(completedBatch);
         } else {
           setRefreshVersion((version) => version + 1);
@@ -1299,7 +1303,7 @@ export default function ProductClusters() {
           result={batchResult}
           profileIpId={selectedIpId}
           onDismiss={() => setBatchResult(null)}
-          className="mt-5"
+          className="fixed inset-x-4 top-20 z-50 shadow-lg sm:left-auto sm:right-6 sm:max-w-lg"
         />
       )}
 

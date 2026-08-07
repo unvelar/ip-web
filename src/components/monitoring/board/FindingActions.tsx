@@ -2,18 +2,19 @@ import { useState, type ReactNode } from "react";
 import { ComposeModal, ConfirmSendModal } from "../../TakedownPanel";
 import {
   addIpLicense,
-  autoSendTakedown,
+  approveTakedown,
   markIpFindingNeedsReview,
   markIpFindingEnforced,
-  markTakedownSentWithoutEmail,
+  markTakedownsSubmitted,
+  openIpFindingTakedownPacket,
   reenrichIpFinding,
   reopenIpFinding,
   type CaseReviewStatus,
   type IpReviewFinding,
   type MonitoringReviewOutcome,
 } from "../../../api";
-import { useAuth } from "../../../context/AuthContext";
 import { ButtonWithShortcut } from "./ButtonWithShortcut";
+import { legalQueueReasonLabel } from "./utils";
 
 export type FindingUpdateOptions = {
   completed?: boolean;
@@ -63,47 +64,24 @@ export function FindingActions({
   const [confirming, setConfirming] = useState(false);
   const [directSending, setDirectSending] = useState(false);
   const [sendErr, setSendErr] = useState("");
-  const { user } = useAuth();
-  const canMarkSentWithoutEmail = user?.role === "admin";
   const sellerLicensed = !!f.licensed_seller || f.dismissal_reason === "licensed";
 
-  // Quick path from the confirm dialog: send the pre-filled draft for the
-  // suggested route without opening the editor. Falls back to the editor when
-  // there's no route/draft to auto-send.
+  // Resolve the reviewer decision through the automatic/manual routing API.
+  // Automatic routes submit immediately; everything else enters the legal queue.
   async function sendDirect(decisionReason: string) {
     if (!f.case_id) return;
     setDirectSending(true);
     setSendErr("");
     try {
-      const r = await autoSendTakedown(f.case_id, decisionReason);
-      if (r.status === "unconfigured") {
-        if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(f.case_id, decisionReason);
-          setConfirming(false);
-          onTakedownSent();
-          onActionComplete();
-          onUpdated({ completed: true });
-          return;
-        }
-        setSendErr("Email isn't configured yet — contact your administrator.");
-        return;
-      }
-      if (r.status === "needs_compose") {
-        if (canMarkSentWithoutEmail) {
-          await markTakedownSentWithoutEmail(f.case_id, decisionReason);
-          setConfirming(false);
-          onTakedownSent();
-          onActionComplete();
-          onUpdated({ completed: true });
-          return;
-        }
-        setComposeDecisionReason(decisionReason);
-        setConfirming(false);
-        setComposing(true);
-        return;
+      const result = await approveTakedown(f.case_id, decisionReason);
+      if (result.status === "automatic") {
+        onTakedownSent();
+      } else {
+        window.alert(
+          `Added to the legal queue. ${legalQueueReasonLabel(result.reason)}.`,
+        );
       }
       setConfirming(false);
-      onTakedownSent();
       onActionComplete();
       onUpdated({ completed: true });
     } catch (e) {
@@ -352,6 +330,7 @@ export function FindingActions({
 
   let buttons: ReactNode = null;
   let utilityButtons: ReactNode = null;
+  let stateNote: ReactNode = null;
 
   if (sellerLicensed && !isDismissed) {
     buttons = (
@@ -367,12 +346,8 @@ export function FindingActions({
       </span>
     );
   } else if (state === "pending") {
-    // Triage decision: send the first takedown (auto-advances to takedown_sent)
-    // or choose a non-enforcement outcome. License is the fast-path for a
-    // recognised seller. The send is blocked (with a tooltip) until the IP has
-    // a takedown signer (signer_ready) — set it on the IP's page. Admins can
-    // still move the state forward without sending email.
-    const signerReady = f.signer_ready ?? true;
+    // Triage decision: automatic routes advance to takedown_sent; all other
+    // routes enter takedown_pending for legal review and manual submission.
     buttons = (
       <>
         {falsePositiveBtn}
@@ -381,16 +356,12 @@ export function FindingActions({
         {needsReviewBtn}
         <button
           type="button"
-          disabled={!f.case_id || (!signerReady && !canMarkSentWithoutEmail)}
+          disabled={!f.case_id}
           title={actionTitle(
             "send_takedown",
             !f.case_id
               ? "Still preparing this case…"
-              : !signerReady && !canMarkSentWithoutEmail
-                ? "Add this IP's takedown signer (on the IP's page) before sending"
-                : !signerReady
-                  ? "Admin override: mark sent without sending email"
-                  : undefined,
+              : "Submit automatically when possible; otherwise add to the legal queue",
           )}
           onClick={() => {
             setSendErr("");
@@ -398,12 +369,12 @@ export function FindingActions({
             setConfirming(true);
           }}
           className={actionClass("send_takedown")}
-          aria-label={actionAriaLabel("send_takedown", "Send takedown")}
+          aria-label={actionAriaLabel("send_takedown", "Takedown")}
           aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
           data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
         >
           <ButtonWithShortcut
-            label="Send takedown"
+            label="Takedown"
             shortcut="T"
             dark={recommendedAction === "send_takedown"}
           />
@@ -412,7 +383,6 @@ export function FindingActions({
     );
     utilityButtons = licenseBtn;
   } else if (state === "review") {
-    const signerReady = f.signer_ready ?? true;
     buttons = (
       <>
         {falsePositiveBtn}
@@ -420,16 +390,12 @@ export function FindingActions({
         {dontPursueBtn}
         <button
           type="button"
-          disabled={!f.case_id || (!signerReady && !canMarkSentWithoutEmail)}
+          disabled={!f.case_id}
           title={actionTitle(
             "send_takedown",
             !f.case_id
               ? "Still preparing this case..."
-              : !signerReady && !canMarkSentWithoutEmail
-                ? "Add this IP's takedown signer (on the IP's page) before sending"
-                : !signerReady
-                  ? "Admin override: mark sent without sending email"
-                  : undefined,
+              : "Submit automatically when possible; otherwise add to the legal queue",
           )}
           onClick={() => {
             setSendErr("");
@@ -437,12 +403,12 @@ export function FindingActions({
             setConfirming(true);
           }}
           className={actionClass("send_takedown")}
-          aria-label={actionAriaLabel("send_takedown", "Send takedown")}
+          aria-label={actionAriaLabel("send_takedown", "Takedown")}
           aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
           data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
         >
           <ButtonWithShortcut
-            label="Send takedown"
+            label="Takedown"
             shortcut="T"
             dark={recommendedAction === "send_takedown"}
           />
@@ -454,6 +420,58 @@ export function FindingActions({
         {licenseBtn}
         {reopenBtn("Move to triage")}
       </div>
+    );
+  } else if (state === "takedown_pending") {
+    buttons = (
+      <>
+        {falsePositiveBtn}
+        {secondHandBtn}
+        {dontPursueBtn}
+        <button
+          type="button"
+          disabled={!f.case_id || busy === "submit"}
+          onClick={() => {
+            if (
+              !f.case_id ||
+              !window.confirm("Confirm that this takedown was submitted through the marketplace's manual route.")
+            ) return;
+            void run(
+              "submit",
+              async () => {
+                const result = await markTakedownsSubmitted([f.case_id as string]);
+                if (!result.submitted_case_ids.includes(f.case_id as string)) {
+                  throw new Error(result.skipped[0]?.reason ?? "The case is no longer awaiting legal action.");
+                }
+                onTakedownSent();
+              },
+              { completeCurrent: true },
+            );
+          }}
+          className={emerald}
+        >
+          {busy === "submit" ? "Working…" : "Mark submitted"}
+        </button>
+      </>
+    );
+    utilityButtons = (
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
+        {ipId && (
+          <button
+            type="button"
+            disabled={busy === "packet"}
+            onClick={() => run("packet", () => openIpFindingTakedownPacket(ipId, f.result_id))}
+            className={ghostStone}
+          >
+            {busy === "packet" ? "Opening…" : "Open takedown packet"}
+          </button>
+        )}
+        {reopenBtn("Move to triage")}
+      </div>
+    );
+    stateNote = (
+      <p className="col-span-2 mb-1 w-full text-xs text-violet-700">
+        Awaiting legal action: {legalQueueReasonLabel(f.takedown_pending_reason)}.
+      </p>
     );
   } else if (state === "takedown_sent") {
     buttons = (
@@ -497,6 +515,7 @@ export function FindingActions({
       }
     >
       <div className={compact ? "finding-action-buttons grid grid-cols-2 gap-1.5" : "finding-action-buttons flex min-w-0 max-w-full flex-wrap items-center gap-1.5"}>
+        {stateNote}
         {buttons}
         {!compact && utilityButtons && (
           <div className="ml-1 flex min-w-0 flex-wrap items-center gap-1.5 border-l border-stone-200 pl-2">
@@ -524,7 +543,6 @@ export function FindingActions({
           platform={f.domain}
           sending={directSending}
           error={sendErr}
-          noEmailMode={canMarkSentWithoutEmail && f.signer_ready === false}
           onSend={sendDirect}
           onEdit={(decisionReason) => {
             setComposeDecisionReason(decisionReason);
@@ -547,12 +565,16 @@ export function FindingActions({
             setComposing(false);
             setComposeDecisionReason("");
           }}
-          onSent={() => {
+          onSent={(outcome) => {
             setComposing(false);
             setComposeDecisionReason("");
-            onTakedownSent();
+            if (outcome === "sent") {
+              onTakedownSent();
+            } else {
+              window.alert("Added to the legal queue for manual review and submission.");
+            }
             onActionComplete();
-            onUpdated({ completed: true }); // case flips to takedown_sent; board refresh re-renders the row
+            onUpdated({ completed: true }); // case leaves triage for sent or the legal queue
           }}
         />
       )}

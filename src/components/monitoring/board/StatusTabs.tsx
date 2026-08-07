@@ -3,6 +3,7 @@ const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: "preparing", label: "Preparing" },
   { key: "pending", label: "To triage" },
   { key: "review", label: "Review" },
+  { key: "takedown_pending", label: "Legal queue" },
   { key: "takedown_sent", label: "Takedown sent" },
   { key: "enforced", label: "Enforced" },
   { key: "dismissed", label: "Dismissed" },
@@ -63,6 +64,7 @@ export function StatusTabs({
     (counts.preparing ?? 0) +
     (counts.pending ?? 0) +
     (counts.review ?? 0) +
+    (counts.takedown_pending ?? 0) +
     (counts.takedown_sent ?? 0) +
     (counts.enforced ?? 0);
   const tab = (key: string | null, label: string, n: number) => {

@@ -105,6 +105,8 @@ export function statusBadge(s: CaseReviewStatus | null | undefined) {
   switch (status) {
     case "review":
       return { label: "Review", cls: "bg-sky-100 text-sky-700" };
+    case "takedown_pending":
+      return { label: "Awaiting legal action", cls: "bg-violet-100 text-violet-700" };
     case "takedown_sent":
       return { label: "Takedown sent", cls: "bg-amber-100 text-amber-700" };
     case "enforced":
@@ -114,6 +116,27 @@ export function statusBadge(s: CaseReviewStatus | null | undefined) {
     case "pending":
     default:
       return { label: "To triage", cls: "bg-stone-100 text-stone-700" };
+  }
+}
+
+export function legalQueueReasonLabel(reason: string | null | undefined) {
+  switch (reason) {
+    case "legacy_unfulfilled_decision":
+      return "Approved before the legal queue was available; submission requirements need review";
+    case "manual_submission_required":
+      return "Marketplace form or another manual submission route required";
+    case "missing_required_information":
+      return "Required notice information is missing";
+    case "email_not_configured":
+      return "Automatic email delivery is not configured";
+    case "missing_listing_url":
+      return "Listing URL is missing";
+    case "automatic_queue_failed":
+      return "Automatic delivery could not be queued";
+    case "automatic_delivery_failed":
+      return "Automatic delivery failed";
+    default:
+      return reason ? reason.replace(/_/g, " ") : "Manual legal submission required";
   }
 }
 

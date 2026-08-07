@@ -2,6 +2,7 @@ import { CANDIDATE_OUTCOME_LABELS, type ResortTarget } from "./constants";
 
 export type BatchAction =
   | "send"
+  | "submit"
   | "false_positive"
   | "do_not_pursue"
   | "second_hand"
@@ -12,7 +13,8 @@ export const BATCH_META: Record<
   BatchAction,
   { label: string; verb: string; gerund: string }
 > = {
-  send: { label: "Send takedowns", verb: "Sent", gerund: "Send takedowns for" },
+  send: { label: "Takedown", verb: "Processed", gerund: "Process takedown for" },
+  submit: { label: "Mark submitted", verb: "Marked submitted", gerund: "Mark submitted" },
   false_positive: { label: "False positive", verb: "Cleared", gerund: "Mark false positive for" },
   do_not_pursue: { label: "Don't pursue", verb: "Cleared", gerund: "Don't pursue" },
   second_hand: { label: "Second hand / allowed", verb: "Marked second hand", gerund: "Mark second hand / allowed for" },
@@ -74,25 +76,26 @@ function listingCount(count: number) {
 export function summarizeTakedownBatch(
   queued: number,
   emailCount: number,
+  legalQueue: Record<string, number>,
   skipped: Record<string, number>,
   failed: number,
 ): TakedownBatchSummary {
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
-  const unqueued = skipTotal + failed;
-  const missingProfile =
-    (skipped["missing required information"] ?? 0) +
-    (skipped["missing signer information"] ?? 0);
-  const manualCompose = skipped["needs manual compose"] ?? 0;
-  const missingEmail = skipped["email not configured"] ?? 0;
-  const missingUrl = skipped["missing listing URL"] ?? 0;
+  const legalQueueTotal = Object.values(legalQueue).reduce((a, b) => a + b, 0);
+  const handled = queued + legalQueueTotal;
+  const unhandled = skipTotal + failed;
+  const recoveredLegacy = legalQueue.legacy_unfulfilled_decision ?? 0;
+  const missingProfile = legalQueue.missing_required_information ?? 0;
+  const manualSubmission = legalQueue.manual_submission_required ?? 0;
+  const missingEmail = legalQueue.email_not_configured ?? 0;
+  const missingUrl = legalQueue.missing_listing_url ?? 0;
+  const automaticQueueFailed = legalQueue.automatic_queue_failed ?? 0;
+  const automaticDeliveryFailed = legalQueue.automatic_delivery_failed ?? 0;
+  const legacyManualCompose = skipped["needs manual compose"] ?? 0;
   const alreadyHandled = skipped["already sent or closed"] ?? 0;
   const stillPreparing = skipped["still preparing"] ?? 0;
   const describedReasons = new Set([
-    "missing required information",
-    "missing signer information",
     "needs manual compose",
-    "email not configured",
-    "missing listing URL",
     "already sent or closed",
     "still preparing",
   ]);
@@ -103,25 +106,60 @@ export function summarizeTakedownBatch(
       `${emailCount} consolidated email${emailCount === 1 ? " is" : "s are"} queued for background delivery.`,
     );
   }
-  if (missingProfile > 0) {
+  if (legalQueueTotal > 0) {
     details.push(
-      `${listingCount(missingProfile)} ${missingProfile === 1 ? "is" : "are"} missing required notice information. Complete the IP’s takedown profile, then retry.`,
+      `${listingCount(legalQueueTotal)} ${legalQueueTotal === 1 ? "was" : "were"} added to the legal queue for manual review and submission.`,
     );
   }
-  if (manualCompose > 0) {
+  if (recoveredLegacy > 0) {
     details.push(
-      `${listingCount(manualCompose)} ${manualCompose === 1 ? "needs a manually composed takedown because its marketplace has" : "need manually composed takedowns because their marketplaces have"} no automatic email route.`,
+      `${listingCount(recoveredLegacy)} came from an earlier approved takedown that had no completed delivery route.`,
+    );
+  }
+  if (missingProfile > 0) {
+    details.push(
+      `${listingCount(missingProfile)} ${missingProfile === 1 ? "is" : "are"} missing required notice information.`,
+    );
+  }
+  if (manualSubmission > 0) {
+    details.push(
+      `${listingCount(manualSubmission)} ${manualSubmission === 1 ? "requires" : "require"} a marketplace form or another manual submission route.`,
     );
   }
   if (missingEmail > 0) {
     details.push(
-      `${listingCount(missingEmail)} ${missingEmail === 1 ? "has" : "have"} no takedown email destination configured.`,
+      `${listingCount(missingEmail)} could not be sent automatically because email delivery is not configured.`,
     );
   }
   if (missingUrl > 0) {
     details.push(
-      `${listingCount(missingUrl)} ${missingUrl === 1 ? "has" : "have"} no usable listing URL.`,
+      `${listingCount(missingUrl)} ${missingUrl === 1 ? "has" : "have"} no usable listing URL and needs legal follow-up.`,
     );
+  }
+  if (automaticQueueFailed > 0) {
+    details.push(
+      `${listingCount(automaticQueueFailed)} could not enter automatic delivery and was preserved in the legal queue.`,
+    );
+  }
+  if (automaticDeliveryFailed > 0) {
+    details.push(
+      `${listingCount(automaticDeliveryFailed)} failed during automatic delivery and was preserved in the legal queue.`,
+    );
+  }
+  for (const [reason, count] of Object.entries(legalQueue)) {
+    if (
+      count <= 0 ||
+      [
+        "legacy_unfulfilled_decision",
+        "missing_required_information",
+        "manual_submission_required",
+        "email_not_configured",
+        "missing_listing_url",
+        "automatic_queue_failed",
+        "automatic_delivery_failed",
+      ].includes(reason)
+    ) continue;
+    details.push(`${listingCount(count)} entered the legal queue: ${reason}.`);
   }
   if (alreadyHandled > 0) {
     details.push(
@@ -133,6 +171,11 @@ export function summarizeTakedownBatch(
       `${listingCount(stillPreparing)} ${stillPreparing === 1 ? "is" : "are"} still being prepared. Try again when processing finishes.`,
     );
   }
+  if (legacyManualCompose > 0) {
+    details.push(
+      `${listingCount(legacyManualCompose)} requires a manual marketplace route and kept its current status.`,
+    );
+  }
   for (const [reason, count] of Object.entries(skipped)) {
     if (count <= 0 || describedReasons.has(reason)) continue;
     details.push(`${listingCount(count)} skipped: ${reason}.`);
@@ -142,22 +185,24 @@ export function summarizeTakedownBatch(
       `${listingCount(failed)} could not be queued because the request failed.`,
     );
   }
-  if (unqueued > 0) {
+  if (unhandled > 0) {
     details.push(
-      queued === 0
-        ? unqueued === 1
-          ? "The listing kept its current status because no takedown request was created, so it remains in this view."
-          : `All ${listingCount(unqueued)} kept their current status because no takedown request was created, so they remain in this view.`
-        : `${listingCount(unqueued)} ${unqueued === 1 ? "was" : "were"} not queued and kept ${unqueued === 1 ? "its" : "their"} current status so the issues can be fixed and retried.`,
+      handled === 0
+        ? `${listingCount(unhandled)} kept ${unhandled === 1 ? "its" : "their"} current status because the takedown could not be processed.`
+        : `${listingCount(unhandled)} ${unhandled === 1 ? "was" : "were"} not processed and kept ${unhandled === 1 ? "its" : "their"} current status.`,
     );
   }
 
   return {
     kind: "takedown_batch",
-    tone: unqueued > 0 ? "warning" : "success",
-    title: queued === 0
-      ? "No takedown emails were queued"
-      : `Queued takedowns for ${listingCount(queued)}`,
+    tone: unhandled > 0 ? "warning" : "success",
+    title: handled === 0
+      ? "No takedowns were processed"
+      : queued > 0 && legalQueueTotal > 0
+        ? `Processed takedown for ${listingCount(handled)}`
+        : legalQueueTotal > 0
+          ? `Added ${listingCount(legalQueueTotal)} to the legal queue`
+          : `Queued takedown for ${listingCount(queued)}`,
     details,
     needsProfile: missingProfile > 0,
   };

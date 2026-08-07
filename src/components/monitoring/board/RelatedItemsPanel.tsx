@@ -24,6 +24,8 @@ function reasonLabel(reason: MonitoringRelatedReason) {
       return "image overlap";
     case "prior_takedown":
       return "prior takedown";
+    case "prior_takedown_pending":
+      return "awaiting legal action";
     case "prior_enforced":
       return "enforced";
     case "prior_dismissal":
@@ -48,6 +50,8 @@ function outcomeLabel(key: string) {
       return "open";
     case "takedown_sent":
       return "takedown sent";
+    case "takedown_pending":
+      return "legal queue";
     case "enforced":
       return "enforced";
     case "licensed":

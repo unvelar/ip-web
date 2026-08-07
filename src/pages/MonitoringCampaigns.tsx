@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import {
-  autoSendTakedownBatch,
+  approveTakedownBatch,
   dismissMonitoringCampaign,
   dismissIpFinding,
   discoverMonitoringCampaigns,
@@ -29,7 +29,6 @@ import {
   type MonitoringCampaignSummary,
 } from "../api";
 import { useActiveIp } from "../context/ActiveIpContext";
-import { useAuth } from "../context/AuthContext";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
 import { BatchResultNotice } from "../components/monitoring/board/BatchResultNotice";
@@ -133,6 +132,11 @@ function CampaignListItem({
             <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
               {campaign.open_count} open
             </span>
+            {campaign.takedown_pending_count > 0 && (
+              <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
+                {campaign.takedown_pending_count} legal
+              </span>
+            )}
             {campaign.platform_count > 0 && (
               <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
                 {campaign.platform_count} platforms
@@ -311,8 +315,6 @@ function CampaignDetailPanel({
   onDismissed: (campaignId: string) => void;
 }) {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const canMarkSentWithoutEmail = user?.role === "admin";
   const [current, setCurrent] = useState(campaign);
   const previousCampaignId = useRef(campaign.id);
   const [campaignBatchActive, setCampaignBatchActive] = useState(true);
@@ -404,7 +406,6 @@ function CampaignDetailPanel({
       if (action === "send") {
         if (!isDecisionState(state)) skip("already sent or closed");
         else if (!finding.case_id) skip("still preparing");
-        else if (finding.signer_ready === false && !canMarkSentWithoutEmail) skip("missing signer information");
         else eligible.push(finding);
       } else if (action === "review") {
         if (state !== "pending") skip("not in triage");
@@ -443,21 +444,28 @@ function CampaignDetailPanel({
       setExtraBatchFindings([]);
       setActiveMemberId(null);
       try {
-        const result = await autoSendTakedownBatch(
+        const result = await approveTakedownBatch(
           eligible.map((finding) => finding.case_id as string),
           decisionReason ?? "",
         );
         for (const item of result.skipped) bump(item.reason);
         const queued = result.queued_case_ids.length;
+        const legalQueue = result.legal_queue ?? [];
+        const legalQueueCounts: Record<string, number> = {};
+        for (const item of legalQueue) {
+          legalQueueCounts[item.reason] = (legalQueueCounts[item.reason] ?? 0) + 1;
+        }
+        const handled = queued + legalQueue.length;
         ok = queued;
         failed = result.failed.length;
         setBatchResult(summarizeTakedownBatch(
           queued,
           result.email_count,
+          legalQueueCounts,
           skipCounts,
           failed,
         ));
-        if (queued === 0) {
+        if (handled === 0) {
           setCampaignBatchActive(previousCampaignBatchActive);
           setExtraBatchFindings(previousExtraBatchFindings);
         } else {
@@ -592,6 +600,16 @@ function CampaignDetailPanel({
         included_count: members.filter((member) => member.campaign_state === "included").length,
         excluded_count: members.filter((member) => member.campaign_state === "excluded").length,
         open_count: members.filter(isActionableMember).length,
+        takedown_pending_count: members.filter(
+          (member) => !member.dismissed_at && member.review_status === "takedown_pending",
+        ).length,
+        takedown_sent_count: members.filter(
+          (member) => !member.dismissed_at && member.review_status === "takedown_sent",
+        ).length,
+        enforced_count: members.filter(
+          (member) => !member.dismissed_at && member.review_status === "enforced",
+        ).length,
+        dismissed_count: members.filter((member) => !!member.dismissed_at).length,
       };
     });
   }

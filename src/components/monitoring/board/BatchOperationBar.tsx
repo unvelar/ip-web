@@ -12,6 +12,8 @@ export function BatchOperationBar({
   resortTooltip,
   onClear,
   showResort = true,
+  showTakedown = true,
+  showMarkSubmitted = false,
   placement = "fixed",
   showShortcuts = true,
   disabled = false,
@@ -26,6 +28,8 @@ export function BatchOperationBar({
   resortTooltip?: string;
   onClear?: () => void;
   showResort?: boolean;
+  showTakedown?: boolean;
+  showMarkSubmitted?: boolean;
   placement?: "fixed" | "inline";
   showShortcuts?: boolean;
   disabled?: boolean;
@@ -71,15 +75,28 @@ export function BatchOperationBar({
               </span>
             ) : (
               <>
-                <button
-                  type="button"
-                  data-batch-action="send"
-                  onClick={() => onAction("send")}
-                  disabled={actionDisabled}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {shortcutLabel("Send takedowns", "T", true)}
-                </button>
+                {showTakedown && (
+                  <button
+                    type="button"
+                    data-batch-action="send"
+                    onClick={() => onAction("send")}
+                    disabled={actionDisabled}
+                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {shortcutLabel("Takedown", "T", true)}
+                  </button>
+                )}
+                {showMarkSubmitted && (
+                  <button
+                    type="button"
+                    data-batch-action="submit"
+                    onClick={() => onAction("submit")}
+                    disabled={actionDisabled}
+                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-600 text-white hover:bg-amber-500 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Mark submitted
+                  </button>
+                )}
                 <button
                   type="button"
                   data-batch-action="enforce"

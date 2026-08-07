@@ -5,13 +5,13 @@ import {
   excludePersistedProductGroupMember,
   markIpFindingNeedsReview,
   markIpFindingEnforced,
-  markTakedownSentWithoutEmail,
+  markTakedownsSubmitted,
   resortMonitoringFindings,
   reopenIpFinding,
   restorePersistedProductGroupMember,
   undismissIpFinding,
-  autoSendTakedown,
-  autoSendTakedownBatch,
+  approveTakedown,
+  approveTakedownBatch,
   type CaseReviewStatus,
   type IpReviewFinding,
   type MonitoringCandidateOutcome,
@@ -23,7 +23,6 @@ import {
   type MonitoringStatusFilter,
   type ProductGroupCorrectionReason,
 } from "../../api";
-import { useAuth } from "../../context/AuthContext";
 import { ConfirmSendModal } from "../TakedownPanel";
 import { BatchConfirmModal } from "./board/batch";
 import { BatchOperationBar } from "./board/BatchOperationBar";
@@ -105,7 +104,11 @@ function isBatchSelectableFinding(f: IpReviewFinding) {
   const state: CaseReviewStatus = f.dismissed_at
     ? "dismissed"
     : (f.review_status ?? "pending");
-  return isDecisionState(state) && f.ready_for_review && !f.licensed_seller;
+  return (
+    (isDecisionState(state) || state === "takedown_pending") &&
+    f.ready_for_review &&
+    !f.licensed_seller
+  );
 }
 
 /**
@@ -165,8 +168,6 @@ export function MonitoringBoard({
   seedBatchKey?: string | null;
 }) {
   const ipAware = showIpColumn ?? findings.some((f) => !!f.ip_id);
-  const { user } = useAuth();
-  const canMarkSentWithoutEmail = user?.role === "admin";
   // Optimistically-dismissed result_ids — the next refetch replaces these
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
@@ -234,6 +235,16 @@ export function MonitoringBoard({
               !f.licensed_seller &&
               (f.review_status ?? "pending") === "pending",
           )
+        : filters.status === "takedown_pending"
+          // Deployment guard: an older API ignores this new status value and
+          // returns all open rows. Never let those unrelated rows appear in the
+          // lawyer queue while backend and frontend versions overlap.
+          ? findings.filter(
+              (f) =>
+                !f.dismissed_at &&
+                !f.licensed_seller &&
+                f.review_status === "takedown_pending",
+            )
         : findings;
     return filters.product_group_id
       ? statusFiltered.filter((f) => !productCorrectedResultIds.has(f.result_id))
@@ -681,7 +692,10 @@ export function MonitoringBoard({
       if (action === "send") {
         if (!isDecisionState(state)) skip("already sent or closed");
         else if (!f.case_id) skip("still preparing");
-        else if (f.signer_ready === false && !canMarkSentWithoutEmail) skip("missing signer information");
+        else eligible.push(f);
+      } else if (action === "submit") {
+        if (state !== "takedown_pending") skip("not awaiting legal action");
+        else if (!f.case_id) skip("still preparing");
         else eligible.push(f);
       } else if (action === "review") {
         if (state !== "pending") skip("not in triage");
@@ -752,15 +766,23 @@ export function MonitoringBoard({
       }
       clearSelection();
       try {
-        const result = await autoSendTakedownBatch(
+        const result = await approveTakedownBatch(
           eligible.map((f) => f.case_id as string),
           decisionReason ?? "",
         );
         for (const item of result.skipped) bump(item.reason);
         const queued = result.queued_case_ids.length;
-        const queuedCaseIds = new Set(result.queued_case_ids);
+        const legalQueue = result.legal_queue ?? [];
+        const legalQueueCounts: Record<string, number> = {};
+        for (const item of legalQueue) {
+          legalQueueCounts[item.reason] = (legalQueueCounts[item.reason] ?? 0) + 1;
+        }
+        const handledCaseIds = new Set([
+          ...result.queued_case_ids,
+          ...legalQueue.map((item) => item.case_id),
+        ]);
         const unqueuedFindings = originalSelection.filter(
-          (finding) => !finding.case_id || !queuedCaseIds.has(finding.case_id),
+          (finding) => !finding.case_id || !handledCaseIds.has(finding.case_id),
         );
         for (const finding of unqueuedFindings) {
           setResultCompleting(finding.result_id, false);
@@ -771,10 +793,11 @@ export function MonitoringBoard({
         setBatchResult(summarizeTakedownBatch(
           queued,
           result.email_count,
+          legalQueueCounts,
           skipCounts,
           failed,
         ));
-        if (queued > 0) onRefresh();
+        if (handledCaseIds.size > 0) onRefresh();
       } catch (error) {
         for (const finding of eligible) {
           setResultCompleting(finding.result_id, false);
@@ -783,6 +806,26 @@ export function MonitoringBoard({
         setBatchResult(
           `Nothing was queued. ${error instanceof Error ? error.message : "The request failed."}`,
         );
+      }
+      return;
+    } else if (action === "submit") {
+      setBatchProgress({ done: 0, total: eligible.length });
+      try {
+        const result = await markTakedownsSubmitted(
+          eligible.map((finding) => finding.case_id as string),
+        );
+        for (const item of result.skipped) bump(item.reason);
+        ok = result.submitted_case_ids.length;
+        setBatchProgress({ done: eligible.length, total: eligible.length });
+        clearSelection();
+        setBatchResult(summarizeBatch(action, ok, skipCounts, 0));
+        if (ok > 0) onRefresh();
+      } catch (error) {
+        setBatchResult(
+          `Nothing was marked submitted. ${error instanceof Error ? error.message : "The request failed."}`,
+        );
+      } finally {
+        setBatchProgress(null);
       }
       return;
     } else {
@@ -857,25 +900,25 @@ export function MonitoringBoard({
     setResultCompleting(targetFinding.result_id, true);
     advanceAfterAction(targetFinding.result_id);
     try {
-      const result = await autoSendTakedown(targetCaseId, decisionReason);
-      if (result.status !== "sent") {
-        if (!canMarkSentWithoutEmail) {
-          throw new Error(
-            result.status === "needs_compose"
-              ? "This takedown needs manual compose. Open the finding to edit it."
-              : "Email is not configured.",
-          );
-        }
-        await markTakedownSentWithoutEmail(targetCaseId, decisionReason);
+      const result = await approveTakedown(targetCaseId, decisionReason);
+      if (result.status === "automatic") {
+        rememberTakedownAction(targetFinding);
+      } else {
+        setBatchResult(summarizeTakedownBatch(
+          0,
+          0,
+          { [result.reason]: 1 },
+          {},
+          0,
+        ));
       }
       setShortcutSendFinding(null);
-      rememberTakedownAction(targetFinding);
       onRefresh(targetFinding.result_id);
     } catch (error) {
       setResultCompleting(targetFinding.result_id, false);
       setActiveFinding(targetFinding.result_id);
       setShortcutSendError(
-        error instanceof Error ? error.message : "Failed to send takedown",
+        error instanceof Error ? error.message : "Failed to process takedown",
       );
     } finally {
       setShortcutSending(false);
@@ -987,6 +1030,13 @@ export function MonitoringBoard({
     () => selectedFindingSummary(selectedActionFindings),
     [selectedActionFindings],
   );
+  const selectedHasTakedownDecision = selectedActionFindings.some((finding) => {
+    const state = finding.dismissed_at ? "dismissed" : (finding.review_status ?? "pending");
+    return isDecisionState(state);
+  });
+  const selectedHasLegalQueue = selectedActionFindings.some(
+    (finding) => !finding.dismissed_at && finding.review_status === "takedown_pending",
+  );
   const resortSelectedTooltip = filters.candidate_outcome
     ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
     : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
@@ -1006,6 +1056,8 @@ export function MonitoringBoard({
       resortDisabled={!filters.candidate_outcome}
       resortTooltip={resortSelectedTooltip}
       onClear={clearSelection}
+      showTakedown={selectedHasTakedownDecision}
+      showMarkSubmitted={selectedHasLegalQueue}
     />
   );
 
@@ -1358,9 +1410,6 @@ export function MonitoringBoard({
           platform={shortcutSendFinding.domain}
           sending={shortcutSending}
           error={shortcutSendError}
-          noEmailMode={
-            canMarkSentWithoutEmail && shortcutSendFinding.signer_ready === false
-          }
           onSend={(decisionReason) => {
             void confirmShortcutTakedown(decisionReason);
           }}

@@ -19,7 +19,7 @@ export function BatchResultNotice({
 }) {
   const summary = isTakedownSummary(result) ? result : null;
   const warning = summary?.tone === "warning" || (
-    typeof result === "string" && result.startsWith("Nothing was queued")
+    typeof result === "string" && result.startsWith("Nothing")
   );
 
   return (

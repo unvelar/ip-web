@@ -355,6 +355,7 @@ export interface PrimitiveResultsBlob {
 export type CaseReviewStatus =
   | "pending"
   | "review"
+  | "takedown_pending"
   | "takedown_sent"
   | "enforced"
   | "dismissed";
@@ -550,23 +551,68 @@ export interface BatchTakedownCaseResult {
   reason: string;
 }
 
+export type TakedownLegalQueueReason =
+  | "legacy_unfulfilled_decision"
+  | "manual_submission_required"
+  | "missing_required_information"
+  | "email_not_configured"
+  | "missing_listing_url"
+  | "automatic_queue_failed"
+  | "automatic_delivery_failed";
+
+export interface TakedownLegalQueueResult {
+  case_id: string;
+  reason: TakedownLegalQueueReason;
+}
+
 export interface BatchTakedownSendResponse {
   queued_case_ids: string[];
   email_count: number;
   requests: TakedownRequest[];
+  legal_queue?: TakedownLegalQueueResult[];
   skipped: BatchTakedownCaseResult[];
   failed: BatchTakedownCaseResult[];
 }
 
 /** Resolve and queue a selection as one API request. Compatible cases (same
  *  IP and intake route) share one notice containing all listing links. */
-export function autoSendTakedownBatch(caseIds: string[], decisionReason: string) {
+export function approveTakedownBatch(caseIds: string[], decisionReason: string) {
   return request<BatchTakedownSendResponse>("/api/takedowns/batch/send", {
     method: "POST",
     body: JSON.stringify({
       case_ids: Array.from(new Set(caseIds)),
       decision_reason: decisionReason.trim(),
     }),
+  });
+}
+
+/** Backward-compatible name for older callers while the UI moves from a
+ * send-only action to approval + automatic/manual routing. */
+export const autoSendTakedownBatch = approveTakedownBatch;
+
+export async function approveTakedown(caseId: string, decisionReason: string) {
+  const result = await approveTakedownBatch([caseId], decisionReason);
+  if (result.queued_case_ids.includes(caseId)) {
+    return {
+      status: "automatic" as const,
+      request: result.requests.find((request) => request.case_id === caseId) ?? result.requests[0] ?? null,
+    };
+  }
+  const legalQueueItem = (result.legal_queue ?? []).find((item) => item.case_id === caseId);
+  if (legalQueueItem) {
+    return { status: "legal_queue" as const, reason: legalQueueItem.reason };
+  }
+  const failure = [...result.failed, ...result.skipped].find((item) => item.case_id === caseId);
+  throw new Error(failure?.reason ?? "The takedown could not be processed.");
+}
+
+export function markTakedownsSubmitted(caseIds: string[]) {
+  return request<{
+    submitted_case_ids: string[];
+    skipped: BatchTakedownCaseResult[];
+  }>("/api/takedowns/batch/mark-submitted", {
+    method: "POST",
+    body: JSON.stringify({ case_ids: Array.from(new Set(caseIds)) }),
   });
 }
 
@@ -1381,7 +1427,11 @@ export interface IpReviewFinding {
   // Enforcement-pipeline status (from cases LEFT JOIN). null when the finding
   // hasn't graduated to a case yet — UI treats null as 'pending'.
   review_status: CaseReviewStatus | null;
+  takedown_pending_at: string | null;
+  takedown_pending_reason: TakedownLegalQueueReason | null;
   takedown_sent_at: string | null;
+  takedown_submission_method: "email" | "manual" | null;
+  takedown_submitted_by: string | null;
   enforced_at: string | null;
   // Round-3 dashboard metadata — all nullable (only populated when visible on
   // the listing page during enrichment). Typed for filter/sort/aggregation.
@@ -1443,8 +1493,8 @@ export interface IpReviewFinding {
   // render an IP chip. Absent on per-IP findings (the IP is implied).
   ip_id?: string;
   ip_name?: string | null;
-  /** True when the finding's IP has a complete takedown signer profile. The
-   *  board disables "Send takedown" until it's set. Tenant-wide board only. */
+  /** True when the finding's IP has a complete takedown signer profile.
+   *  Incomplete profiles route approved takedowns to the legal queue. */
   signer_ready?: boolean;
 }
 
@@ -1812,8 +1862,8 @@ export function undismissIpFinding(ipId: string, resultId: string) {
 }
 
 /** Monitoring finding state transitions (all require the finding to have a linked
- *  case). Triage can pause in review, move to takedown_sent on send, then enforced;
- *  reopen jumps any state back to pending. */
+ *  case). Triage can pause in review, wait in takedown_pending for legal handling,
+ *  move to takedown_sent on submission, then enforced. Reopen returns to pending. */
 export function markIpFindingNeedsReview(ipId: string, resultId: string) {
   return request<{ ok: boolean }>(
     `/api/ip/${ipId}/monitoring/findings/${resultId}/review`,
@@ -1884,7 +1934,7 @@ export type MonitoringSortMode =
 
 export type MonitoringPriorityBand = "high" | "med" | "low";
 export type MonitoringStatusFilter =
-  | "preparing" | "pending" | "review" | "takedown_sent" | "enforced" | "dismissed";
+  | "preparing" | "pending" | "review" | "takedown_pending" | "takedown_sent" | "enforced" | "dismissed";
 export type MonitoringDismissalReasonFilter =
   | "false_positive"
   | "do_not_pursue"
@@ -1922,6 +1972,7 @@ export type MonitoringRelatedReason =
   | "same_seller"
   | "same_product_image"
   | "image_only_unverified"
+  | "prior_takedown_pending"
   | "prior_takedown"
   | "prior_enforced"
   | "prior_dismissal"
@@ -2004,6 +2055,7 @@ export interface MonitoringCampaignSummary extends MonitoringCampaign {
   included_count: number;
   excluded_count: number;
   open_count: number;
+  takedown_pending_count: number;
   takedown_sent_count: number;
   enforced_count: number;
   dismissed_count: number;
@@ -2237,6 +2289,7 @@ export interface DashboardSummary {
     triaged: number;
     acknowledged_infringement: number;
     second_hand_market: number;
+    legal_queue: number;
     in_progress: number;
     enforced_30d: number;
     high_risk: number;
@@ -2293,6 +2346,7 @@ export interface DashboardGroups {
     triaged: number;
     acknowledged_infringement: number;
     second_hand_market: number;
+    legal_queue: number;
     in_progress: number;
     enforced_30d: number;
     high_risk: number;

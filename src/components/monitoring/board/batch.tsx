@@ -63,7 +63,9 @@ export function BatchConfirmModal({
                 <> from <span className="font-semibold text-stone-900">{scopeLabel}</span></>
               )}
               {action === "send"
-                ? ". One consolidated email containing all listing links will be queued in the background. Selections spanning multiple IPs or intake addresses are split into one email per compatible group."
+                ? ". Listings with an automatic route will be queued now; the rest will move to the legal queue for manual review and submission. Compatible automatic listings share one notice."
+                : action === "submit"
+                  ? ". Confirm that the takedown was submitted through the marketplace's manual route."
                 : "."}
             </p>
           ) : (
