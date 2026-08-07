@@ -181,14 +181,27 @@ function AppShellContent() {
     return pathname === to || pathname.startsWith(`${to}/`);
   }
 
-  const renderSidebar = (collapsed = false) => (
+  const renderSidebar = (collapsed = false, collapsible = false) => (
     <aside className="h-full flex flex-col bg-cream border-r border-stone-200/60">
       {/* Logo + brand */}
-      <div className={`flex items-center pt-5 pb-4 ${collapsed ? "justify-center px-2" : "px-5"}`}>
-        <Link to="/" className="flex min-w-0 items-center gap-2" title={collapsed ? "Unvelar" : undefined}>
-          <BrandMark className="h-7 w-7 shrink-0" />
-          {!collapsed && <span className="text-sm font-bold tracking-tight text-stone-900">Unvelar</span>}
-        </Link>
+      <div className={`flex h-16 items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>
+        {!collapsed && (
+          <Link to="/" className="flex min-w-0 items-center gap-2">
+            <BrandMark className="h-7 w-7 shrink-0" />
+            <span className="text-sm font-bold tracking-tight text-stone-900">Unvelar</span>
+          </Link>
+        )}
+        {collapsible && (
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+        )}
       </div>
 
       {/* Nav */}
@@ -327,17 +340,8 @@ function AppShellContent() {
 
       <div className="flex lg:h-full">
         {/* Desktop sidebar */}
-        <div className={`relative hidden lg:block lg:h-full lg:sticky lg:top-0 lg:shrink-0 transition-[width] duration-200 ${sidebarCollapsed ? "lg:w-16" : "lg:w-64"}`}>
-          {renderSidebar(sidebarCollapsed)}
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed((value) => !value)}
-            className="absolute right-0 top-5 z-10 flex h-7 w-7 translate-x-1/2 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-500 shadow-sm transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
-          </button>
+        <div className={`hidden lg:block lg:h-full lg:sticky lg:top-0 lg:shrink-0 transition-[width] duration-200 ${sidebarCollapsed ? "lg:w-16" : "lg:w-64"}`}>
+          {renderSidebar(sidebarCollapsed, true)}
         </div>
 
         {/* Off-canvas drawer (mobile) */}
