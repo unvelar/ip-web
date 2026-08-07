@@ -4321,7 +4321,7 @@ function ProductGroupCard({
                   batchProgress={batchProgress}
                   batchDisabled={batchDisabled}
                   previewLimit={4}
-                  gridClassName="grid-cols-2"
+                  gridClassName="grid-cols-1"
                   renderMember={renderProductMember}
                   renderFinding={(finding) => renderProductFinding(
                     finding,
@@ -4363,7 +4363,7 @@ function ProductGroupCard({
           batchProgress={batchProgress}
           batchDisabled={batchDisabled}
           previewLimit={4}
-          gridClassName="grid-cols-2"
+          gridClassName="grid-cols-1"
           renderMember={renderProductMember}
           renderFinding={(finding) => renderProductFinding(finding, group.price_summary)}
           onSelectBatch={onSelectBatch}
