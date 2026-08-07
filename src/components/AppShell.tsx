@@ -15,6 +15,8 @@ import {
   Building2,
   GitBranch,
   Network,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "./Avatar";
@@ -36,6 +38,7 @@ const INBOX_POLL_MS = 120_000;
 
 const MON_OPEN_KEY = "appshell.mon.open";
 const CLE_OPEN_KEY = "appshell.cle.open";
+const SIDEBAR_COLLAPSED_KEY = "appshell.sidebar.collapsed";
 const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
 
 /**
@@ -95,6 +98,17 @@ function AppShellContent() {
   const [clearanceCount, setClearanceCount] = useState(0);
   const [monitoringCount, setMonitoringCount] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
+    loadBoolean(SIDEBAR_COLLAPSED_KEY, false),
+  );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarCollapsed]);
 
   // Per-group expanded/collapsed state. Persist, but auto-expand whenever
   // the active path belongs to a child route of that group.
@@ -167,23 +181,51 @@ function AppShellContent() {
     return pathname === to || pathname.startsWith(`${to}/`);
   }
 
-  const sidebar = (
+  const renderSidebar = (collapsed = false, collapsible = false) => (
     <aside className="h-full flex flex-col bg-cream border-r border-stone-200/60">
       {/* Logo + brand */}
-      <div className="px-5 pt-5 pb-4">
-        <Link to="/" className="flex items-center gap-2">
-          <BrandMark className="h-7 w-7 shrink-0" />
-          <span className="text-sm font-bold tracking-tight text-stone-900">Unvelar</span>
+      <div className={`flex h-16 items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>
+        <Link
+          to="/"
+          className="flex min-w-0 items-center gap-2"
+          title={collapsed ? "Unvelar" : undefined}
+          aria-label={collapsed ? "Unvelar home" : undefined}
+        >
+          <BrandMark className={`${collapsed ? "h-6 w-6" : "h-7 w-7"} shrink-0`} />
+          {!collapsed && <span className="text-sm font-bold tracking-tight text-stone-900">Unvelar</span>}
         </Link>
+        {collapsible && !collapsed && (
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        )}
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 overflow-y-auto">
+      <nav className={`flex-1 overflow-y-auto ${collapsed ? "px-2" : "px-3"}`}>
+        {collapsible && collapsed && (
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(false)}
+            className="mb-3 flex w-full items-center justify-center rounded-lg py-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+        )}
         <NavItem
           to="/dashboard"
           icon={<Home size={18} />}
           label="Dashboard"
           active={pathname === "/dashboard"}
+          collapsed={collapsed}
         />
 
         <NavGroup
@@ -191,6 +233,7 @@ function AppShellContent() {
           icon={<Radar size={14} />}
           open={monOpen}
           onToggle={() => setMonOpen((v) => !v)}
+          collapsed={collapsed}
         >
           <NavItem
             to="/monitoring/tasks"
@@ -198,30 +241,35 @@ function AppShellContent() {
             label="Tasks"
             active={isActive("/monitoring/tasks") || pathname === "/findings" || pathname.startsWith("/findings/")}
             badge={monitoringCount}
+            collapsed={collapsed}
           />
           <NavItem
             to="/monitoring/campaigns"
             icon={<GitBranch size={18} />}
             label="Campaigns"
             active={isActive("/monitoring/campaigns")}
+            collapsed={collapsed}
           />
           <NavItem
             to="/monitoring/products"
             icon={<Network size={18} />}
             label="Product lab"
             active={isActive("/monitoring/products")}
+            collapsed={collapsed}
           />
           <NavItem
             to="/monitoring/new"
             icon={<Plus size={18} />}
             label="New"
             active={isActive("/monitoring/new")}
+            collapsed={collapsed}
           />
           <NavItem
             to="/monitoring/settings"
             icon={<SettingsIcon size={18} />}
             label="Settings"
             active={isActive("/monitoring/settings") || isActive("/monitors")}
+            collapsed={collapsed}
           />
         </NavGroup>
 
@@ -230,6 +278,7 @@ function AppShellContent() {
           icon={<ShieldCheck size={14} />}
           open={cleOpen}
           onToggle={() => setCleOpen((v) => !v)}
+          collapsed={collapsed}
         >
           <NavItem
             to="/clearance/tasks"
@@ -237,23 +286,26 @@ function AppShellContent() {
             label="Tasks"
             active={isActive("/clearance/tasks")}
             badge={clearanceCount}
+            collapsed={collapsed}
           />
           <NavItem
             to="/clearance/new"
             icon={<Plus size={18} />}
             label="New"
             active={isActive("/clearance/new") || pathname.startsWith("/ip-reviews/new")}
+            collapsed={collapsed}
           />
         </NavGroup>
       </nav>
 
       {/* Footer: settings + admin + user menu */}
-      <div className="px-3 pb-3 pt-2 border-t border-stone-200/60 space-y-0.5">
+      <div className={`${collapsed ? "px-2" : "px-3"} pb-3 pt-2 border-t border-stone-200/60 space-y-0.5`}>
         <NavItem
           to="/settings"
           icon={<SettingsIcon size={18} />}
           label="Settings"
           active={isActive("/settings")}
+          collapsed={collapsed}
         />
         {user?.role === "admin" && (
           <NavItem
@@ -261,6 +313,7 @@ function AppShellContent() {
             icon={<Shield size={18} />}
             label="Admin"
             active={isActive("/admin")}
+            collapsed={collapsed}
           />
         )}
         {user && (
@@ -271,6 +324,7 @@ function AppShellContent() {
             isActingAsOther={isActingAsOther}
             onSwitchTenant={switchTenant}
             onLogout={logout}
+            collapsed={collapsed}
           />
         )}
       </div>
@@ -300,8 +354,8 @@ function AppShellContent() {
 
       <div className="flex lg:h-full">
         {/* Desktop sidebar */}
-        <div className="hidden lg:block lg:w-64 lg:h-full lg:sticky lg:top-0 lg:shrink-0">
-          {sidebar}
+        <div className={`hidden lg:block lg:h-full lg:sticky lg:top-0 lg:shrink-0 transition-[width] duration-200 ${sidebarCollapsed ? "lg:w-16" : "lg:w-64"}`}>
+          {renderSidebar(sidebarCollapsed, true)}
         </div>
 
         {/* Off-canvas drawer (mobile) */}
@@ -321,7 +375,7 @@ function AppShellContent() {
               >
                 <X size={18} />
               </button>
-              {sidebar}
+              {renderSidebar()}
             </div>
           </div>
         )}
@@ -409,26 +463,30 @@ function NavItem({
   label,
   active,
   badge,
+  collapsed = false,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
   active: boolean;
   badge?: number;
+  collapsed?: boolean;
 }) {
   const base =
-    "group flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors";
+    `group relative flex items-center rounded-lg py-2 text-sm transition-colors ${collapsed ? "justify-center px-2" : "gap-2.5 px-2.5"}`;
   const cls = active
     ? `${base} bg-stone-100 text-stone-900 font-semibold`
     : `${base} hover:bg-stone-50 text-stone-700`;
   return (
-    <Link to={to} className={cls}>
+    <Link to={to} className={cls} title={collapsed ? label : undefined} aria-label={collapsed ? label : undefined}>
       <span className="shrink-0">{icon}</span>
-      <span className="flex-1 min-w-0 truncate">{label}</span>
+      {!collapsed && <span className="flex-1 min-w-0 truncate">{label}</span>}
       {badge && badge > 0 ? (
         <span
           title={`${badge} item${badge === 1 ? "" : "s"}`}
-          className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold leading-none"
+          className={collapsed
+            ? "absolute right-0.5 top-0.5 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-600 px-1 text-[8px] font-bold leading-none text-white"
+            : "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold leading-none"}
         >
           {badge > 99 ? "99+" : badge}
         </span>
@@ -443,13 +501,33 @@ function NavGroup({
   open,
   onToggle,
   children,
+  collapsed = false,
 }: {
   label: string;
   icon?: React.ReactNode;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
+  collapsed?: boolean;
 }) {
+  if (collapsed) {
+    return (
+      <div
+        className="mt-3 space-y-1 border-t border-stone-200/60 pt-2.5"
+        role="group"
+        aria-label={label}
+      >
+        <div
+          className="flex h-5 items-center justify-center text-stone-400"
+          title={label}
+          aria-hidden
+        >
+          {icon}
+        </div>
+        {children}
+      </div>
+    );
+  }
   return (
     <div className="mt-3">
       <button
@@ -484,6 +562,17 @@ function loadOpen(key: string): boolean {
   return true;
 }
 
+function loadBoolean(key: string, fallback: boolean): boolean {
+  try {
+    const value = localStorage.getItem(key);
+    if (value === "0") return false;
+    if (value === "1") return true;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
 /** Sticky strip shown while an admin operates on a tenant other than their own,
  *  so the impersonation is never silent. */
 function ActingTenantBanner({ label, onReturn }: { label: string; onReturn: () => void }) {
@@ -511,6 +600,7 @@ function UserMenu({
   isActingAsOther,
   onSwitchTenant,
   onLogout,
+  collapsed = false,
 }: {
   user: {
     email: string | null;
@@ -523,6 +613,7 @@ function UserMenu({
   isActingAsOther: boolean;
   onSwitchTenant: (tenantId: string) => void;
   onLogout: () => Promise<void>;
+  collapsed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -544,20 +635,25 @@ function UserMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-1.5 py-1.5 rounded-lg hover:bg-stone-100 transition-colors"
+        className={`w-full flex items-center rounded-lg py-1.5 hover:bg-stone-100 transition-colors ${collapsed ? "justify-center px-1" : "gap-2 px-1.5"}`}
+        aria-label={collapsed ? "Open account menu" : undefined}
         title={user.email ?? user.display_name ?? ""}
       >
         <Avatar pictureUrl={user.picture_url} name={user.display_name ?? user.email} size={28} />
-        <span className="flex-1 min-w-0 text-left text-sm font-medium text-stone-800 truncate">
-          {user.display_name || user.email || "Account"}
-        </span>
-        <ChevronDown
-          size={12}
-          className={`text-stone-400 transition-transform ${open ? "rotate-180" : ""}`}
-        />
+        {!collapsed && (
+          <>
+            <span className="flex-1 min-w-0 text-left text-sm font-medium text-stone-800 truncate">
+              {user.display_name || user.email || "Account"}
+            </span>
+            <ChevronDown
+              size={12}
+              className={`text-stone-400 transition-transform ${open ? "rotate-180" : ""}`}
+            />
+          </>
+        )}
       </button>
       {open && (
-        <div className="absolute bottom-full mb-1.5 left-0 right-0 bg-white border border-stone-200 rounded-xl shadow-lg shadow-stone-200/50 overflow-hidden z-50">
+        <div className={`absolute bottom-full mb-1.5 bg-white border border-stone-200 rounded-xl shadow-lg shadow-stone-200/50 overflow-hidden z-50 ${collapsed ? "left-0 w-64" : "left-0 right-0"}`}>
           <div className="px-3 py-2.5 border-b border-stone-100">
             <div className="text-sm font-bold text-stone-900 truncate">
               {user.display_name || "Signed in"}
