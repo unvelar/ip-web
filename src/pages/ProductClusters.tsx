@@ -2153,7 +2153,7 @@ function ProductGroupMemberSubgroups({
   };
 
   return (
-    <div className="mt-3 space-y-2.5">
+    <div className="mt-4 space-y-4">
       {PRODUCT_GROUP_RECOMMENDATION_BUCKETS.map((bucket) => {
         const sampledPreviewItems = itemsByBucket.get(bucket.key) ?? [];
         const exactBucketFindings = allFindings
@@ -2208,7 +2208,7 @@ function ProductGroupMemberSubgroups({
           <section
             key={bucket.key}
             data-product-review-subgroup={bucket.key}
-            className={`rounded-xl border p-2.5 ${bucket.className}`}
+            className={`rounded-xl border p-3 ${bucket.className}`}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p
@@ -2306,7 +2306,7 @@ function ProductGroupMemberSubgroups({
               )
             )}
             {bucketItems.length > 0 && (
-              <div className={`mt-2 grid gap-2 ${gridClassName}`}>
+              <div className={`mt-3 grid gap-3 ${gridClassName}`}>
                 {bucketItems.map((item) => {
                   const batchFinding = selectedForBatch
                     ? batchFindingForItem(item)
@@ -3120,7 +3120,7 @@ function ProductGroupsOverview({
               </p>
             </div>
           ) : (
-            <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <div className="mt-5 grid grid-cols-1 gap-5">
               {displayedGroups.map((group, index) => (
                 <ProductGroupCard
                   key={group.id}
@@ -3533,11 +3533,11 @@ function ProductGroupCard({
             title="This listing belongs to a different underlying product"
             disabled={Boolean(savingCorrectionProfileId)}
             onClick={() => setCorrectingProfileId(profile.id)}
-            className={`absolute right-2 top-10 inline-flex h-7 items-center justify-center rounded-full border border-red-200 bg-white/95 px-2.5 text-[10px] font-bold text-red-700 shadow-sm transition hover:bg-red-50 focus:opacity-100 disabled:opacity-40 ${
-              confirmed ? "opacity-0 group-hover/member:opacity-100" : "opacity-100"
+            className={`mt-2 inline-flex w-full items-center justify-center rounded-md px-2 py-1.5 text-[10px] font-semibold text-stone-500 transition hover:bg-red-50 hover:text-red-700 focus:bg-red-50 focus:text-red-700 disabled:opacity-40 ${
+              confirmed ? "opacity-0 group-hover/member:opacity-100 group-focus-within/member:opacity-100" : "opacity-100"
             }`}
           >
-            Wrong product
+            Different product
           </button>
         )}
       </div>
@@ -4321,7 +4321,7 @@ function ProductGroupCard({
                   batchProgress={batchProgress}
                   batchDisabled={batchDisabled}
                   previewLimit={4}
-                  gridClassName="grid-cols-3 sm:grid-cols-4"
+                  gridClassName="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
                   renderMember={renderProductMember}
                   renderFinding={(finding) => renderProductFinding(
                     finding,
@@ -4363,7 +4363,7 @@ function ProductGroupCard({
           batchProgress={batchProgress}
           batchDisabled={batchDisabled}
           previewLimit={4}
-          gridClassName="grid-cols-3 sm:grid-cols-4"
+          gridClassName="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
           renderMember={renderProductMember}
           renderFinding={(finding) => renderProductFinding(finding, group.price_summary)}
           onSelectBatch={onSelectBatch}
@@ -4522,7 +4522,7 @@ function ListingTile({
       data-product-price-currency={price ? "USD" : undefined}
       data-product-price-signal={unusualPrice ? "unusually-low" : undefined}
       data-product-price-comparison={unusualPrice?.comparison_scope}
-      className={`w-full min-w-0 rounded-lg border p-1.5 text-left transition disabled:cursor-default ${
+      className={`w-full min-w-0 rounded-lg border p-2 text-left transition disabled:cursor-default ${
         active
           ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
           : unusualPrice
@@ -4566,7 +4566,7 @@ function ListingTile({
           </span>
         )}
       </span>
-      <span className="mt-1.5 block truncate text-[10px] font-semibold text-stone-700">
+      <span className="mt-2 block truncate text-[11px] font-semibold text-stone-700">
         {profileTitle(profile)}
       </span>
     </button>
