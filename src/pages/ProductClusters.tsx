@@ -2473,6 +2473,12 @@ export function SemanticProductGroupsOverview({
         </div>
       )}
 
+      {overview.dirty && !overview.last_error && !buildingFirstSnapshot && (
+        <p className="mt-3 text-xs font-medium text-stone-500" aria-live="polite">
+          Updating product groups with newly completed comparisons…
+        </p>
+      )}
+
       {showingTriage && !overview.triage_projection_available ? (
         <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Triage workload is temporarily unavailable while the backend update rolls out.
@@ -3078,6 +3084,12 @@ function ProductGroupsOverview({
         <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           The latest automatic group refresh failed: {overview.last_error}
         </div>
+      )}
+
+      {overview.dirty && !overview.last_error && !buildingFirstSnapshot && (
+        <p className="mt-3 text-xs font-medium text-stone-500" aria-live="polite">
+          Updating product groups with newly completed comparisons…
+        </p>
       )}
 
       {showingTriage && !overview.triage_projection_available ? (
