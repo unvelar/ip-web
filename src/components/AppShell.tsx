@@ -184,22 +184,25 @@ function AppShellContent() {
   const renderSidebar = (collapsed = false, collapsible = false) => (
     <aside className="h-full flex flex-col bg-cream border-r border-stone-200/60">
       {/* Logo + brand */}
-      <div className={`flex h-16 items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>
-        {!collapsed && (
-          <Link to="/" className="flex min-w-0 items-center gap-2">
-            <BrandMark className="h-7 w-7 shrink-0" />
-            <span className="text-sm font-bold tracking-tight text-stone-900">Unvelar</span>
-          </Link>
-        )}
+      <div className={`flex h-16 items-center justify-between ${collapsed ? "px-1" : "px-5"}`}>
+        <Link
+          to="/"
+          className="flex min-w-0 items-center gap-2"
+          title={collapsed ? "Unvelar" : undefined}
+          aria-label={collapsed ? "Unvelar home" : undefined}
+        >
+          <BrandMark className={`${collapsed ? "h-6 w-6" : "h-7 w-7"} shrink-0`} />
+          {!collapsed && <span className="text-sm font-bold tracking-tight text-stone-900">Unvelar</span>}
+        </Link>
         {collapsible && (
           <button
             type="button"
             onClick={() => setSidebarCollapsed((value) => !value)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
+            className={`flex shrink-0 items-center justify-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 ${collapsed ? "h-6 w-6" : "h-7 w-7"}`}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={16} />}
           </button>
         )}
       </div>
