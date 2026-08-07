@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import type { IpReviewFinding } from "../../../api";
 import { BATCH_META, type BatchAction } from "./batchUtils";
 
@@ -21,9 +21,25 @@ export function BatchConfirmModal({
   const meta = BATCH_META[action];
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
   const reasonValid = action !== "send" || decisionReason.trim().length >= 3;
+  const canConfirm = eligible.length > 0 && reasonValid;
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+
+    if (event.key === "Enter" && !event.nativeEvent.isComposing && canConfirm) {
+      event.preventDefault();
+      onConfirm(action === "send" ? decisionReason.trim() : undefined);
+    }
+  }
+
   return (
     <div
       onClick={onCancel}
+      onKeyDown={handleKeyDown}
       role="dialog"
       aria-modal="true"
       aria-label={meta.label}
@@ -102,7 +118,7 @@ export function BatchConfirmModal({
           <button
             type="button"
             onClick={() => onConfirm(action === "send" ? decisionReason.trim() : undefined)}
-            disabled={eligible.length === 0 || !reasonValid}
+            disabled={!canConfirm}
             className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {meta.label}
