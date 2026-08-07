@@ -231,19 +231,27 @@ export default function ProductClusters() {
   const batchRequestSequence = useRef(0);
   const semanticPageRequestSequence = useRef(0);
   const visualPageRequestSequence = useRef(0);
+  const taskRouteScrollPosition = useRef<{ main: number; window: number } | null>(null);
   const taskRouteRef = useRef({ linkedTaskId, search: location.search });
   taskRouteRef.current = { linkedTaskId, search: location.search };
   const canMarkSentWithoutEmail = user?.role === "admin";
+  const rememberTaskRouteScrollPosition = useCallback(() => {
+    taskRouteScrollPosition.current = {
+      main: document.querySelector("main")?.scrollTop ?? 0,
+      window: window.scrollY,
+    };
+  }, []);
   const closeTask = useCallback(() => {
     taskRequestSequence.current += 1;
     const closingLinkedTaskId = taskRouteRef.current.linkedTaskId;
     if (closingLinkedTaskId) {
       closingTaskRouteRef.current = closingLinkedTaskId;
+      rememberTaskRouteScrollPosition();
       navigate({ pathname: "/monitoring/products", search: taskRouteRef.current.search });
     }
     setActiveTask(null);
     setLoadingTaskProfileId(null);
-  }, [navigate]);
+  }, [navigate, rememberTaskRouteScrollPosition]);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
     `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${productGroupView}`;
@@ -253,6 +261,18 @@ export default function ProductClusters() {
   const loadingScopes = loadingActiveIp || scopesLoadedKey !== scopesRequestKey;
   const loadingGroups =
     Boolean(selectedIpId && selectedScopeAvailable) && groupsLoadedKey !== groupsRequestKey;
+
+  useEffect(() => {
+    const position = taskRouteScrollPosition.current;
+    if (!position) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector("main")?.scrollTo({ top: position.main });
+      window.scrollTo({ top: position.window });
+      taskRouteScrollPosition.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.pathname]);
 
   useEffect(() => {
     let alive = true;
@@ -436,6 +456,7 @@ export default function ProductClusters() {
       if (taskRequestSequence.current !== requestSequence) return;
       setActiveTask({ profileId: profile.id, groupId, finding });
       if (groupId) {
+        rememberTaskRouteScrollPosition();
         navigate({
           pathname: `/monitoring/products/${encodeURIComponent(groupId)}/tasks/${encodeURIComponent(finding.result_id)}`,
           search: location.search,
@@ -461,6 +482,7 @@ export default function ProductClusters() {
       groupId,
       finding,
     });
+    rememberTaskRouteScrollPosition();
     navigate({
       pathname: `/monitoring/products/${encodeURIComponent(groupId)}/tasks/${encodeURIComponent(finding.result_id)}`,
       search: location.search,
