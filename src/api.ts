@@ -570,14 +570,26 @@ export function autoSendTakedownBatch(caseIds: string[], decisionReason: string)
   });
 }
 
-export function markTakedownSentWithoutEmail(caseId: string, decisionReason: string) {
-  return request<{ ok: boolean; emailed: false }>(
-    `/api/cases/${caseId}/takedown/mark-sent`,
-    {
+export async function markTakedownSentWithoutEmail(caseId: string, decisionReason: string) {
+  const path = `/api/cases/${caseId}/takedown/mark-sent`;
+  try {
+    return await request<{ ok: boolean; emailed: false }>(path, {
       method: "POST",
       body: JSON.stringify({ decision_reason: decisionReason.trim() }),
-    },
-  );
+    });
+  } catch (error) {
+    // Older API deployments cannot type the optional decision-reason SQL
+    // parameter. Retrying the legacy request is safe because PostgreSQL raises
+    // this error while preparing the statement, before the case is updated.
+    if (
+      error instanceof ApiError &&
+      error.status >= 500 &&
+      error.message.includes("could not determine data type of parameter")
+    ) {
+      return request<{ ok: boolean; emailed: false }>(path, { method: "POST" });
+    }
+    throw error;
+  }
 }
 
 /** Send the suggested-route takedown draft for a case without opening the
