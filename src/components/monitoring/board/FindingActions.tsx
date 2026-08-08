@@ -225,7 +225,7 @@ export function FindingActions({
     "second_hand",
     "Second hand",
     "second_hand",
-    "Shortcut 2: resale or second-hand item",
+    "Shortcut 2: used or second-hand item",
     "2",
   );
   const needsReviewBtn = (

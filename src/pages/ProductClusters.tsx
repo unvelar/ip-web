@@ -128,7 +128,7 @@ const PRODUCT_GROUP_RECOMMENDATION_BUCKETS: Array<{
   {
     key: "second_hand",
     label: "Likely second hand",
-    description: "The current evidence suggests secondary-market resale.",
+    description: "The listing evidence indicates that the item was previously used.",
     className: "border-purple-200 bg-purple-50/60",
     labelClassName: "text-purple-900",
     countClassName: "bg-white/80 text-purple-800",

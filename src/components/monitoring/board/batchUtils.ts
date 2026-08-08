@@ -17,7 +17,7 @@ export const BATCH_META: Record<
   submit: { label: "Mark submitted", verb: "Marked submitted", gerund: "Mark submitted" },
   false_positive: { label: "False positive", verb: "Cleared", gerund: "Mark false positive for" },
   do_not_pursue: { label: "Don't pursue", verb: "Cleared", gerund: "Don't pursue" },
-  second_hand: { label: "Second hand / allowed", verb: "Marked second hand", gerund: "Mark second hand / allowed for" },
+  second_hand: { label: "Second hand", verb: "Marked second hand", gerund: "Mark second hand for" },
   review: { label: "Review", verb: "Moved to Review", gerund: "Move to Review" },
   enforce: { label: "Mark enforced", verb: "Marked enforced", gerund: "Mark enforced" },
 };
