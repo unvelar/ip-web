@@ -65,6 +65,7 @@ export interface TakedownBatchSummary {
   title: string;
   details: string[];
   needsProfile: boolean;
+  showLegalQueueLink: boolean;
 }
 
 export type BatchResult = string | TakedownBatchSummary;
@@ -205,6 +206,11 @@ export function summarizeTakedownBatch(
           : `Queued takedown for ${listingCount(queued)}`,
     details,
     needsProfile: missingProfile > 0,
+    // The legacy manual-compose response is kept for compatibility with an API
+    // during a staggered rollout. Those decisions are recovered into the legal
+    // queue by the current backend migration, so the same navigation remains
+    // useful for both response shapes.
+    showLegalQueueLink: legalQueueTotal > 0 || legacyManualCompose > 0,
   };
 }
 

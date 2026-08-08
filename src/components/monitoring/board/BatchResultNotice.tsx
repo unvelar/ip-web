@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { BatchResult, TakedownBatchSummary } from "./batchUtils";
 
@@ -21,6 +21,9 @@ export function BatchResultNotice({
   const warning = summary?.tone === "warning" || (
     typeof result === "string" && result.startsWith("Nothing")
   );
+  const legalQueueHref = `/monitoring/tasks?status=takedown_pending${
+    profileIpId ? `&ip_id=${encodeURIComponent(profileIpId)}` : ""
+  }`;
 
   return (
     <div
@@ -48,13 +51,26 @@ export function BatchResultNotice({
                 ))}
               </ul>
             )}
-            {summary.needsProfile && profileIpId && (
-              <Link
-                to={`/ips/${encodeURIComponent(profileIpId)}#takedown-signer`}
-                className="mt-2 inline-flex text-xs font-bold text-amber-900 underline decoration-amber-400 underline-offset-2 hover:text-amber-700"
-              >
-                Complete the IP takedown profile
-              </Link>
+            {(summary.showLegalQueueLink || (summary.needsProfile && profileIpId)) && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {summary.showLegalQueueLink && (
+                  <Link
+                    to={legalQueueHref}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-violet-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+                  >
+                    View legal queue
+                    <ArrowRight size={13} aria-hidden />
+                  </Link>
+                )}
+                {summary.needsProfile && profileIpId && (
+                  <Link
+                    to={`/ips/${encodeURIComponent(profileIpId)}#takedown-signer`}
+                    className="inline-flex text-xs font-bold text-amber-900 underline decoration-amber-400 underline-offset-2 hover:text-amber-700"
+                  >
+                    Complete the IP takedown profile
+                  </Link>
+                )}
+              </div>
             )}
           </>
         ) : (
