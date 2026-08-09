@@ -38,10 +38,12 @@ import {
   listProductClusterScopes,
   markIpFindingEnforced,
   markIpFindingNeedsReview,
+  mergePersistedProductGroups,
   pinPersistedProductGroupReferenceImage,
   refreshPersistedProductGroups,
   removePersistedProductGroupReferenceImage,
   resetPersistedProductGroupReferenceImages,
+  revokePersistedProductGroupMerge,
   restoreProductSemanticCorrection,
   updatePersistedProductGroupEmbeddingSettings,
   updatePersistedProductGroupRule,
@@ -282,6 +284,9 @@ export default function ProductClusters() {
   const [loadingMoreSemanticGroups, setLoadingMoreSemanticGroups] = useState(false);
   const [loadingMoreVisualGroups, setLoadingMoreVisualGroups] = useState(false);
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
+  const [mergeSourceGroupId, setMergeSourceGroupId] = useState<string | null>(null);
+  const [savingMergeKey, setSavingMergeKey] = useState<string | null>(null);
+  const [revokingMergeDecisionId, setRevokingMergeDecisionId] = useState<string | null>(null);
   const [savingCorrectionProfileId, setSavingCorrectionProfileId] = useState<string | null>(null);
   const [savingSemanticCorrectionProfileId, setSavingSemanticCorrectionProfileId] =
     useState<string | null>(null);
@@ -442,6 +447,9 @@ export default function ProductClusters() {
     setSemanticFeedbackNotice(null);
     setSemanticTaxonomy([]);
     setSemanticTaxonomyLoaded(false);
+    setMergeSourceGroupId(null);
+    setSavingMergeKey(null);
+    setRevokingMergeDecisionId(null);
   }, [actingTenantId, selectedIpId]);
 
   useEffect(() => {
@@ -476,6 +484,7 @@ export default function ProductClusters() {
     setExpandedSubgroupKeys(new Set());
     setActiveBatch(null);
     setConfirmBatchAction(null);
+    setMergeSourceGroupId(null);
   }, [productGroupView, refreshVersion]);
 
   useEffect(() => {
@@ -1000,6 +1009,52 @@ export default function ProductClusters() {
     }
   }
 
+  async function mergeProductGroups(leftGroupId: string, rightGroupId: string) {
+    if (!selectedIpId || leftGroupId === rightGroupId) return;
+    const mergeKey = [leftGroupId, rightGroupId].sort().join(":");
+    visualPageRequestSequence.current += 1;
+    setLoadingMoreVisualGroups(false);
+    setError(null);
+    setSavingMergeKey(mergeKey);
+    try {
+      await mergePersistedProductGroups(selectedIpId, leftGroupId, rightGroupId);
+      setVisualOverview(await getPersistedProductGroups(
+        selectedIpId,
+        "same",
+        productGroupView,
+        { limit: PRODUCT_GROUP_PAGE_SIZE },
+      ));
+      setMergeSourceGroupId(null);
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    } finally {
+      setSavingMergeKey(null);
+    }
+  }
+
+  async function revokeProductGroupMerge(groupId: string, decisionId: string) {
+    if (!selectedIpId) return;
+    visualPageRequestSequence.current += 1;
+    setLoadingMoreVisualGroups(false);
+    setError(null);
+    setRevokingMergeDecisionId(decisionId);
+    try {
+      await revokePersistedProductGroupMerge(selectedIpId, groupId, decisionId);
+      setVisualOverview(await getPersistedProductGroups(
+        selectedIpId,
+        "same",
+        productGroupView,
+        { limit: PRODUCT_GROUP_PAGE_SIZE },
+      ));
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    } finally {
+      setRevokingMergeDecisionId(null);
+    }
+  }
+
   async function correctGroupMember(
     groupId: string,
     profileId: string,
@@ -1510,6 +1565,9 @@ export default function ProductClusters() {
                 showViewToggle={false}
                 showUngrouped
                 savingGroupId={savingGroupId}
+                mergeSourceGroupId={mergeSourceGroupId}
+                savingMergeKey={savingMergeKey}
+                revokingMergeDecisionId={revokingMergeDecisionId}
                 savingCorrectionProfileId={savingCorrectionProfileId}
                 activeTaskProfileId={activeTask?.profileId ?? null}
                 loadingTaskProfileId={loadingTaskProfileId}
@@ -1535,6 +1593,9 @@ export default function ProductClusters() {
                 onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
                 onOpenFinding={openLoadedFinding}
                 onConfirmGroup={confirmGroup}
+                onSelectMergeSource={setMergeSourceGroupId}
+                onMergeGroups={mergeProductGroups}
+                onRevokeMerge={revokeProductGroupMerge}
                 onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
                 onCorrectGroupMember={correctGroupMember}
                 onCreateRule={createGroupRule}
@@ -3170,6 +3231,9 @@ function ProductGroupsOverview({
   showViewToggle = true,
   showUngrouped = true,
   savingGroupId,
+  mergeSourceGroupId,
+  savingMergeKey,
+  revokingMergeDecisionId,
   savingCorrectionProfileId,
   activeTaskProfileId,
   loadingTaskProfileId,
@@ -3189,6 +3253,9 @@ function ProductGroupsOverview({
   onOpenTask,
   onOpenFinding,
   onConfirmGroup,
+  onSelectMergeSource,
+  onMergeGroups,
+  onRevokeMerge,
   onUpdateEmbeddingThreshold,
   onCorrectGroupMember,
   onCreateRule,
@@ -3202,6 +3269,9 @@ function ProductGroupsOverview({
   showViewToggle?: boolean;
   showUngrouped?: boolean;
   savingGroupId: string | null;
+  mergeSourceGroupId: string | null;
+  savingMergeKey: string | null;
+  revokingMergeDecisionId: string | null;
   savingCorrectionProfileId: string | null;
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
@@ -3230,6 +3300,9 @@ function ProductGroupsOverview({
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
+  onSelectMergeSource: (groupId: string | null) => void;
+  onMergeGroups: (leftGroupId: string, rightGroupId: string) => Promise<void>;
+  onRevokeMerge: (groupId: string, decisionId: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
     groupId: string,
     embeddingMatchThreshold: number | null,
@@ -3270,6 +3343,10 @@ function ProductGroupsOverview({
     ? overview.triage_ungrouped
     : overview.ungrouped;
   const buildingFirstSnapshot = overview.dirty && (overview.snapshot_profile_count ?? 0) === 0;
+  const mergeSourceGroup = mergeSourceGroupId
+    ? overview.groups.find((group) => group.id === mergeSourceGroupId) ?? null
+    : null;
+  const loadedGroupIds = new Set(overview.groups.map((group) => group.id));
 
   return (
     <div className="mt-5">
@@ -3287,6 +3364,26 @@ function ProductGroupsOverview({
         <p className="mt-3 text-xs font-medium text-stone-500" aria-live="polite">
           Updating product groups with newly completed comparisons…
         </p>
+      )}
+
+      {mode === "same" && mergeSourceGroup && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+          <div>
+            <p className="text-xs font-bold text-violet-900">Choose the matching product group</p>
+            <p className="mt-0.5 text-[11px] text-violet-700">
+              Selected {mergeSourceGroup.display_name ||
+                `a group with ${mergeSourceGroup.member_count} listings`}. The decision is durable and can be undone.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={Boolean(savingMergeKey)}
+            onClick={() => onSelectMergeSource(null)}
+            className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-40"
+          >
+            Cancel merge
+          </button>
+        </div>
       )}
 
       {showingTriage && !overview.triage_projection_available ? (
@@ -3334,12 +3431,20 @@ function ProductGroupsOverview({
                 <ProductGroupCard
                   key={group.id}
                   group={group}
+                  reconciliationSuggestions={group.reconciliation_suggestions.filter(
+                    (suggestion) =>
+                      group.id === suggestion.left_group_id ||
+                      !loadedGroupIds.has(suggestion.left_group_id),
+                  )}
                   index={index}
                   ipId={overview.scope.ip_id}
                   mode={mode}
                   showPersistedMembers={!showingTriage}
                   triageProjectionAvailable={overview.triage_projection_available}
                   saving={savingGroupId === group.id}
+                  mergeSourceGroup={mergeSourceGroup}
+                  savingMergeKey={savingMergeKey}
+                  revokingMergeDecisionId={revokingMergeDecisionId}
                   savingCorrectionProfileId={savingCorrectionProfileId}
                   activeTaskProfileId={activeTaskProfileId}
                   loadingTaskProfileId={loadingTaskProfileId}
@@ -3364,6 +3469,9 @@ function ProductGroupsOverview({
                   onOpenTask={onOpenTask}
                   onOpenFinding={onOpenFinding}
                   onConfirmGroup={onConfirmGroup}
+                  onSelectMergeSource={onSelectMergeSource}
+                  onMergeGroups={onMergeGroups}
+                  onRevokeMerge={onRevokeMerge}
                   onUpdateEmbeddingThreshold={onUpdateEmbeddingThreshold}
                   onCorrectGroupMember={onCorrectGroupMember}
                   onCreateRule={onCreateRule}
@@ -3486,12 +3594,16 @@ function ProductGroupPriceSummaryView({
 
 function ProductGroupCard({
   group,
+  reconciliationSuggestions,
   index,
   ipId,
   mode,
   showPersistedMembers,
   triageProjectionAvailable,
   saving,
+  mergeSourceGroup,
+  savingMergeKey,
+  revokingMergeDecisionId,
   savingCorrectionProfileId,
   activeTaskProfileId,
   loadingTaskProfileId,
@@ -3510,6 +3622,9 @@ function ProductGroupCard({
   onOpenTask,
   onOpenFinding,
   onConfirmGroup,
+  onSelectMergeSource,
+  onMergeGroups,
+  onRevokeMerge,
   onUpdateEmbeddingThreshold,
   onCorrectGroupMember,
   onCreateRule,
@@ -3517,12 +3632,16 @@ function ProductGroupCard({
   onDeleteRule,
 }: {
   group: PersistedProductGroup;
+  reconciliationSuggestions: PersistedProductGroup["reconciliation_suggestions"];
   index: number;
   ipId: string;
   mode: GroupMode;
   showPersistedMembers: boolean;
   triageProjectionAvailable: boolean;
   saving: boolean;
+  mergeSourceGroup: PersistedProductGroup | null;
+  savingMergeKey: string | null;
+  revokingMergeDecisionId: string | null;
   savingCorrectionProfileId: string | null;
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
@@ -3547,6 +3666,9 @@ function ProductGroupCard({
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
+  onSelectMergeSource: (groupId: string | null) => void;
+  onMergeGroups: (leftGroupId: string, rightGroupId: string) => Promise<void>;
+  onRevokeMerge: (groupId: string, decisionId: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
     groupId: string,
     embeddingMatchThreshold: number | null,
@@ -3597,6 +3719,15 @@ function ProductGroupCard({
   const [savingReferenceImageId, setSavingReferenceImageId] = useState<string | null>(null);
   const [resettingReferences, setResettingReferences] = useState(false);
   const confirmed = group.confirmation_status === "confirmed";
+  const selectedAsMergeSource = mergeSourceGroup?.id === group.id;
+  const selectedMergeKey = mergeSourceGroup
+    ? [mergeSourceGroup.id, group.id].sort().join(":")
+    : null;
+  const savingThisMerge = selectedMergeKey != null && savingMergeKey === selectedMergeKey;
+  const alreadySameCanonicalProduct = Boolean(
+    mergeSourceGroup?.canonical_product_id &&
+      mergeSourceGroup.canonical_product_id === group.canonical_product_id,
+  );
   const triageMemberCount = group.triage_member_count ?? 0;
   const showingPersistedMembers = showPersistedMembers || managing;
   const displayedMembers = showingPersistedMembers ? group.members : group.triage_members;
@@ -3815,6 +3946,11 @@ function ProductGroupCard({
               Confirmed {new Date(group.confirmed_at).toLocaleString()}
             </p>
           )}
+          {mode === "same" && group.atomic_cohort_count > 1 && (
+            <p className="mt-1 inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-800 ring-1 ring-inset ring-violet-200">
+              {group.atomic_cohort_count} evidence cohorts combined
+            </p>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <p className="text-sm font-bold text-stone-900">
@@ -3896,12 +4032,140 @@ function ProductGroupCard({
                   : "Show image similarity"}
             </button>
           )}
+          {mode === "same" && (
+            mergeSourceGroup ? (
+              selectedAsMergeSource ? (
+                <button
+                  type="button"
+                  disabled={Boolean(savingMergeKey)}
+                  onClick={() => onSelectMergeSource(null)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-40"
+                >
+                  <X size={14} />
+                  Cancel selection
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={Boolean(savingMergeKey) || alreadySameCanonicalProduct}
+                  onClick={() => {
+                    void onMergeGroups(mergeSourceGroup.id, group.id).catch(() => undefined);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-700 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Check size={14} />
+                  {alreadySameCanonicalProduct
+                    ? "Already one product"
+                    : savingThisMerge
+                      ? "Combining…"
+                      : "Merge with selected product"}
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                disabled={Boolean(savingMergeKey)}
+                onClick={() => onSelectMergeSource(group.id)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:border-violet-300 hover:bg-violet-100 disabled:opacity-40"
+              >
+                <Plus size={14} />
+                Merge with…
+              </button>
+            )
+          )}
         </div>
       )}
       {!managing && visualEvidenceError && (
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-800">
           {visualEvidenceError}
         </p>
+      )}
+
+      {mode === "same" && reconciliationSuggestions.length > 0 && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+          <p className="text-xs font-bold text-amber-950">Possible duplicate product group</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-amber-800">
+            Distributed cross-listing evidence supports the same underlying product. Review the target before combining them.
+          </p>
+          <div className="mt-2 space-y-2">
+            {reconciliationSuggestions.map((suggestion) => {
+              const suggestionMergeKey = [group.id, suggestion.target_group_id]
+                .sort().join(":");
+              const savingSuggestion = savingMergeKey === suggestionMergeKey;
+              const minimumCoverage = Math.min(
+                suggestion.left_coverage,
+                suggestion.right_coverage,
+              );
+              return (
+                <div
+                  key={suggestion.target_group_id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-stone-900">
+                      {suggestion.target_display_name ||
+                        `Another group with ${suggestion.target_member_count} listings`}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-stone-600">
+                      {suggestion.support_count} matching comparisons · {Math.round(minimumCoverage * 100)}%+ member coverage · median match {suggestion.median_same_product_score.toFixed(2)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={Boolean(savingMergeKey)}
+                    onClick={() => {
+                      void onMergeGroups(group.id, suggestion.target_group_id)
+                        .catch(() => undefined);
+                    }}
+                    className="shrink-0 rounded-lg bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-800 disabled:opacity-45"
+                  >
+                    {savingSuggestion ? "Combining…" : "Merge as same product"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {mode === "same" && group.canonical_decisions.length > 0 && (
+        <details className="mt-3 rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2.5">
+          <summary className="cursor-pointer text-xs font-bold text-violet-900">
+            Merge history · {group.canonical_decisions.length}
+          </summary>
+          <p className="mt-1 text-[10px] leading-4 text-violet-700">
+            Undo removes this decision. Other decisions in the history may still keep some cohorts combined.
+          </p>
+          <div className="mt-2 space-y-2">
+            {group.canonical_decisions.map((decision) => (
+              <div
+                key={decision.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-violet-100"
+              >
+                <div>
+                  <p className="text-[11px] font-semibold text-stone-800">
+                    {decision.decision_source === "reviewer"
+                      ? "Reviewer-confirmed merge"
+                      : "High-confidence automatic merge"}
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-stone-500">
+                    {new Date(decision.created_at).toLocaleString()} · confidence {Math.round(decision.confidence * 100)}%
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={Boolean(revokingMergeDecisionId)}
+                  onClick={() => {
+                    void onRevokeMerge(group.id, decision.id).catch(() => undefined);
+                  }}
+                  className="rounded-md border border-stone-200 px-2.5 py-1 text-[10px] font-semibold text-stone-700 hover:border-red-200 hover:bg-red-50 hover:text-red-800 disabled:opacity-40"
+                >
+                  {revokingMergeDecisionId === decision.id ? "Undoing…" : "Undo merge"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {canConfirm && editingName && (

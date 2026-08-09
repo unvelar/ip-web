@@ -2596,6 +2596,8 @@ export interface PersistedProductGroup {
   name_source: "auto" | "manual";
   confirmation_status: "candidate" | "confirmed";
   confirmed_at: string | null;
+  canonical_product_id: string | null;
+  atomic_cohort_count: number;
   parent_group_id: string | null;
   semantic_kind: "category" | "color" | null;
   semantic_key: string | null;
@@ -2615,6 +2617,39 @@ export interface PersistedProductGroup {
   members: ProductClusterProfile[];
   triage_members: ProductClusterProfile[];
   rules: ProductGroupRule[];
+  canonical_decisions: ProductCanonicalDecision[];
+  reconciliation_suggestions: ProductGroupReconciliationSuggestion[];
+}
+
+export interface ProductCanonicalDecision {
+  id: string;
+  canonical_product_id: string;
+  left_group_id: string;
+  right_group_id: string;
+  decision_source: "reviewer" | "automatic";
+  confidence: number;
+  created_at: string;
+}
+
+export interface ProductGroupReconciliationSuggestion {
+  target_group_id: string;
+  target_display_name: string | null;
+  target_member_count: number;
+  left_group_id: string;
+  right_group_id: string;
+  recommendation: "review" | "automatic";
+  confidence: number;
+  support_count: number;
+  left_member_count: number;
+  right_member_count: number;
+  left_coverage: number;
+  right_coverage: number;
+  average_same_product_score: number;
+  median_same_product_score: number;
+  minimum_same_product_score: number;
+  median_exact_reranker_score: number;
+  direct_relation_count: number;
+  legacy_relation_count: number;
 }
 
 export interface ProductGroupRule {
@@ -2978,9 +3013,76 @@ function normalizeProductCommercialSubgroups(
   });
 }
 
+function normalizeProductCanonicalDecisions(value: unknown): ProductCanonicalDecision[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+    const decision = raw as Partial<ProductCanonicalDecision>;
+    if (
+      typeof decision.id !== "string" ||
+      typeof decision.canonical_product_id !== "string" ||
+      typeof decision.left_group_id !== "string" ||
+      typeof decision.right_group_id !== "string" ||
+      !["reviewer", "automatic"].includes(decision.decision_source ?? "") ||
+      !isFiniteNumber(decision.confidence) ||
+      typeof decision.created_at !== "string"
+    ) return [];
+    return [{
+      ...decision,
+      decision_source: decision.decision_source as "reviewer" | "automatic",
+      confidence: Math.max(0, Math.min(1, decision.confidence)),
+    } as ProductCanonicalDecision];
+  });
+}
+
+function normalizeProductGroupReconciliationSuggestions(
+  value: unknown,
+): ProductGroupReconciliationSuggestion[] {
+  if (!Array.isArray(value)) return [];
+  const numericKeys: Array<keyof ProductGroupReconciliationSuggestion> = [
+    "target_member_count",
+    "confidence",
+    "support_count",
+    "left_member_count",
+    "right_member_count",
+    "left_coverage",
+    "right_coverage",
+    "average_same_product_score",
+    "median_same_product_score",
+    "minimum_same_product_score",
+    "median_exact_reranker_score",
+    "direct_relation_count",
+    "legacy_relation_count",
+  ];
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+    const suggestion = raw as Partial<ProductGroupReconciliationSuggestion>;
+    if (
+      typeof suggestion.target_group_id !== "string" ||
+      typeof suggestion.left_group_id !== "string" ||
+      typeof suggestion.right_group_id !== "string" ||
+      !["review", "automatic"].includes(suggestion.recommendation ?? "") ||
+      numericKeys.some((key) => !isFiniteNumber(suggestion[key]))
+    ) return [];
+    return [{
+      ...suggestion,
+      target_display_name: typeof suggestion.target_display_name === "string"
+        ? suggestion.target_display_name
+        : null,
+      recommendation: suggestion.recommendation as "review" | "automatic",
+    } as ProductGroupReconciliationSuggestion];
+  });
+}
+
 function normalizePersistedProductGroupOverview(overview: PersistedProductGroupOverview) {
   const groups = overview.groups.map((group) => ({
     ...group,
+    canonical_product_id: typeof group.canonical_product_id === "string"
+      ? group.canonical_product_id
+      : null,
+    atomic_cohort_count: isFiniteNumber(group.atomic_cohort_count)
+      ? Math.max(1, Math.trunc(group.atomic_cohort_count))
+      : 1,
     parent_group_id: group.parent_group_id ?? null,
     semantic_kind: group.semantic_kind ?? null,
     semantic_key: group.semantic_key ?? null,
@@ -2989,6 +3091,10 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
         ? group.semantic_definition
         : null,
     rules: Array.isArray(group.rules) ? group.rules : [],
+    canonical_decisions: normalizeProductCanonicalDecisions(group.canonical_decisions),
+    reconciliation_suggestions: normalizeProductGroupReconciliationSuggestions(
+      group.reconciliation_suggestions,
+    ),
     triage_member_count: Number.isFinite(group.triage_member_count)
       ? Number(group.triage_member_count)
       : null,
@@ -3107,6 +3213,41 @@ export async function refreshPersistedProductGroups(
     { method: "POST" },
   );
   return normalizePersistedProductGroupOverview(overview);
+}
+
+export function mergePersistedProductGroups(
+  ipId: string,
+  leftGroupId: string,
+  rightGroupId: string,
+) {
+  return request<{
+    decision: ProductCanonicalDecision;
+    regrouped: boolean;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/merge`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        left_group_id: leftGroupId,
+        right_group_id: rightGroupId,
+      }),
+    },
+  );
+}
+
+export function revokePersistedProductGroupMerge(
+  ipId: string,
+  groupId: string,
+  decisionId: string,
+) {
+  return request<{
+    decision: ProductCanonicalDecision;
+    regrouped: boolean;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}` +
+      `/canonical-decisions/${encodeURIComponent(decisionId)}`,
+    { method: "DELETE" },
+  );
 }
 
 export function confirmPersistedProductGroup(
