@@ -1065,11 +1065,32 @@ export default function ProductClusters() {
         return null;
       });
       if (latestOverview) {
-        setVisualOverview(latestOverview);
+        // The regroup request can complete before a replica/cache serves the
+        // updated snapshot. Keep the acknowledged correction applied locally
+        // so that a stale follow-up read cannot resurrect the removed card.
+        setVisualOverview(
+          optimisticallyExcludeProductGroupMember(latestOverview, groupId, profileId),
+        );
       } else if (!result.regrouped) {
         setVisualOverview((current) => current ? { ...current, dirty: true } : current);
       }
     } catch (caught: unknown) {
+      if (isApiError(caught, 404)) {
+        // Treat an already-absent membership as the desired end state. This
+        // also repairs clients that briefly rendered a stale group snapshot.
+        const latestOverview = await getPersistedProductGroups(
+          selectedIpId,
+          "same",
+          productGroupView,
+          { limit: PRODUCT_GROUP_PAGE_SIZE },
+        ).catch(() => null);
+        if (latestOverview) {
+          setVisualOverview(
+            optimisticallyExcludeProductGroupMember(latestOverview, groupId, profileId),
+          );
+        }
+        return;
+      }
       setError(errorMessage(caught));
       if (previousGroup) {
         setVisualOverview((current) => current ? {
