@@ -2635,6 +2635,8 @@ export interface ProductGroupReconciliationSuggestion {
   target_group_id: string;
   target_display_name: string | null;
   target_member_count: number;
+  target_confirmation_status: "candidate" | "confirmed";
+  target_preview_members: ProductClusterProfile[];
   left_group_id: string;
   right_group_id: string;
   recommendation: "review" | "automatic";
@@ -3069,6 +3071,12 @@ function normalizeProductGroupReconciliationSuggestions(
       target_display_name: typeof suggestion.target_display_name === "string"
         ? suggestion.target_display_name
         : null,
+      target_confirmation_status: suggestion.target_confirmation_status === "confirmed"
+        ? "confirmed"
+        : "candidate",
+      target_preview_members: Array.isArray(suggestion.target_preview_members)
+        ? suggestion.target_preview_members.map(normalizeProductClusterProfile)
+        : [],
       recommendation: suggestion.recommendation as "review" | "automatic",
     } as ProductGroupReconciliationSuggestion];
   });

@@ -3724,13 +3724,20 @@ function productGroupRecommendationSummary(group: PersistedProductGroup) {
 }
 
 function ProductGroupPreviewImages({
-  group,
+  profiles,
   size = "compact",
 }: {
-  group: PersistedProductGroup;
+  profiles: ProductClusterProfile[];
   size?: "compact" | "large";
 }) {
-  const profiles = productGroupPreviewProfiles(group);
+  const [failedProfileKeys, setFailedProfileKeys] = useState<Set<string>>(new Set());
+  const candidateProfiles = [...profiles]
+    .sort((left, right) => Number(Boolean(right.image_url)) - Number(Boolean(left.image_url)));
+  const visibleProfiles = candidateProfiles
+    .filter((profile) =>
+      !failedProfileKeys.has(`${profile.id}:${profile.image_url ?? ""}`)
+    )
+    .slice(0, 4);
   const cellClassName = size === "large"
     ? "aspect-square min-w-0 overflow-hidden rounded-lg bg-stone-100"
     : "h-12 w-12 overflow-hidden rounded-md bg-stone-100 sm:h-14 sm:w-14";
@@ -3739,22 +3746,32 @@ function ProductGroupPreviewImages({
       ? "grid grid-cols-4 gap-1.5"
       : "grid shrink-0 grid-cols-2 gap-1"}
     >
-      {profiles.map((profile) => (
-        <div key={profile.id} className={cellClassName} title={profileTitle(profile)}>
-          {profile.image_url ? (
-            <img
-              src={profile.image_url}
-              alt={profileTitle(profile)}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center text-sm font-black text-stone-400">
-              {profileTitle(profile).slice(0, 1).toUpperCase()}
-            </span>
-          )}
-        </div>
-      ))}
-      {profiles.length === 0 && (
+      {visibleProfiles.map((profile) => {
+        const profileKey = `${profile.id}:${profile.image_url ?? ""}`;
+        return (
+          <div key={profileKey} className={cellClassName} title={profileTitle(profile)}>
+            {profile.image_url ? (
+              <img
+                src={profile.image_url}
+                alt={profileTitle(profile)}
+                onError={() => {
+                  setFailedProfileKeys((current) => {
+                    const next = new Set(current);
+                    next.add(profileKey);
+                    return next;
+                  });
+                }}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center text-sm font-black text-stone-400">
+                {profileTitle(profile).slice(0, 1).toUpperCase()}
+              </span>
+            )}
+          </div>
+        );
+      })}
+      {visibleProfiles.length === 0 && (
         <div className={`${cellClassName} flex items-center justify-center text-stone-400`}>
           <Images size={size === "large" ? 24 : 18} />
         </div>
@@ -3781,10 +3798,17 @@ function ProductGroupReconciliationPreview({
     ? productGroupReviewLabel(targetGroup)
     : suggestion.target_display_name?.trim() ||
       `Unnamed group · ${suggestion.target_member_count} listings`;
+  const suggestedRepresentative = suggestion.target_preview_members.find(
+    (profile) => profile.listing_title?.trim(),
+  );
   const representativeTitle = targetGroup
     ? productGroupRepresentativeTitle(targetGroup)
-    : null;
+    : suggestedRepresentative
+      ? profileTitle(suggestedRepresentative)
+      : null;
   const variants = targetGroup ? productGroupVariantLabels(targetGroup) : [];
+  const targetConfirmationStatus = targetGroup?.confirmation_status ??
+    suggestion.target_confirmation_status;
 
   return (
     <div
@@ -3792,8 +3816,12 @@ function ProductGroupReconciliationPreview({
       className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-white p-3 lg:flex-row lg:items-center"
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        {targetGroup ? (
-          <ProductGroupPreviewImages group={targetGroup} />
+        {targetGroup || suggestion.target_preview_members.length > 0 ? (
+          <ProductGroupPreviewImages
+            profiles={targetGroup
+              ? productGroupPreviewProfiles(targetGroup, 8)
+              : suggestion.target_preview_members}
+          />
         ) : (
           <div className="grid shrink-0 grid-cols-2 gap-1" aria-hidden="true">
             {[0, 1, 2, 3].map((slot) => (
@@ -3812,11 +3840,11 @@ function ProductGroupReconciliationPreview({
               {targetLabel}
             </p>
             <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
-              targetGroup?.confirmation_status === "confirmed"
+              targetConfirmationStatus === "confirmed"
                 ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"
                 : "bg-stone-100 text-stone-600"
             }`}>
-              {targetGroup?.confirmation_status === "confirmed" ? "Confirmed" : "Unconfirmed"}
+              {targetConfirmationStatus === "confirmed" ? "Confirmed" : "Unconfirmed"}
             </span>
           </div>
           {representativeTitle && (
@@ -3897,7 +3925,10 @@ function ProductGroupMergeComparisonPanel({
       </p>
 
       <div className="mt-3">
-        <ProductGroupPreviewImages group={group} size="large" />
+        <ProductGroupPreviewImages
+          profiles={productGroupPreviewProfiles(group, 8)}
+          size="large"
+        />
       </div>
 
       {representativeTitle && (
