@@ -678,6 +678,65 @@ export default function ProductClusters() {
     }
   }
 
+  async function loadProductGroupForReview(groupId: string) {
+    if (!selectedIpId || !visualOverview) return null;
+    const alreadyLoaded = visualOverview.groups.find((group) => group.id === groupId);
+    if (alreadyLoaded) return alreadyLoaded;
+
+    const requestSequence = ++visualPageRequestSequence.current;
+    setLoadingMoreVisualGroups(false);
+    setError(null);
+    let accumulated = visualOverview;
+    const seenCursors = new Set<string>();
+    try {
+      while (accumulated.next_cursor && !seenCursors.has(accumulated.next_cursor)) {
+        const cursor = accumulated.next_cursor;
+        seenCursors.add(cursor);
+        const nextOverview = await getPersistedProductGroups(
+          selectedIpId,
+          "same",
+          productGroupView,
+          { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
+        );
+        if (visualPageRequestSequence.current !== requestSequence) return null;
+        accumulated = appendProductGroupPage(accumulated, nextOverview);
+        const target = accumulated.groups.find((group) => group.id === groupId);
+        if (target) {
+          setVisualOverview(accumulated);
+          return target;
+        }
+      }
+      setVisualOverview(accumulated);
+      if (productGroupView === "triage") {
+        let allCursor: string | null = null;
+        const seenAllCursors = new Set<string>();
+        do {
+          const allOverview = await getPersistedProductGroups(
+            selectedIpId,
+            "same",
+            "all",
+            {
+              limit: PRODUCT_GROUP_PAGE_SIZE,
+              cursor: allCursor,
+            },
+          );
+          if (visualPageRequestSequence.current !== requestSequence) return null;
+          const target = allOverview.groups.find((group) => group.id === groupId);
+          if (target) return target;
+          allCursor = allOverview.next_cursor;
+          if (allCursor && seenAllCursors.has(allCursor)) break;
+          if (allCursor) seenAllCursors.add(allCursor);
+        } while (allCursor);
+      }
+      return null;
+    } catch (caught: unknown) {
+      if (visualPageRequestSequence.current === requestSequence) {
+        setError(errorMessage(caught, "Unable to load the suggested product group."));
+      }
+      return null;
+    }
+  }
+
   async function loadGroupTasks(groupId: string) {
     const cached = loadedGroupTasks[groupId];
     if (cached) return cached;
@@ -1594,6 +1653,7 @@ export default function ProductClusters() {
                 onOpenFinding={openLoadedFinding}
                 onConfirmGroup={confirmGroup}
                 onSelectMergeSource={setMergeSourceGroupId}
+                onLoadGroupForReview={loadProductGroupForReview}
                 onMergeGroups={mergeProductGroups}
                 onRevokeMerge={revokeProductGroupMerge}
                 onUpdateEmbeddingThreshold={updateGroupEmbeddingThreshold}
@@ -3254,6 +3314,7 @@ function ProductGroupsOverview({
   onOpenFinding,
   onConfirmGroup,
   onSelectMergeSource,
+  onLoadGroupForReview,
   onMergeGroups,
   onRevokeMerge,
   onUpdateEmbeddingThreshold,
@@ -3301,6 +3362,7 @@ function ProductGroupsOverview({
   onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onSelectMergeSource: (groupId: string | null) => void;
+  onLoadGroupForReview: (groupId: string) => Promise<PersistedProductGroup | null>;
   onMergeGroups: (leftGroupId: string, rightGroupId: string) => Promise<void>;
   onRevokeMerge: (groupId: string, decisionId: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
@@ -3431,6 +3493,7 @@ function ProductGroupsOverview({
                 <ProductGroupCard
                   key={group.id}
                   group={group}
+                  availableGroups={overview.groups}
                   reconciliationSuggestions={group.reconciliation_suggestions.filter(
                     (suggestion) =>
                       group.id === suggestion.left_group_id ||
@@ -3470,6 +3533,7 @@ function ProductGroupsOverview({
                   onOpenFinding={onOpenFinding}
                   onConfirmGroup={onConfirmGroup}
                   onSelectMergeSource={onSelectMergeSource}
+                  onLoadGroupForReview={onLoadGroupForReview}
                   onMergeGroups={onMergeGroups}
                   onRevokeMerge={onRevokeMerge}
                   onUpdateEmbeddingThreshold={onUpdateEmbeddingThreshold}
@@ -3592,8 +3656,464 @@ function ProductGroupPriceSummaryView({
   );
 }
 
+type ProductGroupReconciliationSuggestion =
+  PersistedProductGroup["reconciliation_suggestions"][number];
+
+function productGroupPreviewProfiles(
+  group: PersistedProductGroup,
+  limit = 4,
+) {
+  const uniqueProfiles = new Map<string, ProductClusterProfile>();
+  for (const profile of [...group.triage_members, ...group.members]) {
+    if (!uniqueProfiles.has(profile.id)) uniqueProfiles.set(profile.id, profile);
+  }
+  return [...uniqueProfiles.values()]
+    .sort((left, right) => Number(Boolean(right.image_url)) - Number(Boolean(left.image_url)))
+    .slice(0, limit);
+}
+
+function productGroupReviewLabel(group: PersistedProductGroup) {
+  return group.display_name?.trim() ||
+    `Unnamed group · ${group.member_count} ${group.member_count === 1 ? "listing" : "listings"}`;
+}
+
+function productGroupRepresentativeTitle(group: PersistedProductGroup) {
+  const profiles = productGroupPreviewProfiles(group, 8);
+  const titledProfile = profiles.find((profile) => profile.listing_title?.trim());
+  return titledProfile ? profileTitle(titledProfile) : null;
+}
+
+function productGroupVariantLabels(group: PersistedProductGroup) {
+  return [...new Set(
+    group.commercial_subgroups
+      .map((subgroup) => subgroup.variant_label.trim())
+      .filter(Boolean),
+  )].slice(0, 3);
+}
+
+function productGroupPriceLabel(group: PersistedProductGroup) {
+  if (group.price_summary) {
+    const low = formatMoney(group.price_summary.typical_low_usd, "USD");
+    const high = formatMoney(group.price_summary.typical_high_usd, "USD");
+    return low === high ? low : `${low}–${high} typical`;
+  }
+  const subgroupPrices = group.commercial_subgroups.flatMap((subgroup) =>
+    subgroup.price_range
+      ? [subgroup.price_range.minimum, subgroup.price_range.maximum]
+      : []
+  );
+  if (subgroupPrices.length > 0) {
+    const low = Math.min(...subgroupPrices);
+    const high = Math.max(...subgroupPrices);
+    return low === high
+      ? formatMoney(low, "USD")
+      : `${formatMoney(low, "USD")}–${formatMoney(high, "USD")}`;
+  }
+  return "Price unavailable";
+}
+
+function productGroupRecommendationSummary(group: PersistedProductGroup) {
+  const counts = group.triage_recommendation_counts;
+  if (!counts) return [];
+  return [
+    { label: "Likely counterfeit", count: counts.takedown },
+    { label: "Second-hand", count: counts.second_hand },
+    { label: "Might be OK", count: counts.might_be_ok },
+    { label: "Needs review", count: counts.needs_review },
+  ].filter(({ count }) => count > 0);
+}
+
+function ProductGroupPreviewImages({
+  group,
+  size = "compact",
+}: {
+  group: PersistedProductGroup;
+  size?: "compact" | "large";
+}) {
+  const profiles = productGroupPreviewProfiles(group);
+  const cellClassName = size === "large"
+    ? "aspect-square min-w-0 overflow-hidden rounded-lg bg-stone-100"
+    : "h-12 w-12 overflow-hidden rounded-md bg-stone-100 sm:h-14 sm:w-14";
+  return (
+    <div className={size === "large"
+      ? "grid grid-cols-4 gap-1.5"
+      : "grid shrink-0 grid-cols-2 gap-1"}
+    >
+      {profiles.map((profile) => (
+        <div key={profile.id} className={cellClassName} title={profileTitle(profile)}>
+          {profile.image_url ? (
+            <img
+              src={profile.image_url}
+              alt={profileTitle(profile)}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-sm font-black text-stone-400">
+              {profileTitle(profile).slice(0, 1).toUpperCase()}
+            </span>
+          )}
+        </div>
+      ))}
+      {profiles.length === 0 && (
+        <div className={`${cellClassName} flex items-center justify-center text-stone-400`}>
+          <Images size={size === "large" ? 24 : 18} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductGroupReconciliationPreview({
+  suggestion,
+  targetGroup,
+  mergeBusy,
+  loading,
+  onReview,
+}: {
+  suggestion: ProductGroupReconciliationSuggestion;
+  targetGroup: PersistedProductGroup | null;
+  mergeBusy: boolean;
+  loading: boolean;
+  onReview: () => void;
+}) {
+  const minimumCoverage = Math.min(suggestion.left_coverage, suggestion.right_coverage);
+  const targetLabel = targetGroup
+    ? productGroupReviewLabel(targetGroup)
+    : suggestion.target_display_name?.trim() ||
+      `Unnamed group · ${suggestion.target_member_count} listings`;
+  const representativeTitle = targetGroup
+    ? productGroupRepresentativeTitle(targetGroup)
+    : null;
+  const variants = targetGroup ? productGroupVariantLabels(targetGroup) : [];
+
+  return (
+    <div
+      data-reconciliation-target-group-id={suggestion.target_group_id}
+      className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-white p-3 lg:flex-row lg:items-center"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {targetGroup ? (
+          <ProductGroupPreviewImages group={targetGroup} />
+        ) : (
+          <div className="grid shrink-0 grid-cols-2 gap-1" aria-hidden="true">
+            {[0, 1, 2, 3].map((slot) => (
+              <div
+                key={slot}
+                className="flex h-12 w-12 items-center justify-center rounded-md bg-stone-100 text-stone-300 sm:h-14 sm:w-14"
+              >
+                <Images size={16} />
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="min-w-0 truncate text-sm font-bold text-stone-950">
+              {targetLabel}
+            </p>
+            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+              targetGroup?.confirmation_status === "confirmed"
+                ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"
+                : "bg-stone-100 text-stone-600"
+            }`}>
+              {targetGroup?.confirmation_status === "confirmed" ? "Confirmed" : "Unconfirmed"}
+            </span>
+          </div>
+          {representativeTitle && (
+            <p className="mt-1 line-clamp-1 text-[11px] font-medium text-stone-700">
+              <span className="text-stone-400">Representative listing:</span>{" "}
+              {representativeTitle}
+            </p>
+          )}
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {targetGroup && (
+              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-700">
+                {productGroupPriceLabel(targetGroup)}
+              </span>
+            )}
+            {variants.map((variant) => (
+              <span
+                key={variant}
+                className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800 ring-1 ring-inset ring-sky-200"
+              >
+                {variant}
+              </span>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[10px] text-stone-600">
+            {suggestion.support_count} matching comparisons · {Math.round(minimumCoverage * 100)}%+ member coverage · median match {suggestion.median_same_product_score.toFixed(2)}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+        {targetGroup && (
+          <a
+            href={`#product-group-${targetGroup.id}`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800"
+          >
+            <Eye size={14} />
+            View group
+          </a>
+        )}
+        <button
+          type="button"
+          disabled={mergeBusy || loading}
+          onClick={onReview}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {loading ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-200 border-t-white" />
+          ) : (
+            <Eye size={14} />
+          )}
+          {loading ? "Loading preview…" : "Review & merge"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProductGroupMergeComparisonPanel({
+  group,
+  eyebrow,
+}: {
+  group: PersistedProductGroup;
+  eyebrow: string;
+}) {
+  const profiles = productGroupPreviewProfiles(group, 6);
+  const variants = productGroupVariantLabels(group);
+  const recommendations = productGroupRecommendationSummary(group);
+  const representativeTitle = productGroupRepresentativeTitle(group);
+  return (
+    <section className="min-w-0 rounded-2xl border border-stone-200 bg-stone-50/80 p-4">
+      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-700">
+        {eyebrow}
+      </p>
+      <h3 className="mt-1 line-clamp-2 text-base font-black text-stone-950">
+        {productGroupReviewLabel(group)}
+      </h3>
+      <p className="mt-1 text-[11px] font-semibold text-stone-500">
+        {group.confirmation_status === "confirmed" ? "Confirmed product" : "Unconfirmed product group"}
+      </p>
+
+      <div className="mt-3">
+        <ProductGroupPreviewImages group={group} size="large" />
+      </div>
+
+      {representativeTitle && (
+        <div className="mt-3 rounded-lg border border-stone-200 bg-white px-3 py-2.5">
+          <p className="text-[9px] font-black uppercase tracking-wide text-stone-400">
+            Representative listing
+          </p>
+          <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-stone-800">
+            {representativeTitle}
+          </p>
+        </div>
+      )}
+
+      <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-lg border border-stone-200 bg-white px-3 py-2">
+          <dt className="text-[9px] font-bold uppercase tracking-wide text-stone-400">Listings</dt>
+          <dd className="mt-0.5 font-black text-stone-900">{group.member_count}</dd>
+        </div>
+        <div className="rounded-lg border border-stone-200 bg-white px-3 py-2">
+          <dt className="text-[9px] font-bold uppercase tracking-wide text-stone-400">Price</dt>
+          <dd className="mt-0.5 truncate font-black text-stone-900">{productGroupPriceLabel(group)}</dd>
+        </div>
+      </dl>
+
+      {variants.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[9px] font-black uppercase tracking-wide text-stone-400">
+            Comparable variants
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {variants.map((variant) => (
+              <span
+                key={variant}
+                className="rounded-full bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-800 ring-1 ring-inset ring-sky-200"
+              >
+                {variant}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recommendations.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[9px] font-black uppercase tracking-wide text-stone-400">
+            Current triage mix
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {recommendations.map(({ label, count }) => (
+              <span
+                key={label}
+                className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-stone-700 ring-1 ring-inset ring-stone-200"
+              >
+                {label} {count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {profiles.length > 1 && (
+        <div className="mt-3">
+          <p className="text-[9px] font-black uppercase tracking-wide text-stone-400">
+            Other examples
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {profiles.slice(1, 4).map((profile) => (
+              <li key={profile.id} className="truncate text-[10px] font-medium text-stone-600">
+                {profileTitle(profile)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProductGroupMergeReviewDialog({
+  sourceGroup,
+  targetGroup,
+  targetVisibleOnPage,
+  suggestion,
+  saving,
+  onClose,
+  onMerge,
+}: {
+  sourceGroup: PersistedProductGroup;
+  targetGroup: PersistedProductGroup | null;
+  targetVisibleOnPage: boolean;
+  suggestion: ProductGroupReconciliationSuggestion;
+  saving: boolean;
+  onClose: () => void;
+  onMerge: () => Promise<void>;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || saving) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, saving]);
+
+  const minimumCoverage = Math.min(suggestion.left_coverage, suggestion.right_coverage);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/50 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !saving) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-group-merge-review-title"
+        data-product-group-merge-review
+        className="max-h-[calc(100vh-2rem)] w-full max-w-5xl overflow-y-auto rounded-2xl border border-violet-200 bg-white shadow-2xl"
+      >
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-stone-200 bg-white/95 px-5 py-4 backdrop-blur">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-700">
+              Same-product decision
+            </p>
+            <h2 id="product-group-merge-review-title" className="mt-1 text-xl font-black text-stone-950">
+              Review product merge
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-stone-600">
+              Compare both groups before creating one durable product identity. The decision can be undone from merge history.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close merge review"
+            disabled={saving}
+            onClick={onClose}
+            className="rounded-lg p-2 text-stone-500 hover:bg-stone-100 hover:text-stone-900 disabled:opacity-40"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-5">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-xs font-bold text-amber-950">Why this was suggested</p>
+            <p className="mt-1 text-[11px] leading-5 text-amber-800">
+              {suggestion.support_count} matching comparisons across at least {Math.round(minimumCoverage * 100)}% of each group · median same-product match {suggestion.median_same_product_score.toFixed(2)} · minimum match {suggestion.minimum_same_product_score.toFixed(2)}
+            </p>
+          </div>
+
+          {targetGroup ? (
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <ProductGroupMergeComparisonPanel group={sourceGroup} eyebrow="Current group" />
+              <ProductGroupMergeComparisonPanel group={targetGroup} eyebrow="Suggested target" />
+            </div>
+          ) : (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-800">
+              The target group could not be loaded for review. No merge can be submitted until its listings are available.
+            </div>
+          )}
+
+          <div className="mt-5 flex flex-col gap-3 border-t border-stone-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              {targetGroup && (
+                <p className="text-xs font-bold text-stone-800">
+                  Combine “{productGroupReviewLabel(sourceGroup)}” and “{productGroupReviewLabel(targetGroup)}” as one underlying product?
+                </p>
+              )}
+              <p className="mt-1 text-[10px] text-stone-500">
+                Listings keep their size, price, and review lanes after the product identities are combined.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {targetGroup && targetVisibleOnPage && (
+                <a
+                  href={`#product-group-${targetGroup.id}`}
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800"
+                >
+                  <Eye size={14} />
+                  View target on page
+                </a>
+              )}
+              <button
+                type="button"
+                disabled={saving}
+                onClick={onClose}
+                className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100 disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving || !targetGroup}
+                onClick={() => void onMerge().catch(() => undefined)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-violet-700 px-4 py-2 text-xs font-bold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {saving ? (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-200 border-t-white" />
+                ) : (
+                  <Check size={14} />
+                )}
+                {saving ? "Combining…" : "Merge these groups"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProductGroupCard({
   group,
+  availableGroups,
   reconciliationSuggestions,
   index,
   ipId,
@@ -3623,6 +4143,7 @@ function ProductGroupCard({
   onOpenFinding,
   onConfirmGroup,
   onSelectMergeSource,
+  onLoadGroupForReview,
   onMergeGroups,
   onRevokeMerge,
   onUpdateEmbeddingThreshold,
@@ -3632,6 +4153,7 @@ function ProductGroupCard({
   onDeleteRule,
 }: {
   group: PersistedProductGroup;
+  availableGroups: PersistedProductGroup[];
   reconciliationSuggestions: PersistedProductGroup["reconciliation_suggestions"];
   index: number;
   ipId: string;
@@ -3667,6 +4189,7 @@ function ProductGroupCard({
   onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onSelectMergeSource: (groupId: string | null) => void;
+  onLoadGroupForReview: (groupId: string) => Promise<PersistedProductGroup | null>;
   onMergeGroups: (leftGroupId: string, rightGroupId: string) => Promise<void>;
   onRevokeMerge: (groupId: string, decisionId: string) => Promise<void>;
   onUpdateEmbeddingThreshold: (
@@ -3718,6 +4241,11 @@ function ProductGroupCard({
   const [visualEvidenceError, setVisualEvidenceError] = useState<string | null>(null);
   const [savingReferenceImageId, setSavingReferenceImageId] = useState<string | null>(null);
   const [resettingReferences, setResettingReferences] = useState(false);
+  const [mergeReviewTargetId, setMergeReviewTargetId] = useState<string | null>(null);
+  const [resolvedMergeReviewTarget, setResolvedMergeReviewTarget] =
+    useState<PersistedProductGroup | null>(null);
+  const [loadingMergeReviewTargetId, setLoadingMergeReviewTargetId] =
+    useState<string | null>(null);
   const confirmed = group.confirmation_status === "confirmed";
   const selectedAsMergeSource = mergeSourceGroup?.id === group.id;
   const selectedMergeKey = mergeSourceGroup
@@ -3728,6 +4256,17 @@ function ProductGroupCard({
     mergeSourceGroup?.canonical_product_id &&
       mergeSourceGroup.canonical_product_id === group.canonical_product_id,
   );
+  const mergeReviewSuggestion = mergeReviewTargetId
+    ? reconciliationSuggestions.find(
+        (suggestion) => suggestion.target_group_id === mergeReviewTargetId,
+      ) ?? null
+    : null;
+  const mergeReviewTarget = mergeReviewTargetId
+    ? availableGroups.find((candidate) => candidate.id === mergeReviewTargetId) ??
+      (resolvedMergeReviewTarget?.id === mergeReviewTargetId
+        ? resolvedMergeReviewTarget
+        : null)
+    : null;
   const triageMemberCount = group.triage_member_count ?? 0;
   const showingPersistedMembers = showPersistedMembers || managing;
   const displayedMembers = showingPersistedMembers ? group.members : group.triage_members;
@@ -3839,6 +4378,19 @@ function ProductGroupCard({
     }
   }
 
+  async function openMergeReview(targetGroupId: string) {
+    setLoadingMergeReviewTargetId(targetGroupId);
+    try {
+      const target = availableGroups.find((candidate) => candidate.id === targetGroupId) ??
+        await onLoadGroupForReview(targetGroupId);
+      if (!target) return;
+      setResolvedMergeReviewTarget(target);
+      setMergeReviewTargetId(targetGroupId);
+    } finally {
+      setLoadingMergeReviewTargetId(null);
+    }
+  }
+
   const displayedCommercialSubgroups = mode === "same"
     ? group.commercial_subgroups.filter((subgroup) =>
         showingPersistedMembers
@@ -3903,8 +4455,9 @@ function ProductGroupCard({
 
   return (
     <section
+      id={`product-group-${group.id}`}
       data-product-group-id={group.id}
-      className={`rounded-2xl border bg-white p-4 shadow-sm ${
+      className={`scroll-mt-4 rounded-2xl border bg-white p-4 shadow-sm transition target:ring-4 target:ring-violet-200 ${
         confirmed
           ? "border-emerald-200"
           : mode === "visual"
@@ -4088,42 +4641,18 @@ function ProductGroupCard({
             Distributed cross-listing evidence supports the same underlying product. Review the target before combining them.
           </p>
           <div className="mt-2 space-y-2">
-            {reconciliationSuggestions.map((suggestion) => {
-              const suggestionMergeKey = [group.id, suggestion.target_group_id]
-                .sort().join(":");
-              const savingSuggestion = savingMergeKey === suggestionMergeKey;
-              const minimumCoverage = Math.min(
-                suggestion.left_coverage,
-                suggestion.right_coverage,
-              );
-              return (
-                <div
-                  key={suggestion.target_group_id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-stone-900">
-                      {suggestion.target_display_name ||
-                        `Another group with ${suggestion.target_member_count} listings`}
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-stone-600">
-                      {suggestion.support_count} matching comparisons · {Math.round(minimumCoverage * 100)}%+ member coverage · median match {suggestion.median_same_product_score.toFixed(2)}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={Boolean(savingMergeKey)}
-                    onClick={() => {
-                      void onMergeGroups(group.id, suggestion.target_group_id)
-                        .catch(() => undefined);
-                    }}
-                    className="shrink-0 rounded-lg bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-800 disabled:opacity-45"
-                  >
-                    {savingSuggestion ? "Combining…" : "Merge as same product"}
-                  </button>
-                </div>
-              );
-            })}
+            {reconciliationSuggestions.map((suggestion) => (
+              <ProductGroupReconciliationPreview
+                key={suggestion.target_group_id}
+                suggestion={suggestion}
+                targetGroup={availableGroups.find(
+                  (candidate) => candidate.id === suggestion.target_group_id,
+                ) ?? null}
+                mergeBusy={Boolean(savingMergeKey)}
+                loading={loadingMergeReviewTargetId === suggestion.target_group_id}
+                onReview={() => void openMergeReview(suggestion.target_group_id)}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -4877,6 +5406,23 @@ function ProductGroupCard({
               : "View tasks"}
         </Link>
       </div>
+      {mergeReviewSuggestion && (
+        <ProductGroupMergeReviewDialog
+          sourceGroup={group}
+          targetGroup={mergeReviewTarget}
+          targetVisibleOnPage={availableGroups.some(
+            (candidate) => candidate.id === mergeReviewSuggestion.target_group_id,
+          )}
+          suggestion={mergeReviewSuggestion}
+          saving={savingMergeKey === [group.id, mergeReviewSuggestion.target_group_id]
+            .sort().join(":")}
+          onClose={() => setMergeReviewTargetId(null)}
+          onMerge={async () => {
+            await onMergeGroups(group.id, mergeReviewSuggestion.target_group_id);
+            setMergeReviewTargetId(null);
+          }}
+        />
+      )}
     </section>
   );
 }
