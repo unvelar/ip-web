@@ -175,6 +175,87 @@ function appendProductGroupPage(
   };
 }
 
+function decrementRecommendationCount(
+  counts: ProductGroupRecommendationCounts,
+  bucket: ProductGroupRecommendationBucket,
+) {
+  const next = {
+    ...counts,
+    [bucket]: Math.max(0, counts[bucket] - 1),
+  };
+  if (next.review != null) {
+    next.review = next.might_be_ok + next.needs_review;
+  }
+  return next;
+}
+
+function optimisticallyExcludeProductGroupMember(
+  overview: PersistedProductGroupOverview,
+  groupId: string,
+  profileId: string,
+) {
+  let removedPersistedMember = false;
+  let removedTriageMember = false;
+  const groups = overview.groups.map((group) => {
+    if (group.id !== groupId) return group;
+    const profile = group.members.find((member) => member.id === profileId) ??
+      group.triage_members.find((member) => member.id === profileId);
+    if (!profile) return group;
+    removedPersistedMember = true;
+    removedTriageMember = group.triage_members.some((member) => member.id === profileId);
+    const recommendationBucket = removedTriageMember
+      ? recommendationBucketForProfile(profile)
+      : null;
+    const commercialSubgroups = group.commercial_subgroups.map((subgroup) => {
+      if (subgroup.key !== profile.commercial_subgroup_key) return subgroup;
+      return {
+        ...subgroup,
+        member_count: Math.max(0, subgroup.member_count - 1),
+        triage_member_count: Math.max(
+          0,
+          subgroup.triage_member_count - (removedTriageMember ? 1 : 0),
+        ),
+        triage_recommendation_counts: recommendationBucket
+          ? decrementRecommendationCount(
+            subgroup.triage_recommendation_counts,
+            recommendationBucket,
+          )
+          : subgroup.triage_recommendation_counts,
+        triage_case_ids: subgroup.triage_case_ids.filter(
+          (caseId) => caseId !== profile.case_id,
+        ),
+      };
+    });
+    return {
+      ...group,
+      member_count: Math.max(0, group.member_count - 1),
+      triage_member_count: group.triage_member_count == null
+        ? null
+        : Math.max(0, group.triage_member_count - (removedTriageMember ? 1 : 0)),
+      triage_recommendation_counts: recommendationBucket && group.triage_recommendation_counts
+        ? decrementRecommendationCount(group.triage_recommendation_counts, recommendationBucket)
+        : group.triage_recommendation_counts,
+      members: group.members.filter((member) => member.id !== profileId),
+      triage_members: group.triage_members.filter((member) => member.id !== profileId),
+      price_signal_members: group.price_signal_members.filter(
+        (member) => member.profile_id !== profileId,
+      ),
+      commercial_subgroups: commercialSubgroups,
+    };
+  });
+  if (!removedPersistedMember) return overview;
+  return {
+    ...overview,
+    groups,
+    triage_profile_count: overview.triage_profile_count == null
+      ? null
+      : Math.max(0, overview.triage_profile_count - (removedTriageMember ? 1 : 0)),
+    snapshot_membership_count: overview.snapshot_membership_count == null
+      ? null
+      : Math.max(0, overview.snapshot_membership_count - 1),
+  };
+}
+
 export default function ProductClusters() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -925,23 +1006,92 @@ export default function ProductClusters() {
     reason: ProductGroupCorrectionReason,
   ) {
     if (!selectedIpId) return;
+    const previousOverview = visualOverview;
+    const previousGroup = previousOverview?.groups.find((group) => group.id === groupId) ?? null;
+    const removedProfile = previousGroup?.members.find((profile) => profile.id === profileId) ??
+      previousGroup?.triage_members.find((profile) => profile.id === profileId) ?? null;
+    const previousLoadedFindings = loadedGroupTasks[groupId] ?? null;
+    const previousActiveBatch = activeBatch?.groupId === groupId ? activeBatch : null;
     visualPageRequestSequence.current += 1;
     setLoadingMoreVisualGroups(false);
     setError(null);
     setSavingCorrectionProfileId(profileId);
+    setVisualOverview((current) => current
+      ? optimisticallyExcludeProductGroupMember(current, groupId, profileId)
+      : current);
+    if (removedProfile) {
+      setLoadedGroupTasks((current) => current[groupId]
+        ? {
+          ...current,
+          [groupId]: current[groupId].filter(
+            (finding) => finding.case_id !== removedProfile.case_id,
+          ),
+        }
+        : current);
+      setActiveBatch((current) => {
+        if (current?.groupId !== groupId || !current.findings) return current;
+        const removedResultIds = new Set(
+          current.findings
+            .filter((finding) => finding.case_id === removedProfile.case_id)
+            .map((finding) => finding.result_id),
+        );
+        if (removedResultIds.size === 0) return current;
+        return {
+          ...current,
+          findings: current.findings.filter(
+            (finding) => !removedResultIds.has(finding.result_id),
+          ),
+          selectedResultIds: new Set(
+            [...current.selectedResultIds].filter((resultId) => !removedResultIds.has(resultId)),
+          ),
+        };
+      });
+    }
     try {
-      await excludePersistedProductGroupMember(selectedIpId, groupId, {
+      const result = await excludePersistedProductGroupMember(selectedIpId, groupId, {
         profile_id: profileId,
         reason,
       });
-      setVisualOverview(await getPersistedProductGroups(
+      const latestOverview = await getPersistedProductGroups(
         selectedIpId,
         "same",
         productGroupView,
         { limit: PRODUCT_GROUP_PAGE_SIZE },
-      ));
+      ).catch((caught: unknown) => {
+        setError(errorMessage(
+          caught,
+          "The correction was saved, but the latest product groups could not be loaded.",
+        ));
+        return null;
+      });
+      if (latestOverview) {
+        setVisualOverview(latestOverview);
+      } else if (!result.regrouped) {
+        setVisualOverview((current) => current ? { ...current, dirty: true } : current);
+      }
     } catch (caught: unknown) {
       setError(errorMessage(caught));
+      if (previousGroup) {
+        setVisualOverview((current) => current ? {
+          ...current,
+          triage_profile_count: previousOverview
+            ? previousOverview.triage_profile_count
+            : current.triage_profile_count,
+          snapshot_membership_count: previousOverview
+            ? previousOverview.snapshot_membership_count
+            : current.snapshot_membership_count,
+          groups: current.groups.map((group) =>
+            group.id === groupId ? previousGroup : group
+          ),
+        } : current);
+      }
+      if (previousLoadedFindings) {
+        setLoadedGroupTasks((current) => ({
+          ...current,
+          [groupId]: previousLoadedFindings,
+        }));
+      }
+      if (previousActiveBatch) setActiveBatch(previousActiveBatch);
       throw caught;
     } finally {
       setSavingCorrectionProfileId(null);
@@ -3404,7 +3554,6 @@ function ProductGroupCard({
 }) {
   const [editingName, setEditingName] = useState(false);
   const [managing, setManaging] = useState(false);
-  const [correctingProfileId, setCorrectingProfileId] = useState<string | null>(null);
   const [name, setName] = useState(
     group.confirmation_status === "confirmed" ? group.display_name ?? "" : "",
   );
@@ -3443,7 +3592,6 @@ function ProductGroupCard({
     : "status=all&show_dismissed=true";
   const canConfirm = mode === "same" || mode === "visual";
   const trimmedName = name.trim();
-  const correctingProfile = group.members.find((profile) => profile.id === correctingProfileId) ?? null;
   const nextEmbeddingThreshold = embeddingThresholdEnabled
     ? embeddingThresholdDraft
     : null;
@@ -3570,7 +3718,10 @@ function ProductGroupCard({
             aria-label={`Remove ${profileTitle(profile)} from this product`}
             title="This listing belongs to a different underlying product"
             disabled={Boolean(savingCorrectionProfileId)}
-            onClick={() => setCorrectingProfileId(profile.id)}
+            onClick={() => {
+              void onCorrectGroupMember(group.id, profile.id, "wrong_product")
+                .catch(() => undefined);
+            }}
             className={`mt-2 inline-flex w-full items-center justify-center rounded-md px-2 py-1.5 text-[10px] font-semibold text-stone-500 transition hover:bg-red-50 hover:text-red-700 focus:bg-red-50 focus:text-red-700 disabled:opacity-40 ${
               confirmed ? "opacity-0 group-hover/member:opacity-100 group-focus-within/member:opacity-100" : "opacity-100"
             }`}
@@ -4411,39 +4562,6 @@ function ProductGroupCard({
           onSetAllBatchFindings={onSetAllBatchFindings}
           onToggleSubgroupListings={onToggleSubgroupListings}
         />
-      )}
-      {correctingProfile && (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <p className="text-xs font-bold text-amber-950">
-            Mark “{profileTitle(correctingProfile)}” as a different product?
-          </p>
-          <p className="mt-1 text-[11px] text-amber-800">
-            Size, price, condition, and counterfeit suspicion belong inside this product.
-            Remove it only when the underlying design or model is different.
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={Boolean(savingCorrectionProfileId)}
-              onClick={() => {
-                void onCorrectGroupMember(group.id, correctingProfile.id, "wrong_product")
-                  .then(() => setCorrectingProfileId(null))
-                  .catch(() => undefined);
-              }}
-              className="rounded-lg bg-amber-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-950 disabled:opacity-50"
-            >
-              Different product
-            </button>
-            <button
-              type="button"
-              disabled={Boolean(savingCorrectionProfileId)}
-              onClick={() => setCorrectingProfileId(null)}
-              className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
       )}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <span className="text-xs text-stone-500">
