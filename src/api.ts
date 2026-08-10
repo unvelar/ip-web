@@ -2195,7 +2195,7 @@ export interface MonitoringSellerProfilePage {
   next_cursor: string | null;
 }
 
-export function getMonitoringSellerProfile(
+export async function getMonitoringSellerProfile(
   sellerKey: string,
   opts: {
     status?: MonitoringSellerStatus;
@@ -2214,10 +2214,17 @@ export function getMonitoringSellerProfile(
   if (opts.sort) params.set("sort", opts.sort);
   if (opts.cursor) params.set("cursor", opts.cursor);
   params.set("limit", String(opts.limit ?? 50));
-  return request<MonitoringSellerProfilePage>(
-    `/api/monitoring/sellers/${encodeURIComponent(sellerKey)}?${params.toString()}`,
-    { signal: opts.signal },
-  );
+  const path = () =>
+    `/api/monitoring/sellers/${encodeURIComponent(sellerKey)}?${params.toString()}`;
+  try {
+    return await request<MonitoringSellerProfilePage>(path(), { signal: opts.signal });
+  } catch (error) {
+    // Keep frontend previews usable while the API rollout is in flight. The
+    // backend treats `active` as an alias for `open` once it has been updated.
+    if (opts.status !== "open" || !isApiError(error, 400)) throw error;
+    params.set("status", "active");
+    return request<MonitoringSellerProfilePage>(path(), { signal: opts.signal });
+  }
 }
 
 export function resolveMonitoringFindingTenant(resultId: string) {
