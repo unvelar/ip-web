@@ -1477,8 +1477,8 @@ export default function ProductClusters() {
   const workloadOverview = visualOverview;
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="mx-auto max-w-[100rem] px-4 py-4 sm:px-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-black tracking-tight text-stone-900">
@@ -1488,10 +1488,6 @@ export default function ProductClusters() {
               Beta
             </span>
           </div>
-          <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Review in order: the underlying product, then comparable size and price,
-            then the recommended decision for each listing.
-          </p>
         </div>
         <button
           type="button"
@@ -1511,7 +1507,7 @@ export default function ProductClusters() {
       </header>
 
       {primaryOverview && (
-        <section className="mt-6 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
+        <section className="mt-4 flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-2 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:pl-4">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-stone-500">
             <span>
               <strong className="text-stone-800">{primaryOverview.scope.profile_count}</strong>{" "}
@@ -1560,6 +1556,12 @@ export default function ProductClusters() {
               </>
             )}
           </div>
+          {visualOverview && (
+            <ProductGroupViewToggle
+              view={productGroupView}
+              onChange={setProductGroupView}
+            />
+          )}
         </section>
       )}
 
@@ -1599,23 +1601,12 @@ export default function ProductClusters() {
       ) : loadingGroups && !semanticOverview && !visualOverview ? (
         <LoadingState />
       ) : semanticOverview || visualOverview ? (
-        <div className="mt-5">
-          <ProductGroupViewToggle
-            view={productGroupView}
-            onChange={setProductGroupView}
-          />
+        <div className="mt-4">
           {visualOverview && (
-            <section className="mt-7" aria-labelledby="product-groups-heading">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-700">
-                Product identity
-              </p>
-              <h2 id="product-groups-heading" className="mt-1 text-lg font-black text-stone-900">
-                Same products
+            <section aria-labelledby="product-groups-heading">
+              <h2 id="product-groups-heading" className="text-lg font-black text-stone-900">
+                Products
               </h2>
-              <p className="mt-1 max-w-3xl text-sm text-stone-500">
-                Each parent contains listings for the same underlying product. Inside,
-                comparable size and price groups are separated before the review recommendation.
-              </p>
               <ProductGroupsOverview
                 overview={visualOverview}
                 mode="same"
@@ -3411,7 +3402,7 @@ function ProductGroupsOverview({
   const loadedGroupIds = new Set(overview.groups.map((group) => group.id));
 
   return (
-    <div className="mt-5">
+    <div className="mt-3">
       {showViewToggle && (
         <ProductGroupViewToggle view={groupView} onChange={onGroupViewChange} />
       )}
@@ -3488,7 +3479,7 @@ function ProductGroupsOverview({
               </p>
             </div>
           ) : (
-            <div className="mt-5 grid grid-cols-1 gap-5">
+            <div className="mt-3 columns-1 gap-4 xl:columns-2">
               {displayedGroups.map((group, index) => (
                 <ProductGroupCard
                   key={group.id}
@@ -4251,6 +4242,7 @@ function ProductGroupCard({
 }) {
   const [editingName, setEditingName] = useState(false);
   const [managing, setManaging] = useState(false);
+  const [showAllCommercialSubgroups, setShowAllCommercialSubgroups] = useState(false);
   const [name, setName] = useState(
     group.confirmation_status === "confirmed" ? group.display_name ?? "" : "",
   );
@@ -4429,6 +4421,11 @@ function ProductGroupCard({
           : subgroup.triage_member_count > 0
       )
     : [];
+  const visibleCommercialSubgroups = showAllCommercialSubgroups
+    ? displayedCommercialSubgroups
+    : displayedCommercialSubgroups.slice(0, 1);
+  const hiddenCommercialSubgroupCount = displayedCommercialSubgroups.length -
+    visibleCommercialSubgroups.length;
 
   const renderProductMember = (profile: ProductClusterProfile) => {
     const primaryVisualEvidence = primaryVisualEvidenceByProfileId.get(profile.id);
@@ -4488,7 +4485,9 @@ function ProductGroupCard({
     <section
       id={`product-group-${group.id}`}
       data-product-group-id={group.id}
-      className={`scroll-mt-4 rounded-2xl border bg-white p-4 shadow-sm transition target:ring-4 target:ring-violet-200 ${
+      className={`mb-4 inline-block w-full break-inside-avoid scroll-mt-4 rounded-xl border bg-white p-3 align-top shadow-sm transition target:ring-4 target:ring-violet-200 ${
+        managing || editingName ? "xl:[column-span:all]" : ""
+      } ${
         confirmed
           ? "border-emerald-200"
           : mode === "visual"
@@ -4509,7 +4508,7 @@ function ProductGroupCard({
             {confirmed
               ? "Confirmed group"
               : mode === "same"
-                ? `Potential product group ${index + 1}`
+                ? "Potential product group"
                 : mode === "related"
                   ? `Related family ${index + 1}`
                   : `Visual group ${index + 1}`}
@@ -5274,7 +5273,7 @@ function ProductGroupCard({
 
       {displayedCommercialSubgroups.length > 0 ? (
         <div className="mt-4 space-y-3" data-product-commercial-groups>
-          {displayedCommercialSubgroups.map((commercialSubgroup) => {
+          {visibleCommercialSubgroups.map((commercialSubgroup) => {
             const scopeId = productCommercialReviewScopeId(
               group.id,
               commercialSubgroup.key,
@@ -5331,7 +5330,12 @@ function ProductGroupCard({
                     <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-stone-600 ring-1 ring-inset ring-stone-200">
                       {showingPersistedMembers
                         ? commercialSubgroup.member_count
-                        : commercialSubgroup.triage_member_count} listings
+                        : commercialSubgroup.triage_member_count}{" "}
+                      {(showingPersistedMembers
+                        ? commercialSubgroup.member_count
+                        : commercialSubgroup.triage_member_count) === 1
+                        ? "listing"
+                        : "listings"}
                     </span>
                   </div>
                 </div>
@@ -5377,6 +5381,23 @@ function ProductGroupCard({
               </section>
             );
           })}
+          {displayedCommercialSubgroups.length > 1 && (
+            <button
+              type="button"
+              aria-expanded={showAllCommercialSubgroups}
+              onClick={() => setShowAllCommercialSubgroups((current) => !current)}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-700 transition hover:border-stone-300 hover:bg-stone-100"
+            >
+              {showAllCommercialSubgroups ? (
+                <ChevronUp size={14} aria-hidden="true" />
+              ) : (
+                <ChevronDown size={14} aria-hidden="true" />
+              )}
+              {showAllCommercialSubgroups
+                ? "Show fewer comparable offers"
+                : `Show ${hiddenCommercialSubgroupCount} more comparable ${hiddenCommercialSubgroupCount === 1 ? "offer" : "offers"}`}
+            </button>
+          )}
         </div>
       ) : (
         <ProductGroupMemberSubgroups
