@@ -2221,8 +2221,12 @@ export async function getMonitoringSellerProfile(
   } catch (error) {
     // Keep frontend previews usable while the API rollout is in flight. The
     // backend treats `active` as an alias for `open` once it has been updated.
-    if (opts.status !== "open" || !isApiError(error, 400)) throw error;
-    params.set("status", "active");
+    if (
+      opts.status !== "open" ||
+      !isApiError(error) ||
+      !error.message.toLowerCase().includes("invalid status")
+    ) throw error;
+    params.delete("status");
     return request<MonitoringSellerProfilePage>(path(), { signal: opts.signal });
   }
 }
