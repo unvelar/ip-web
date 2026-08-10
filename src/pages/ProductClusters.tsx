@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  ArrowLeft,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -13,6 +14,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Search,
   Settings2,
   Trash2,
   X,
@@ -82,6 +84,7 @@ import { useAuth } from "../context/AuthContext";
 
 type ProductGroupView = "triage" | "all";
 type GroupMode = "same" | "related" | "visual";
+type ProductWorkspaceSection = "review" | "offers" | "settings" | "history";
 type ActiveProductTask = {
   profileId: string;
   groupId: string | null;
@@ -272,11 +275,14 @@ export default function ProductClusters() {
     loading: loadingActiveIp,
   } = useActiveIp();
   const [scopes, setScopes] = useState<ProductClusterScope[]>([]);
-  const [semanticOverview, setSemanticOverview] =
-    useState<PersistedProductGroupOverview | null>(null);
+  const [, setSemanticOverview] = useState<PersistedProductGroupOverview | null>(null);
   const [visualOverview, setVisualOverview] =
     useState<PersistedProductGroupOverview | null>(null);
   const [productGroupView, setProductGroupView] = useState<ProductGroupView>("triage");
+  const [productSearch, setProductSearch] = useState("");
+  const [productSort, setProductSort] = useState<"work" | "name">("work");
+  const [focusedGroup, setFocusedGroup] = useState<PersistedProductGroup | null>(null);
+  const [focusedGroupResolvedId, setFocusedGroupResolvedId] = useState<string | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [scopesLoadedKey, setScopesLoadedKey] = useState<string | null>(null);
   const [groupsLoadedKey, setGroupsLoadedKey] = useState<string | null>(null);
@@ -318,8 +324,8 @@ export default function ProductClusters() {
   const semanticPageRequestSequence = useRef(0);
   const visualPageRequestSequence = useRef(0);
   const taskRouteScrollPosition = useRef<{ main: number; window: number } | null>(null);
-  const taskRouteRef = useRef({ linkedTaskId, search: location.search });
-  taskRouteRef.current = { linkedTaskId, search: location.search };
+  const taskRouteRef = useRef({ linkedGroupId, linkedTaskId, search: location.search });
+  taskRouteRef.current = { linkedGroupId, linkedTaskId, search: location.search };
   const rememberTaskRouteScrollPosition = useCallback(() => {
     taskRouteScrollPosition.current = {
       main: document.querySelector("main")?.scrollTop ?? 0,
@@ -332,7 +338,12 @@ export default function ProductClusters() {
     if (closingLinkedTaskId) {
       closingTaskRouteRef.current = closingLinkedTaskId;
       rememberTaskRouteScrollPosition();
-      navigate({ pathname: "/monitoring/products", search: taskRouteRef.current.search });
+      navigate({
+        pathname: taskRouteRef.current.linkedGroupId
+          ? `/monitoring/products/${encodeURIComponent(taskRouteRef.current.linkedGroupId)}`
+          : "/monitoring/products",
+        search: taskRouteRef.current.search,
+      });
     }
     setActiveTask(null);
     setLoadingTaskProfileId(null);
@@ -678,7 +689,7 @@ export default function ProductClusters() {
     }
   }
 
-  async function loadProductGroupForReview(groupId: string) {
+  const loadProductGroupForReview = useCallback(async (groupId: string) => {
     if (!selectedIpId || !visualOverview) return null;
     const alreadyLoaded = visualOverview.groups.find((group) => group.id === groupId);
     if (alreadyLoaded) return alreadyLoaded;
@@ -735,7 +746,33 @@ export default function ProductClusters() {
       }
       return null;
     }
-  }
+  }, [productGroupView, selectedIpId, visualOverview]);
+
+  useEffect(() => {
+    if (!linkedGroupId) {
+      setFocusedGroup(null);
+      setFocusedGroupResolvedId(null);
+      return;
+    }
+    const loadedGroup = visualOverview?.groups.find((group) => group.id === linkedGroupId);
+    if (loadedGroup) {
+      setFocusedGroup(loadedGroup);
+      setFocusedGroupResolvedId(linkedGroupId);
+      return;
+    }
+    if (!visualOverview || loadingGroups) return;
+
+    let alive = true;
+    setFocusedGroupResolvedId(null);
+    void loadProductGroupForReview(linkedGroupId).then((group) => {
+      if (!alive) return;
+      setFocusedGroup(group);
+      setFocusedGroupResolvedId(linkedGroupId);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [linkedGroupId, loadProductGroupForReview, loadingGroups, visualOverview]);
 
   async function loadGroupTasks(groupId: string) {
     const cached = loadedGroupTasks[groupId];
@@ -1473,25 +1510,33 @@ export default function ProductClusters() {
     }
   }
 
-  const primaryOverview = visualOverview;
-  const workloadOverview = visualOverview;
+  const workspaceGroup = linkedGroupId
+    ? visualOverview?.groups.find((group) => group.id === linkedGroupId) ?? focusedGroup
+    : null;
+  const showingWorkspace = Boolean(linkedGroupId);
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-black tracking-tight text-stone-900">
-              Product Lab
-            </h1>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-              Beta
-            </span>
-          </div>
-          <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Review in order: the underlying product, then comparable size and price,
-            then the recommended decision for each listing.
-          </p>
+          {showingWorkspace ? (
+            <Link
+              to={{ pathname: "/monitoring/products", search: location.search }}
+              className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-stone-600 transition hover:text-stone-950"
+            >
+              <ArrowLeft size={17} aria-hidden="true" />
+              All products
+            </Link>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-black tracking-tight text-stone-950">
+                Product Lab
+              </h1>
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                Beta
+              </span>
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -1509,59 +1554,6 @@ export default function ProductClusters() {
           Refresh
         </button>
       </header>
-
-      {primaryOverview && (
-        <section className="mt-6 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-stone-500">
-            <span>
-              <strong className="text-stone-800">{primaryOverview.scope.profile_count}</strong>{" "}
-              profiled listings
-            </span>
-            {primaryOverview.snapshot_profile_count != null && (
-              <span>
-                <strong className="text-stone-800">{primaryOverview.snapshot_profile_count}</strong>{" "}
-                grouped by product identity
-              </span>
-            )}
-            {(primaryOverview.pending_snapshot_count ?? 0) > 0 && (
-              <span className="text-violet-700">
-                <strong>{primaryOverview.pending_snapshot_count}</strong>{" "}
-                awaiting product grouping
-              </span>
-            )}
-            {productGroupView === "triage" && workloadOverview?.triage_projection_available && (
-              <>
-                <span>
-                  <strong className="text-stone-800">{workloadOverview.triage_profile_count ?? 0}</strong>{" "}
-                  {(workloadOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
-                </span>
-                {visualOverview && (
-                  <span>
-                    <strong className="text-stone-800">{visualOverview.triage_group_count ?? 0}</strong>{" "}
-                    products with work
-                  </span>
-                )}
-              </>
-            )}
-            {productGroupView === "all" && (
-              <>
-                {visualOverview && (
-                  <span>
-                    <strong className="text-stone-800">{visualOverview.group_count}</strong>{" "}
-                    product groups
-                  </span>
-                )}
-                {workloadOverview?.triage_projection_available && (
-                  <span>
-                    <strong className="text-stone-800">{workloadOverview.triage_profile_count ?? 0}</strong>{" "}
-                    {(workloadOverview.triage_profile_count ?? 0) === 1 ? "listing" : "listings"} to triage
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-      )}
 
       {error && (
         <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -1596,48 +1588,43 @@ export default function ProductClusters() {
         <LoadingState />
       ) : !selectedIpId || !selectedScope ? (
         <EmptyState ipName={activeIp?.name ?? null} />
-      ) : loadingGroups && !semanticOverview && !visualOverview ? (
+      ) : loadingGroups && !visualOverview ? (
         <LoadingState />
-      ) : semanticOverview || visualOverview ? (
-        <div className="mt-5">
-          <ProductGroupViewToggle
-            view={productGroupView}
-            onChange={setProductGroupView}
-          />
-          {visualOverview && (
-            <section className="mt-7" aria-labelledby="product-groups-heading">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-700">
-                Product identity
-              </p>
-              <h2 id="product-groups-heading" className="mt-1 text-lg font-black text-stone-900">
-                Same products
-              </h2>
-              <p className="mt-1 max-w-3xl text-sm text-stone-500">
-                Each parent contains listings for the same underlying product. Inside,
-                comparable size and price groups are separated before the review recommendation.
-              </p>
-              <ProductGroupsOverview
-                overview={visualOverview}
+      ) : visualOverview ? (
+        showingWorkspace ? (
+          workspaceGroup ? (
+            <div className="mt-3">
+              <ProductGroupCard
+                workspace
+                group={workspaceGroup}
+                availableGroups={visualOverview.groups}
+                reconciliationSuggestions={workspaceGroup.reconciliation_suggestions}
+                index={visualOverview.groups.findIndex((group) => group.id === workspaceGroup.id)}
+                ipId={visualOverview.scope.ip_id}
                 mode="same"
-                groupView={productGroupView}
-                onGroupViewChange={setProductGroupView}
-                showViewToggle={false}
-                showUngrouped
-                savingGroupId={savingGroupId}
-                mergeSourceGroupId={mergeSourceGroupId}
+                showPersistedMembers={productGroupView === "all"}
+                triageProjectionAvailable={visualOverview.triage_projection_available}
+                saving={savingGroupId === workspaceGroup.id}
+                mergeSourceGroup={mergeSourceGroupId
+                  ? visualOverview.groups.find((group) => group.id === mergeSourceGroupId) ?? null
+                  : null}
                 savingMergeKey={savingMergeKey}
                 revokingMergeDecisionId={revokingMergeDecisionId}
                 savingCorrectionProfileId={savingCorrectionProfileId}
                 activeTaskProfileId={activeTask?.profileId ?? null}
                 loadingTaskProfileId={loadingTaskProfileId}
-                loadingGroupTasksId={loadingGroupTasksId}
-                loadedGroupTasks={loadedGroupTasks}
+                allFindings={loadedGroupTasks[workspaceGroup.id] ?? null}
                 expandedSubgroupKeys={expandedSubgroupKeys}
+                loadingAllFindings={loadingGroupTasksId === workspaceGroup.id}
                 activeBatch={activeBatch}
-                batchProgress={batchProgress}
-                loadingMore={loadingMoreVisualGroups}
-                onSelectBatch={(groupId, groupName, bucket, commercialSubgroup) =>
-                  void selectGroupBatch(groupId, groupName, bucket, commercialSubgroup)}
+                batchProgress={activeBatch?.groupId === workspaceGroup.id ? batchProgress : null}
+                batchDisabled={Boolean(loadingGroupTasksId || batchProgress)}
+                onSelectBatch={(bucket, commercialSubgroup) => void selectGroupBatch(
+                  workspaceGroup.id,
+                  workspaceGroup.display_name ?? "Product",
+                  bucket,
+                  commercialSubgroup,
+                )}
                 onBatchAction={(action) => {
                   if (selectedProductGroupBatchFindings(activeBatch).length > 0) {
                     setConfirmBatchAction(action);
@@ -1646,9 +1633,11 @@ export default function ProductClusters() {
                 onClearBatch={clearGroupBatch}
                 onToggleBatchFinding={toggleGroupBatchFinding}
                 onSetAllBatchFindings={setAllGroupBatchFindings}
-                onToggleSubgroupListings={(groupId, bucket, commercialSubgroup) =>
-                  void toggleGroupSubgroupListings(groupId, bucket, commercialSubgroup)}
-                onLoadMore={() => void loadMoreVisualGroups()}
+                onToggleSubgroupListings={(bucket, commercialSubgroup) => void toggleGroupSubgroupListings(
+                  workspaceGroup.id,
+                  bucket,
+                  commercialSubgroup,
+                )}
                 onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
                 onOpenFinding={openLoadedFinding}
                 onConfirmGroup={confirmGroup}
@@ -1662,9 +1651,26 @@ export default function ProductClusters() {
                 onUpdateRule={updateGroupRule}
                 onDeleteRule={deleteGroupRule}
               />
-            </section>
-          )}
-        </div>
+            </div>
+          ) : (
+            focusedGroupResolvedId === linkedGroupId
+              ? <ProductWorkspaceNotFound />
+              : <LoadingState />
+          )
+        ) : (
+          <ProductQueue
+            overview={visualOverview}
+            view={productGroupView}
+            search={productSearch}
+            sort={productSort}
+            loadingMore={loadingMoreVisualGroups}
+            onViewChange={setProductGroupView}
+            onSearchChange={setProductSearch}
+            onSortChange={setProductSort}
+            onLoadMore={() => void loadMoreVisualGroups()}
+            currentSearch={location.search}
+          />
+        )
       ) : null}
 
       {activeTask && (
@@ -1721,6 +1727,292 @@ export default function ProductClusters() {
           onReset={() => resetSemanticCorrection(semanticCorrectionTarget)}
         />
       )}
+    </div>
+  );
+}
+
+function ProductQueue({
+  overview,
+  view,
+  search,
+  sort,
+  loadingMore,
+  currentSearch,
+  onViewChange,
+  onSearchChange,
+  onSortChange,
+  onLoadMore,
+}: {
+  overview: PersistedProductGroupOverview;
+  view: ProductGroupView;
+  search: string;
+  sort: "work" | "name";
+  loadingMore: boolean;
+  currentSearch: string;
+  onViewChange: (view: ProductGroupView) => void;
+  onSearchChange: (search: string) => void;
+  onSortChange: (sort: "work" | "name") => void;
+  onLoadMore: () => void;
+}) {
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const candidateGroups = view === "triage"
+    ? overview.groups.filter((group) => (group.triage_member_count ?? 0) > 0)
+    : overview.groups;
+  const visibleGroups = candidateGroups
+    .filter((group) => {
+      if (!normalizedSearch) return true;
+      const searchable = [
+        productGroupDisplayName(group),
+        group.display_name,
+        ...group.members.slice(0, 4).map((member) => profileTitle(member)),
+        ...group.triage_members.slice(0, 4).map((member) => profileTitle(member)),
+        ...group.commercial_subgroups.map((subgroup) => subgroup.variant_label),
+      ].filter(Boolean).join(" ").toLocaleLowerCase();
+      return searchable.includes(normalizedSearch);
+    })
+    .sort((left, right) => {
+      if (sort === "name") {
+        return productGroupDisplayName(left).localeCompare(productGroupDisplayName(right));
+      }
+      return (right.triage_member_count ?? 0) - (left.triage_member_count ?? 0) ||
+        right.member_count - left.member_count;
+    });
+  const productCount = view === "triage"
+    ? overview.triage_group_count ?? candidateGroups.length
+    : overview.group_count;
+
+  return (
+    <section className="mt-5" aria-labelledby="product-queue-heading">
+      <div className="border-y border-stone-200 bg-white py-3">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-stone-600">
+          <span>
+            <strong className="font-black text-stone-950">
+              {overview.triage_profile_count ?? 0}
+            </strong>{" "}
+            listings need review
+          </span>
+          <span>
+            <strong className="font-black text-stone-950">{productCount}</strong>{" "}
+            {productCount === 1 ? "product" : "products"}
+          </span>
+          {overview.pending_snapshot_count ? (
+            <span className="text-amber-800">
+              <strong>{overview.pending_snapshot_count}</strong> still grouping
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <ProductGroupViewToggle view={view} onChange={onViewChange} />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <label className="relative block min-w-0 sm:w-72">
+            <span className="sr-only">Search products</span>
+            <Search
+              size={16}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Search products or offers"
+              className="min-h-11 w-full rounded-lg border border-stone-300 bg-white py-2 pl-9 pr-3 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700">
+            <span className="text-stone-500">Sort</span>
+            <select
+              value={sort}
+              onChange={(event) => onSortChange(event.target.value as "work" | "name")}
+              className="min-w-0 flex-1 bg-transparent text-stone-950 outline-none"
+            >
+              <option value="work">Most work</option>
+              <option value="name">Product name</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-5 flex items-end justify-between gap-4">
+        <div>
+          <h2 id="product-queue-heading" className="text-lg font-black text-stone-950">
+            {view === "triage" ? "Products requiring attention" : "All products"}
+          </h2>
+          <p className="mt-1 text-sm text-stone-500">
+            Open a product to review its listings, offers and group settings.
+          </p>
+        </div>
+        <span className="shrink-0 text-xs font-semibold text-stone-500">
+          {visibleGroups.length} shown
+        </span>
+      </div>
+
+      {visibleGroups.length > 0 ? (
+        <div className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white">
+          {visibleGroups.map((group) => (
+            <ProductQueueRow
+              key={group.id}
+              group={group}
+              view={view}
+              currentSearch={currentSearch}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-xl border border-dashed border-stone-300 bg-white px-6 py-12 text-center">
+          <h3 className="text-base font-black text-stone-900">
+            {search ? "No products match this search" : "No products need attention"}
+          </h3>
+          <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
+            {search
+              ? "Try a product name, listing title or comparable offer."
+              : "This IP has no product groups in the current review queue."}
+          </p>
+          {search && (
+            <button
+              type="button"
+              onClick={() => onSearchChange("")}
+              className="mt-4 min-h-11 rounded-lg border border-stone-300 bg-white px-4 text-sm font-bold text-stone-800 hover:bg-stone-50"
+            >
+              Clear search
+            </button>
+          )}
+        </div>
+      )}
+
+      {overview.next_cursor && (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 bg-white px-4 text-sm font-bold text-stone-800 transition hover:bg-stone-50 disabled:cursor-wait disabled:opacity-60"
+          >
+            {loadingMore && <RefreshCw size={15} className="animate-spin" />}
+            {loadingMore ? "Loading products…" : "Load more products"}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProductQueueRow({
+  group,
+  view,
+  currentSearch,
+}: {
+  group: PersistedProductGroup;
+  view: ProductGroupView;
+  currentSearch: string;
+}) {
+  const representative = (view === "triage" ? group.triage_members[0] : null) ??
+    group.members[0] ?? group.triage_members[0] ?? null;
+  const triageCount = group.triage_member_count ?? 0;
+  const offerCount = group.commercial_subgroups.filter((subgroup) =>
+    view === "triage" ? subgroup.triage_member_count > 0 : subgroup.member_count > 0
+  ).length;
+  const priceRange = productGroupPriceRange(group);
+  const confirmed = group.confirmation_status === "confirmed";
+
+  return (
+    <article className="border-b border-stone-200 p-3 last:border-b-0 sm:p-4">
+      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-stone-100 sm:h-20 sm:w-20">
+          {representative?.image_url ? (
+            <img
+              src={representative.image_url}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="flex h-full items-center justify-center text-xl font-black text-stone-400">
+              {productGroupDisplayName(group).slice(0, 1).toUpperCase()}
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+            <div className="min-w-0">
+              <p className={`text-xs font-black uppercase tracking-[0.08em] ${
+                confirmed ? "text-emerald-700" : "text-amber-800"
+              }`}>
+                {confirmed ? "Confirmed product" : "Needs confirmation"}
+              </p>
+              <h3 className="mt-1 line-clamp-2 text-base font-black text-stone-950 sm:text-lg">
+                {productGroupDisplayName(group)}
+              </h3>
+            </div>
+            <div className="shrink-0 text-left sm:text-right">
+              <p className={`text-base font-black ${
+                triageCount > 0 ? "text-red-800" : "text-emerald-700"
+              }`}>
+                {triageCount > 0 ? `${triageCount} to review` : "Review complete"}
+              </p>
+              <p className="mt-0.5 text-xs text-stone-500">
+                {group.member_count} total listings
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-stone-600">
+            <span>{offerCount} comparable {offerCount === 1 ? "offer" : "offers"}</span>
+            {priceRange && <span>{priceRange}</span>}
+            <span>Similarity {group.average_score?.toFixed(2) ?? "—"}</span>
+          </div>
+        </div>
+
+        <Link
+          to={{
+            pathname: `/monitoring/products/${encodeURIComponent(group.id)}`,
+            search: currentSearch,
+          }}
+          aria-label={`Open ${productGroupDisplayName(group)}`}
+          className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-stone-950 px-4 text-sm font-bold text-white transition hover:bg-stone-800"
+        >
+          <span className="hidden sm:inline">Open</span>
+          <span className="sm:hidden" aria-hidden="true">→</span>
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+function productGroupDisplayName(group: PersistedProductGroup) {
+  return group.display_name?.trim() ||
+    (group.triage_members[0] ? profileTitle(group.triage_members[0]) : null) ||
+    (group.members[0] ? profileTitle(group.members[0]) : null) ||
+    "Unnamed product";
+}
+
+function productGroupPriceRange(group: PersistedProductGroup) {
+  const ranges = group.commercial_subgroups
+    .map((subgroup) => subgroup.price_range)
+    .filter((range): range is NonNullable<typeof range> => Boolean(range));
+  if (ranges.length === 0) return null;
+  const minimum = Math.min(...ranges.map((range) => range.minimum));
+  const maximum = Math.max(...ranges.map((range) => range.maximum));
+  return minimum === maximum
+    ? formatMoney(minimum, "USD")
+    : `${formatMoney(minimum, "USD")}–${formatMoney(maximum, "USD")}`;
+}
+
+function ProductWorkspaceNotFound() {
+  return (
+    <div className="mt-5 rounded-xl border border-dashed border-stone-300 bg-white px-6 py-14 text-center">
+      <h2 className="text-lg font-black text-stone-950">Product not found</h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
+        This product is no longer in the current snapshot, or the link is out of date.
+      </p>
+      <Link
+        to="/monitoring/products"
+        className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-stone-950 px-4 text-sm font-bold text-white"
+      >
+        Return to products
+      </Link>
     </div>
   );
 }
@@ -3283,7 +3575,7 @@ function SemanticProductGroupCard({
   );
 }
 
-function ProductGroupsOverview({
+export function ProductGroupsOverview({
   overview,
   mode,
   groupView,
@@ -4143,6 +4435,7 @@ function ProductGroupMergeReviewDialog({
 }
 
 function ProductGroupCard({
+  workspace = false,
   group,
   availableGroups,
   reconciliationSuggestions,
@@ -4183,6 +4476,7 @@ function ProductGroupCard({
   onUpdateRule,
   onDeleteRule,
 }: {
+  workspace?: boolean;
   group: PersistedProductGroup;
   availableGroups: PersistedProductGroup[];
   reconciliationSuggestions: PersistedProductGroup["reconciliation_suggestions"];
@@ -4249,6 +4543,11 @@ function ProductGroupCard({
     ruleId: string,
   ) => Promise<{ id: string; rescore_jobs_enqueued: number }>;
 }) {
+  const [workspaceSection, setWorkspaceSection] =
+    useState<ProductWorkspaceSection>("review");
+  const [selectedCommercialSubgroupKey, setSelectedCommercialSubgroupKey] =
+    useState<string | null>(() => group.commercial_subgroups[0]?.key ?? null);
+  const [workspaceMergeTargetId, setWorkspaceMergeTargetId] = useState("");
   const [editingName, setEditingName] = useState(false);
   const [managing, setManaging] = useState(false);
   const [name, setName] = useState(
@@ -4299,9 +4598,11 @@ function ProductGroupCard({
         : null)
     : null;
   const triageMemberCount = group.triage_member_count ?? 0;
-  const showingPersistedMembers = showPersistedMembers || managing;
+  const showingPersistedMembers = showPersistedMembers || managing ||
+    (workspace && workspaceSection === "settings");
   const displayedMembers = showingPersistedMembers ? group.members : group.triage_members;
   const displayedMemberCount = showingPersistedMembers ? group.member_count : triageMemberCount;
+  const workspaceRepresentative = group.triage_members[0] ?? group.members[0] ?? null;
   const taskLinkMode = !showingPersistedMembers || (
     triageProjectionAvailable && triageMemberCount > 0
   )
@@ -4429,9 +4730,31 @@ function ProductGroupCard({
           : subgroup.triage_member_count > 0
       )
     : [];
+  const selectedCommercialSubgroup = displayedCommercialSubgroups.find(
+    (subgroup) => subgroup.key === selectedCommercialSubgroupKey,
+  ) ?? displayedCommercialSubgroups[0] ?? null;
+  const renderedCommercialSubgroups = workspace
+    ? selectedCommercialSubgroup ? [selectedCommercialSubgroup] : []
+    : displayedCommercialSubgroups;
 
   const renderProductMember = (profile: ProductClusterProfile) => {
     const primaryVisualEvidence = primaryVisualEvidenceByProfileId.get(profile.id);
+    if (workspace) {
+      return (
+        <ProductListingRow
+          key={profile.id}
+          profile={profile}
+          active={activeTaskProfileId === profile.id}
+          loading={loadingTaskProfileId === profile.id}
+          onOpen={() => onOpenTask(profile, group.id)}
+          correctionDisabled={Boolean(savingCorrectionProfileId)}
+          onRemove={canConfirm && group.member_count > 1 && (!confirmed || managing)
+            ? () => void onCorrectGroupMember(group.id, profile.id, "wrong_product")
+              .catch(() => undefined)
+            : undefined}
+        />
+      );
+    }
     return (
       <div key={profile.id} className="group/member relative min-w-0">
         <ListingTile
@@ -4473,6 +4796,15 @@ function ProductGroupCard({
     priceSummary: ProductGroupPriceSummary | null,
   ) => {
     const profile = productClusterProfileForFinding(finding, priceSummary);
+    if (workspace) {
+      return (
+        <ProductListingRow
+          profile={profile}
+          active={activeTaskProfileId === profile.id}
+          onOpen={() => onOpenFinding(finding, group.id)}
+        />
+      );
+    }
     return (
       <div className="relative min-w-0">
         <ListingTile
@@ -4488,7 +4820,9 @@ function ProductGroupCard({
     <section
       id={`product-group-${group.id}`}
       data-product-group-id={group.id}
-      className={`scroll-mt-4 rounded-2xl border bg-white p-4 shadow-sm transition target:ring-4 target:ring-violet-200 ${
+      className={`scroll-mt-4 bg-white transition target:ring-4 target:ring-violet-200 ${
+        workspace ? "rounded-xl border border-stone-200 p-4 sm:p-5" : "rounded-2xl border p-4 shadow-sm"
+      } ${
         confirmed
           ? "border-emerald-200"
           : mode === "visual"
@@ -4497,7 +4831,23 @@ function ProductGroupCard({
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+          {workspace && (
+            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-stone-100 sm:h-20 sm:w-20">
+              {workspaceRepresentative?.image_url ? (
+                <img
+                  src={workspaceRepresentative.image_url}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="flex h-full items-center justify-center text-xl font-black text-stone-400">
+                  {productGroupDisplayName(group).slice(0, 1).toUpperCase()}
+                </span>
+              )}
+            </div>
+          )}
+          <div className="min-w-0">
           <p className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide ${
             confirmed
               ? "text-emerald-700"
@@ -4515,15 +4865,24 @@ function ProductGroupCard({
                   : `Visual group ${index + 1}`}
           </p>
           {confirmed && group.display_name ? (
-            <h2 className="mt-1 line-clamp-2 text-sm font-bold text-stone-900">
+            <h2 className={`mt-1 line-clamp-2 font-black text-stone-950 ${
+              workspace ? "text-xl sm:text-2xl" : "text-sm"
+            }`}>
               {group.display_name}
             </h2>
           ) : (
-            <p className="mt-1 text-[11px] text-stone-500">
-              {mode === "visual"
-                ? "Automatically grouped by shared gallery appearance"
-                : "Unnamed until confirmed"}
-            </p>
+            <>
+              {workspace && (
+                <h2 className="mt-1 line-clamp-2 text-xl font-black text-stone-950 sm:text-2xl">
+                  {productGroupDisplayName(group)}
+                </h2>
+              )}
+              <p className="mt-1 text-[11px] text-stone-500">
+                {mode === "visual"
+                  ? "Automatically grouped by shared gallery appearance"
+                  : "Unnamed until confirmed"}
+              </p>
+            </>
           )}
           {confirmed && group.confirmed_at && (
             <p className="mt-1 text-[10px] text-emerald-700">
@@ -4535,6 +4894,7 @@ function ProductGroupCard({
               {group.atomic_cohort_count} evidence cohorts combined
             </p>
           )}
+          </div>
         </div>
         <div className="shrink-0 text-right">
           <p className="text-sm font-bold text-stone-900">
@@ -4585,7 +4945,12 @@ function ProductGroupCard({
             onClick={() => {
               setName(confirmed ? group.display_name ?? "" : "");
               if (confirmed) {
-                setManaging((current) => !current);
+                if (workspace) {
+                  setWorkspaceSection("settings");
+                  setManaging(true);
+                } else {
+                  setManaging((current) => !current);
+                }
               } else {
                 setEditingName(true);
               }
@@ -4598,14 +4963,22 @@ function ProductGroupCard({
           >
             {confirmed ? <Settings2 size={14} /> : <CheckCircle2 size={14} />}
             {confirmed
-              ? (managing ? "Close group settings" : "Manage group")
+              ? workspace
+                ? "Manage product"
+                : (managing ? "Close group settings" : "Manage group")
               : "Confirm & name"}
           </button>
           {confirmed && mode === "same" && !managing && (
             <button
               type="button"
               disabled={loadingVisualEvidence}
-              onClick={() => void loadVisualEvidence()}
+              onClick={() => {
+                if (workspace) {
+                  setWorkspaceSection("settings");
+                  setManaging(true);
+                }
+                void loadVisualEvidence();
+              }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 transition hover:border-indigo-300 hover:bg-indigo-100 disabled:opacity-50"
             >
               <Images size={14} />
@@ -4616,7 +4989,7 @@ function ProductGroupCard({
                   : "Show image similarity"}
             </button>
           )}
-          {mode === "same" && (
+          {!workspace && mode === "same" && (
             mergeSourceGroup ? (
               selectedAsMergeSource ? (
                 <button
@@ -4659,13 +5032,44 @@ function ProductGroupCard({
           )}
         </div>
       )}
+      {workspace && (
+        <nav
+          className="mt-5 flex gap-1 overflow-x-auto border-b border-stone-200"
+          aria-label="Product workspace sections"
+        >
+          {([
+            ["review", `Review queue · ${triageMemberCount}`],
+            ["offers", `Offers · ${displayedCommercialSubgroups.length}`],
+            ["settings", "Group settings"],
+            ["history", `History · ${group.canonical_decisions.length}`],
+          ] as Array<[ProductWorkspaceSection, string]>).map(([section, label]) => (
+            <button
+              key={section}
+              type="button"
+              aria-current={workspaceSection === section ? "page" : undefined}
+              onClick={() => {
+                setWorkspaceSection(section);
+                setManaging(section === "settings");
+              }}
+              className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-bold transition ${
+                workspaceSection === section
+                  ? "border-stone-950 text-stone-950"
+                  : "border-transparent text-stone-500 hover:border-stone-300 hover:text-stone-800"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
       {!managing && visualEvidenceError && (
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-800">
           {visualEvidenceError}
         </p>
       )}
 
-      {mode === "same" && reconciliationSuggestions.length > 0 && (
+      {mode === "same" && reconciliationSuggestions.length > 0 &&
+        (!workspace || workspaceSection === "history") && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
           <p className="text-xs font-bold text-amber-950">Possible duplicate product group</p>
           <p className="mt-0.5 text-[11px] leading-4 text-amber-800">
@@ -4688,7 +5092,8 @@ function ProductGroupCard({
         </div>
       )}
 
-      {mode === "same" && group.canonical_decisions.length > 0 && (
+      {mode === "same" && group.canonical_decisions.length > 0 &&
+        (!workspace || workspaceSection === "history") && (
         <details className="mt-3 rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2.5">
           <summary className="cursor-pointer text-xs font-bold text-violet-900">
             Merge history · {group.canonical_decisions.length}
@@ -4769,7 +5174,7 @@ function ProductGroupCard({
         </form>
       )}
 
-      {confirmed && managing && (
+      {confirmed && managing && (!workspace || workspaceSection === "settings") && (
         <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -5272,9 +5677,135 @@ function ProductGroupCard({
         </div>
       )}
 
-      {displayedCommercialSubgroups.length > 0 ? (
+      {workspace && workspaceSection === "review" && displayedCommercialSubgroups.length > 1 && (
+        <div className="mt-5">
+          <p className="text-xs font-black uppercase tracking-[0.1em] text-stone-500">
+            Comparable offer
+          </p>
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            {displayedCommercialSubgroups.map((subgroup) => {
+              const count = showingPersistedMembers
+                ? subgroup.member_count
+                : subgroup.triage_member_count;
+              const selected = selectedCommercialSubgroup?.key === subgroup.key;
+              return (
+                <button
+                  key={subgroup.key}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setSelectedCommercialSubgroupKey(subgroup.key)}
+                  className={`min-h-11 shrink-0 rounded-lg border px-3 text-left text-sm font-bold transition ${
+                    selected
+                      ? "border-stone-950 bg-stone-950 text-white"
+                      : "border-stone-300 bg-white text-stone-700 hover:border-stone-500"
+                  }`}
+                >
+                  {subgroup.variant_label}
+                  <span className={`ml-2 text-xs ${selected ? "text-stone-300" : "text-stone-400"}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {workspace && workspaceSection === "offers" && (
+        <div className="mt-5 overflow-hidden rounded-xl border border-stone-200">
+          {displayedCommercialSubgroups.length > 0 ? displayedCommercialSubgroups.map((subgroup) => {
+            const count = showingPersistedMembers
+              ? subgroup.member_count
+              : subgroup.triage_member_count;
+            const priceRange = subgroup.price_range;
+            const priceLabel = !priceRange
+              ? "Price unavailable"
+              : priceRange.minimum === priceRange.maximum
+                ? formatMoney(priceRange.minimum, "USD")
+                : `${formatMoney(priceRange.minimum, "USD")}–${formatMoney(priceRange.maximum, "USD")}`;
+            return (
+              <button
+                key={subgroup.key}
+                type="button"
+                onClick={() => {
+                  setSelectedCommercialSubgroupKey(subgroup.key);
+                  setWorkspaceSection("review");
+                  setManaging(false);
+                }}
+                className="flex min-h-16 w-full items-center justify-between gap-4 border-b border-stone-200 px-4 text-left transition last:border-b-0 hover:bg-stone-50"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-black text-stone-950">
+                    {subgroup.variant_label}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-stone-500">
+                    {count} {count === 1 ? "listing" : "listings"}
+                  </span>
+                </span>
+                <span className={`shrink-0 text-sm font-bold ${
+                  subgroup.price_band === "unusually_low" ? "text-red-700" : "text-stone-700"
+                }`}>
+                  {priceLabel} →
+                </span>
+              </button>
+            );
+          }) : (
+            <p className="px-4 py-8 text-center text-sm text-stone-500">
+              No comparable offers are available for this product.
+            </p>
+          )}
+        </div>
+      )}
+
+      {workspace && workspaceSection === "history" && (
+        <div className="mt-5 rounded-xl border border-stone-200 bg-stone-50 p-4">
+          <p className="text-sm font-black text-stone-950">Merge another product</p>
+          <p className="mt-1 text-sm text-stone-500">
+            Combine this identity with another loaded product. The decision remains reversible.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <select
+              value={workspaceMergeTargetId}
+              onChange={(event) => setWorkspaceMergeTargetId(event.target.value)}
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="">Choose a product…</option>
+              {availableGroups.filter((candidate) => candidate.id !== group.id).map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {productGroupDisplayName(candidate)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!workspaceMergeTargetId || Boolean(savingMergeKey)}
+              onClick={() => {
+                if (!workspaceMergeTargetId) return;
+                void onMergeGroups(group.id, workspaceMergeTargetId)
+                  .then(() => setWorkspaceMergeTargetId(""))
+                  .catch(() => undefined);
+              }}
+              className="min-h-11 rounded-lg bg-stone-950 px-4 text-sm font-bold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {savingMergeKey ? "Merging…" : "Merge products"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {workspace && workspaceSection === "history" &&
+        reconciliationSuggestions.length === 0 && group.canonical_decisions.length === 0 && (
+        <div className="mt-5 rounded-xl border border-dashed border-stone-300 px-4 py-10 text-center">
+          <p className="text-sm font-bold text-stone-900">No merge history yet</p>
+          <p className="mt-1 text-sm text-stone-500">
+            Merge suggestions and reversible decisions will appear here.
+          </p>
+        </div>
+      )}
+
+      {(!workspace || workspaceSection === "review") && (displayedCommercialSubgroups.length > 0 ? (
         <div className="mt-4 space-y-3" data-product-commercial-groups>
-          {displayedCommercialSubgroups.map((commercialSubgroup) => {
+          {renderedCommercialSubgroups.map((commercialSubgroup) => {
             const scopeId = productCommercialReviewScopeId(
               group.id,
               commercialSubgroup.key,
@@ -5355,7 +5886,7 @@ function ProductGroupCard({
                   batchProgress={batchProgress}
                   batchDisabled={batchDisabled}
                   previewLimit={4}
-                  gridClassName="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+                  gridClassName={workspace ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"}
                   renderMember={renderProductMember}
                   renderFinding={(finding) => renderProductFinding(
                     finding,
@@ -5397,7 +5928,7 @@ function ProductGroupCard({
           batchProgress={batchProgress}
           batchDisabled={batchDisabled}
           previewLimit={4}
-          gridClassName="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+          gridClassName={workspace ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"}
           renderMember={renderProductMember}
           renderFinding={(finding) => renderProductFinding(finding, group.price_summary)}
           onSelectBatch={onSelectBatch}
@@ -5407,8 +5938,9 @@ function ProductGroupCard({
           onSetAllBatchFindings={onSetAllBatchFindings}
           onToggleSubgroupListings={onToggleSubgroupListings}
         />
-      )}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+      ))}
+      {(!workspace || workspaceSection === "review") && (
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-3">
         <span className="text-xs text-stone-500">
           {!showingPersistedMembers
             ? `${displayedMemberCount} current to-triage listings`
@@ -5437,6 +5969,7 @@ function ProductGroupCard({
               : "View tasks"}
         </Link>
       </div>
+      )}
       {mergeReviewSuggestion && (
         <ProductGroupMergeReviewDialog
           sourceGroup={group}
@@ -5487,6 +6020,85 @@ async function loadProductGroupBatch(ipId: string, groupId: string) {
 
 function isDecisionState(state: CaseReviewStatus) {
   return state === "pending" || state === "review";
+}
+
+function ProductListingRow({
+  profile,
+  active = false,
+  loading = false,
+  correctionDisabled = false,
+  onOpen,
+  onRemove,
+}: {
+  profile: ProductClusterProfile;
+  active?: boolean;
+  loading?: boolean;
+  correctionDisabled?: boolean;
+  onOpen: () => void;
+  onRemove?: () => void;
+}) {
+  const priceValueUsd = profile.price_value_usd == null
+    ? null
+    : Number(profile.price_value_usd);
+  const price = priceValueUsd != null && Number.isFinite(priceValueUsd)
+    ? formatMoney(priceValueUsd, "USD")
+    : "Price unavailable";
+  const bucket = productGroupRecommendationBucket(recommendationBucketForProfile(profile));
+  const unusualPrice = profile.price_signal?.unusually_low === true;
+
+  return (
+    <div className={`flex min-w-0 items-center gap-2 rounded-lg border bg-white p-2 transition ${
+      active ? "border-blue-400 ring-2 ring-blue-100" : "border-stone-200"
+    }`}>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <span className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-stone-100 sm:h-20 sm:w-20">
+          {profile.image_url ? (
+            <img src={profile.image_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="flex h-full items-center justify-center text-lg font-black text-stone-400">
+              {profileTitle(profile).slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          {loading && (
+            <span className="absolute inset-0 flex items-center justify-center bg-white/75">
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" />
+            </span>
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 text-sm font-bold text-stone-950">
+            {profileTitle(profile)}
+          </span>
+          <span className="mt-1 block truncate text-xs text-stone-500">
+            {profile.platform || "Marketplace listing"}
+          </span>
+        </span>
+        <span className="hidden shrink-0 text-right sm:block">
+          <span className={`block text-sm font-black ${unusualPrice ? "text-red-700" : "text-stone-950"}`}>
+            {price}
+          </span>
+          <span className={`mt-1 block text-xs font-bold ${bucket.labelClassName}`}>
+            {bucket.label}
+          </span>
+        </span>
+        <span className="shrink-0 text-stone-400" aria-hidden="true">→</span>
+      </button>
+      {onRemove && (
+        <button
+          type="button"
+          disabled={correctionDisabled}
+          onClick={onRemove}
+          className="hidden min-h-11 shrink-0 rounded-lg px-3 text-xs font-bold text-stone-500 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-40 md:inline-flex md:items-center"
+        >
+          Different product
+        </button>
+      )}
+    </div>
+  );
 }
 
 function ListingTile({

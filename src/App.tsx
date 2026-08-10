@@ -128,9 +128,9 @@ export default function App() {
           <Route path="/monitoring/campaigns" element={<MonitoringCampaigns />} />
           <Route path="/monitoring/campaigns/:campaignId" element={<MonitoringCampaigns />} />
           <Route path="/monitoring/sellers/:sellerKey" element={<SellerProfile />} />
-          <Route path="/monitoring/products" element={<ProductClusters />}>
-            <Route path=":groupId/tasks/:taskId" />
-          </Route>
+          <Route path="/monitoring/products" element={<ProductClusters />} />
+          <Route path="/monitoring/products/:groupId" element={<ProductClusters />} />
+          <Route path="/monitoring/products/:groupId/tasks/:taskId" element={<ProductClusters />} />
           <Route path="/monitoring/new" element={<MonitoringNew />} />
           <Route path="/monitoring/settings" element={<Monitors />} />
           <Route path="/clearance/tasks" element={<ClearanceTasks />} />
