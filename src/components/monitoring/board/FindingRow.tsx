@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { IpReviewFinding } from "../../../api";
+import { sellerProfilePath } from "../../../lib/sellers";
 import { ActionabilityBadge } from "./ActionabilityBadge";
 import {
   QTY_FALLBACK,
@@ -74,6 +76,7 @@ export function FindingRow({
   const checkedAgo = formatAgo(f.last_checked_at);
   const title = compactListingTitle(f);
   const sellerLine = f.seller_name || "—";
+  const sellerTarget = sellerProfilePath(f.seller_key);
   // Show the USD-normalized price so the Price column reads monotonically when
   // sorted (the sort key is USD across mixed currencies). Native price + est.
   // market live in the tooltip.
@@ -144,7 +147,15 @@ export function FindingRow({
 
       {/* Seller. */}
       <td className="hidden md:table-cell py-1 px-2 align-middle max-w-[10rem] truncate text-[12px] text-stone-600">
-        {sellerLine}
+        {sellerTarget ? (
+          <Link
+            to={sellerTarget}
+            onClick={(event) => event.stopPropagation()}
+            className="font-medium text-stone-700 hover:text-blue-700 hover:underline"
+          >
+            {sellerLine}
+          </Link>
+        ) : sellerLine}
       </td>
 
       {/* Platform. */}

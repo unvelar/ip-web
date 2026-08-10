@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import type {
   IpReviewFinding,
@@ -29,6 +30,7 @@ export function FindingInspector({
   productGroupId,
   onCorrectProductGroup,
   showRelatedItems = true,
+  taskHref,
 }: {
   f: IpReviewFinding;
   ipId?: string;
@@ -47,6 +49,8 @@ export function FindingInspector({
   productGroupId?: string;
   onCorrectProductGroup?: (reason: ProductGroupCorrectionReason) => Promise<void>;
   showRelatedItems?: boolean;
+  /** Optional escape hatch when the inspector is opened outside the Tasks page. */
+  taskHref?: string;
 }) {
   const inspectorRef = useRef<HTMLElement>(null);
 
@@ -105,6 +109,14 @@ export function FindingInspector({
             </div>
             <div className="text-[11px] text-stone-400 truncate">{f.domain}</div>
           </div>
+          {taskHref && (
+            <Link
+              to={taskHref}
+              className="shrink-0 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+            >
+              Open in Tasks
+            </Link>
+          )}
           <button
             type="button"
             onClick={onClose}

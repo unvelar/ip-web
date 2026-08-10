@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ExternalLink, MoreHorizontal } from "lucide-react";
+import { Link } from "react-router-dom";
 import TakedownPanel from "../../TakedownPanel";
 import {
   reenrichIpFinding,
@@ -9,6 +10,7 @@ import {
 } from "../../../api";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
+import { sellerProfilePath } from "../../../lib/sellers";
 import {
   actionabilityMeta,
   dismissalBadge,
@@ -121,6 +123,7 @@ export function FindingComparison({
   productGroupId?: string;
   onCorrectProductGroup?: (reason: ProductGroupCorrectionReason) => Promise<void>;
 }) {
+  const sellerTarget = sellerProfilePath(f.seller_key);
   const [refreshing, setRefreshing] = useState(false);
   const [correctingProduct, setCorrectingProduct] = useState(false);
   const similarity = f.similarity_score ?? f.enforcement_priority;
@@ -141,6 +144,19 @@ export function FindingComparison({
   const actionability = actionabilityMeta(f.actionability);
   const sellerPriorEnforcement = f.seller_prior_enforcement_count ?? 0;
   const whyFlagged = findingFlaggedReason(f);
+  const normalizedAvailability = f.availability?.trim().toLowerCase();
+  const availabilityNotice =
+    normalizedAvailability === "blocked"
+      ? {
+          label: "Couldn't verify",
+          title: "The website blocked our latest automated check. This finding remains open and will be checked again.",
+        }
+      : normalizedAvailability === "error"
+        ? {
+            label: "Not yet verified",
+            title: "We do not have a reliable availability result yet. This finding remains open.",
+          }
+        : null;
   const countryLabel = f.country || "Unknown";
   const countryTitle = f.location && f.location !== f.country ? `Raw location: ${f.location}` : undefined;
   const unitPriceUsd = f.price_value_usd == null ? null : Number(f.price_value_usd);
@@ -238,6 +254,14 @@ export function FindingComparison({
               title="Manually moved during grouped triage"
             >
               Moved
+            </span>
+          )}
+          {availabilityNotice && (
+            <span
+              className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700"
+              title={availabilityNotice.title}
+            >
+              {availabilityNotice.label}
             </span>
           )}
           {showIp && f.ip_name && (
@@ -367,14 +391,19 @@ export function FindingComparison({
         <div className="text-sm text-stone-500 flex items-center gap-x-2 gap-y-0.5 flex-wrap">
           <span>
             <span className="text-stone-400">Seller: </span>
-            {f.seller_url ? (
-              <a href={f.seller_url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline font-medium">
-                {f.seller_name || f.seller_url}
-              </a>
+            {sellerTarget ? (
+              <Link to={sellerTarget} className="text-blue-700 hover:underline font-medium">
+                {f.seller_name || "Seller profile"}
+              </Link>
             ) : (
               <span className="font-medium text-stone-600">{f.seller_name}</span>
             )}
           </span>
+          {f.seller_url && (
+            <a href={f.seller_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 hover:underline">
+              Marketplace <ExternalLink size={12} />
+            </a>
+          )}
           {f.seller_rating != null && (
             <span>
               ★ <span className="font-semibold text-stone-600">{Number(f.seller_rating).toFixed(1)}</span>

@@ -17,6 +17,7 @@ import MonitoringTasks from "./pages/MonitoringTasks";
 import MonitoringCampaigns from "./pages/MonitoringCampaigns";
 import ProductClusters from "./pages/ProductClusters";
 import MonitoringNew from "./pages/MonitoringNew";
+import SellerProfile from "./pages/SellerProfile";
 import Monitors from "./pages/Monitors";
 import Dashboard from "./pages/Dashboard";
 import BrandsCatalog from "./pages/BrandsCatalog";
@@ -126,6 +127,7 @@ export default function App() {
           <Route path="/monitoring/tasks/:taskId" element={<MonitoringTasks />} />
           <Route path="/monitoring/campaigns" element={<MonitoringCampaigns />} />
           <Route path="/monitoring/campaigns/:campaignId" element={<MonitoringCampaigns />} />
+          <Route path="/monitoring/sellers/:sellerKey" element={<SellerProfile />} />
           <Route path="/monitoring/products" element={<ProductClusters />}>
             <Route path=":groupId/tasks/:taskId" />
           </Route>
