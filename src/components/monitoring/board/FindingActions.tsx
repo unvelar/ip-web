@@ -76,10 +76,6 @@ export function FindingActions({
       const result = await approveTakedown(f.case_id, decisionReason);
       if (result.status === "automatic") {
         onTakedownSent();
-      } else {
-        window.alert(
-          `Added to the legal queue. ${legalQueueReasonLabel(result.reason)}.`,
-        );
       }
       setConfirming(false);
       onActionComplete();
@@ -570,8 +566,6 @@ export function FindingActions({
             setComposeDecisionReason("");
             if (outcome === "sent") {
               onTakedownSent();
-            } else {
-              window.alert("Added to the legal queue for manual review and submission.");
             }
             onActionComplete();
             onUpdated({ completed: true }); // case leaves triage for sent or the legal queue

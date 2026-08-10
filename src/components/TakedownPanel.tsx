@@ -12,7 +12,6 @@ import {
   type TakedownRequestStatus,
   type TakedownThread,
 } from "../api";
-import { legalQueueReasonLabel } from "./monitoring/board/utils";
 
 const STATUS_META: Record<TakedownRequestStatus, { label: string; cls: string }> = {
   queued: { label: "Queued", cls: "bg-stone-100 text-stone-600" },
@@ -119,12 +118,7 @@ export default function TakedownPanel({
         await reload();
         return;
       }
-      const result = await approveTakedown(caseId, decisionReason);
-      if (result.status === "legal_queue") {
-        window.alert(
-          `Added to the legal queue. ${legalQueueReasonLabel(result.reason)}.`,
-        );
-      }
+      await approveTakedown(caseId, decisionReason);
       setConfirming(false);
       await reload();
     } catch (e) {
@@ -290,12 +284,9 @@ export default function TakedownPanel({
             setComposing(false);
             setComposeDecisionReason("");
           }}
-          onSent={async (outcome) => {
+          onSent={async () => {
             setComposing(false);
             setComposeDecisionReason("");
-            if (outcome === "legal_queue") {
-              window.alert("Added to the legal queue for manual review and submission.");
-            }
             await reload();
           }}
         />
