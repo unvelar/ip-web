@@ -144,6 +144,19 @@ export function FindingComparison({
   const actionability = actionabilityMeta(f.actionability);
   const sellerPriorEnforcement = f.seller_prior_enforcement_count ?? 0;
   const whyFlagged = findingFlaggedReason(f);
+  const normalizedAvailability = f.availability?.trim().toLowerCase();
+  const availabilityNotice =
+    normalizedAvailability === "blocked"
+      ? {
+          label: "Couldn't verify",
+          title: "The website blocked our latest automated check. This finding remains open and will be checked again.",
+        }
+      : normalizedAvailability === "error"
+        ? {
+            label: "Not yet verified",
+            title: "We do not have a reliable availability result yet. This finding remains open.",
+          }
+        : null;
   const countryLabel = f.country || "Unknown";
   const countryTitle = f.location && f.location !== f.country ? `Raw location: ${f.location}` : undefined;
   const unitPriceUsd = f.price_value_usd == null ? null : Number(f.price_value_usd);
@@ -241,6 +254,14 @@ export function FindingComparison({
               title="Manually moved during grouped triage"
             >
               Moved
+            </span>
+          )}
+          {availabilityNotice && (
+            <span
+              className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700"
+              title={availabilityNotice.title}
+            >
+              {availabilityNotice.label}
             </span>
           )}
           {showIp && f.ip_name && (

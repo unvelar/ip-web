@@ -457,8 +457,16 @@ export function findingChips(f: IpReviewFinding, showIp?: boolean) {
   const category =
     detailValue(f.item_details, ["category", "type", "department"]) ||
     null;
+  const availability = f.availability?.trim().toLowerCase();
+  const availabilityChip =
+    availability === "blocked"
+      ? "Couldn't verify"
+      : availability === "error"
+        ? "Not yet verified"
+        : null;
   return [
     saleUrgencyChip(f),
+    availabilityChip,
     showIp && f.ip_name ? f.ip_name : null,
     category,
     priceText,

@@ -31,10 +31,10 @@ import {
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
 
 const STATUS_OPTIONS: Array<{ value: MonitoringSellerStatus; label: string }> = [
-  { value: "active", label: "Active" },
-  { value: "all", label: "All history" },
+  { value: "open", label: "Open" },
+  { value: "all", label: "All" },
   { value: "enforced", label: "Enforced" },
-  { value: "dismissed", label: "Dismissed" },
+  { value: "dismissed", label: "Closed" },
 ];
 
 const SORT_OPTIONS: Array<{ value: MonitoringSellerSort; label: string }> = [
@@ -44,7 +44,7 @@ const SORT_OPTIONS: Array<{ value: MonitoringSellerSort; label: string }> = [
 ];
 
 function sellerStatus(value: string | null): MonitoringSellerStatus {
-  return value === "all" || value === "dismissed" || value === "enforced" ? value : "active";
+  return value === "all" || value === "dismissed" || value === "enforced" ? value : "open";
 }
 
 function sellerSort(value: string | null): MonitoringSellerSort {
@@ -52,7 +52,7 @@ function sellerSort(value: string | null): MonitoringSellerSort {
 }
 
 function sellerAvailability(value: string | null): MonitoringSellerAvailability | null {
-  return value === "available" || value === "unknown" || value === "unavailable" ? value : null;
+  return value === "available" || value === "blocked" || value === "unknown" || value === "unavailable" ? value : null;
 }
 
 export default function SellerProfile() {
@@ -170,6 +170,7 @@ export default function SellerProfile() {
   }
 
   const { seller, summary } = profile;
+  const notVerified = (summary.blocked_listings ?? 0) + summary.unknown_availability;
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-6 space-y-6">
@@ -218,9 +219,9 @@ export default function SellerProfile() {
           </div>
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-stone-100 sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
-          <Metric label="Monitored" value={summary.monitored_listings.toLocaleString()} icon={<ShoppingBag size={15} />} />
+          <Metric label="Open findings" value={summary.monitored_listings.toLocaleString()} icon={<ShoppingBag size={15} />} />
           <Metric label="Available" value={summary.available_listings.toLocaleString()} icon={<PackageOpen size={15} />} />
-          <Metric label="Availability unknown" value={summary.unknown_availability.toLocaleString()} />
+          <Metric label="Not verified" value={notVerified.toLocaleString()} />
           <Metric label="Market value" value={formatMoney(summary.monitored_market_usd, "USD")} />
           <Metric label="Affected IPs" value={summary.affected_ip_count.toLocaleString()} />
           <Metric label="Prior enforcement" value={summary.prior_enforcement_count.toLocaleString()} icon={<ShieldCheck size={15} />} alert={summary.prior_enforcement_count > 0} />
@@ -234,7 +235,7 @@ export default function SellerProfile() {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => updateParam("status", option.value, "active")}
+                onClick={() => updateParam("status", option.value, "open")}
                 className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
                   status === option.value ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-800"
                 }`}
@@ -252,7 +253,8 @@ export default function SellerProfile() {
             >
               <option value="">Any availability</option>
               <option value="available">Available</option>
-              <option value="unknown">Unknown</option>
+              <option value="blocked">Couldn’t verify</option>
+              <option value="unknown">Not yet verified</option>
               <option value="unavailable">Unavailable</option>
             </select>
             <select
@@ -412,7 +414,12 @@ function SellerListingCard({
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${status.cls}`}>{status.label}</span>
-          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${availability.cls}`}>{availability.label}</span>
+          <span
+            className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${availability.cls}`}
+            title={availability.title}
+          >
+            {availability.label}
+          </span>
           {finding.ip_name && <span className="max-w-[11rem] truncate rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold text-stone-600">{finding.ip_name}</span>}
           <a
             href={finding.page_url}
@@ -431,11 +438,32 @@ function SellerListingCard({
 
 function availabilityLabel(value: string | null) {
   const normalized = value?.trim().toLowerCase();
-  if (normalized === "live") return { label: "Available", cls: "bg-emerald-50 text-emerald-700" };
-  if (!normalized || normalized === "unknown" || normalized === "unchecked") {
-    return { label: "Availability unknown", cls: "bg-amber-50 text-amber-700" };
+  if (normalized === "live") {
+    return {
+      label: "Available",
+      cls: "bg-emerald-50 text-emerald-700",
+      title: "The latest check confirmed that this listing is available.",
+    };
   }
-  return { label: "Unavailable", cls: "bg-stone-100 text-stone-500" };
+  if (normalized === "blocked") {
+    return {
+      label: "Couldn't verify",
+      cls: "bg-amber-50 text-amber-700",
+      title: "The website blocked our latest automated check. This finding remains open and will be checked again.",
+    };
+  }
+  if (!normalized || normalized === "unknown" || normalized === "unchecked" || normalized === "error") {
+    return {
+      label: "Not yet verified",
+      cls: "bg-amber-50 text-amber-700",
+      title: "We do not have a reliable availability result yet. This finding remains open.",
+    };
+  }
+  return {
+    label: "Unavailable",
+    cls: "bg-stone-100 text-stone-500",
+    title: "The latest check found that this listing is no longer available.",
+  };
 }
 
 function SellerProfileSkeleton() {

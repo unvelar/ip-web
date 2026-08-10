@@ -2162,8 +2162,8 @@ export function getMonitoringFindingForCase(caseId: string) {
   );
 }
 
-export type MonitoringSellerStatus = "active" | "all" | "dismissed" | "enforced";
-export type MonitoringSellerAvailability = "available" | "unknown" | "unavailable";
+export type MonitoringSellerStatus = "open" | "all" | "dismissed" | "enforced";
+export type MonitoringSellerAvailability = "available" | "blocked" | "unknown" | "unavailable";
 export type MonitoringSellerSort = "found_desc" | "price_desc" | "risk_desc";
 
 export interface MonitoringSellerProfilePage {
@@ -2181,6 +2181,8 @@ export interface MonitoringSellerProfilePage {
   summary: {
     monitored_listings: number;
     available_listings: number;
+    /** Present after the workflow/availability API rollout. */
+    blocked_listings?: number;
     unknown_availability: number;
     unavailable_listings: number;
     monitored_market_usd: number;
