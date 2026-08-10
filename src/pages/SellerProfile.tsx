@@ -11,9 +11,11 @@ import {
   Store,
 } from "lucide-react";
 import {
+  dismissIpFinding,
   getMonitoringSellerProfile,
   isApiError,
   type IpReviewFinding,
+  type MonitoringReviewOutcome,
   type MonitoringSellerAvailability,
   type MonitoringSellerProfilePage,
   type MonitoringSellerSort,
@@ -26,6 +28,7 @@ import {
   formatMoney,
   tableImageUrls,
 } from "../components/monitoring/board/utils";
+import { FindingInspector } from "../components/monitoring/board/FindingInspector";
 
 const STATUS_OPTIONS: Array<{ value: MonitoringSellerStatus; label: string }> = [
   { value: "active", label: "Active" },
@@ -64,6 +67,10 @@ export default function SellerProfile() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [dismissing, setDismissing] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
+  const activeFindingId = params.get("finding");
+  const activeFinding = profile?.findings.find((finding) => finding.result_id === activeFindingId) ?? null;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -95,13 +102,34 @@ export default function SellerProfile() {
     return () => controller.abort();
     // `knownIps` is deliberately retained across profile filters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sellerKey, status, sort, availability, ipId]);
+  }, [sellerKey, status, sort, availability, ipId, reloadToken]);
 
   function updateParam(key: string, value: string | null, defaultValue?: string) {
     const next = new URLSearchParams(params);
     if (!value || value === defaultValue) next.delete(key);
     else next.set(key, value);
     setParams(next);
+  }
+
+  function setActiveFinding(resultId: string | null) {
+    const next = new URLSearchParams(params);
+    if (resultId) next.set("finding", resultId);
+    else next.delete("finding");
+    setParams(next);
+  }
+
+  async function dismissFinding(finding: IpReviewFinding, reason: MonitoringReviewOutcome) {
+    if (dismissing || !finding.ip_id) return;
+    setDismissing(true);
+    try {
+      await dismissIpFinding(finding.ip_id, finding.result_id, { reason });
+      setActiveFinding(null);
+      setReloadToken((current) => current + 1);
+    } catch (caught) {
+      window.alert(caught instanceof Error ? caught.message : "Unable to update this finding.");
+    } finally {
+      setDismissing(false);
+    }
   }
 
   async function loadMore() {
@@ -263,7 +291,14 @@ export default function SellerProfile() {
           </div>
         ) : (
           <div className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-3 ${loading ? "opacity-60" : ""}`}>
-            {profile.findings.map((finding) => <SellerListingCard key={finding.result_id} finding={finding} />)}
+            {profile.findings.map((finding) => (
+              <SellerListingCard
+                key={finding.result_id}
+                finding={finding}
+                active={finding.result_id === activeFindingId}
+                onOpen={() => setActiveFinding(finding.result_id)}
+              />
+            ))}
           </div>
         )}
 
@@ -280,6 +315,27 @@ export default function SellerProfile() {
           </div>
         )}
       </section>
+
+      {activeFinding && (
+        <FindingInspector
+          f={activeFinding}
+          ipId={activeFinding.ip_id}
+          showIp
+          isDismissed={!!activeFinding.dismissed_at}
+          isDismissing={dismissing}
+          onClose={() => setActiveFinding(null)}
+          onDismiss={(reason) => void dismissFinding(activeFinding, reason)}
+          onActionComplete={() => setActiveFinding(null)}
+          onNeedsReview={() => undefined}
+          onTakedownSent={() => undefined}
+          onEnforced={() => undefined}
+          onLicensed={() => undefined}
+          onUpdated={() => setReloadToken((current) => current + 1)}
+          onAddRelatedToBatch={() => undefined}
+          showRelatedItems={false}
+          taskHref={`/monitoring/tasks/${activeFinding.result_id}`}
+        />
+      )}
     </div>
   );
 }
@@ -307,7 +363,15 @@ function FilterChip({ active, label, onClick }: { active: boolean; label: string
   );
 }
 
-function SellerListingCard({ finding }: { finding: IpReviewFinding }) {
+function SellerListingCard({
+  finding,
+  active,
+  onOpen,
+}: {
+  finding: IpReviewFinding;
+  active: boolean;
+  onOpen: () => void;
+}) {
   const image = tableImageUrls(finding)[0];
   const status = findingStatusBadge(finding);
   const price = finding.price_value_usd != null
@@ -316,7 +380,12 @@ function SellerListingCard({ finding }: { finding: IpReviewFinding }) {
   const availability = availabilityLabel(finding.availability);
 
   return (
-    <article className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+    <article
+      onClick={onOpen}
+      className={`cursor-pointer overflow-hidden rounded-xl border bg-white shadow-sm transition-all hover:shadow-md ${
+        active ? "border-blue-500 ring-2 ring-blue-100" : "border-stone-200"
+      }`}
+    >
       <div className="aspect-[16/10] overflow-hidden bg-stone-100">
         {image ? (
           <img src={image} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
@@ -327,9 +396,16 @@ function SellerListingCard({ finding }: { finding: IpReviewFinding }) {
       <div className="space-y-3 p-4">
         <div className="flex min-w-0 items-start gap-2">
           <div className="min-w-0 flex-1">
-            <Link to={`/monitoring/tasks/${finding.result_id}`} className="line-clamp-2 text-sm font-bold leading-5 text-stone-900 hover:text-blue-700 hover:underline">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen();
+              }}
+              className="line-clamp-2 text-left text-sm font-bold leading-5 text-stone-900 hover:text-blue-700 hover:underline"
+            >
               {compactListingTitle(finding)}
-            </Link>
+            </button>
             <div className="mt-1 text-[11px] text-stone-500">Found {formatAgo(finding.found_at) ?? "recently"}</div>
           </div>
           {price && <span className="shrink-0 text-sm font-black tabular-nums text-stone-900">{price}</span>}
@@ -342,6 +418,7 @@ function SellerListingCard({ finding }: { finding: IpReviewFinding }) {
             href={finding.page_url}
             target="_blank"
             rel="noreferrer"
+            onClick={(event) => event.stopPropagation()}
             className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-stone-500 hover:text-blue-700"
           >
             Listing <ExternalLink size={11} />
