@@ -40,6 +40,7 @@ import {
   summarizeTakedownBatch,
 } from "../components/monitoring/board/batchUtils";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
+import { sellerProfilePath } from "../lib/sellers";
 import {
   compactListingTitle,
   findingStatusBadge,
@@ -167,6 +168,7 @@ function CampaignMemberRow({
   const actionable = isActionableMember(member);
   const thumbUrls = tableImageUrls(member);
   const thumbUrl = thumbUrls[0];
+  const sellerTarget = sellerProfilePath(member.seller_key);
 
   async function setState(state: "included" | "excluded") {
     const reason =
@@ -254,7 +256,15 @@ function CampaignMemberRow({
         )}
       </td>
       <td className="hidden px-2 py-2 text-xs text-stone-500 md:table-cell">
-        {member.seller_name || "-"}
+        {sellerTarget ? (
+          <Link
+            to={sellerTarget}
+            onClick={(event) => event.stopPropagation()}
+            className="font-medium text-stone-700 hover:text-blue-700 hover:underline"
+          >
+            {member.seller_name || "Seller"}
+          </Link>
+        ) : (member.seller_name || "-")}
       </td>
       <td className="hidden px-2 py-2 text-xs text-stone-500 lg:table-cell">
         {member.domain}

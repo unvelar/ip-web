@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import { getDashboardGroups, type DashboardGroups } from "../api";
 import { useActiveIp } from "../context/ActiveIpContext";
+import { sellerProfilePath } from "../lib/sellers";
 
 type Days = 7 | 30 | 90;
 type Ip = DashboardGroups["ips"][number];
@@ -632,7 +633,7 @@ function SellersCard({
             </thead>
             <tbody>
               {rows.map((s, i) => {
-                const target = sellerLink(s.seller_name, s.domain, s.ip_id);
+                const target = sellerProfilePath(s.seller_key) ?? sellerTasksLink(s.seller_name, s.domain, s.ip_id);
                 return (
                   <tr key={`${s.seller_name}-${s.domain}-${s.ip_id}-${i}`} className="border-b border-stone-50 last:border-0 hover:bg-stone-50 transition-colors">
                     <td className="py-2 pr-3 font-medium text-stone-800 truncate max-w-[12rem]">
@@ -711,7 +712,7 @@ function SellerFilterChip({
 /** Build the Tasks deep-link for a seller row. Returns null for blank seller
  *  names so the row falls back to "unknown" text. Threads the row's IP through
  *  as `ip_id`. */
-function sellerLink(
+function sellerTasksLink(
   seller: string | null,
   domain: string | null,
   ipId: string | null,

@@ -1,5 +1,7 @@
 import { ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
+import { sellerProfilePath } from "../../../lib/sellers";
 import { ActionabilityBadge } from "./ActionabilityBadge";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
@@ -79,6 +81,7 @@ export function GridFindingCard({
     f.dismissal_reason !== "licensed";
   const inactiveListing =
     f.dismissal_reason?.startsWith("dead") || f.availability?.startsWith("dead");
+  const sellerTarget = sellerProfilePath(f.seller_key);
 
   return (
     <div
@@ -153,9 +156,16 @@ export function GridFindingCard({
           </a>
         </div>
         <div className="text-[11px] text-stone-500 truncate">
-          {[f.seller_name || "Unknown seller", priceText, `found ${formatAgo(f.found_at) ?? "-"}`]
-            .filter(Boolean)
-            .join(" - ")}
+          {sellerTarget ? (
+            <Link
+              to={sellerTarget}
+              onClick={(event) => event.stopPropagation()}
+              className="font-semibold text-stone-700 hover:text-blue-700 hover:underline"
+            >
+              {f.seller_name || "Unknown seller"}
+            </Link>
+          ) : (f.seller_name || "Unknown seller")}
+          {priceText ? ` - ${priceText}` : ""} - found {formatAgo(f.found_at) ?? "-"}
         </div>
         <details className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-600">
           <summary className="cursor-pointer select-none font-semibold text-stone-700">

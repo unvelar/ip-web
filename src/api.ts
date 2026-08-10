@@ -1408,6 +1408,8 @@ export interface IpReviewFinding {
   source_method: string | null;
   /** How the match fired: 'visual', 'name', or 'both'. Null on legacy rows. */
   match_method: string | null;
+  /** Opaque canonical seller identity. Use this for seller profile links. */
+  seller_key: string | null;
   seller_name: string | null;
   seller_url: string | null;
   listing_title: string | null;
@@ -2160,6 +2162,62 @@ export function getMonitoringFindingForCase(caseId: string) {
   );
 }
 
+export type MonitoringSellerStatus = "active" | "all" | "dismissed" | "enforced";
+export type MonitoringSellerAvailability = "available" | "unknown" | "unavailable";
+export type MonitoringSellerSort = "found_desc" | "price_desc" | "risk_desc";
+
+export interface MonitoringSellerProfilePage {
+  seller: {
+    key: string;
+    name: string;
+    domain: string;
+    profile_url: string | null;
+    rating: number | null;
+    rating_count: number | null;
+    sales: number | null;
+    years_active: number | null;
+    location: string | null;
+  };
+  summary: {
+    monitored_listings: number;
+    available_listings: number;
+    unknown_availability: number;
+    unavailable_listings: number;
+    monitored_market_usd: number;
+    affected_ip_count: number;
+    prior_enforcement_count: number;
+  };
+  ips: Array<{ ip_id: string; ip_name: string; findings: number }>;
+  statuses: Record<string, number>;
+  findings: IpReviewFinding[];
+  next_cursor: string | null;
+}
+
+export function getMonitoringSellerProfile(
+  sellerKey: string,
+  opts: {
+    status?: MonitoringSellerStatus;
+    ip_id?: string | null;
+    availability?: MonitoringSellerAvailability | null;
+    sort?: MonitoringSellerSort;
+    cursor?: string | null;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {},
+) {
+  const params = new URLSearchParams();
+  if (opts.status) params.set("status", opts.status);
+  if (opts.ip_id) params.set("ip_id", opts.ip_id);
+  if (opts.availability) params.set("availability", opts.availability);
+  if (opts.sort) params.set("sort", opts.sort);
+  if (opts.cursor) params.set("cursor", opts.cursor);
+  params.set("limit", String(opts.limit ?? 50));
+  return request<MonitoringSellerProfilePage>(
+    `/api/monitoring/sellers/${encodeURIComponent(sellerKey)}?${params.toString()}`,
+    { signal: opts.signal },
+  );
+}
+
 export function resolveMonitoringFindingTenant(resultId: string) {
   return request<{ tenant_id: string }>(
     `/api/monitoring/findings/${encodeURIComponent(resultId)}/tenant`,
@@ -2365,6 +2423,7 @@ export interface DashboardGroups {
   sellers: Array<{
     ip_id: string;
     ip_name: string | null;
+    seller_key: string | null;
     seller_name: string;
     domain: string;
     findings: number;
