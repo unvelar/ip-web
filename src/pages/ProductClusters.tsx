@@ -124,8 +124,8 @@ const PRODUCT_GROUP_RECOMMENDATION_BUCKETS: Array<{
 }> = [
   {
     key: "takedown",
-    label: "Likely counterfeit",
-    description: "The current evidence recommends a takedown.",
+    label: "Takedown recommended",
+    description: "A strong identity match and an independent violation signal support takedown.",
     className: "border-red-200 bg-red-50/60",
     labelClassName: "text-red-900",
     countClassName: "bg-white/80 text-red-800",
@@ -4424,7 +4424,7 @@ function productGroupRecommendationSummary(group: PersistedProductGroup) {
   const counts = group.triage_recommendation_counts;
   if (!counts) return [];
   return [
-    { label: "Likely counterfeit", count: counts.takedown },
+    { label: "Takedown recommended", count: counts.takedown },
     { label: "Second-hand", count: counts.second_hand },
     { label: "Might be OK", count: counts.might_be_ok },
     { label: "Needs review", count: counts.needs_review },

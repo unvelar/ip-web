@@ -1480,6 +1480,8 @@ export interface IpReviewFinding {
    *  per-row figures so the UI shows one unified currency. */
   price_value_usd: number | null;
   description_risk_breakdown: Record<string, unknown> | null;
+  condition_assessment: ListingConditionAssessment | null;
+  authenticity_assessment: ListingAuthenticityAssessment | null;
   marketplace_condition: "new" | "second_hand" | "unknown";
   manual_candidate_outcome: MonitoringCandidateOutcome | null;
   suggested_review_outcome:
@@ -1490,6 +1492,12 @@ export interface IpReviewFinding {
     | "none";
   suggested_review_reason: string | null;
   actionability: MonitoringActionability;
+  automated_candidate_outcome: MonitoringCandidateOutcome | null;
+  automated_candidate_reason: string | null;
+  automated_reason_category: MonitoringDecisionReasonCategory | null;
+  automated_decision_factors: MonitoringDecisionFactor[] | null;
+  automated_decision_version: string | null;
+  automated_decided_at: string | null;
   // Present on tenant-wide findings (GET /api/monitoring/findings) so a
   // multi-IP board can key per-finding actions off the finding's own IP and
   // render an IP chip. Absent on per-IP findings (the IP is implied).
@@ -1958,10 +1966,80 @@ export type MonitoringActionabilityKey =
   | "false_positive"
   | "needs_review";
 
+export type MonitoringDecisionReasonCategory =
+  | "counterfeit"
+  | "unauthorized_ip_use"
+  | "policy_violation"
+  | "high_risk_description"
+  | "allowed_resale"
+  | "licensed"
+  | "weak_match"
+  | "manual"
+  | "insufficient_evidence";
+
+export interface MonitoringDecisionFactor {
+  code: string;
+  source:
+    | "identity"
+    | "condition"
+    | "authenticity"
+    | "license"
+    | "infringement"
+    | "description"
+    | "playbook"
+    | "seller"
+    | "manual";
+  effect: "identity" | "violation" | "clearance" | "context";
+  strength: "strong" | "moderate" | "weak";
+  detail: string;
+}
+
+export interface ListingConditionAssessment {
+  declared_condition: "new" | "used" | "unknown";
+  observed_use_state:
+    | "unused"
+    | "used"
+    | "partially_used"
+    | "opened"
+    | "packaging_only"
+    | "unknown";
+  effective_condition: "new" | "second_hand" | "unknown";
+  confidence: number;
+  evidence: Array<{
+    source: "title" | "description" | "item_details" | "image" | "marketplace" | "system";
+    kind:
+      | "declared_new"
+      | "declared_used"
+      | "unused"
+      | "opened"
+      | "partial_quantity"
+      | "prior_use"
+      | "wear"
+      | "packaging_only";
+    text: string;
+    confidence: number;
+  }>;
+  contradictions: string[];
+}
+
+export interface ListingAuthenticityAssessment {
+  status: "counterfeit_signals" | "no_visible_signals" | "unclear";
+  confidence: number;
+  reasoning: string | null;
+  evidence: Array<{
+    source: "image" | "description" | "item_details";
+    signal: string;
+    text: string;
+  }>;
+}
+
 export interface MonitoringActionability {
   key: MonitoringActionabilityKey;
   label: string;
   reason: string;
+  reason_category: MonitoringDecisionReasonCategory;
+  decision_factors: MonitoringDecisionFactor[];
+  classification_version: string;
 }
 
 export type MonitoringRelatedBucketKey =
