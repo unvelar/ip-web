@@ -139,6 +139,12 @@ export function FindingComparison({
     !f.listing_title && !f.seller_name && !f.match_explanation && !f.description_summary;
   const inactiveListing =
     f.dismissal_reason?.startsWith("dead") || f.availability?.startsWith("dead");
+  const fullDescription = f.description_full_en || f.description_full;
+  const hasTranslatedDescription = Boolean(
+    f.description_full_en &&
+    f.description_full &&
+    f.description_full_en !== f.description_full,
+  );
 
   const sb = findingStatusBadge(f);
   const actionability = actionabilityMeta(f.actionability);
@@ -463,12 +469,20 @@ export function FindingComparison({
         <p className="text-sm text-stone-500 leading-relaxed">{f.description_summary}</p>
       )}
 
-      {f.description_full && f.description_full !== f.description_summary && (
+      {fullDescription && fullDescription !== f.description_summary && (
         <details className="text-sm text-stone-500">
           <summary className="cursor-pointer text-stone-400 hover:text-stone-600 select-none">
             Full description
           </summary>
-          <p className="mt-1.5 leading-relaxed whitespace-pre-wrap">{f.description_full}</p>
+          <p className="mt-1.5 leading-relaxed whitespace-pre-wrap">{fullDescription}</p>
+          {hasTranslatedDescription && (
+            <details className="mt-2 border-l-2 border-stone-200 pl-3">
+              <summary className="cursor-pointer text-stone-400 hover:text-stone-600 select-none">
+                View original{f.description_language ? ` (${f.description_language.toUpperCase()})` : ""}
+              </summary>
+              <p className="mt-1.5 leading-relaxed whitespace-pre-wrap">{f.description_full}</p>
+            </details>
+          )}
         </details>
       )}
 

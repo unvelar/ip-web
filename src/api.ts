@@ -1440,6 +1440,8 @@ export interface IpReviewFinding {
   published_at: string | null;
   shipping_price: string | null;
   description_full: string | null;
+  description_full_en: string | null;
+  description_language: string | null;
   item_details: Record<string, unknown> | null;
   image_urls: string[] | null;
   /** Per-image similarity (vs this finding's IP), sorted desc — lets the
