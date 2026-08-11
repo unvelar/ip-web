@@ -2137,6 +2137,9 @@ export default function ProductClusters() {
           action={confirmBatchAction}
           scopeLabel={productGroupRecommendationBucket(activeBatch.bucket).label}
           {...partitionGroupBatch(confirmBatchAction)}
+          decisionReasonRequired={partitionGroupBatch(confirmBatchAction).eligible.some(
+            (finding) => finding.actionability?.key !== "send_takedown",
+          )}
           onCancel={() => setConfirmBatchAction(null)}
           onConfirm={(decisionReason) => {
             const action = confirmBatchAction;

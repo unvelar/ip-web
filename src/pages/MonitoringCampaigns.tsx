@@ -829,6 +829,9 @@ function CampaignDetailPanel({
           action={confirmAction}
           eligible={partitionCampaignSelection(confirmAction).eligible}
           skipped={partitionCampaignSelection(confirmAction).skipped}
+          decisionReasonRequired={partitionCampaignSelection(confirmAction).eligible.some(
+            (finding) => finding.actionability?.key !== "send_takedown",
+          )}
           onConfirm={(decisionReason) => {
             const action = confirmAction;
             setConfirmAction(null);

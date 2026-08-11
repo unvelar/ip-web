@@ -1432,6 +1432,7 @@ export function MonitoringBoard({
           platform={shortcutSendFinding.domain}
           sending={shortcutSending}
           error={shortcutSendError}
+          decisionReasonRequired={shortcutSendFinding.actionability?.key !== "send_takedown"}
           onSend={(decisionReason) => {
             void confirmShortcutTakedown(decisionReason);
           }}
@@ -1447,6 +1448,9 @@ export function MonitoringBoard({
         <BatchConfirmModal
           action={confirmAction}
           {...partitionSelection(confirmAction)}
+          decisionReasonRequired={partitionSelection(confirmAction).eligible.some(
+            (finding) => finding.actionability?.key !== "send_takedown",
+          )}
           onCancel={() => setConfirmAction(null)}
           onConfirm={(decisionReason) => {
             const a = confirmAction;
