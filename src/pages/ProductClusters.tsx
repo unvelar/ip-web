@@ -126,8 +126,8 @@ const PRODUCT_GROUP_RECOMMENDATION_BUCKETS: Array<{
 }> = [
   {
     key: "takedown",
-    label: "Likely counterfeit",
-    description: "The current evidence recommends a takedown.",
+    label: "Takedown recommended",
+    description: "A strong identity match and an independent violation signal support takedown.",
     className: "border-red-200 bg-red-50/60",
     labelClassName: "text-red-900",
     countClassName: "bg-white/80 text-red-800",
@@ -194,6 +194,244 @@ function decrementRecommendationCount(
     next.review = next.might_be_ok + next.needs_review;
   }
   return next;
+}
+
+type AcknowledgedProductTaskResolution = {
+  groupId: string;
+  resultId: string;
+  caseId: string | null;
+  profileId: string;
+  recommendationBucket: ProductGroupRecommendationBucket;
+  remainingFindings: IpReviewFinding[] | null;
+};
+
+function productGroupHasReviewQueueWork(group: PersistedProductGroup) {
+  const triageMemberCount = group.triage_member_count ?? 0;
+  return group.confirmation_status === "confirmed"
+    ? triageMemberCount > 0
+    : triageMemberCount > 1;
+}
+
+function productProfileMatchesResolution(
+  profile: ProductClusterProfile,
+  resolution: AcknowledgedProductTaskResolution,
+) {
+  return profile.id === resolution.profileId || Boolean(
+    resolution.caseId && profile.case_id === resolution.caseId,
+  );
+}
+
+function optimisticallyResolveProductGroupTask(
+  group: PersistedProductGroup,
+  resolution: AcknowledgedProductTaskResolution,
+) {
+  if (group.id !== resolution.groupId) return { group, removed: false };
+  const resolvedProfile = group.triage_members.find((profile) =>
+    productProfileMatchesResolution(profile, resolution)
+  ) ?? null;
+  const matchingCommercialSubgroupKeys = new Set(
+    group.commercial_subgroups
+      .filter((subgroup) =>
+        Boolean(
+          resolution.caseId && subgroup.triage_case_ids.includes(resolution.caseId),
+        ) || subgroup.key === resolvedProfile?.commercial_subgroup_key
+      )
+      .map((subgroup) => subgroup.key),
+  );
+  if (!resolvedProfile && matchingCommercialSubgroupKeys.size === 0) {
+    return { group, removed: false };
+  }
+
+  const recommendationBucket = resolvedProfile
+    ? recommendationBucketForProfile(resolvedProfile)
+    : resolution.recommendationBucket;
+  const commercialSubgroups = group.commercial_subgroups.map((subgroup) => {
+    if (!matchingCommercialSubgroupKeys.has(subgroup.key)) return subgroup;
+    return {
+      ...subgroup,
+      triage_member_count: Math.max(0, subgroup.triage_member_count - 1),
+      triage_recommendation_counts: decrementRecommendationCount(
+        subgroup.triage_recommendation_counts,
+        recommendationBucket,
+      ),
+      triage_case_ids: resolution.caseId
+        ? subgroup.triage_case_ids.filter((caseId) => caseId !== resolution.caseId)
+        : subgroup.triage_case_ids,
+    };
+  });
+  return {
+    removed: true,
+    group: {
+      ...group,
+      triage_member_count: group.triage_member_count == null
+        ? null
+        : Math.max(0, group.triage_member_count - 1),
+      triage_recommendation_counts: group.triage_recommendation_counts
+        ? decrementRecommendationCount(
+          group.triage_recommendation_counts,
+          recommendationBucket,
+        )
+        : group.triage_recommendation_counts,
+      triage_members: group.triage_members.filter((profile) =>
+        !productProfileMatchesResolution(profile, resolution)
+      ),
+      commercial_subgroups: commercialSubgroups,
+    },
+  };
+}
+
+function optimisticallyResolveProductGroupTaskInOverview(
+  overview: PersistedProductGroupOverview,
+  resolution: AcknowledgedProductTaskResolution,
+) {
+  let removed = false;
+  let removedQueueGroup = false;
+  const groups = overview.groups.map((group) => {
+    const wasQueueGroup = productGroupHasReviewQueueWork(group);
+    const result = optimisticallyResolveProductGroupTask(group, resolution);
+    if (!result.removed) return group;
+    removed = true;
+    removedQueueGroup = wasQueueGroup && !productGroupHasReviewQueueWork(result.group);
+    return result.group;
+  });
+  if (!removed) return overview;
+  return {
+    ...overview,
+    groups,
+    triage_group_count: overview.triage_group_count == null
+      ? null
+      : Math.max(0, overview.triage_group_count - (removedQueueGroup ? 1 : 0)),
+    triage_profile_count: overview.triage_profile_count == null
+      ? null
+      : Math.max(0, overview.triage_profile_count - 1),
+  };
+}
+
+function applyAcknowledgedProductTaskResolutions(
+  overview: PersistedProductGroupOverview,
+  resolutions: Iterable<AcknowledgedProductTaskResolution>,
+) {
+  let nextOverview = overview;
+  for (const resolution of resolutions) {
+    nextOverview = optimisticallyResolveProductGroupTaskInOverview(
+      nextOverview,
+      resolution,
+    );
+    const targetGroup = nextOverview.groups.find((group) => group.id === resolution.groupId);
+    if (targetGroup?.triage_recommendation_counts == null && resolution.remainingFindings) {
+      nextOverview = reconcileProductGroupTaskProjectionInOverview(
+        nextOverview,
+        resolution.groupId,
+        resolution.remainingFindings,
+      );
+    }
+  }
+  return nextOverview;
+}
+
+function productTaskResolution(
+  task: ActiveProductTask,
+): AcknowledgedProductTaskResolution | null {
+  if (!task.groupId) return null;
+  return {
+    groupId: task.groupId,
+    resultId: task.finding.result_id,
+    caseId: task.finding.case_id ?? null,
+    profileId: task.profileId,
+    recommendationBucket: recommendationBucketForFinding(task.finding),
+    remainingFindings: null,
+  } satisfies AcknowledgedProductTaskResolution;
+}
+
+function findingMatchesAcknowledgedResolution(
+  finding: IpReviewFinding,
+  resolution: AcknowledgedProductTaskResolution,
+) {
+  return finding.result_id === resolution.resultId || Boolean(
+    resolution.caseId && finding.case_id === resolution.caseId,
+  );
+}
+
+function recommendationCountsForFindings(findings: IpReviewFinding[]) {
+  const counts: ProductGroupRecommendationCounts = {
+    takedown: 0,
+    second_hand: 0,
+    might_be_ok: 0,
+    needs_review: 0,
+    review: 0,
+  };
+  for (const finding of findings) {
+    const bucket = recommendationBucketForFinding(finding);
+    counts[bucket] += 1;
+  }
+  counts.review = counts.might_be_ok + counts.needs_review;
+  return counts;
+}
+
+function reconcileProductGroupTaskProjection(
+  group: PersistedProductGroup,
+  groupId: string,
+  findings: IpReviewFinding[],
+) {
+  if (group.id !== groupId) return group;
+  const findingCaseIds = new Set(
+    findings.flatMap((finding) => finding.case_id ? [finding.case_id] : []),
+  );
+  const commercialSubgroups = group.commercial_subgroups.map((subgroup) => {
+    const subgroupCaseIds = new Set(subgroup.triage_case_ids);
+    const subgroupFindings = findings.filter((finding) => Boolean(
+      finding.case_id && subgroupCaseIds.has(finding.case_id),
+    ));
+    return {
+      ...subgroup,
+      triage_member_count: subgroupFindings.length,
+      triage_recommendation_counts: recommendationCountsForFindings(subgroupFindings),
+      triage_case_ids: subgroupFindings.flatMap((finding) =>
+        finding.case_id ? [finding.case_id] : []
+      ),
+    };
+  });
+  return {
+    ...group,
+    triage_member_count: findings.length,
+    triage_recommendation_counts: recommendationCountsForFindings(findings),
+    triage_members: group.triage_members.filter((profile) =>
+      findingCaseIds.has(profile.case_id)
+    ),
+    commercial_subgroups: commercialSubgroups,
+  };
+}
+
+function reconcileProductGroupTaskProjectionInOverview(
+  overview: PersistedProductGroupOverview,
+  groupId: string,
+  findings: IpReviewFinding[],
+) {
+  let previousTriageMemberCount: number | null = null;
+  let nextTriageMemberCount: number | null = null;
+  let queueGroupDelta = 0;
+  const groups = overview.groups.map((group) => {
+    if (group.id !== groupId) return group;
+    previousTriageMemberCount = group.triage_member_count;
+    const wasQueueGroup = productGroupHasReviewQueueWork(group);
+    const nextGroup = reconcileProductGroupTaskProjection(group, groupId, findings);
+    nextTriageMemberCount = nextGroup.triage_member_count;
+    const isQueueGroup = productGroupHasReviewQueueWork(nextGroup);
+    queueGroupDelta = Number(isQueueGroup) - Number(wasQueueGroup);
+    return nextGroup;
+  });
+  if (previousTriageMemberCount == null || nextTriageMemberCount == null) return overview;
+  const profileDelta = nextTriageMemberCount - previousTriageMemberCount;
+  return {
+    ...overview,
+    groups,
+    triage_group_count: overview.triage_group_count == null
+      ? null
+      : Math.max(0, overview.triage_group_count + queueGroupDelta),
+    triage_profile_count: overview.triage_profile_count == null
+      ? null
+      : Math.max(0, overview.triage_profile_count + profileDelta),
+  };
 }
 
 function optimisticallyExcludeProductGroupMember(
@@ -325,6 +563,10 @@ export default function ProductClusters() {
   const batchRequestSequence = useRef(0);
   const semanticPageRequestSequence = useRef(0);
   const visualPageRequestSequence = useRef(0);
+  const workspaceQueueHydrationAttempt = useRef<string | null>(null);
+  const acknowledgedProductTaskResolutions = useRef(
+    new Map<string, AcknowledgedProductTaskResolution>(),
+  );
   const taskRouteScrollPosition = useRef<{ main: number; window: number } | null>(null);
   const taskRouteRef = useRef({ linkedGroupId, linkedTaskId, search: location.search });
   taskRouteRef.current = { linkedGroupId, linkedTaskId, search: location.search };
@@ -350,6 +592,101 @@ export default function ProductClusters() {
     setActiveTask(null);
     setLoadingTaskProfileId(null);
   }, [navigate, rememberTaskRouteScrollPosition]);
+  const applyAcknowledgedResolutions = useCallback(
+    (overview: PersistedProductGroupOverview) =>
+      applyAcknowledgedProductTaskResolutions(
+        overview,
+        acknowledgedProductTaskResolutions.current.values(),
+      ),
+    [],
+  );
+  const omitAcknowledgedGroupFindings = useCallback(
+    (groupId: string, findings: IpReviewFinding[]) => {
+      const resolutions = [...acknowledgedProductTaskResolutions.current.values()]
+        .filter((resolution) => resolution.groupId === groupId);
+      if (resolutions.length === 0) return findings;
+      return findings.filter((finding) =>
+        !resolutions.some((resolution) =>
+          findingMatchesAcknowledgedResolution(finding, resolution)
+        )
+      );
+    },
+    [],
+  );
+  const acknowledgeProductTaskResolution = useCallback((task: ActiveProductTask) => {
+    const resolution = productTaskResolution(task);
+    if (!resolution) return;
+    const resolutionKey = `${resolution.groupId}:${resolution.resultId}`;
+    if (acknowledgedProductTaskResolutions.current.has(resolutionKey)) return;
+    const loadedFindings = loadedGroupTasks[resolution.groupId] ?? null;
+    const remainingFindings = loadedFindings?.filter((finding) =>
+      !findingMatchesAcknowledgedResolution(finding, resolution)
+    ) ?? null;
+    resolution.remainingFindings = remainingFindings;
+    acknowledgedProductTaskResolutions.current.set(resolutionKey, resolution);
+    setVisualOverview((current) => {
+      if (!current) return current;
+      return remainingFindings
+        ? reconcileProductGroupTaskProjectionInOverview(
+          current,
+          resolution.groupId,
+          remainingFindings,
+        )
+        : optimisticallyResolveProductGroupTaskInOverview(current, resolution);
+    });
+    setFocusedGroup((current) => {
+      if (!current) return current;
+      return remainingFindings
+        ? reconcileProductGroupTaskProjection(
+          current,
+          resolution.groupId,
+          remainingFindings,
+        )
+        : optimisticallyResolveProductGroupTask(current, resolution).group;
+    });
+    setLoadedGroupTasks((current) => {
+      const findings = current[resolution.groupId];
+      if (!findings) return current;
+      const nextFindings = findings.filter((finding) =>
+        !findingMatchesAcknowledgedResolution(finding, resolution)
+      );
+      return nextFindings.length === findings.length
+        ? current
+        : { ...current, [resolution.groupId]: nextFindings };
+    });
+    setActiveBatch((current) => {
+      if (current?.groupId !== resolution.groupId || !current.findings) return current;
+      const removedResultIds = new Set(
+        current.findings
+          .filter((finding) => findingMatchesAcknowledgedResolution(finding, resolution))
+          .map((finding) => finding.result_id),
+      );
+      if (removedResultIds.size === 0) return current;
+      return {
+        ...current,
+        findings: current.findings.filter(
+          (finding) => !removedResultIds.has(finding.result_id),
+        ),
+        selectedResultIds: new Set(
+          [...current.selectedResultIds].filter(
+            (resultId) => !removedResultIds.has(resultId),
+          ),
+        ),
+      };
+    });
+  }, [loadedGroupTasks]);
+  const forgetProductTaskResolution = useCallback((task: ActiveProductTask) => {
+    for (const [key, resolution] of acknowledgedProductTaskResolutions.current) {
+      if (
+        resolution.resultId === task.finding.result_id ||
+        Boolean(
+          task.finding.case_id && resolution.caseId === task.finding.case_id,
+        )
+      ) {
+        acknowledgedProductTaskResolutions.current.delete(key);
+      }
+    }
+  }, []);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
     `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${productGroupView}`;
@@ -422,7 +759,7 @@ export default function ProductClusters() {
       },
     ).then((nextOverview) => {
       if (!alive) return;
-      setVisualOverview(nextOverview);
+      setVisualOverview(applyAcknowledgedResolutions(nextOverview));
       setError(null);
     }).catch((caught: unknown) => {
       if (alive) setError(errorMessage(caught));
@@ -439,10 +776,12 @@ export default function ProductClusters() {
     productGroupView,
     refreshVersion,
     actingTenantId,
+    applyAcknowledgedResolutions,
     groupsRequestKey,
   ]);
 
   useEffect(() => {
+    acknowledgedProductTaskResolutions.current.clear();
     setError(null);
     setTaskError(null);
     setBatchResult(null);
@@ -596,6 +935,7 @@ export default function ProductClusters() {
     reasonCode?: MonitoringDismissReasonCode,
   ) {
     if (!activeTask) return;
+    const task = activeTask;
     const finding = activeTask.finding;
     const ipId = finding.ip_id ?? selectedIpId;
     if (!ipId) {
@@ -604,6 +944,7 @@ export default function ProductClusters() {
     }
     setDismissingTaskId(finding.result_id);
     setTaskError(null);
+    acknowledgeProductTaskResolution(task);
     try {
       await dismissIpFinding(ipId, finding.result_id, {
         reason,
@@ -612,10 +953,17 @@ export default function ProductClusters() {
       closeTask();
       setRefreshVersion((version) => version + 1);
     } catch (caught: unknown) {
+      forgetProductTaskResolution(task);
+      setRefreshVersion((version) => version + 1);
       setTaskError(errorMessage(caught, "Unable to update task."));
     } finally {
       setDismissingTaskId(null);
     }
+  }
+
+  function completeActiveTask() {
+    if (activeTask) acknowledgeProductTaskResolution(activeTask);
+    closeTask();
   }
 
   function refreshTaskAfterUpdate(opts?: { completed?: boolean }) {
@@ -626,6 +974,11 @@ export default function ProductClusters() {
         (task.finding.review_status ?? "pending") !== "pending"
       ),
     );
+    if (task && opts?.completed) {
+      acknowledgeProductTaskResolution(task);
+    } else if (task && reopeningClosedTask) {
+      forgetProductTaskResolution(task);
+    }
     if (opts?.completed || reopeningClosedTask) {
       setRefreshVersion((version) => version + 1);
     }
@@ -651,11 +1004,13 @@ export default function ProductClusters() {
     if (selectedIpId && selectedScopeAvailable) {
       setRefreshingGroups(true);
       try {
-        const nextOverview = await refreshPersistedProductGroups(
-          selectedIpId,
-          "same",
-          productGroupView,
-          { limit: PRODUCT_GROUP_PAGE_SIZE },
+        const nextOverview = applyAcknowledgedResolutions(
+          await refreshPersistedProductGroups(
+            selectedIpId,
+            "same",
+            productGroupView,
+            { limit: PRODUCT_GROUP_PAGE_SIZE },
+          ),
         );
         setVisualOverview(nextOverview);
       } catch (caught: unknown) {
@@ -674,11 +1029,13 @@ export default function ProductClusters() {
     setLoadingMoreVisualGroups(true);
     setError(null);
     try {
-      const nextOverview = await getPersistedProductGroups(
-        selectedIpId,
-        "same",
-        productGroupView,
-        { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
+      const nextOverview = applyAcknowledgedResolutions(
+        await getPersistedProductGroups(
+          selectedIpId,
+          "same",
+          productGroupView,
+          { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
+        ),
       );
       if (visualPageRequestSequence.current !== requestSequence) return;
       setVisualOverview((current) =>
@@ -711,11 +1068,13 @@ export default function ProductClusters() {
       while (accumulated.next_cursor && !seenCursors.has(accumulated.next_cursor)) {
         const cursor = accumulated.next_cursor;
         seenCursors.add(cursor);
-        const nextOverview = await getPersistedProductGroups(
-          selectedIpId,
-          "same",
-          productGroupView,
-          { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
+        const nextOverview = applyAcknowledgedResolutions(
+          await getPersistedProductGroups(
+            selectedIpId,
+            "same",
+            productGroupView,
+            { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
+          ),
         );
         if (visualPageRequestSequence.current !== requestSequence) return null;
         accumulated = appendProductGroupPage(accumulated, nextOverview);
@@ -730,14 +1089,16 @@ export default function ProductClusters() {
         let allCursor: string | null = null;
         const seenAllCursors = new Set<string>();
         do {
-          const allOverview = await getPersistedProductGroups(
-            selectedIpId,
-            "same",
-            "all",
-            {
-              limit: PRODUCT_GROUP_PAGE_SIZE,
-              cursor: allCursor,
-            },
+          const allOverview = applyAcknowledgedResolutions(
+            await getPersistedProductGroups(
+              selectedIpId,
+              "same",
+              "all",
+              {
+                limit: PRODUCT_GROUP_PAGE_SIZE,
+                cursor: allCursor,
+              },
+            ),
           );
           if (visualPageRequestSequence.current !== requestSequence) return null;
           const target = allOverview.groups.find((group) => group.id === groupId);
@@ -754,7 +1115,7 @@ export default function ProductClusters() {
       }
       return null;
     }
-  }, [productGroupView, selectedIpId, visualOverview]);
+  }, [applyAcknowledgedResolutions, productGroupView, selectedIpId, visualOverview]);
 
   useEffect(() => {
     if (!linkedGroupId) {
@@ -782,7 +1143,7 @@ export default function ProductClusters() {
     };
   }, [linkedGroupId, loadProductGroupForReview, loadingGroups, visualOverview]);
 
-  async function loadGroupTasks(groupId: string) {
+  const loadGroupTasks = useCallback(async (groupId: string) => {
     const cached = loadedGroupTasks[groupId];
     if (cached) return cached;
     if (!selectedIpId || loadingGroupTasksId) return null;
@@ -791,9 +1152,21 @@ export default function ProductClusters() {
     setLoadingGroupTasksId(groupId);
     setError(null);
     try {
-      const findings = await loadProductGroupBatch(selectedIpId, groupId);
+      const findings = omitAcknowledgedGroupFindings(
+        groupId,
+        await loadProductGroupBatch(selectedIpId, groupId),
+      );
       if (batchRequestSequence.current !== requestSequence) return null;
+      for (const resolution of acknowledgedProductTaskResolutions.current.values()) {
+        if (resolution.groupId === groupId) resolution.remainingFindings = findings;
+      }
       setLoadedGroupTasks((current) => ({ ...current, [groupId]: findings }));
+      setVisualOverview((current) => current
+        ? reconcileProductGroupTaskProjectionInOverview(current, groupId, findings)
+        : current);
+      setFocusedGroup((current) => current
+        ? reconcileProductGroupTaskProjection(current, groupId, findings)
+        : current);
       return findings;
     } catch (caught: unknown) {
       if (batchRequestSequence.current === requestSequence) {
@@ -805,7 +1178,7 @@ export default function ProductClusters() {
         setLoadingGroupTasksId(null);
       }
     }
-  }
+  }, [loadedGroupTasks, loadingGroupTasksId, omitAcknowledgedGroupFindings, selectedIpId]);
 
   async function toggleGroupSubgroupListings(
     groupId: string,
@@ -1070,6 +1443,13 @@ export default function ProductClusters() {
               await markIpFindingEnforced(findingIpId, finding.result_id);
               ok += 1;
             }
+            if (completedBatch) {
+              acknowledgeProductTaskResolution({
+                profileId: findingProfileId(finding),
+                groupId: completedBatch.groupId,
+                finding,
+              });
+            }
           } catch {
             failed += 1;
           } finally {
@@ -1105,11 +1485,13 @@ export default function ProductClusters() {
         groupId,
         displayName,
       );
-      setVisualOverview(await getPersistedProductGroups(
-        selectedIpId,
-        "same",
-        productGroupView,
-        { limit: PRODUCT_GROUP_PAGE_SIZE },
+      setVisualOverview(applyAcknowledgedResolutions(
+        await getPersistedProductGroups(
+          selectedIpId,
+          "same",
+          productGroupView,
+          { limit: PRODUCT_GROUP_PAGE_SIZE },
+        ),
       ));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
@@ -1128,11 +1510,13 @@ export default function ProductClusters() {
     setSavingMergeKey(mergeKey);
     try {
       await mergePersistedProductGroups(selectedIpId, leftGroupId, rightGroupId);
-      setVisualOverview(await getPersistedProductGroups(
-        selectedIpId,
-        "same",
-        productGroupView,
-        { limit: PRODUCT_GROUP_PAGE_SIZE },
+      setVisualOverview(applyAcknowledgedResolutions(
+        await getPersistedProductGroups(
+          selectedIpId,
+          "same",
+          productGroupView,
+          { limit: PRODUCT_GROUP_PAGE_SIZE },
+        ),
       ));
       setMergeSourceGroupId(null);
     } catch (caught: unknown) {
@@ -1151,11 +1535,13 @@ export default function ProductClusters() {
     setRevokingMergeDecisionId(decisionId);
     try {
       await revokePersistedProductGroupMerge(selectedIpId, groupId, decisionId);
-      setVisualOverview(await getPersistedProductGroups(
-        selectedIpId,
-        "same",
-        productGroupView,
-        { limit: PRODUCT_GROUP_PAGE_SIZE },
+      setVisualOverview(applyAcknowledgedResolutions(
+        await getPersistedProductGroups(
+          selectedIpId,
+          "same",
+          productGroupView,
+          { limit: PRODUCT_GROUP_PAGE_SIZE },
+        ),
       ));
     } catch (caught: unknown) {
       setError(errorMessage(caught));
@@ -1528,6 +1914,36 @@ export default function ProductClusters() {
     ? visualOverview?.groups.find((group) => group.id === linkedGroupId) ?? focusedGroup
     : null;
   const showingWorkspace = Boolean(linkedGroupId);
+  const workspaceQueueHydrationKey = selectedIpId && workspaceGroup
+    ? `${selectedIpId}:${workspaceGroup.id}:${refreshVersion}`
+    : null;
+  const workspaceQueueNeedsHydration = Boolean(
+    productGroupView === "triage" &&
+      workspaceGroup &&
+      (workspaceGroup.triage_member_count ?? 0) > 0 &&
+      workspaceGroup.triage_recommendation_counts == null &&
+      loadedGroupTasks[workspaceGroup.id] == null,
+  );
+
+  useEffect(() => {
+    if (
+      !workspaceQueueNeedsHydration ||
+      !workspaceGroup ||
+      !workspaceQueueHydrationKey ||
+      loadingGroupTasksId ||
+      workspaceQueueHydrationAttempt.current === workspaceQueueHydrationKey
+    ) {
+      return;
+    }
+    workspaceQueueHydrationAttempt.current = workspaceQueueHydrationKey;
+    void loadGroupTasks(workspaceGroup.id);
+  }, [
+    loadGroupTasks,
+    loadingGroupTasksId,
+    workspaceGroup,
+    workspaceQueueHydrationKey,
+    workspaceQueueNeedsHydration,
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
@@ -1702,7 +2118,7 @@ export default function ProductClusters() {
           }
           onClose={closeTask}
           onDismiss={(reason, reasonCode) => void dismissActiveTask(reason, reasonCode)}
-          onActionComplete={closeTask}
+          onActionComplete={completeActiveTask}
           onNeedsReview={() => undefined}
           onTakedownSent={() => undefined}
           onEnforced={() => undefined}
@@ -1770,7 +2186,7 @@ function ProductQueue({
 }) {
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const candidateGroups = view === "triage"
-    ? overview.groups.filter((group) => (group.triage_member_count ?? 0) > 0)
+    ? overview.groups.filter(productGroupHasReviewQueueWork)
     : overview.groups;
   const visibleGroups = candidateGroups
     .filter((group) => {
@@ -3058,7 +3474,7 @@ export function SemanticProductGroupsOverview({
 }) {
   const showingTriage = groupView === "triage";
   const displayedGroups = showingTriage
-    ? overview.groups.filter((group) => (group.triage_member_count ?? 0) > 0)
+    ? overview.groups.filter(productGroupHasReviewQueueWork)
     : overview.groups;
   const categoryGroups = displayedGroups.filter(
     (group) => group.semantic_kind === "category" && !group.parent_group_id,
@@ -3427,10 +3843,10 @@ function SemanticProductGroupCard({
   const triageMemberCount = group.triage_member_count ?? 0;
   const displayedMembers = showingTriage ? group.triage_members : group.members;
   const displayedMemberCount = showingTriage ? triageMemberCount : group.member_count;
-  const taskLinkMode = showingTriage || (triageProjectionAvailable && triageMemberCount > 0)
-    ? "pending"
-    : triageProjectionAvailable
-      ? "history"
+  const taskLinkMode = triageProjectionAvailable && triageMemberCount === 0
+    ? "history"
+    : showingTriage || (triageProjectionAvailable && triageMemberCount > 0)
+      ? "pending"
       : "all";
   const taskQuery = taskLinkMode === "pending"
     ? "status=pending"
@@ -3700,7 +4116,7 @@ export function ProductGroupsOverview({
   const showingTriage = groupView === "triage";
   const displayedGroups = showingTriage
     ? overview.triage_projection_available
-      ? overview.groups.filter((group) => (group.triage_member_count ?? 0) > 0)
+      ? overview.groups.filter(productGroupHasReviewQueueWork)
       : []
     : overview.groups;
   const triageProfileCount = overview.triage_profile_count ?? 0;
@@ -4022,7 +4438,7 @@ function productGroupRecommendationSummary(group: PersistedProductGroup) {
   const counts = group.triage_recommendation_counts;
   if (!counts) return [];
   return [
-    { label: "Likely counterfeit", count: counts.takedown },
+    { label: "Takedown recommended", count: counts.takedown },
     { label: "Second-hand", count: counts.second_hand },
     { label: "Might be OK", count: counts.might_be_ok },
     { label: "Needs review", count: counts.needs_review },
@@ -4617,12 +5033,10 @@ function ProductGroupCard({
   const displayedMembers = showingPersistedMembers ? group.members : group.triage_members;
   const displayedMemberCount = showingPersistedMembers ? group.member_count : triageMemberCount;
   const workspaceRepresentative = group.triage_members[0] ?? group.members[0] ?? null;
-  const taskLinkMode = !showingPersistedMembers || (
-    triageProjectionAvailable && triageMemberCount > 0
-  )
-    ? "pending"
-    : triageProjectionAvailable
-      ? "history"
+  const taskLinkMode = triageProjectionAvailable && triageMemberCount === 0
+    ? "history"
+    : !showingPersistedMembers || triageMemberCount > 0
+      ? "pending"
       : "all";
   const taskQuery = taskLinkMode === "pending"
     ? "status=pending"
@@ -5817,7 +6231,19 @@ function ProductGroupCard({
         </div>
       )}
 
-      {(!workspace || workspaceSection === "review") && (displayedCommercialSubgroups.length > 0 ? (
+      {workspace && workspaceSection === "review" &&
+        !showingPersistedMembers && displayedMemberCount === 0 && (
+          <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-6 text-center">
+            <p className="text-sm font-black text-emerald-950">Review queue complete</p>
+            <p className="mt-1 text-sm text-emerald-800">
+              No current tasks remain for this product. Resolved listings stay in task history
+              and return here only if they are reopened.
+            </p>
+          </div>
+        )}
+
+      {(!workspace || workspaceSection === "review") && displayedMemberCount > 0 &&
+        (displayedCommercialSubgroups.length > 0 ? (
         <div className="mt-4 space-y-3" data-product-commercial-groups>
           {renderedCommercialSubgroups.map((commercialSubgroup) => {
             const scopeId = productCommercialReviewScopeId(
