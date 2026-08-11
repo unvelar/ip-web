@@ -969,6 +969,15 @@ export function MonitoringBoard({
         alert("Finding is still preparing.");
         return;
       }
+      if (targetFinding.actionability?.key === "send_takedown") {
+        const recommendedButton = document.querySelector<HTMLButtonElement>(
+          'button[data-recommended-action="Recommended"]',
+        );
+        if (recommendedButton && !recommendedButton.disabled) {
+          recommendedButton.click();
+          return;
+        }
+      }
       setShortcutSendError("");
       setShortcutSendFinding(targetFinding);
       return;

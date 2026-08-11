@@ -89,6 +89,16 @@ export function FindingActions({
     }
   }
 
+  function beginTakedown() {
+    setSendErr("");
+    setComposeDecisionReason("");
+    if (f.actionability?.key === "send_takedown") {
+      void sendDirect("");
+      return;
+    }
+    setConfirming(true);
+  }
+
   async function run(
     label: string,
     fn: () => Promise<unknown>,
@@ -372,25 +382,21 @@ export function FindingActions({
         {needsReviewBtn}
         <button
           type="button"
-          disabled={!f.case_id}
+          disabled={!f.case_id || directSending}
           title={actionTitle(
             "send_takedown",
             !f.case_id
               ? "Still preparing this case…"
               : "Submit automatically when possible; otherwise add to the legal queue",
           )}
-          onClick={() => {
-            setSendErr("");
-            setComposeDecisionReason("");
-            setConfirming(true);
-          }}
+          onClick={beginTakedown}
           className={actionClass("send_takedown")}
           aria-label={actionAriaLabel("send_takedown", "Takedown")}
           aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
           data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
         >
           <ButtonWithShortcut
-            label="Takedown"
+            label={directSending ? "Processing…" : "Takedown"}
             shortcut="T"
             dark={recommendedAction === "send_takedown"}
           />
@@ -407,25 +413,21 @@ export function FindingActions({
         {dontPursueBtn}
         <button
           type="button"
-          disabled={!f.case_id}
+          disabled={!f.case_id || directSending}
           title={actionTitle(
             "send_takedown",
             !f.case_id
               ? "Still preparing this case..."
               : "Submit automatically when possible; otherwise add to the legal queue",
           )}
-          onClick={() => {
-            setSendErr("");
-            setComposeDecisionReason("");
-            setConfirming(true);
-          }}
+          onClick={beginTakedown}
           className={actionClass("send_takedown")}
           aria-label={actionAriaLabel("send_takedown", "Takedown")}
           aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
           data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
         >
           <ButtonWithShortcut
-            label="Takedown"
+            label={directSending ? "Processing…" : "Takedown"}
             shortcut="T"
             dark={recommendedAction === "send_takedown"}
           />
