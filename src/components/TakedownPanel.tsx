@@ -328,6 +328,19 @@ export function ConfirmSendModal({
   return (
     <div
       onClick={onCancel}
+      onKeyDown={(event) => {
+        if (
+          event.defaultPrevented ||
+          event.key !== "Enter" ||
+          event.shiftKey ||
+          event.nativeEvent.isComposing ||
+          sending ||
+          !reasonValid ||
+          event.target instanceof HTMLButtonElement
+        ) return;
+        event.preventDefault();
+        onSend(decisionReason.trim());
+      }}
       role="dialog"
       aria-modal="true"
       aria-label="Takedown"
