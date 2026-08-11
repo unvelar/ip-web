@@ -15,6 +15,7 @@ import {
   getMonitoringSellerProfile,
   isApiError,
   type IpReviewFinding,
+  type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
   type MonitoringSellerAvailability,
   type MonitoringSellerProfilePage,
@@ -118,11 +119,18 @@ export default function SellerProfile() {
     setParams(next);
   }
 
-  async function dismissFinding(finding: IpReviewFinding, reason: MonitoringReviewOutcome) {
+  async function dismissFinding(
+    finding: IpReviewFinding,
+    reason: MonitoringReviewOutcome,
+    reasonCode?: MonitoringDismissReasonCode,
+  ) {
     if (dismissing || !finding.ip_id) return;
     setDismissing(true);
     try {
-      await dismissIpFinding(finding.ip_id, finding.result_id, { reason });
+      await dismissIpFinding(finding.ip_id, finding.result_id, {
+        reason,
+        ...(reasonCode ? { reason_code: reasonCode } : {}),
+      });
       setActiveFinding(null);
       setReloadToken((current) => current + 1);
     } catch (caught) {
@@ -326,7 +334,7 @@ export default function SellerProfile() {
           isDismissed={!!activeFinding.dismissed_at}
           isDismissing={dismissing}
           onClose={() => setActiveFinding(null)}
-          onDismiss={(reason) => void dismissFinding(activeFinding, reason)}
+          onDismiss={(reason, reasonCode) => void dismissFinding(activeFinding, reason, reasonCode)}
           onActionComplete={() => setActiveFinding(null)}
           onNeedsReview={() => undefined}
           onTakedownSent={() => undefined}

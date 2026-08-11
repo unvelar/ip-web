@@ -382,7 +382,7 @@ export function inferCondition(f: IpReviewFinding): "new" | "second hand" | null
 export function suggestionMeta(outcome: IpReviewFinding["suggested_review_outcome"]) {
   switch (outcome) {
     case "false_positive":
-      return { label: "False positive", shortcut: "0", cls: "bg-stone-800 text-white" };
+      return { label: "Different product", shortcut: "0", cls: "bg-stone-800 text-white" };
     case "do_not_pursue":
       return { label: "Don't pursue", shortcut: "1", cls: "bg-sky-700 text-white" };
     case "takedown":

@@ -11,6 +11,7 @@ import {
   reopenIpFinding,
   type CaseReviewStatus,
   type IpReviewFinding,
+  type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
 } from "../../../api";
 import { ButtonWithShortcut } from "./ButtonWithShortcut";
@@ -23,6 +24,7 @@ export type FindingUpdateOptions = {
 type RecommendableAction =
   | "false_positive"
   | "second_hand"
+  | "packaging_only"
   | "do_not_pursue"
   | "review"
   | "send_takedown"
@@ -48,7 +50,7 @@ export function FindingActions({
   canLicense: boolean;
   isDismissed: boolean;
   isDismissing: boolean;
-  onDismiss: (reason: MonitoringReviewOutcome) => void;
+  onDismiss: (reason: MonitoringReviewOutcome, reasonCode?: MonitoringDismissReasonCode) => void;
   onActionComplete: () => void;
   onNeedsReview: () => void;
   onTakedownSent: () => void;
@@ -135,11 +137,15 @@ export function FindingActions({
       : f.actionability?.key === "send_takedown"
         ? "send_takedown"
         : f.actionability?.key === "allowed_resale"
-          ? "second_hand"
+          ? f.offer_subject === "packaging_only"
+            ? "packaging_only"
+            : "second_hand"
           : f.actionability?.key === "licensed_seller"
             ? "license"
             : f.actionability?.key === "false_positive"
-              ? "false_positive"
+              ? f.offer_subject === "packaging_only"
+                ? "packaging_only"
+                : "false_positive"
               : "review";
   const recommendationReason = f.actionability?.reason?.trim();
 
@@ -175,13 +181,14 @@ export function FindingActions({
     action: RecommendableAction,
     label: string,
     reason: MonitoringReviewOutcome,
+    reasonCode: MonitoringDismissReasonCode | undefined,
     title: string,
     shortcut: string,
   ) => (
     <button
       key={key}
       type="button"
-      onClick={() => onDismiss(reason)}
+      onClick={() => onDismiss(reason, reasonCode)}
       disabled={isDismissing}
       title={actionTitle(action, title)}
       className={actionClass(action)}
@@ -203,9 +210,10 @@ export function FindingActions({
   const falsePositiveBtn = outcomeButton(
     "false-positive",
     "false_positive",
-    "False positive",
+    "Different product",
     "false_positive",
-    "Shortcut 1: the detection is wrong or irrelevant",
+    "different_product",
+    "Shortcut 1: the listing is for a different product",
     "1",
   );
   const dontPursueBtn = outcomeButton(
@@ -213,6 +221,7 @@ export function FindingActions({
     "do_not_pursue",
     "Don't pursue",
     "do_not_pursue",
+    undefined,
     "Shortcut 3: valid detection, intentionally tolerated or not worth enforcement",
     "3",
   );
@@ -221,8 +230,18 @@ export function FindingActions({
     "second_hand",
     "Second hand",
     "second_hand",
-    "Shortcut 2: used or second-hand item",
+    "genuine_second_hand",
+    "Shortcut 2: a likely genuine used or second-hand item",
     "2",
+  );
+  const packagingOnlyBtn = outcomeButton(
+    "packaging-only",
+    "packaging_only",
+    "Packaging only",
+    "second_hand",
+    "original_packaging_only",
+    "Shortcut 4: original packaging or an empty box only",
+    "4",
   );
   const needsReviewBtn = (
     <button
@@ -348,6 +367,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
+        {packagingOnlyBtn}
         {dontPursueBtn}
         {needsReviewBtn}
         <button
@@ -383,6 +403,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
+        {packagingOnlyBtn}
         {dontPursueBtn}
         <button
           type="button"
@@ -422,6 +443,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
+        {packagingOnlyBtn}
         {dontPursueBtn}
         <button
           type="button"
@@ -474,6 +496,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
+        {packagingOnlyBtn}
         {dontPursueBtn}
         <button
           type="button"

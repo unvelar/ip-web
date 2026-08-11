@@ -17,6 +17,7 @@ import {
   type MonitoringCandidateOutcome,
   type MonitoringFacets,
   type MonitoringDismissalReasonFilter,
+  type MonitoringDismissReasonCode,
   type MonitoringPriorityBand,
   type MonitoringReviewOutcome,
   type MonitoringSortMode,
@@ -31,6 +32,7 @@ import {
   type BatchResult,
   type BatchAction,
   runPool,
+  dismissalOptionsForBatchAction,
   summarizeBatch,
   summarizeResort,
   summarizeTakedownBatch,
@@ -80,7 +82,13 @@ type LastReviewAction = {
 
 const TOAST_VISIBLE_MS = 5000;
 
-function dismissalDecisionLabel(reason: MonitoringReviewOutcome) {
+function dismissalDecisionLabel(
+  reason: MonitoringReviewOutcome,
+  reasonCode?: MonitoringDismissReasonCode,
+) {
+  if (reasonCode === "original_packaging_only") return "Packaging only";
+  if (reasonCode === "genuine_second_hand") return "Second hand";
+  if (reasonCode === "different_product") return "Different product";
   switch (reason) {
     case "resale":
       return DISMISSAL_REASON_LABELS.second_hand;
@@ -383,6 +391,7 @@ export function MonitoringBoard({
   const handleDismiss = useCallback(async (
     f: IpReviewFinding,
     reason: MonitoringReviewOutcome = "false_positive",
+    reasonCode?: MonitoringDismissReasonCode,
   ) => {
     if (dismissing.has(f.result_id) || completingResultIdsRef.current.has(f.result_id)) return;
     const fipId = f.ip_id ?? ipId;
@@ -394,10 +403,13 @@ export function MonitoringBoard({
     setResultCompleting(f.result_id, true);
     advanceAfterAction(f.result_id);
     try {
-      await dismissIpFinding(fipId, f.result_id, { reason });
+      await dismissIpFinding(fipId, f.result_id, {
+        reason,
+        ...(reasonCode ? { reason_code: reasonCode } : {}),
+      });
       onDismiss?.(f.result_id);
       recordLastAction({
-        label: `${dismissalDecisionLabel(reason)} applied`,
+        label: `${dismissalDecisionLabel(reason, reasonCode)} applied`,
         detail: compactListingTitle(f),
         undo: { kind: "undismiss", ipId: fipId, resultId: f.result_id },
       });
@@ -702,7 +714,7 @@ export function MonitoringBoard({
         else if (!f.case_id) skip("still preparing");
         else if (!(f.ip_id ?? ipId)) skip("no associated IP");
         else eligible.push(f);
-      } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand") {
+      } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand" || action === "packaging_only") {
         if (f.dismissed_at) skip("already dismissed");
         else if (!(f.ip_id ?? ipId)) skip("no associated IP");
         else eligible.push(f);
@@ -837,10 +849,11 @@ export function MonitoringBoard({
             if (
               action === "false_positive" ||
               action === "do_not_pursue" ||
-              action === "second_hand"
+              action === "second_hand" ||
+              action === "packaging_only"
             ) {
               await dismissIpFinding((f.ip_id ?? ipId) as string, f.result_id, {
-                reason: action,
+                ...dismissalOptionsForBatchAction(action),
               });
               ok++;
             } else if (action === "review") {
@@ -925,7 +938,7 @@ export function MonitoringBoard({
     }
   }
 
-  const runShortcutAction = useCallback(async (action: "false_positive" | "do_not_pursue" | "send" | "second_hand" | "review") => {
+  const runShortcutAction = useCallback(async (action: "false_positive" | "do_not_pursue" | "send" | "second_hand" | "packaging_only" | "review") => {
     if (selected.size > 0) {
       setConfirmAction(action);
       return;
@@ -973,7 +986,8 @@ export function MonitoringBoard({
         onRefresh(targetFinding.result_id);
         return;
       }
-      await handleDismiss(targetFinding, action);
+      const options = dismissalOptionsForBatchAction(action);
+      await handleDismiss(targetFinding, options.reason, options.reason_code);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to update finding");
     }
@@ -1012,6 +1026,7 @@ export function MonitoringBoard({
         e.key === "1" ? "false_positive" :
         e.key === "2" ? "second_hand" :
         e.key === "3" ? "do_not_pursue" :
+        e.key === "4" ? "packaging_only" :
         e.key.toLowerCase() === "r" ? "review" :
         e.key.toLowerCase() === "t" ? "send" :
         null;
@@ -1281,7 +1296,7 @@ export function MonitoringBoard({
                     setActiveFinding(f.result_id);
                     setViewMode("table");
                   }}
-                  onDismiss={(reason) => handleDismiss(f, reason)}
+                  onDismiss={(reason, reasonCode) => handleDismiss(f, reason, reasonCode)}
                   onActionComplete={() => advanceAfterAction(f.result_id)}
                   onNeedsReview={() => rememberNeedsReviewAction(f)}
                   onTakedownSent={() => rememberTakedownAction(f)}
@@ -1392,7 +1407,7 @@ export function MonitoringBoard({
           isDismissed={!!activeFinding.dismissed_at || dismissing.has(activeFinding.result_id)}
           isDismissing={dismissing.has(activeFinding.result_id) && !activeFinding.dismissed_at}
           onClose={() => setActiveFinding(null)}
-          onDismiss={(reason) => handleDismiss(activeFinding, reason)}
+          onDismiss={(reason, reasonCode) => handleDismiss(activeFinding, reason, reasonCode)}
           onActionComplete={() => advanceAfterAction(activeFinding.result_id)}
           onNeedsReview={() => rememberNeedsReviewAction(activeFinding)}
           onTakedownSent={() => rememberTakedownAction(activeFinding)}

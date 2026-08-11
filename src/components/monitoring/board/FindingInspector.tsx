@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import type {
   IpReviewFinding,
+  MonitoringDismissReasonCode,
   MonitoringReviewOutcome,
   ProductGroupCorrectionReason,
 } from "../../../api";
@@ -38,7 +39,7 @@ export function FindingInspector({
   isDismissed: boolean;
   isDismissing: boolean;
   onClose: () => void;
-  onDismiss: (reason: MonitoringReviewOutcome) => void;
+  onDismiss: (reason: MonitoringReviewOutcome, reasonCode?: MonitoringDismissReasonCode) => void;
   onActionComplete: () => void;
   onNeedsReview: () => void;
   onTakedownSent: () => void;

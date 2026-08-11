@@ -53,6 +53,7 @@ import {
   type PersistedProductGroupOverview,
   type CaseReviewStatus,
   type IpReviewFinding,
+  type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
   type ProductClusterProfile,
   type ProductClusterScope,
@@ -73,6 +74,7 @@ import {
   type BatchResult,
   type BatchAction,
   runPool,
+  dismissalOptionsForBatchAction,
   summarizeBatch,
   summarizeTakedownBatch,
 } from "../components/monitoring/board/batchUtils";
@@ -589,7 +591,10 @@ export default function ProductClusters() {
     });
   }
 
-  async function dismissActiveTask(reason: MonitoringReviewOutcome) {
+  async function dismissActiveTask(
+    reason: MonitoringReviewOutcome,
+    reasonCode?: MonitoringDismissReasonCode,
+  ) {
     if (!activeTask) return;
     const finding = activeTask.finding;
     const ipId = finding.ip_id ?? selectedIpId;
@@ -600,7 +605,10 @@ export default function ProductClusters() {
     setDismissingTaskId(finding.result_id);
     setTaskError(null);
     try {
-      await dismissIpFinding(ipId, finding.result_id, { reason });
+      await dismissIpFinding(ipId, finding.result_id, {
+        reason,
+        ...(reasonCode ? { reason_code: reasonCode } : {}),
+      });
       closeTask();
       setRefreshVersion((version) => version + 1);
     } catch (caught: unknown) {
@@ -964,7 +972,8 @@ export default function ProductClusters() {
       } else if (
         action === "false_positive" ||
         action === "do_not_pursue" ||
-        action === "second_hand"
+        action === "second_hand" ||
+        action === "packaging_only"
       ) {
         if (finding.dismissed_at) skip("already dismissed");
         else if (!findingIpId) skip("no associated IP");
@@ -1045,9 +1054,14 @@ export default function ProductClusters() {
             if (
               action === "false_positive" ||
               action === "do_not_pursue" ||
-              action === "second_hand"
+              action === "second_hand" ||
+              action === "packaging_only"
             ) {
-              await dismissIpFinding(findingIpId, finding.result_id, { reason: action });
+              await dismissIpFinding(
+                findingIpId,
+                finding.result_id,
+                dismissalOptionsForBatchAction(action),
+              );
               ok += 1;
             } else if (action === "review") {
               await markIpFindingNeedsReview(findingIpId, finding.result_id);
@@ -1687,7 +1701,7 @@ export default function ProductClusters() {
             !activeTask.finding.dismissed_at
           }
           onClose={closeTask}
-          onDismiss={(reason) => void dismissActiveTask(reason)}
+          onDismiss={(reason, reasonCode) => void dismissActiveTask(reason, reasonCode)}
           onActionComplete={closeTask}
           onNeedsReview={() => undefined}
           onTakedownSent={() => undefined}
