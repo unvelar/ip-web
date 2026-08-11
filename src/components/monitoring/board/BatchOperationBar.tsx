@@ -14,6 +14,7 @@ export function BatchOperationBar({
   showResort = true,
   showTakedown = true,
   showMarkSubmitted = false,
+  showPackagingOnly = false,
   placement = "fixed",
   showShortcuts = true,
   disabled = false,
@@ -30,6 +31,7 @@ export function BatchOperationBar({
   showResort?: boolean;
   showTakedown?: boolean;
   showMarkSubmitted?: boolean;
+  showPackagingOnly?: boolean;
   placement?: "fixed" | "inline";
   showShortcuts?: boolean;
   disabled?: boolean;
@@ -133,15 +135,17 @@ export function BatchOperationBar({
                 >
                   {shortcutLabel("Second hand", "2")}
                 </button>
-                <button
-                  type="button"
-                  data-batch-action="packaging_only"
-                  onClick={() => onAction("packaging_only")}
-                  disabled={actionDisabled}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {shortcutLabel("Packaging only", "4")}
-                </button>
+                {showPackagingOnly && (
+                  <button
+                    type="button"
+                    data-batch-action="packaging_only"
+                    onClick={() => onAction("packaging_only")}
+                    disabled={actionDisabled}
+                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {shortcutLabel("Packaging only", "4")}
+                  </button>
+                )}
                 <button
                   type="button"
                   data-batch-action="review"

@@ -1349,6 +1349,9 @@ export default function ProductClusters() {
         action === "packaging_only"
       ) {
         if (finding.dismissed_at) skip("already dismissed");
+        else if (action === "packaging_only" && finding.offer_subject !== "packaging_only") {
+          skip("not packaging-only");
+        }
         else if (!findingIpId) skip("no associated IP");
         else eligible.push(finding);
       } else {
@@ -3340,6 +3343,9 @@ function ProductGroupMemberSubgroups({
                     showResort={false}
                     placement="inline"
                     showShortcuts={false}
+                    showPackagingOnly={selectedProductGroupBatchFindings(activeBatch).every(
+                      (finding) => finding.offer_subject === "packaging_only",
+                    )}
                     disabled={batchDisabled}
                   />
                 </>

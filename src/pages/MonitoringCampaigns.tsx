@@ -404,6 +404,8 @@ function CampaignDetailPanel({
     () => selectedFindingSummary(campaignBatchMembers),
     [campaignBatchMembers],
   );
+  const campaignBatchPackagingOnly = campaignBatchMembers.length > 0 &&
+    campaignBatchMembers.every((finding) => finding.offer_subject === "packaging_only");
 
   function partitionCampaignSelection(action: BatchAction) {
     const eligible: IpReviewFinding[] = [];
@@ -426,6 +428,9 @@ function CampaignDetailPanel({
         else eligible.push(finding);
       } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand" || action === "packaging_only") {
         if (finding.dismissed_at) skip("already dismissed");
+        else if (action === "packaging_only" && finding.offer_subject !== "packaging_only") {
+          skip("not packaging-only");
+        }
         else if (!finding.ip_id) skip("no associated IP");
         else eligible.push(finding);
       } else {
@@ -590,7 +595,7 @@ function CampaignDetailPanel({
         e.key === "1" ? "false_positive" :
         e.key === "2" ? "second_hand" :
         e.key === "3" ? "do_not_pursue" :
-        e.key === "4" ? "packaging_only" :
+        e.key === "4" && campaignBatchPackagingOnly ? "packaging_only" :
         e.key.toLowerCase() === "r" ? "review" :
         e.key.toLowerCase() === "t" ? "send" :
         null;
@@ -602,7 +607,7 @@ function CampaignDetailPanel({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [batchProgress, campaignBatchMembers.length, confirmAction]);
+  }, [batchProgress, campaignBatchMembers.length, campaignBatchPackagingOnly, confirmAction]);
 
   function refreshAfterInspectorUpdate(opts?: { completed?: boolean }) {
     if (opts?.completed) setActiveMemberId(null);
@@ -796,6 +801,7 @@ function CampaignDetailPanel({
           setExtraBatchFindings([]);
         }}
         showResort={false}
+        showPackagingOnly={campaignBatchPackagingOnly}
       />
       {activeMember && (
         <FindingInspector

@@ -367,7 +367,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
-        {packagingOnlyBtn}
+        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
         {needsReviewBtn}
         <button
@@ -403,7 +403,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
-        {packagingOnlyBtn}
+        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
         <button
           type="button"
@@ -443,7 +443,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
-        {packagingOnlyBtn}
+        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
         <button
           type="button"
@@ -496,7 +496,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
-        {packagingOnlyBtn}
+        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
         <button
           type="button"

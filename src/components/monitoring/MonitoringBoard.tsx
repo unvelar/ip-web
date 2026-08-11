@@ -716,6 +716,9 @@ export function MonitoringBoard({
         else eligible.push(f);
       } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand" || action === "packaging_only") {
         if (f.dismissed_at) skip("already dismissed");
+        else if (action === "packaging_only" && f.offer_subject !== "packaging_only") {
+          skip("not packaging-only");
+        }
         else if (!(f.ip_id ?? ipId)) skip("no associated IP");
         else eligible.push(f);
       } else {
@@ -950,6 +953,7 @@ export function MonitoringBoard({
         : visibleActionableFindings.find((f) => !completingResultIds.has(f.result_id));
     if (!targetFinding) return;
     if (completingResultIds.has(targetFinding.result_id)) return;
+    if (action === "packaging_only" && targetFinding.offer_subject !== "packaging_only") return;
 
     const state: CaseReviewStatus = targetFinding.dismissed_at
       ? "dismissed"
@@ -1073,6 +1077,9 @@ export function MonitoringBoard({
       onClear={clearSelection}
       showTakedown={selectedHasTakedownDecision}
       showMarkSubmitted={selectedHasLegalQueue}
+      showPackagingOnly={selectedActionFindings.length > 0 && selectedActionFindings.every(
+        (finding) => finding.offer_subject === "packaging_only",
+      )}
     />
   );
 
