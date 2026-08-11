@@ -37,9 +37,7 @@ import {
 } from "./board/batchUtils";
 import {
   CANDIDATE_OUTCOME_LABELS,
-  CANDIDATE_OUTCOME_ORDER,
   DISMISSAL_REASON_LABELS,
-  FILTER_SELECT,
   type ResortTarget,
 } from "./board/constants";
 import { GridFindingCard } from "./board/GridFindingCard";
@@ -47,7 +45,8 @@ import { FindingRow } from "./board/FindingRow";
 import { FindingInspector } from "./board/FindingInspector";
 import type { FindingUpdateOptions } from "./board/FindingActions";
 import { SortHeader } from "./board/SortHeader";
-import { FilterPill, StatusTabs } from "./board/StatusTabs";
+import { StatusTabs } from "./board/StatusTabs";
+import { TriageFilters } from "./board/TriageFilters";
 import { compactListingTitle, hasReviewAnalysis, selectedFindingSummary } from "./board/utils";
 
 /** Shape pushed up to the parent — must match Findings.tsx::InboxFilters. */
@@ -1042,10 +1041,6 @@ export function MonitoringBoard({
     : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
   const showAiRecommendationTabs =
     filters.status === null || filters.status === "pending" || !!filters.candidate_outcome;
-  const filterHeaderLabel =
-    "w-24 shrink-0 text-[10px] font-bold uppercase tracking-wide text-stone-600";
-  const filterRow =
-    "flex items-center gap-0.5 px-3 py-2 overflow-x-auto whitespace-nowrap";
   const bulkSelectionBar = (
     <BatchOperationBar
       selectedCount={selected.size}
@@ -1063,9 +1058,9 @@ export function MonitoringBoard({
 
   return (
     <>
-      <div className="rounded-lg border border-stone-200 bg-white overflow-hidden mb-2">
-        <div className="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-stone-100 bg-white">
-          <span className={filterHeaderLabel}>
+      <div className="mb-2 overflow-visible rounded-lg border border-stone-200 bg-white">
+        <div className="flex items-center gap-3 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-stone-500">
             Workflow
           </span>
           <StatusTabs
@@ -1075,171 +1070,20 @@ export function MonitoringBoard({
               onFiltersChange({
                 status: s as MonitoringStatusFilter | null,
                 dismissal_reason: s === "dismissed" ? filters.dismissal_reason : null,
-                show_dismissed: s === "dismissed" ? true : filters.show_dismissed,
+                show_dismissed: s === "dismissed",
               })
             }
           />
-          <span className="flex-1 min-w-[8px]" aria-hidden />
-          <span className="text-[11px] font-semibold text-stone-500 whitespace-nowrap">
-            {facets.total} in view
-          </span>
         </div>
-
-        <div className="divide-y divide-stone-100">
-          {showIpFilter && ipAware && facets.ips.length > 1 && (
-            <div
-              className={filterRow}
-              role="group"
-              aria-label="Filter by IP"
-            >
-              <span className={filterHeaderLabel}>
-                IP
-              </span>
-              <FilterPill
-                label="All"
-                count={facets.total}
-                active={!filters.ip_id}
-                onClick={() => onFiltersChange({ ip_id: null, product_group_id: null })}
-              />
-              {facets.ips.map((ip) => (
-                <FilterPill
-                  key={ip.ip_id}
-                  label={ip.name ?? "Unnamed IP"}
-                  count={ip.n}
-                  active={filters.ip_id === ip.ip_id}
-                  onClick={() =>
-                    onFiltersChange({
-                      ip_id: filters.ip_id === ip.ip_id ? null : ip.ip_id,
-                      product_group_id: null,
-                    })
-                  }
-                  title={`${ip.name ?? "Unnamed IP"} · ${ip.n} finding${ip.n === 1 ? "" : "s"}`}
-                  className="max-w-[9rem]"
-                />
-              ))}
-            </div>
-          )}
-          {((facets.product_groups?.length ?? 0) > 0 || filters.product_group_id) && (
-            <div className="flex items-center gap-2 px-3 py-2">
-              <span className={filterHeaderLabel}>
-                Group
-              </span>
-              <select
-                value={filters.product_group_id ?? "all"}
-                onChange={(event) =>
-                  onFiltersChange({
-                    product_group_id: event.target.value === "all" ? null : event.target.value,
-                  })
-                }
-                aria-label="Filter by product or visual group"
-                title="Filter tasks by a stored exact-product or overlapping visual group"
-                className={`${FILTER_SELECT} max-w-sm`}
-              >
-                <option value="all">All groups</option>
-                {filters.product_group_id && !(facets.product_groups ?? []).some(
-                  (group) => group.product_group_id === filters.product_group_id,
-                ) && (
-                  <option value={filters.product_group_id}>Selected group (0)</option>
-                )}
-                {(facets.product_groups ?? []).map((group) => (
-                  <option key={group.product_group_id} value={group.product_group_id}>
-                    {group.name} ({group.n})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {facets.platforms.length > 1 && (
-            <div
-              className={filterRow}
-              role="group"
-              aria-label="Filter by website"
-            >
-              <span className={filterHeaderLabel}>
-                Websites
-              </span>
-              <FilterPill
-                label="All"
-                count={facets.total}
-                active={!filters.platform}
-                onClick={() => onFiltersChange({ platform: null })}
-              />
-              {facets.platforms.map((p) => (
-                <FilterPill
-                  key={p.domain}
-                  label={p.domain}
-                  count={p.n}
-                  active={filters.platform === p.domain}
-                  onClick={() =>
-                    onFiltersChange({
-                      platform: filters.platform === p.domain ? null : p.domain,
-                    })
-                  }
-                  title={`${p.domain} · ${p.n} finding${p.n === 1 ? "" : "s"}`}
-                  className="max-w-[8rem]"
-                />
-              ))}
-            </div>
-          )}
-          {(filters.status === "dismissed" || filters.dismissal_reason) && (
-            <div className="flex items-center gap-2 px-3 py-2">
-              <span className={filterHeaderLabel}>
-                Dismissal
-              </span>
-              <select
-                value={filters.dismissal_reason ?? "all"}
-                onChange={(e) =>
-                  onFiltersChange({
-                    status: "dismissed",
-                    dismissal_reason:
-                      e.target.value === "all"
-                        ? null
-                        : (e.target.value as MonitoringDismissalReasonFilter),
-                    show_dismissed: true,
-                  })
-                }
-                aria-label="Filter dismissed findings by outcome"
-                title="Filter dismissed findings by outcome"
-                className={FILTER_SELECT}
-              >
-                <option value="all">All dismissed ({facets.statuses.dismissed ?? 0})</option>
-                {Object.entries(DISMISSAL_REASON_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label} ({facets.dismissal_reasons?.[key] ?? 0})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {showAiRecommendationTabs && (
-            <div className="flex items-center gap-1 flex-wrap px-3 py-2">
-              <span className={filterHeaderLabel}>
-                AI Reasoning
-              </span>
-              <FilterPill
-                label="All"
-                count={facets.statuses.pending ?? 0}
-                active={!filters.candidate_outcome}
-                onClick={() => onFiltersChange({ candidate_outcome: null })}
-              />
-              {CANDIDATE_OUTCOME_ORDER.map((outcome) => (
-                <FilterPill
-                  key={outcome}
-                  label={CANDIDATE_OUTCOME_LABELS[outcome]}
-                  count={facets.candidate_outcomes?.[outcome] ?? 0}
-                  active={filters.candidate_outcome === outcome}
-                  onClick={() => onFiltersChange({ candidate_outcome: outcome, status: "pending" })}
-                />
-              ))}
-              {selected.size > 0 && (
-                <span className="ml-auto text-[11px] font-semibold text-stone-500 whitespace-nowrap">
-                  {selected.size} selected
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        <TriageFilters
+          facets={facets}
+          filters={filters}
+          onFiltersChange={onFiltersChange}
+          showIpFilter={showIpFilter}
+          ipAware={ipAware}
+          showAiRecommendation={showAiRecommendationTabs}
+          selectedCount={selected.size}
+        />
       </div>
 
       <div ref={queueRef} className="rounded-lg border border-stone-200 bg-white overflow-hidden">

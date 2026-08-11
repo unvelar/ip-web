@@ -80,7 +80,7 @@ export function StatusTabs({
     );
   };
   return (
-    <div className="flex items-center gap-0.5 flex-wrap">
+    <div className="flex items-center gap-0.5 whitespace-nowrap">
       {tab(null, "All open", total)}
       {STATUS_FILTERS.map((s) => tab(s.key, s.label, counts[s.key] ?? 0))}
     </div>

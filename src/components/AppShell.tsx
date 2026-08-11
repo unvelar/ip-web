@@ -354,7 +354,7 @@ function AppShellContent() {
 
       <div className="flex lg:h-full">
         {/* Desktop sidebar */}
-        <div className={`hidden lg:block lg:h-full lg:sticky lg:top-0 lg:shrink-0 transition-[width] duration-200 ${sidebarCollapsed ? "lg:w-16" : "lg:w-64"}`}>
+        <div className={`hidden lg:block lg:h-full lg:sticky lg:top-0 lg:shrink-0 transition-[width] duration-200 ${sidebarCollapsed ? "lg:w-[64px]" : "lg:w-[248px]"}`}>
           {renderSidebar(sidebarCollapsed, true)}
         </div>
 
