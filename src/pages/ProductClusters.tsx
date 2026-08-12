@@ -6599,6 +6599,11 @@ function ProductGroupCard({
             const count = showingPersistedMembers
               ? subgroup.member_count
               : subgroup.triage_member_count;
+            const subgroupMembers = displayedMembers.filter(
+              (member) => member.commercial_subgroup_key === subgroup.key,
+            );
+            const representative = subgroupMembers.find((member) => member.image_url) ??
+              subgroupMembers[0] ?? null;
             const priceRange = subgroup.price_range;
             const priceLabel = !priceRange
               ? "Price unavailable"
@@ -6614,9 +6619,22 @@ function ProductGroupCard({
                   setWorkspaceSection("review");
                   setManaging(false);
                 }}
-                className="flex min-h-16 w-full items-center justify-between gap-4 border-b border-stone-200 px-4 text-left transition last:border-b-0 hover:bg-stone-50"
+                className="flex min-h-24 w-full items-center gap-3 border-b border-stone-200 p-3 text-left transition last:border-b-0 hover:bg-stone-50 sm:gap-4 sm:p-4"
               >
-                <span className="min-w-0">
+                <span className="flex h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-stone-100 sm:h-20 sm:w-20">
+                  {representative?.image_url ? (
+                    <img
+                      src={representative.image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-lg font-black text-stone-400">
+                      {subgroup.variant_label.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-black text-stone-950">
                     {subgroup.variant_label}
                   </span>
@@ -6624,10 +6642,11 @@ function ProductGroupCard({
                     {count} {count === 1 ? "listing" : "listings"}
                   </span>
                 </span>
-                <span className={`shrink-0 text-sm font-bold ${
+                <span className={`shrink-0 text-right text-sm font-black ${
                   subgroup.price_band === "unusually_low" ? "text-red-700" : "text-stone-700"
                 }`}>
-                  {priceLabel} →
+                  <span className="block">{priceLabel}</span>
+                  <span className="mt-1 block text-xs font-bold text-stone-400">View listings →</span>
                 </span>
               </button>
             );
