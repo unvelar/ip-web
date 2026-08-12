@@ -5598,7 +5598,7 @@ function ProductGroupCard({
               </p>
               <p className="mt-1 text-[11px] text-blue-700">
                 {mode === "same"
-                  ? "Rename the product, tune its multimodal candidate gate, manage representative images and rules, or remove a listing below."
+                  ? "Rename the product, adjust how closely new listings must match, manage representative images and rules, or remove a listing below."
                   : "Rename this confirmed group or remove an incorrect image-backed placement below."}
               </p>
             </div>
@@ -5859,21 +5859,21 @@ function ProductGroupCard({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold text-stone-900">
-                  Multimodal candidate gate
+                  Limit which listings can join this product
                 </p>
                 <p className="mt-0.5 text-[11px] leading-4 text-stone-600">
-                  Require the whole-listing embedding—up to six images plus title,
-                  description and product attributes—to reach this raw cosine
-                  similarity against another listing before exact-product reranking
-                  and rules are applied. Passing the gate does not add a listing to
-                  the product; the final same-product score still decides membership.
-                  A failed pair may still be recognized as a related product. Higher
-                  is stricter.
+                  Most products should leave this off. Turn it on if unrelated
+                  listings are being grouped with this product. New listings and
+                  listings outside this group must then look and read similar enough
+                  to the listings already here before we consider them a match. Moving
+                  the slider to the right reduces incorrect matches, but can also miss
+                  genuine ones. Listings already grouped here will not be removed by
+                  this setting.
                 </p>
               </div>
               <span className="shrink-0 rounded-full bg-white px-2 py-1 font-mono text-[10px] font-bold text-violet-800">
                 {embeddingThresholdEnabled
-                  ? embeddingThresholdDraft.toFixed(2)
+                  ? `On · ${embeddingThresholdDraft.toFixed(2)}`
                   : "Off"}
               </span>
             </div>
@@ -5888,7 +5888,7 @@ function ProductGroupCard({
                 }}
                 className="h-4 w-4 rounded border-stone-300 text-violet-700 focus:ring-violet-200"
               />
-              Use a product-specific multimodal candidate gate
+              Require new matches to be similar enough
             </label>
 
             <div className={`mt-3 ${embeddingThresholdEnabled ? "" : "opacity-45"}`}>
@@ -5904,18 +5904,19 @@ function ProductGroupCard({
                   setEmbeddingThresholdNotice(null);
                 }}
                 className="w-full accent-violet-700"
-                aria-label="Minimum multimodal listing similarity"
+                aria-label="Minimum similarity required for new matches"
               />
-              <div className="mt-1 flex justify-between font-mono text-[10px] text-stone-500">
-                <span>0.00 broad</span>
-                <span>1.00 strict</span>
+              <div className="mt-1 flex justify-between text-[10px] text-stone-500">
+                <span>Consider more possible matches</span>
+                <span>Only consider closer matches</span>
               </div>
             </div>
 
             <div className="mt-2 flex items-center justify-between gap-3">
               <p className="text-[10px] text-stone-500">
-                Turning this off removes this extra gate; normal embedding retrieval,
-                reranking and final same-product scoring still run.
+                Listings that pass this step still go through the normal product
+                matching checks. Review decisions and takedown recommendations are
+                not affected.
               </p>
               <button
                 type="button"
@@ -5926,7 +5927,7 @@ function ProductGroupCard({
                   void onUpdateEmbeddingThreshold(group.id, nextEmbeddingThreshold)
                     .then(() => {
                       setEmbeddingThresholdNotice(
-                        "Saved. Future candidates use this immediately; the stored group snapshot will rebuild in the background.",
+                        "Saved. New matches use this setting now. We’re refreshing the group in the background.",
                       );
                     })
                     .catch(() => undefined)
@@ -5934,7 +5935,7 @@ function ProductGroupCard({
                 }}
                 className="shrink-0 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-40"
               >
-                {savingEmbeddingThreshold ? "Saving…" : "Save threshold"}
+                {savingEmbeddingThreshold ? "Saving…" : "Save matching setting"}
               </button>
             </div>
             {embeddingThresholdNotice && (
