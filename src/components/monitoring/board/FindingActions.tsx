@@ -328,11 +328,11 @@ export function FindingActions({
             ? "px-1.5 py-1 rounded text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
             : "h-7 px-2 rounded-md text-xs font-medium leading-none whitespace-nowrap text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
       }
-      aria-label={actionAriaLabel("license", compact ? "License seller" : "License this seller")}
+      aria-label={actionAriaLabel("license", "Mark as licensed seller")}
       aria-keyshortcuts={recommendedAction === "license" ? "Enter" : undefined}
       data-recommended-action={recommendedAction === "license" ? "Recommended" : undefined}
     >
-      {licensing ? "Licensing…" : compact ? "License seller" : "License this seller"}
+      {licensing ? "Marking…" : "Mark as licensed seller"}
     </button>
   ) : null;
 
