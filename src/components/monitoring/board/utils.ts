@@ -370,6 +370,7 @@ export function inferCondition(f: IpReviewFinding): "new" | "second hand" | null
     f.license_status,
     riskTermValues.join(" "),
     f.description_summary,
+    f.description_full_en,
     f.description_full,
   ].filter(Boolean).join(" ").toLowerCase();
   if (/\b(pre[-\s]?owned|pre[-\s]?loved|used|second[-\s]?hand|vintage|resale)\b/.test(haystack)) {

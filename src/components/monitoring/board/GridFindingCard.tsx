@@ -65,10 +65,16 @@ export function GridFindingCard({
       ? formatMoney(unitPriceUsd, "USD")
       : null;
   const priceText = priceUsd ?? f.price ?? null;
+  const fullDescription = f.description_full_en || f.description_full;
+  const hasTranslatedDescription = Boolean(
+    f.description_full_en &&
+    f.description_full &&
+    f.description_full_en !== f.description_full,
+  );
   const detailCount = [
     f.listing_title,
     f.description_summary,
-    f.description_full,
+    fullDescription,
     whyFlagged,
     f.actionability?.reason,
     f.seller_name,
@@ -184,11 +190,21 @@ export function GridFindingCard({
                 {f.description_summary}
               </p>
             )}
-            {f.description_full && f.description_full !== f.description_summary && (
-              <p className="whitespace-pre-wrap">
-                <span className="font-semibold text-stone-500">Description: </span>
-                {f.description_full}
-              </p>
+            {fullDescription && fullDescription !== f.description_summary && (
+              <div className="space-y-1.5">
+                <p className="whitespace-pre-wrap">
+                  <span className="font-semibold text-stone-500">Description: </span>
+                  {fullDescription}
+                </p>
+                {hasTranslatedDescription && (
+                  <details className="border-l-2 border-stone-200 pl-2">
+                    <summary className="cursor-pointer select-none text-stone-500 hover:text-stone-700">
+                      View original{f.description_language ? ` (${f.description_language.toUpperCase()})` : ""}
+                    </summary>
+                    <p className="mt-1 whitespace-pre-wrap">{f.description_full}</p>
+                  </details>
+                )}
+              </div>
             )}
             {whyFlagged && (
               <p>
