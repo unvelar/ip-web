@@ -5,6 +5,7 @@ import TakedownPanel from "../../TakedownPanel";
 import {
   reenrichIpFinding,
   type IpReviewFinding,
+  type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
   type ProductGroupCorrectionReason,
 } from "../../../api";
@@ -113,7 +114,7 @@ export function FindingComparison({
   showIp?: boolean;
   isDismissed: boolean;
   isDismissing: boolean;
-  onDismiss: (reason: MonitoringReviewOutcome) => void;
+  onDismiss: (reason: MonitoringReviewOutcome, reasonCode?: MonitoringDismissReasonCode) => void;
   onActionComplete: () => void;
   onNeedsReview: () => void;
   onTakedownSent: () => void;
@@ -148,6 +149,20 @@ export function FindingComparison({
 
   const sb = findingStatusBadge(f);
   const actionability = actionabilityMeta(f.actionability);
+  const authenticityLabel =
+    f.authenticity_status === "likely_genuine"
+      ? "Likely genuine"
+      : f.authenticity_status === "likely_counterfeit"
+        ? "Likely counterfeit"
+        : f.authenticity_status === "unclear"
+          ? "Authenticity unclear"
+          : null;
+  const authenticityConfidence =
+    f.authenticity_confidence != null && Number.isFinite(f.authenticity_confidence)
+      ? `${Math.round((f.authenticity_confidence <= 1
+          ? f.authenticity_confidence * 100
+          : f.authenticity_confidence))}%`
+      : null;
   const sellerPriorEnforcement = f.seller_prior_enforcement_count ?? 0;
   const whyFlagged = findingFlaggedReason(f);
   const productAuthenticityAssessment = f.product_authenticity_assessment;
@@ -501,12 +516,33 @@ export function FindingComparison({
         </section>
       )}
 
-      {(whyFlagged || actionability.reason) && (
+      {(whyFlagged || actionability.reason || authenticityLabel ||
+        f.offer_subject === "packaging_only" || f.authenticity_reasoning) && (
         <details className="text-sm text-stone-500">
           <summary className="cursor-pointer text-stone-400 hover:text-stone-600 select-none">
             Rationale
           </summary>
           <div className="mt-1.5 space-y-1.5 leading-relaxed">
+            {(authenticityLabel || f.offer_subject === "packaging_only") && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {authenticityLabel && (
+                  <span className="rounded bg-stone-100 px-1.5 py-0.5 font-semibold text-stone-600">
+                    {authenticityLabel}{authenticityConfidence && ` · ${authenticityConfidence}`}
+                  </span>
+                )}
+                {f.offer_subject === "packaging_only" && (
+                  <span className="rounded bg-purple-100 px-1.5 py-0.5 font-semibold text-purple-700">
+                    Packaging only
+                  </span>
+                )}
+              </div>
+            )}
+            {f.authenticity_reasoning && (
+              <p>
+                <span className="font-semibold text-stone-500">Authenticity: </span>
+                {f.authenticity_reasoning}
+              </p>
+            )}
             {whyFlagged && (
               <p>
                 <span className="font-semibold text-stone-500">Why flagged: </span>

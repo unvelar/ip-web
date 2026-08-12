@@ -25,6 +25,7 @@ import {
   type IpReviewFinding,
   type MonitoringCampaignDetail,
   type MonitoringCampaignMember,
+  type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
   type MonitoringCampaignSummary,
 } from "../api";
@@ -36,6 +37,7 @@ import {
   type BatchResult,
   type BatchAction,
   runPool,
+  dismissalOptionsForBatchAction,
   summarizeBatch,
   summarizeTakedownBatch,
 } from "../components/monitoring/board/batchUtils";
@@ -402,6 +404,8 @@ function CampaignDetailPanel({
     () => selectedFindingSummary(campaignBatchMembers),
     [campaignBatchMembers],
   );
+  const campaignBatchPackagingOnly = campaignBatchMembers.length > 0 &&
+    campaignBatchMembers.every((finding) => finding.offer_subject === "packaging_only");
 
   function partitionCampaignSelection(action: BatchAction) {
     const eligible: IpReviewFinding[] = [];
@@ -422,8 +426,11 @@ function CampaignDetailPanel({
         else if (!finding.case_id) skip("still preparing");
         else if (!finding.ip_id) skip("no associated IP");
         else eligible.push(finding);
-      } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand") {
+      } else if (action === "false_positive" || action === "do_not_pursue" || action === "second_hand" || action === "packaging_only") {
         if (finding.dismissed_at) skip("already dismissed");
+        else if (action === "packaging_only" && finding.offer_subject !== "packaging_only") {
+          skip("not packaging-only");
+        }
         else if (!finding.ip_id) skip("no associated IP");
         else eligible.push(finding);
       } else {
@@ -498,10 +505,11 @@ function CampaignDetailPanel({
             if (
               action === "false_positive" ||
               action === "do_not_pursue" ||
-              action === "second_hand"
+              action === "second_hand" ||
+              action === "packaging_only"
             ) {
               await dismissIpFinding(finding.ip_id as string, finding.result_id, {
-                reason: action,
+                ...dismissalOptionsForBatchAction(action),
               });
               ok++;
             } else if (action === "review") {
@@ -528,14 +536,20 @@ function CampaignDetailPanel({
     onReload();
   }
 
-  async function handleInspectorDismiss(reason: MonitoringReviewOutcome) {
+  async function handleInspectorDismiss(
+    reason: MonitoringReviewOutcome,
+    reasonCode?: MonitoringDismissReasonCode,
+  ) {
     if (!activeMember || !activeMember.ip_id) {
       alert("Cannot update finding: finding has no associated IP.");
       return;
     }
     setDismissingIds((prev) => new Set(prev).add(activeMember.result_id));
     try {
-      await dismissIpFinding(activeMember.ip_id, activeMember.result_id, { reason });
+      await dismissIpFinding(activeMember.ip_id, activeMember.result_id, {
+        reason,
+        ...(reasonCode ? { reason_code: reasonCode } : {}),
+      });
       setBatchResult(`${compactListingTitle(activeMember)} dismissed.`);
       setActiveMemberId(null);
       onReload();
@@ -581,6 +595,7 @@ function CampaignDetailPanel({
         e.key === "1" ? "false_positive" :
         e.key === "2" ? "second_hand" :
         e.key === "3" ? "do_not_pursue" :
+        e.key === "4" && campaignBatchPackagingOnly ? "packaging_only" :
         e.key.toLowerCase() === "r" ? "review" :
         e.key.toLowerCase() === "t" ? "send" :
         null;
@@ -592,7 +607,7 @@ function CampaignDetailPanel({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [batchProgress, campaignBatchMembers.length, confirmAction]);
+  }, [batchProgress, campaignBatchMembers.length, campaignBatchPackagingOnly, confirmAction]);
 
   function refreshAfterInspectorUpdate(opts?: { completed?: boolean }) {
     if (opts?.completed) setActiveMemberId(null);
@@ -786,6 +801,7 @@ function CampaignDetailPanel({
           setExtraBatchFindings([]);
         }}
         showResort={false}
+        showPackagingOnly={campaignBatchPackagingOnly}
       />
       {activeMember && (
         <FindingInspector
@@ -795,7 +811,7 @@ function CampaignDetailPanel({
           isDismissed={!!activeMember.dismissed_at || dismissingIds.has(activeMember.result_id)}
           isDismissing={dismissingIds.has(activeMember.result_id) && !activeMember.dismissed_at}
           onClose={() => setActiveMemberId(null)}
-          onDismiss={(reason) => void handleInspectorDismiss(reason)}
+          onDismiss={(reason, reasonCode) => void handleInspectorDismiss(reason, reasonCode)}
           onActionComplete={() => setActiveMemberId(null)}
           onNeedsReview={() => setBatchResult(`${compactListingTitle(activeMember)} moved to review.`)}
           onTakedownSent={() => setBatchResult(`Takedown sent for ${compactListingTitle(activeMember)}.`)}
@@ -813,6 +829,9 @@ function CampaignDetailPanel({
           action={confirmAction}
           eligible={partitionCampaignSelection(confirmAction).eligible}
           skipped={partitionCampaignSelection(confirmAction).skipped}
+          decisionReasonRequired={partitionCampaignSelection(confirmAction).eligible.some(
+            (finding) => finding.actionability?.key !== "send_takedown",
+          )}
           onConfirm={(decisionReason) => {
             const action = confirmAction;
             setConfirmAction(null);

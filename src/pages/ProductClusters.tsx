@@ -56,6 +56,7 @@ import {
   type PersistedProductGroupOverview,
   type CaseReviewStatus,
   type IpReviewFinding,
+  type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
   type ProductClusterProfile,
   type ProductClusterScope,
@@ -78,6 +79,7 @@ import {
   type BatchResult,
   type BatchAction,
   runPool,
+  dismissalOptionsForBatchAction,
   summarizeBatch,
   summarizeTakedownBatch,
 } from "../components/monitoring/board/batchUtils";
@@ -956,7 +958,10 @@ export default function ProductClusters() {
     });
   }
 
-  async function dismissActiveTask(reason: MonitoringReviewOutcome) {
+  async function dismissActiveTask(
+    reason: MonitoringReviewOutcome,
+    reasonCode?: MonitoringDismissReasonCode,
+  ) {
     if (!activeTask) return;
     const task = activeTask;
     const finding = activeTask.finding;
@@ -969,7 +974,10 @@ export default function ProductClusters() {
     setTaskError(null);
     acknowledgeProductTaskResolution(task);
     try {
-      await dismissIpFinding(ipId, finding.result_id, { reason });
+      await dismissIpFinding(ipId, finding.result_id, {
+        reason,
+        ...(reasonCode ? { reason_code: reasonCode } : {}),
+      });
       closeTask();
       setRefreshVersion((version) => version + 1);
     } catch (caught: unknown) {
@@ -1342,9 +1350,13 @@ export default function ProductClusters() {
       } else if (
         action === "false_positive" ||
         action === "do_not_pursue" ||
-        action === "second_hand"
+        action === "second_hand" ||
+        action === "packaging_only"
       ) {
         if (finding.dismissed_at) skip("already dismissed");
+        else if (action === "packaging_only" && finding.offer_subject !== "packaging_only") {
+          skip("not packaging-only");
+        }
         else if (!findingIpId) skip("no associated IP");
         else eligible.push(finding);
       } else {
@@ -1423,9 +1435,14 @@ export default function ProductClusters() {
             if (
               action === "false_positive" ||
               action === "do_not_pursue" ||
-              action === "second_hand"
+              action === "second_hand" ||
+              action === "packaging_only"
             ) {
-              await dismissIpFinding(findingIpId, finding.result_id, { reason: action });
+              await dismissIpFinding(
+                findingIpId,
+                finding.result_id,
+                dismissalOptionsForBatchAction(action),
+              );
               ok += 1;
             } else if (action === "review") {
               await markIpFindingNeedsReview(findingIpId, finding.result_id);
@@ -2172,7 +2189,7 @@ export default function ProductClusters() {
             !activeTask.finding.dismissed_at
           }
           onClose={closeTask}
-          onDismiss={(reason) => void dismissActiveTask(reason)}
+          onDismiss={(reason, reasonCode) => void dismissActiveTask(reason, reasonCode)}
           onActionComplete={completeActiveTask}
           onNeedsReview={() => undefined}
           onTakedownSent={() => undefined}
@@ -2189,6 +2206,9 @@ export default function ProductClusters() {
           action={confirmBatchAction}
           scopeLabel={productGroupRecommendationBucket(activeBatch.bucket).label}
           {...partitionGroupBatch(confirmBatchAction)}
+          decisionReasonRequired={partitionGroupBatch(confirmBatchAction).eligible.some(
+            (finding) => finding.actionability?.key !== "send_takedown",
+          )}
           onCancel={() => setConfirmBatchAction(null)}
           onConfirm={(decisionReason) => {
             const action = confirmBatchAction;
@@ -3381,6 +3401,9 @@ function ProductGroupMemberSubgroups({
                     showResort={false}
                     placement="inline"
                     showShortcuts={false}
+                    showPackagingOnly={selectedProductGroupBatchFindings(activeBatch).every(
+                      (finding) => finding.offer_subject === "packaging_only",
+                    )}
                     disabled={batchDisabled}
                   />
                 </>

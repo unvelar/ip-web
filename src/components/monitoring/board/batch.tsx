@@ -7,6 +7,7 @@ export function BatchConfirmModal({
   scopeLabel,
   eligible,
   skipped,
+  decisionReasonRequired = true,
   onConfirm,
   onCancel,
 }: {
@@ -14,13 +15,15 @@ export function BatchConfirmModal({
   scopeLabel?: string;
   eligible: IpReviewFinding[];
   skipped: Record<string, number>;
+  decisionReasonRequired?: boolean;
   onConfirm: (decisionReason?: string) => void;
   onCancel: () => void;
 }) {
   const [decisionReason, setDecisionReason] = useState("");
   const meta = BATCH_META[action];
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
-  const reasonValid = action !== "send" || decisionReason.trim().length >= 3;
+  const reasonValid =
+    action !== "send" || !decisionReasonRequired || decisionReason.trim().length >= 3;
   const canConfirm = eligible.length > 0 && reasonValid;
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -85,7 +88,7 @@ export function BatchConfirmModal({
               </ul>
             </div>
           )}
-          {action === "send" && eligible.length > 0 && (
+          {action === "send" && eligible.length > 0 && decisionReasonRequired && (
             <div className="space-y-1.5">
               <label
                 htmlFor="batch-takedown-decision-reason"

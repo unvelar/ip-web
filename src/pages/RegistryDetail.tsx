@@ -670,7 +670,7 @@ function LicensesSection({ ipId }: { ipId: string }) {
         </button>
       </div>
       <p className="text-[11px] text-stone-400">
-        Tip: the quickest way is the <span className="font-medium">“License this seller”</span> button on a monitoring finding — it pre-fills these from the listing.
+        Tip: the quickest way is the <span className="font-medium">“Mark as licensed seller”</span> button on a monitoring finding — it pre-fills these from the listing.
       </p>
     </div>
   );

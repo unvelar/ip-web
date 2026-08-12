@@ -1,4 +1,5 @@
 import { CANDIDATE_OUTCOME_LABELS, type ResortTarget } from "./constants";
+import type { MonitoringDismissOptions } from "../../../api";
 
 export type BatchAction =
   | "send"
@@ -6,6 +7,7 @@ export type BatchAction =
   | "false_positive"
   | "do_not_pursue"
   | "second_hand"
+  | "packaging_only"
   | "review"
   | "enforce";
 
@@ -15,12 +17,28 @@ export const BATCH_META: Record<
 > = {
   send: { label: "Takedown", verb: "Processed", gerund: "Process takedown for" },
   submit: { label: "Mark submitted", verb: "Marked submitted", gerund: "Mark submitted" },
-  false_positive: { label: "False positive", verb: "Cleared", gerund: "Mark false positive for" },
+  false_positive: { label: "Different product", verb: "Cleared", gerund: "Mark as a different product for" },
   do_not_pursue: { label: "Don't pursue", verb: "Cleared", gerund: "Don't pursue" },
   second_hand: { label: "Second hand", verb: "Marked second hand", gerund: "Mark second hand for" },
+  packaging_only: { label: "Packaging only", verb: "Marked packaging only", gerund: "Mark packaging only for" },
   review: { label: "Review", verb: "Moved to Review", gerund: "Move to Review" },
   enforce: { label: "Mark enforced", verb: "Marked enforced", gerund: "Mark enforced" },
 };
+
+export function dismissalOptionsForBatchAction(
+  action: Extract<BatchAction, "false_positive" | "do_not_pursue" | "second_hand" | "packaging_only">,
+): MonitoringDismissOptions {
+  if (action === "false_positive") {
+    return { reason: "false_positive", reason_code: "different_product" };
+  }
+  if (action === "second_hand") {
+    return { reason: "second_hand", reason_code: "genuine_second_hand" };
+  }
+  if (action === "packaging_only") {
+    return { reason: "second_hand", reason_code: "original_packaging_only" };
+  }
+  return { reason: "do_not_pursue" };
+}
 
 /** Run `worker` over `items` with at most `concurrency` in flight. */
 export async function runPool<T>(

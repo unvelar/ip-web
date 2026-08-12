@@ -1486,6 +1486,19 @@ export interface IpReviewFinding {
   authenticity_assessment: ListingAuthenticityAssessment | null;
   product_authenticity_assessment: ProductAuthenticityAssessment | null;
   marketplace_condition: "new" | "second_hand" | "unknown";
+  authenticity_status:
+    | "likely_genuine"
+    | "likely_counterfeit"
+    | "unclear"
+    | null;
+  authenticity_confidence: number | null;
+  authenticity_reasoning: string | null;
+  offer_subject:
+    | "product"
+    | "packaging_only"
+    | "accessory"
+    | "unclear"
+    | null;
   manual_candidate_outcome: MonitoringCandidateOutcome | null;
   suggested_review_outcome:
     | "false_positive"
@@ -1814,10 +1827,21 @@ export type MonitoringReviewOutcome =
   | "allowed_product"
   | "resale";
 
+export type MonitoringDismissReasonCode =
+  | "different_product"
+  | "genuine_second_hand"
+  | "original_packaging_only";
+
+export type MonitoringDismissOptions = {
+  reason?: MonitoringReviewOutcome;
+  reason_code?: MonitoringDismissReasonCode;
+  reason_notes?: string | null;
+};
+
 export function dismissIpFinding(
   ipId: string,
   resultId: string,
-  opts: { reason?: MonitoringReviewOutcome; reason_notes?: string | null } = {},
+  opts: MonitoringDismissOptions = {},
 ) {
   return request<{ ok: boolean }>(
     `/api/ip/${ipId}/monitoring/findings/${resultId}/dismiss`,

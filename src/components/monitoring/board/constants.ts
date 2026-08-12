@@ -9,7 +9,7 @@ export const FILTER_SELECT =
   "max-w-[14rem] focus:outline-none focus:ring-1 focus:ring-stone-300";
 
 export const DISMISSAL_REASON_LABELS: Record<MonitoringDismissalReasonFilter, string> = {
-  false_positive: "False positive",
+  false_positive: "Different product",
   do_not_pursue: "Don't pursue",
   second_hand: "Second hand",
   licensed: "Licensed",
@@ -22,7 +22,7 @@ export const CANDIDATE_OUTCOME_LABELS: Record<MonitoringCandidateOutcome, string
   takedown: "Takedown",
   second_hand: "Second hand",
   do_not_pursue: "Don't pursue",
-  false_positive: "False positive",
+  false_positive: "Different product",
   none: "Unsorted",
 };
 

@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { IpReviewFinding, MonitoringReviewOutcome } from "../../../api";
+import type { IpReviewFinding, MonitoringDismissReasonCode, MonitoringReviewOutcome } from "../../../api";
 import { sellerProfilePath } from "../../../lib/sellers";
 import { ActionabilityBadge } from "./ActionabilityBadge";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
@@ -43,7 +43,7 @@ export function GridFindingCard({
   onSelect: () => void;
   onActivate: () => void;
   onOpen: () => void;
-  onDismiss: (reason: MonitoringReviewOutcome) => void;
+  onDismiss: (reason: MonitoringReviewOutcome, reasonCode?: MonitoringDismissReasonCode) => void;
   onActionComplete: () => void;
   onNeedsReview: () => void;
   onTakedownSent: () => void;

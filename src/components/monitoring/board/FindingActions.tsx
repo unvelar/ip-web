@@ -11,6 +11,7 @@ import {
   reopenIpFinding,
   type CaseReviewStatus,
   type IpReviewFinding,
+  type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
 } from "../../../api";
 import { ButtonWithShortcut } from "./ButtonWithShortcut";
@@ -23,6 +24,7 @@ export type FindingUpdateOptions = {
 type RecommendableAction =
   | "false_positive"
   | "second_hand"
+  | "packaging_only"
   | "do_not_pursue"
   | "review"
   | "send_takedown"
@@ -48,7 +50,7 @@ export function FindingActions({
   canLicense: boolean;
   isDismissed: boolean;
   isDismissing: boolean;
-  onDismiss: (reason: MonitoringReviewOutcome) => void;
+  onDismiss: (reason: MonitoringReviewOutcome, reasonCode?: MonitoringDismissReasonCode) => void;
   onActionComplete: () => void;
   onNeedsReview: () => void;
   onTakedownSent: () => void;
@@ -85,6 +87,16 @@ export function FindingActions({
     } finally {
       setDirectSending(false);
     }
+  }
+
+  function beginTakedown() {
+    setSendErr("");
+    setComposeDecisionReason("");
+    if (f.actionability?.key === "send_takedown") {
+      void sendDirect("");
+      return;
+    }
+    setConfirming(true);
   }
 
   async function run(
@@ -135,11 +147,15 @@ export function FindingActions({
       : f.actionability?.key === "send_takedown"
         ? "send_takedown"
         : f.actionability?.key === "allowed_resale"
-          ? "second_hand"
+          ? f.offer_subject === "packaging_only"
+            ? "packaging_only"
+            : "second_hand"
           : f.actionability?.key === "licensed_seller"
             ? "license"
             : f.actionability?.key === "false_positive"
-              ? "false_positive"
+              ? f.offer_subject === "packaging_only"
+                ? "packaging_only"
+                : "false_positive"
               : "review";
   const recommendationReason = f.actionability?.reason?.trim();
 
@@ -175,13 +191,14 @@ export function FindingActions({
     action: RecommendableAction,
     label: string,
     reason: MonitoringReviewOutcome,
+    reasonCode: MonitoringDismissReasonCode | undefined,
     title: string,
     shortcut: string,
   ) => (
     <button
       key={key}
       type="button"
-      onClick={() => onDismiss(reason)}
+      onClick={() => onDismiss(reason, reasonCode)}
       disabled={isDismissing}
       title={actionTitle(action, title)}
       className={actionClass(action)}
@@ -203,9 +220,10 @@ export function FindingActions({
   const falsePositiveBtn = outcomeButton(
     "false-positive",
     "false_positive",
-    "False positive",
+    "Different product",
     "false_positive",
-    "Shortcut 1: the detection is wrong or irrelevant",
+    "different_product",
+    "Shortcut 1: the listing is for a different product",
     "1",
   );
   const dontPursueBtn = outcomeButton(
@@ -213,6 +231,7 @@ export function FindingActions({
     "do_not_pursue",
     "Don't pursue",
     "do_not_pursue",
+    undefined,
     "Shortcut 3: valid detection, intentionally tolerated or not worth enforcement",
     "3",
   );
@@ -221,8 +240,18 @@ export function FindingActions({
     "second_hand",
     "Second hand",
     "second_hand",
-    "Shortcut 2: used or second-hand item",
+    "genuine_second_hand",
+    "Shortcut 2: a likely genuine used or second-hand item",
     "2",
+  );
+  const packagingOnlyBtn = outcomeButton(
+    "packaging-only",
+    "packaging_only",
+    "Packaging only",
+    "second_hand",
+    "original_packaging_only",
+    "Shortcut 4: original packaging or an empty box only",
+    "4",
   );
   const needsReviewBtn = (
     <button
@@ -299,11 +328,11 @@ export function FindingActions({
             ? "px-1.5 py-1 rounded text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
             : "h-7 px-2 rounded-md text-xs font-medium leading-none whitespace-nowrap text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
       }
-      aria-label={actionAriaLabel("license", compact ? "License seller" : "License this seller")}
+      aria-label={actionAriaLabel("license", "Mark as licensed seller")}
       aria-keyshortcuts={recommendedAction === "license" ? "Enter" : undefined}
       data-recommended-action={recommendedAction === "license" ? "Recommended" : undefined}
     >
-      {licensing ? "Licensing…" : compact ? "License seller" : "License this seller"}
+      {licensing ? "Marking…" : "Mark as licensed seller"}
     </button>
   ) : null;
 
@@ -348,29 +377,26 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
+        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
         {needsReviewBtn}
         <button
           type="button"
-          disabled={!f.case_id}
+          disabled={!f.case_id || directSending}
           title={actionTitle(
             "send_takedown",
             !f.case_id
               ? "Still preparing this case…"
               : "Submit automatically when possible; otherwise add to the legal queue",
           )}
-          onClick={() => {
-            setSendErr("");
-            setComposeDecisionReason("");
-            setConfirming(true);
-          }}
+          onClick={beginTakedown}
           className={actionClass("send_takedown")}
           aria-label={actionAriaLabel("send_takedown", "Takedown")}
           aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
           data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
         >
           <ButtonWithShortcut
-            label="Takedown"
+            label={directSending ? "Processing…" : "Takedown"}
             shortcut="T"
             dark={recommendedAction === "send_takedown"}
           />
@@ -383,28 +409,25 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
+        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
         <button
           type="button"
-          disabled={!f.case_id}
+          disabled={!f.case_id || directSending}
           title={actionTitle(
             "send_takedown",
             !f.case_id
               ? "Still preparing this case..."
               : "Submit automatically when possible; otherwise add to the legal queue",
           )}
-          onClick={() => {
-            setSendErr("");
-            setComposeDecisionReason("");
-            setConfirming(true);
-          }}
+          onClick={beginTakedown}
           className={actionClass("send_takedown")}
           aria-label={actionAriaLabel("send_takedown", "Takedown")}
           aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
           data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
         >
           <ButtonWithShortcut
-            label="Takedown"
+            label={directSending ? "Processing…" : "Takedown"}
             shortcut="T"
             dark={recommendedAction === "send_takedown"}
           />
@@ -422,6 +445,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
+        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
         <button
           type="button"
@@ -474,6 +498,7 @@ export function FindingActions({
       <>
         {falsePositiveBtn}
         {secondHandBtn}
+        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
         <button
           type="button"
@@ -539,6 +564,7 @@ export function FindingActions({
           platform={f.domain}
           sending={directSending}
           error={sendErr}
+          decisionReasonRequired={f.actionability?.key !== "send_takedown"}
           onSend={sendDirect}
           onEdit={(decisionReason) => {
             setComposeDecisionReason(decisionReason);

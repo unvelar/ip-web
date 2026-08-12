@@ -308,6 +308,7 @@ export function ConfirmSendModal({
   error,
   legalFallback = true,
   initialDecisionReason = "",
+  decisionReasonRequired = true,
   onSend,
   onEdit,
   onCancel,
@@ -317,15 +318,29 @@ export function ConfirmSendModal({
   error: string;
   legalFallback?: boolean;
   initialDecisionReason?: string;
+  decisionReasonRequired?: boolean;
   onSend: (decisionReason: string) => void;
   onEdit?: (decisionReason: string) => void;
   onCancel: () => void;
 }) {
   const [decisionReason, setDecisionReason] = useState(initialDecisionReason);
-  const reasonValid = decisionReason.trim().length >= 3;
+  const reasonValid = !decisionReasonRequired || decisionReason.trim().length >= 3;
   return (
     <div
       onClick={onCancel}
+      onKeyDown={(event) => {
+        if (
+          event.defaultPrevented ||
+          event.key !== "Enter" ||
+          event.shiftKey ||
+          event.nativeEvent.isComposing ||
+          sending ||
+          !reasonValid ||
+          event.target instanceof HTMLButtonElement
+        ) return;
+        event.preventDefault();
+        onSend(decisionReason.trim());
+      }}
       role="dialog"
       aria-modal="true"
       aria-label="Takedown"
@@ -355,7 +370,7 @@ export function ConfirmSendModal({
               </>
             )}
           </p>
-          <div className="space-y-1.5">
+          {decisionReasonRequired && <div className="space-y-1.5">
             <label
               htmlFor="takedown-decision-reason"
               className="text-xs font-semibold text-stone-800"
@@ -375,7 +390,7 @@ export function ConfirmSendModal({
             <p className="text-[11px] text-stone-500">
               This is not sent to the marketplace. It helps improve future suggestions for this IP.
             </p>
-          </div>
+          </div>}
           {error && (
             <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-3 py-2">
               {error}
