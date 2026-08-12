@@ -6115,6 +6115,7 @@ function ProductGroupCard({
                   }`}
                 >
                   {subgroup.variant_label}
+                  {subgroup.price_band === "unusually_low" ? " · unusually low" : ""}
                   <span className={`ml-2 text-xs ${selected ? "text-stone-300" : "text-stone-400"}`}>
                     {count}
                   </span>
