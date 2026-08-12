@@ -165,6 +165,7 @@ export function FindingComparison({
       : null;
   const sellerPriorEnforcement = f.seller_prior_enforcement_count ?? 0;
   const whyFlagged = findingFlaggedReason(f);
+  const productAuthenticityAssessment = f.product_authenticity_assessment;
   const normalizedAvailability = f.availability?.trim().toLowerCase();
   const availabilityNotice =
     normalizedAvailability === "blocked"
@@ -457,6 +458,63 @@ export function FindingComparison({
         <ExternalLink size={16} aria-hidden="true" />
         Open listing
       </a>
+
+      {productAuthenticityAssessment &&
+        productAuthenticityAssessment.rule_assessments.length > 0 && (
+        <section className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xs font-bold text-stone-900">Product authenticity checks</h3>
+            <span className="text-[10px] font-semibold text-stone-500">
+              {productAuthenticityAssessment.rule_assessments.length} checked
+            </span>
+          </div>
+          <div className="mt-2 space-y-2">
+            {productAuthenticityAssessment.rule_assessments.map((assessment) => {
+              const verdict = assessment.verdict === "violated"
+                ? { label: "Failed", cls: "bg-red-50 text-red-700" }
+                : assessment.verdict === "satisfied"
+                  ? { label: "Passed", cls: "bg-emerald-50 text-emerald-700" }
+                  : assessment.verdict === "not_visible"
+                    ? { label: "Not visible", cls: "bg-stone-200 text-stone-700" }
+                    : { label: "Unclear", cls: "bg-amber-50 text-amber-800" };
+              return (
+                <div key={`${assessment.rule_id}:${assessment.rule_version}`} className="rounded-md bg-white px-2.5 py-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${verdict.cls}`}>
+                      {verdict.label}
+                    </span>
+                    <span className="text-[10px] text-stone-400">
+                      {Math.round(assessment.confidence * 100)}% confidence
+                    </span>
+                    {assessment.failure_action === "takedown" && (
+                      <span className="text-[9px] font-semibold text-red-600">
+                        decisive check
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-stone-800">
+                    {assessment.expected_feature}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-stone-600">
+                    {assessment.evidence || assessment.reasoning ||
+                      "The available listing evidence was not enough to explain this result."}
+                  </p>
+                  {assessment.evidence_image_positions.length > 0 && (
+                    <p className="mt-0.5 text-[10px] text-stone-400">
+                      Listing photo{assessment.evidence_image_positions.length === 1 ? "" : "s"}{" "}
+                      {assessment.evidence_image_positions.map((position) => position + 1).join(", ")}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-stone-500">
+            “Not visible” means the listing did not show enough evidence. It is
+            not treated as a failed check.
+          </p>
+        </section>
+      )}
 
       {(whyFlagged || actionability.reason || authenticityLabel ||
         f.offer_subject === "packaging_only" || f.authenticity_reasoning) && (

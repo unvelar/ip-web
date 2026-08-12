@@ -27,7 +27,9 @@ import {
   calculatePersistedProductGroupVisualEvidence,
   confirmPersistedProductGroup,
   correctProductSemanticGroupMember,
+  createPersistedProductGroupAuthenticityRule,
   createPersistedProductGroupRule,
+  deletePersistedProductGroupAuthenticityRule,
   deletePersistedProductGroupRule,
   dismissIpFinding,
   excludePersistedProductGroupMember,
@@ -48,6 +50,7 @@ import {
   revokePersistedProductGroupMerge,
   restoreProductSemanticCorrection,
   updatePersistedProductGroupEmbeddingSettings,
+  updatePersistedProductGroupAuthenticityRule,
   updatePersistedProductGroupRule,
   type PersistedProductGroup,
   type PersistedProductGroupOverview,
@@ -59,6 +62,8 @@ import {
   type ProductClusterScope,
   type ProductGroupCorrectionReason,
   type ProductGroupCommercialSubgroup,
+  type ProductGroupAuthenticityRule,
+  type ProductGroupAuthenticityRuleInput,
   type ProductGroupPriceSignal,
   type ProductGroupPriceSummary,
   type ProductGroupRecommendationCounts,
@@ -87,6 +92,32 @@ import { useAuth } from "../context/AuthContext";
 type ProductGroupView = "triage" | "all";
 type GroupMode = "same" | "related" | "visual";
 type ProductWorkspaceSection = "review" | "offers" | "settings" | "history";
+const PRODUCT_GROUP_VIEW = "all" as const;
+const EMPTY_AUTHENTICITY_RULE: ProductGroupAuthenticityRuleInput = {
+  expected_feature: "",
+  violation_pattern: "",
+  inspection_instruction: "",
+  visibility_rule: "",
+  applicability: null,
+  rationale: null,
+  modality: "image",
+  failure_action: "review",
+};
+
+function authenticityRuleInput(
+  rule: ProductGroupAuthenticityRule,
+): ProductGroupAuthenticityRuleInput {
+  return {
+    expected_feature: rule.expected_feature,
+    violation_pattern: rule.violation_pattern,
+    inspection_instruction: rule.inspection_instruction,
+    visibility_rule: rule.visibility_rule,
+    applicability: rule.applicability,
+    rationale: rule.rationale,
+    modality: rule.modality,
+    failure_action: rule.failure_action,
+  };
+}
 type ActiveProductTask = {
   profileId: string;
   groupId: string | null;
@@ -518,7 +549,6 @@ export default function ProductClusters() {
   const [, setSemanticOverview] = useState<PersistedProductGroupOverview | null>(null);
   const [visualOverview, setVisualOverview] =
     useState<PersistedProductGroupOverview | null>(null);
-  const [productGroupView, setProductGroupView] = useState<ProductGroupView>("triage");
   const [productSearch, setProductSearch] = useState("");
   const [productSort, setProductSort] = useState<"work" | "name">("work");
   const [focusedGroup, setFocusedGroup] = useState<PersistedProductGroup | null>(null);
@@ -563,7 +593,6 @@ export default function ProductClusters() {
   const batchRequestSequence = useRef(0);
   const semanticPageRequestSequence = useRef(0);
   const visualPageRequestSequence = useRef(0);
-  const workspaceQueueHydrationAttempt = useRef<string | null>(null);
   const acknowledgedProductTaskResolutions = useRef(
     new Map<string, AcknowledgedProductTaskResolution>(),
   );
@@ -689,7 +718,7 @@ export default function ProductClusters() {
   }, []);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
-    `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${productGroupView}`;
+    `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${PRODUCT_GROUP_VIEW}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
   const selectedScopeAvailable =
     scopesLoadedKey === scopesRequestKey && selectedScope != null;
@@ -752,7 +781,7 @@ export default function ProductClusters() {
     void getPersistedProductGroups(
       selectedIpId,
       "same",
-      productGroupView,
+      PRODUCT_GROUP_VIEW,
       {
         limit: PRODUCT_GROUP_PAGE_SIZE,
         signal: controller.signal,
@@ -773,7 +802,6 @@ export default function ProductClusters() {
   }, [
     selectedIpId,
     selectedScopeAvailable,
-    productGroupView,
     refreshVersion,
     actingTenantId,
     applyAcknowledgedResolutions,
@@ -837,7 +865,7 @@ export default function ProductClusters() {
     setActiveBatch(null);
     setConfirmBatchAction(null);
     setMergeSourceGroupId(null);
-  }, [productGroupView, refreshVersion]);
+  }, [refreshVersion]);
 
   useEffect(() => {
     if (!semanticCorrectionTarget || !selectedIpId || semanticTaxonomyLoaded) return;
@@ -1008,7 +1036,7 @@ export default function ProductClusters() {
           await refreshPersistedProductGroups(
             selectedIpId,
             "same",
-            productGroupView,
+            PRODUCT_GROUP_VIEW,
             { limit: PRODUCT_GROUP_PAGE_SIZE },
           ),
         );
@@ -1033,7 +1061,7 @@ export default function ProductClusters() {
         await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
         ),
       );
@@ -1072,7 +1100,7 @@ export default function ProductClusters() {
           await getPersistedProductGroups(
             selectedIpId,
             "same",
-            productGroupView,
+            PRODUCT_GROUP_VIEW,
             { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
           ),
         );
@@ -1085,29 +1113,6 @@ export default function ProductClusters() {
         }
       }
       setVisualOverview(accumulated);
-      if (productGroupView === "triage") {
-        let allCursor: string | null = null;
-        const seenAllCursors = new Set<string>();
-        do {
-          const allOverview = applyAcknowledgedResolutions(
-            await getPersistedProductGroups(
-              selectedIpId,
-              "same",
-              "all",
-              {
-                limit: PRODUCT_GROUP_PAGE_SIZE,
-                cursor: allCursor,
-              },
-            ),
-          );
-          if (visualPageRequestSequence.current !== requestSequence) return null;
-          const target = allOverview.groups.find((group) => group.id === groupId);
-          if (target) return target;
-          allCursor = allOverview.next_cursor;
-          if (allCursor && seenAllCursors.has(allCursor)) break;
-          if (allCursor) seenAllCursors.add(allCursor);
-        } while (allCursor);
-      }
       return null;
     } catch (caught: unknown) {
       if (visualPageRequestSequence.current === requestSequence) {
@@ -1115,7 +1120,7 @@ export default function ProductClusters() {
       }
       return null;
     }
-  }, [applyAcknowledgedResolutions, productGroupView, selectedIpId, visualOverview]);
+  }, [applyAcknowledgedResolutions, selectedIpId, visualOverview]);
 
   useEffect(() => {
     if (!linkedGroupId) {
@@ -1492,7 +1497,7 @@ export default function ProductClusters() {
         await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE },
         ),
       ));
@@ -1517,7 +1522,7 @@ export default function ProductClusters() {
         await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE },
         ),
       ));
@@ -1542,7 +1547,7 @@ export default function ProductClusters() {
         await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE },
         ),
       ));
@@ -1609,7 +1614,7 @@ export default function ProductClusters() {
       const latestOverview = await getPersistedProductGroups(
         selectedIpId,
         "same",
-        productGroupView,
+        PRODUCT_GROUP_VIEW,
         { limit: PRODUCT_GROUP_PAGE_SIZE },
       ).catch((caught: unknown) => {
         setError(errorMessage(
@@ -1635,7 +1640,7 @@ export default function ProductClusters() {
         const latestOverview = await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE },
         ).catch(() => null);
         if (latestOverview) {
@@ -1711,7 +1716,7 @@ export default function ProductClusters() {
         },
       );
       setSemanticOverview(
-        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView, {
+        await getPersistedProductGroups(selectedIpId, "semantic", PRODUCT_GROUP_VIEW, {
           limit: SEMANTIC_GROUP_PAGE_SIZE,
         }),
       );
@@ -1735,7 +1740,7 @@ export default function ProductClusters() {
         const latestOverview = await getPersistedProductGroups(
           selectedIpId,
           "semantic",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: SEMANTIC_GROUP_PAGE_SIZE },
         ).catch(() => null);
         if (latestOverview) {
@@ -1767,7 +1772,7 @@ export default function ProductClusters() {
         target.profile.semantic_correction_id,
       );
       setSemanticOverview(
-        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView, {
+        await getPersistedProductGroups(selectedIpId, "semantic", PRODUCT_GROUP_VIEW, {
           limit: SEMANTIC_GROUP_PAGE_SIZE,
         }),
       );
@@ -1786,7 +1791,7 @@ export default function ProductClusters() {
         const latestOverview = await getPersistedProductGroups(
           selectedIpId,
           "semantic",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: SEMANTIC_GROUP_PAGE_SIZE },
         ).catch(() => null);
         if (latestOverview) {
@@ -1913,40 +1918,103 @@ export default function ProductClusters() {
     }
   }
 
+  async function createGroupAuthenticityRule(
+    groupId: string,
+    input: ProductGroupAuthenticityRuleInput,
+  ) {
+    if (!selectedIpId) throw new Error("No product scope selected");
+    setError(null);
+    try {
+      const result = await createPersistedProductGroupAuthenticityRule(
+        selectedIpId,
+        groupId,
+        input,
+      );
+      setVisualOverview((current) => current ? {
+        ...current,
+        groups: current.groups.map((group) =>
+          group.id === groupId
+            ? {
+              ...group,
+              authenticity_rules: [...group.authenticity_rules, result.rule],
+            }
+            : group
+        ),
+      } : current);
+      return result;
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    }
+  }
+
+  async function updateGroupAuthenticityRule(
+    groupId: string,
+    ruleId: string,
+    input: ProductGroupAuthenticityRuleInput,
+  ) {
+    if (!selectedIpId) throw new Error("No product scope selected");
+    setError(null);
+    try {
+      const result = await updatePersistedProductGroupAuthenticityRule(
+        selectedIpId,
+        groupId,
+        ruleId,
+        input,
+      );
+      setVisualOverview((current) => current ? {
+        ...current,
+        groups: current.groups.map((group) =>
+          group.id === groupId
+            ? {
+              ...group,
+              authenticity_rules: group.authenticity_rules.map((rule) =>
+                rule.id === result.rule.id ? result.rule : rule
+              ),
+            }
+            : group
+        ),
+      } : current);
+      return result;
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    }
+  }
+
+  async function deleteGroupAuthenticityRule(groupId: string, ruleId: string) {
+    if (!selectedIpId) throw new Error("No product scope selected");
+    setError(null);
+    try {
+      const result = await deletePersistedProductGroupAuthenticityRule(
+        selectedIpId,
+        groupId,
+        ruleId,
+      );
+      setVisualOverview((current) => current ? {
+        ...current,
+        groups: current.groups.map((group) =>
+          group.id === groupId
+            ? {
+              ...group,
+              authenticity_rules: group.authenticity_rules.filter(
+                (rule) => rule.id !== ruleId,
+              ),
+            }
+            : group
+        ),
+      } : current);
+      return result;
+    } catch (caught: unknown) {
+      setError(errorMessage(caught));
+      throw caught;
+    }
+  }
+
   const workspaceGroup = linkedGroupId
     ? visualOverview?.groups.find((group) => group.id === linkedGroupId) ?? focusedGroup
     : null;
   const showingWorkspace = Boolean(linkedGroupId);
-  const workspaceQueueHydrationKey = selectedIpId && workspaceGroup
-    ? `${selectedIpId}:${workspaceGroup.id}:${refreshVersion}`
-    : null;
-  const workspaceQueueNeedsHydration = Boolean(
-    productGroupView === "triage" &&
-      workspaceGroup &&
-      (workspaceGroup.triage_member_count ?? 0) > 0 &&
-      workspaceGroup.triage_recommendation_counts == null &&
-      loadedGroupTasks[workspaceGroup.id] == null,
-  );
-
-  useEffect(() => {
-    if (
-      !workspaceQueueNeedsHydration ||
-      !workspaceGroup ||
-      !workspaceQueueHydrationKey ||
-      loadingGroupTasksId ||
-      workspaceQueueHydrationAttempt.current === workspaceQueueHydrationKey
-    ) {
-      return;
-    }
-    workspaceQueueHydrationAttempt.current = workspaceQueueHydrationKey;
-    void loadGroupTasks(workspaceGroup.id);
-  }, [
-    loadGroupTasks,
-    loadingGroupTasksId,
-    workspaceGroup,
-    workspaceQueueHydrationKey,
-    workspaceQueueNeedsHydration,
-  ]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
@@ -2035,7 +2103,7 @@ export default function ProductClusters() {
                 index={visualOverview.groups.findIndex((group) => group.id === workspaceGroup.id)}
                 ipId={visualOverview.scope.ip_id}
                 mode="same"
-                showPersistedMembers={productGroupView === "all"}
+                showPersistedMembers
                 triageProjectionAvailable={visualOverview.triage_projection_available}
                 saving={savingGroupId === workspaceGroup.id}
                 mergeSourceGroup={mergeSourceGroupId
@@ -2083,6 +2151,9 @@ export default function ProductClusters() {
                 onCreateRule={createGroupRule}
                 onUpdateRule={updateGroupRule}
                 onDeleteRule={deleteGroupRule}
+                onCreateAuthenticityRule={createGroupAuthenticityRule}
+                onUpdateAuthenticityRule={updateGroupAuthenticityRule}
+                onDeleteAuthenticityRule={deleteGroupAuthenticityRule}
               />
             </div>
           ) : (
@@ -2093,11 +2164,9 @@ export default function ProductClusters() {
         ) : (
           <ProductQueue
             overview={visualOverview}
-            view={productGroupView}
             search={productSearch}
             sort={productSort}
             loadingMore={loadingMoreVisualGroups}
-            onViewChange={setProductGroupView}
             onSearchChange={setProductSearch}
             onSortChange={setProductSort}
             onLoadMore={() => void loadMoreVisualGroups()}
@@ -2169,32 +2238,25 @@ export default function ProductClusters() {
 
 function ProductQueue({
   overview,
-  view,
   search,
   sort,
   loadingMore,
   currentSearch,
-  onViewChange,
   onSearchChange,
   onSortChange,
   onLoadMore,
 }: {
   overview: PersistedProductGroupOverview;
-  view: ProductGroupView;
   search: string;
   sort: "work" | "name";
   loadingMore: boolean;
   currentSearch: string;
-  onViewChange: (view: ProductGroupView) => void;
   onSearchChange: (search: string) => void;
   onSortChange: (sort: "work" | "name") => void;
   onLoadMore: () => void;
 }) {
   const normalizedSearch = search.trim().toLocaleLowerCase();
-  const candidateGroups = view === "triage"
-    ? overview.groups.filter(productGroupHasReviewQueueWork)
-    : overview.groups;
-  const visibleGroups = candidateGroups
+  const visibleGroups = overview.groups
     .filter((group) => {
       if (!normalizedSearch) return true;
       const searchable = [
@@ -2213,9 +2275,7 @@ function ProductQueue({
       return (right.triage_member_count ?? 0) - (left.triage_member_count ?? 0) ||
         right.member_count - left.member_count;
     });
-  const productCount = view === "triage"
-    ? overview.triage_group_count ?? candidateGroups.length
-    : overview.group_count;
+  const productCount = overview.group_count;
 
   return (
     <section className="mt-5" aria-labelledby="product-queue-heading">
@@ -2239,8 +2299,7 @@ function ProductQueue({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <ProductGroupViewToggle view={view} onChange={onViewChange} />
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
         <div className="flex flex-col gap-2 sm:flex-row">
           <label className="relative block min-w-0 sm:w-72">
             <span className="sr-only">Search products</span>
@@ -2274,7 +2333,7 @@ function ProductQueue({
       <div className="mt-5 flex items-end justify-between gap-4">
         <div>
           <h2 id="product-queue-heading" className="text-lg font-black text-stone-950">
-            {view === "triage" ? "Products requiring attention" : "All products"}
+            All products
           </h2>
           <p className="mt-1 text-sm text-stone-500">
             Open a product to review its listings, offers and group settings.
@@ -2291,7 +2350,6 @@ function ProductQueue({
             <ProductQueueRow
               key={group.id}
               group={group}
-              view={view}
               currentSearch={currentSearch}
             />
           ))}
@@ -2299,12 +2357,12 @@ function ProductQueue({
       ) : (
         <div className="mt-3 rounded-xl border border-dashed border-stone-300 bg-white px-6 py-12 text-center">
           <h3 className="text-base font-black text-stone-900">
-            {search ? "No products match this search" : "No products need attention"}
+            {search ? "No products match this search" : "No product groups yet"}
           </h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
             {search
               ? "Try a product name, listing title or comparable offer."
-              : "This IP has no product groups in the current review queue."}
+              : "This IP has no product groups yet."}
           </p>
           {search && (
             <button
@@ -2337,18 +2395,15 @@ function ProductQueue({
 
 function ProductQueueRow({
   group,
-  view,
   currentSearch,
 }: {
   group: PersistedProductGroup;
-  view: ProductGroupView;
   currentSearch: string;
 }) {
-  const representative = (view === "triage" ? group.triage_members[0] : null) ??
-    group.members[0] ?? group.triage_members[0] ?? null;
+  const representative = group.members[0] ?? group.triage_members[0] ?? null;
   const triageCount = group.triage_member_count ?? 0;
   const offerCount = group.commercial_subgroups.filter((subgroup) =>
-    view === "triage" ? subgroup.triage_member_count > 0 : subgroup.member_count > 0
+    subgroup.member_count > 0
   ).length;
   const priceRange = productGroupPriceRange(group);
   const confirmed = group.confirmation_status === "confirmed";
@@ -4053,6 +4108,9 @@ export function ProductGroupsOverview({
   onCreateRule,
   onUpdateRule,
   onDeleteRule,
+  onCreateAuthenticityRule,
+  onUpdateAuthenticityRule,
+  onDeleteAuthenticityRule,
 }: {
   overview: PersistedProductGroupOverview;
   mode: GroupMode;
@@ -4121,6 +4179,25 @@ export function ProductGroupsOverview({
     groupId: string,
     ruleId: string,
   ) => Promise<{ id: string; rescore_jobs_enqueued: number }>;
+  onCreateAuthenticityRule: (
+    groupId: string,
+    input: ProductGroupAuthenticityRuleInput,
+  ) => Promise<{
+    rule: ProductGroupAuthenticityRule;
+    assessment_jobs_enqueued: number;
+  }>;
+  onUpdateAuthenticityRule: (
+    groupId: string,
+    ruleId: string,
+    input: ProductGroupAuthenticityRuleInput,
+  ) => Promise<{
+    rule: ProductGroupAuthenticityRule;
+    assessment_jobs_enqueued: number;
+  }>;
+  onDeleteAuthenticityRule: (
+    groupId: string,
+    ruleId: string,
+  ) => Promise<{ id: string; assessment_jobs_enqueued: number }>;
 }) {
   const showingTriage = groupView === "triage";
   const displayedGroups = showingTriage
@@ -4272,6 +4349,9 @@ export function ProductGroupsOverview({
                   onCreateRule={onCreateRule}
                   onUpdateRule={onUpdateRule}
                   onDeleteRule={onDeleteRule}
+                  onCreateAuthenticityRule={onCreateAuthenticityRule}
+                  onUpdateAuthenticityRule={onUpdateAuthenticityRule}
+                  onDeleteAuthenticityRule={onDeleteAuthenticityRule}
                 />
               ))}
             </div>
@@ -4914,6 +4994,9 @@ function ProductGroupCard({
   onCreateRule,
   onUpdateRule,
   onDeleteRule,
+  onCreateAuthenticityRule,
+  onUpdateAuthenticityRule,
+  onDeleteAuthenticityRule,
 }: {
   workspace?: boolean;
   group: PersistedProductGroup;
@@ -4981,6 +5064,25 @@ function ProductGroupCard({
     groupId: string,
     ruleId: string,
   ) => Promise<{ id: string; rescore_jobs_enqueued: number }>;
+  onCreateAuthenticityRule: (
+    groupId: string,
+    input: ProductGroupAuthenticityRuleInput,
+  ) => Promise<{
+    rule: ProductGroupAuthenticityRule;
+    assessment_jobs_enqueued: number;
+  }>;
+  onUpdateAuthenticityRule: (
+    groupId: string,
+    ruleId: string,
+    input: ProductGroupAuthenticityRuleInput,
+  ) => Promise<{
+    rule: ProductGroupAuthenticityRule;
+    assessment_jobs_enqueued: number;
+  }>;
+  onDeleteAuthenticityRule: (
+    groupId: string,
+    ruleId: string,
+  ) => Promise<{ id: string; assessment_jobs_enqueued: number }>;
 }) {
   const [workspaceSection, setWorkspaceSection] =
     useState<ProductWorkspaceSection>("review");
@@ -4997,6 +5099,12 @@ function ProductGroupCard({
   const [editingRuleText, setEditingRuleText] = useState("");
   const [savingRule, setSavingRule] = useState(false);
   const [ruleNotice, setRuleNotice] = useState<string | null>(null);
+  const [authenticityDraft, setAuthenticityDraft] =
+    useState<ProductGroupAuthenticityRuleInput>(EMPTY_AUTHENTICITY_RULE);
+  const [editingAuthenticityRuleId, setEditingAuthenticityRuleId] =
+    useState<string | null>(null);
+  const [savingAuthenticityRule, setSavingAuthenticityRule] = useState(false);
+  const [authenticityNotice, setAuthenticityNotice] = useState<string | null>(null);
   const [embeddingThresholdEnabled, setEmbeddingThresholdEnabled] = useState(
     group.embedding_match_threshold != null,
   );
@@ -5057,6 +5165,15 @@ function ProductGroupCard({
     : null;
   const embeddingThresholdChanged =
     nextEmbeddingThreshold !== group.embedding_match_threshold;
+  const authenticityDraftValid = [
+    authenticityDraft.expected_feature,
+    authenticityDraft.violation_pattern,
+    authenticityDraft.inspection_instruction,
+    authenticityDraft.visibility_rule,
+  ].every((value) => value.trim().length >= 10) && (
+    authenticityDraft.failure_action !== "takedown" ||
+    (authenticityDraft.rationale?.trim().length ?? 0) >= 10
+  );
   const referenceRankByImageId = new Map(
     visualEvidence?.references.map((reference) => [
       reference.image_id,
@@ -5621,7 +5738,7 @@ function ProductGroupCard({
               </p>
               <p className="mt-1 text-[11px] text-blue-700">
                 {mode === "same"
-                  ? "Rename the product, tune its multimodal candidate gate, manage representative images and rules, or remove a listing below."
+                  ? "Rename the product, adjust how closely new listings must match, manage representative images and rules, or remove a listing below."
                   : "Rename this confirmed group or remove an incorrect image-backed placement below."}
               </p>
             </div>
@@ -5882,21 +5999,29 @@ function ProductGroupCard({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold text-stone-900">
-                  Multimodal candidate gate
+                  Extra similarity check for new matches
                 </p>
                 <p className="mt-0.5 text-[11px] leading-4 text-stone-600">
-                  Require the whole-listing embedding—up to six images plus title,
-                  description and product attributes—to reach this raw cosine
-                  similarity against another listing before exact-product reranking
-                  and rules are applied. Passing the gate does not add a listing to
-                  the product; the final same-product score still decides membership.
-                  A failed pair may still be recognized as a related product. Higher
-                  is stricter.
+                  Unvelar already compares each listing’s photos and product details.
+                  Leave this extra check off unless unrelated listings keep appearing
+                  in this product.
+                </p>
+                <p className="mt-1.5 text-[11px] leading-4 text-stone-600">
+                  When it is on, listings must first look and read similar enough to
+                  the listings already here. Genuine offers often use different
+                  photos, angles, backgrounds, packaging, languages, or incomplete
+                  descriptions. Those differences can make a real match fail this
+                  early check before the full product matcher can assess it.
+                </p>
+                <p className="mt-1.5 text-[11px] leading-4 text-stone-600">
+                  Use it when reducing incorrect matches matters more than finding
+                  every genuine offer. It only affects new listings and listings not
+                  yet in this product; it will not remove listings already here.
                 </p>
               </div>
               <span className="shrink-0 rounded-full bg-white px-2 py-1 font-mono text-[10px] font-bold text-violet-800">
                 {embeddingThresholdEnabled
-                  ? embeddingThresholdDraft.toFixed(2)
+                  ? `On · ${embeddingThresholdDraft.toFixed(2)}`
                   : "Off"}
               </span>
             </div>
@@ -5911,7 +6036,7 @@ function ProductGroupCard({
                 }}
                 className="h-4 w-4 rounded border-stone-300 text-violet-700 focus:ring-violet-200"
               />
-              Use a product-specific multimodal candidate gate
+              Use this extra check for new matches
             </label>
 
             <div className={`mt-3 ${embeddingThresholdEnabled ? "" : "opacity-45"}`}>
@@ -5927,18 +6052,19 @@ function ProductGroupCard({
                   setEmbeddingThresholdNotice(null);
                 }}
                 className="w-full accent-violet-700"
-                aria-label="Minimum multimodal listing similarity"
+                aria-label="How closely new listings must resemble this product"
               />
-              <div className="mt-1 flex justify-between font-mono text-[10px] text-stone-500">
-                <span>0.00 broad</span>
-                <span>1.00 strict</span>
+              <div className="mt-1 flex justify-between text-[10px] text-stone-500">
+                <span>Allow more variation</span>
+                <span>Require a closer overall match</span>
               </div>
             </div>
 
             <div className="mt-2 flex items-center justify-between gap-3">
               <p className="text-[10px] text-stone-500">
-                Turning this off removes this extra gate; normal embedding retrieval,
-                reranking and final same-product scoring still run.
+                Listings that pass this extra check still go through the normal
+                product matching process. This setting does not decide whether a
+                listing is authentic or should be taken down.
               </p>
               <button
                 type="button"
@@ -5949,7 +6075,7 @@ function ProductGroupCard({
                   void onUpdateEmbeddingThreshold(group.id, nextEmbeddingThreshold)
                     .then(() => {
                       setEmbeddingThresholdNotice(
-                        "Saved. Future candidates use this immediately; the stored group snapshot will rebuild in the background.",
+                        "Saved. The extra check now applies to new matches. We’re refreshing this product in the background.",
                       );
                     })
                     .catch(() => undefined)
@@ -5957,7 +6083,7 @@ function ProductGroupCard({
                 }}
                 className="shrink-0 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-40"
               >
-                {savingEmbeddingThreshold ? "Saving…" : "Save threshold"}
+                {savingEmbeddingThreshold ? "Saving…" : "Save matching setting"}
               </button>
             </div>
             {embeddingThresholdNotice && (
@@ -5970,9 +6096,12 @@ function ProductGroupCard({
           <div className="mt-4 border-t border-blue-200 pt-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-bold text-stone-900">Automatic membership rules</p>
-                <p className="mt-0.5 text-[11px] text-stone-600">
-                  The product reranker checks these instructions for new candidates. If evidence is not visible, it remains unknown.
+                <p className="text-xs font-bold text-stone-900">What belongs to this product</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-stone-600">
+                  Use these rules only to distinguish this product from a different
+                  design, model or formula. Do not use size, price, condition or signs
+                  of a possible counterfeit here. Those listings should still join
+                  this product so Unvelar can inspect them correctly.
                 </p>
               </div>
               <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-bold text-blue-800">
@@ -6091,7 +6220,7 @@ function ProductGroupCard({
               />
               <div className="mt-2 flex items-center justify-between gap-3">
                 <p className="text-[10px] text-stone-500">
-                  Rules are versioned; changes automatically queue this product for rescoring.
+                  Changes recheck current membership and automatically apply to future listings.
                 </p>
                 <button
                   type="submit"
@@ -6106,6 +6235,321 @@ function ProductGroupCard({
             {ruleNotice && (
               <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">
                 {ruleNotice}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-4 border-t border-blue-200 pt-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-stone-900">Authenticity checks</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-stone-600">
+                  These checks run after a listing has joined this product. They never
+                  remove it from the product. Current listings are rechecked when a
+                  check changes, and future listings are checked automatically.
+                </p>
+                <p className="mt-1.5 text-[11px] leading-4 text-stone-600">
+                  A check fails only when the listing clearly shows the required area
+                  and the feature is demonstrably wrong or missing. If the right photo
+                  is absent, cropped or blurry, the result is <strong>Not visible</strong>—
+                  it is not treated as counterfeit.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-bold text-blue-800">
+                {group.authenticity_rules.length} active
+              </span>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {group.authenticity_rules.map((rule) => (
+                <div key={rule.id} className="rounded-lg border border-stone-200 bg-white p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="text-xs font-bold text-stone-900">
+                          {rule.expected_feature}
+                        </p>
+                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                          rule.failure_action === "takedown"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-amber-50 text-amber-800"
+                        }`}>
+                          {rule.failure_action === "takedown"
+                            ? "Can recommend takedown"
+                            : "Review only"}
+                        </span>
+                      </div>
+                      <dl className="mt-2 grid gap-1.5 text-[10px] leading-4 text-stone-600 sm:grid-cols-2">
+                        <div>
+                          <dt className="font-bold text-stone-700">Clear failure</dt>
+                          <dd>{rule.violation_pattern}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-bold text-stone-700">Enough evidence to judge</dt>
+                          <dd>{rule.visibility_rule}</dd>
+                        </div>
+                        {rule.applicability && (
+                          <div className="sm:col-span-2">
+                            <dt className="font-bold text-stone-700">Applies to</dt>
+                            <dd>{rule.applicability}</dd>
+                          </div>
+                        )}
+                      </dl>
+                    </div>
+                    <button
+                      type="button"
+                      title="Edit authenticity check"
+                      disabled={savingAuthenticityRule}
+                      onClick={() => {
+                        setEditingAuthenticityRuleId(rule.id);
+                        setAuthenticityDraft(authenticityRuleInput(rule));
+                        setAuthenticityNotice(null);
+                      }}
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Remove authenticity check"
+                      disabled={savingAuthenticityRule}
+                      onClick={() => {
+                        setSavingAuthenticityRule(true);
+                        setAuthenticityNotice(null);
+                        void onDeleteAuthenticityRule(group.id, rule.id)
+                          .then((result) => {
+                            if (editingAuthenticityRuleId === rule.id) {
+                              setEditingAuthenticityRuleId(null);
+                              setAuthenticityDraft(EMPTY_AUTHENTICITY_RULE);
+                            }
+                            setAuthenticityNotice(
+                              authenticityJobsNotice(result.assessment_jobs_enqueued),
+                            );
+                          })
+                          .catch(() => undefined)
+                          .finally(() => setSavingAuthenticityRule(false));
+                      }}
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {group.authenticity_rules.length === 0 && (
+                <p className="rounded-lg border border-dashed border-stone-300 bg-white/70 px-3 py-3 text-xs leading-5 text-stone-500">
+                  No authenticity checks yet. Add only facts confirmed by the
+                  rightsholder or reliable genuine samples across the packaging
+                  versions this check covers.
+                </p>
+              )}
+            </div>
+
+            <form
+              className="mt-3 rounded-lg border border-stone-200 bg-white p-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!authenticityDraftValid) return;
+                const input: ProductGroupAuthenticityRuleInput = {
+                  ...authenticityDraft,
+                  expected_feature: authenticityDraft.expected_feature.trim(),
+                  violation_pattern: authenticityDraft.violation_pattern.trim(),
+                  inspection_instruction: authenticityDraft.inspection_instruction.trim(),
+                  visibility_rule: authenticityDraft.visibility_rule.trim(),
+                  applicability: authenticityDraft.applicability?.trim() || null,
+                  rationale: authenticityDraft.rationale?.trim() || null,
+                };
+                setSavingAuthenticityRule(true);
+                setAuthenticityNotice(null);
+                const save = editingAuthenticityRuleId
+                  ? onUpdateAuthenticityRule(
+                      group.id,
+                      editingAuthenticityRuleId,
+                      input,
+                    )
+                  : onCreateAuthenticityRule(group.id, input);
+                void save
+                  .then((result) => {
+                    setEditingAuthenticityRuleId(null);
+                    setAuthenticityDraft(EMPTY_AUTHENTICITY_RULE);
+                    setAuthenticityNotice(
+                      authenticityJobsNotice(result.assessment_jobs_enqueued),
+                    );
+                  })
+                  .catch(() => undefined)
+                  .finally(() => setSavingAuthenticityRule(false));
+              }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-bold text-stone-900">
+                  {editingAuthenticityRuleId ? "Edit authenticity check" : "Add an authenticity check"}
+                </p>
+                {editingAuthenticityRuleId && (
+                  <button
+                    type="button"
+                    disabled={savingAuthenticityRule}
+                    onClick={() => {
+                      setEditingAuthenticityRuleId(null);
+                      setAuthenticityDraft(EMPTY_AUTHENTICITY_RULE);
+                    }}
+                    className="text-[10px] font-bold text-stone-500 hover:text-stone-800"
+                  >
+                    Cancel editing
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="text-[10px] font-bold text-stone-700">
+                  What genuine items should show
+                  <textarea
+                    value={authenticityDraft.expected_feature}
+                    maxLength={1000}
+                    rows={3}
+                    placeholder="Example: A printed lot number appears in the bottom-right corner of the box’s bottom panel."
+                    onChange={(event) => setAuthenticityDraft((current) => ({
+                      ...current,
+                      expected_feature: event.target.value,
+                    }))}
+                    className="mt-1 w-full resize-y rounded-lg border border-stone-300 px-2.5 py-2 text-xs font-normal text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+                <label className="text-[10px] font-bold text-stone-700">
+                  What counts as a clear failure
+                  <textarea
+                    value={authenticityDraft.violation_pattern}
+                    maxLength={1000}
+                    rows={3}
+                    placeholder="Example: The complete bottom panel is clear, but no lot number is present in that area."
+                    onChange={(event) => setAuthenticityDraft((current) => ({
+                      ...current,
+                      violation_pattern: event.target.value,
+                    }))}
+                    className="mt-1 w-full resize-y rounded-lg border border-stone-300 px-2.5 py-2 text-xs font-normal text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+                <label className="text-[10px] font-bold text-stone-700">
+                  How Unvelar should check it
+                  <textarea
+                    value={authenticityDraft.inspection_instruction}
+                    maxLength={1000}
+                    rows={3}
+                    placeholder="Inspect every gallery image for the bottom panel and compare the position and format of the printed code."
+                    onChange={(event) => setAuthenticityDraft((current) => ({
+                      ...current,
+                      inspection_instruction: event.target.value,
+                    }))}
+                    className="mt-1 w-full resize-y rounded-lg border border-stone-300 px-2.5 py-2 text-xs font-normal text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+                <label className="text-[10px] font-bold text-stone-700">
+                  When there is enough evidence to judge
+                  <textarea
+                    value={authenticityDraft.visibility_rule}
+                    maxLength={1000}
+                    rows={3}
+                    placeholder="Only judge when the whole bottom panel is visible, uncropped and sharp enough to read."
+                    onChange={(event) => setAuthenticityDraft((current) => ({
+                      ...current,
+                      visibility_rule: event.target.value,
+                    }))}
+                    className="mt-1 w-full resize-y rounded-lg border border-stone-300 px-2.5 py-2 text-xs font-normal text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+              </div>
+
+              <label className="mt-3 block text-[10px] font-bold text-stone-700">
+                Which packaging versions or markets this applies to <span className="font-normal text-stone-400">(optional)</span>
+                <input
+                  value={authenticityDraft.applicability ?? ""}
+                  maxLength={1000}
+                  placeholder="Example: 100 ml European retail boxes introduced in 2025."
+                  onChange={(event) => setAuthenticityDraft((current) => ({
+                    ...current,
+                    applicability: event.target.value || null,
+                  }))}
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-2.5 py-2 text-xs font-normal text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="text-[10px] font-bold text-stone-700">
+                  Where to check
+                  <select
+                    value={authenticityDraft.modality}
+                    onChange={(event) => setAuthenticityDraft((current) => ({
+                      ...current,
+                      modality: event.target.value as ProductGroupAuthenticityRuleInput["modality"],
+                    }))}
+                    className="mt-1 min-h-9 w-full rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-normal text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="image">Listing photos</option>
+                    <option value="description">Listing text</option>
+                    <option value="both">Photos and text</option>
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold text-stone-700">
+                  If it clearly fails
+                  <select
+                    value={authenticityDraft.failure_action}
+                    onChange={(event) => setAuthenticityDraft((current) => ({
+                      ...current,
+                      failure_action: event.target.value as ProductGroupAuthenticityRuleInput["failure_action"],
+                    }))}
+                    className="mt-1 min-h-9 w-full rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-normal text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="review">Send to human review</option>
+                    <option value="takedown">Allow a takedown recommendation</option>
+                  </select>
+                </label>
+              </div>
+
+              {authenticityDraft.failure_action === "takedown" && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-[10px] leading-4 text-red-800">
+                    This does not send a takedown automatically. It can recommend one
+                    only when the product identity is strong, the rule is clearly
+                    violated, and current evidence reaches high confidence.
+                  </p>
+                  <label className="mt-2 block text-[10px] font-bold text-red-900">
+                    Why this is reliable enough to support takedown
+                    <textarea
+                      value={authenticityDraft.rationale ?? ""}
+                      maxLength={2000}
+                      rows={3}
+                      placeholder="Describe the rightsholder source, genuine samples and packaging versions that confirm this feature."
+                      onChange={(event) => setAuthenticityDraft((current) => ({
+                        ...current,
+                        rationale: event.target.value || null,
+                      }))}
+                      className="mt-1 w-full resize-y rounded-lg border border-red-200 bg-white px-2.5 py-2 text-xs font-normal text-stone-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                    />
+                  </label>
+                </div>
+              )}
+
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="text-[10px] text-stone-500">
+                  Passed checks support authenticity but never prove it by themselves.
+                </p>
+                <button
+                  type="submit"
+                  disabled={savingAuthenticityRule || !authenticityDraftValid}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-900 disabled:opacity-40"
+                >
+                  <Plus size={13} />
+                  {savingAuthenticityRule
+                    ? "Saving…"
+                    : editingAuthenticityRuleId
+                      ? "Save check"
+                      : "Add check"}
+                </button>
+              </div>
+            </form>
+
+            {authenticityNotice && (
+              <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">
+                {authenticityNotice}
               </p>
             )}
           </div>
@@ -6138,6 +6582,7 @@ function ProductGroupCard({
                   }`}
                 >
                   {subgroup.variant_label}
+                  {subgroup.price_band === "unusually_low" ? " · unusually low" : ""}
                   <span className={`ml-2 text-xs ${selected ? "text-stone-300" : "text-stone-400"}`}>
                     {count}
                   </span>
@@ -6690,4 +7135,11 @@ function rescoreNotice(count: number) {
     return "Rule saved. Future candidates will use it automatically.";
   }
   return `Rule saved. ${count} current listing${count === 1 ? "" : "s"} queued for automatic rescoring.`;
+}
+
+function authenticityJobsNotice(count: number) {
+  if (count === 0) {
+    return "Authenticity check saved. Future listings will use it automatically.";
+  }
+  return `Authenticity check saved. ${count} current listing${count === 1 ? "" : "s"} queued to be checked again.`;
 }

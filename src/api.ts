@@ -1484,6 +1484,7 @@ export interface IpReviewFinding {
   description_risk_breakdown: Record<string, unknown> | null;
   condition_assessment: ListingConditionAssessment | null;
   authenticity_assessment: ListingAuthenticityAssessment | null;
+  product_authenticity_assessment: ProductAuthenticityAssessment | null;
   marketplace_condition: "new" | "second_hand" | "unknown";
   authenticity_status:
     | "likely_genuine"
@@ -2009,6 +2010,7 @@ export interface MonitoringDecisionFactor {
     | "identity"
     | "condition"
     | "authenticity"
+    | "product_authenticity"
     | "license"
     | "infringement"
     | "description"
@@ -2049,7 +2051,7 @@ export interface ListingConditionAssessment {
 }
 
 export interface ListingAuthenticityAssessment {
-  status: "counterfeit_signals" | "no_visible_signals" | "unclear";
+  status: "counterfeit_signals" | "genuine_signals" | "no_visible_signals" | "unclear";
   confidence: number;
   reasoning: string | null;
   evidence: Array<{
@@ -2057,6 +2059,42 @@ export interface ListingAuthenticityAssessment {
     signal: string;
     text: string;
   }>;
+}
+
+export type ProductAuthenticityRuleVerdict =
+  | "violated"
+  | "satisfied"
+  | "not_visible"
+  | "unclear";
+
+export interface ProductAuthenticityRuleAssessment {
+  rule_id: string;
+  rule_version: number;
+  expected_feature: string;
+  failure_action: "review" | "takedown";
+  verdict: ProductAuthenticityRuleVerdict;
+  confidence: number;
+  evidence_source: "image" | "description" | "both" | "none";
+  evidence: string | null;
+  evidence_image_positions: number[];
+  evidence_regions: Array<{
+    position: number;
+    box_2d: [number, number, number, number];
+  }>;
+  reasoning: string | null;
+}
+
+export interface ProductAuthenticityAssessment {
+  policy_version: string;
+  product_group_id: string;
+  source_content_hash: string;
+  ruleset_hash: string;
+  matched: boolean;
+  confidence: number;
+  evidence_source: "image" | "description" | "both" | "none";
+  matched_cues: string[];
+  reasoning: string | null;
+  rule_assessments: ProductAuthenticityRuleAssessment[];
 }
 
 export interface MonitoringActionability {
@@ -2793,6 +2831,7 @@ export interface PersistedProductGroup {
   members: ProductClusterProfile[];
   triage_members: ProductClusterProfile[];
   rules: ProductGroupRule[];
+  authenticity_rules: ProductGroupAuthenticityRule[];
   canonical_decisions: ProductCanonicalDecision[];
   reconciliation_suggestions: ProductGroupReconciliationSuggestion[];
 }
@@ -2838,6 +2877,37 @@ export interface ProductGroupRule {
   version: number;
   created_at: string;
   updated_at: string;
+}
+
+export type ProductAuthenticityModality = "image" | "description" | "both";
+export type ProductAuthenticityFailureAction = "review" | "takedown";
+
+export interface ProductGroupAuthenticityRule {
+  id: string;
+  group_id: string;
+  expected_feature: string;
+  violation_pattern: string;
+  inspection_instruction: string;
+  visibility_rule: string;
+  applicability: string | null;
+  rationale: string | null;
+  modality: ProductAuthenticityModality;
+  failure_action: ProductAuthenticityFailureAction;
+  status: "active";
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductGroupAuthenticityRuleInput {
+  expected_feature: string;
+  violation_pattern: string;
+  inspection_instruction: string;
+  visibility_rule: string;
+  applicability: string | null;
+  rationale: string | null;
+  modality: ProductAuthenticityModality;
+  failure_action: ProductAuthenticityFailureAction;
 }
 
 export interface ProductGroupVisualReference {
@@ -3275,6 +3345,9 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
         ? group.semantic_definition
         : null,
     rules: Array.isArray(group.rules) ? group.rules : [],
+    authenticity_rules: Array.isArray(group.authenticity_rules)
+      ? group.authenticity_rules
+      : [],
     canonical_decisions: normalizeProductCanonicalDecisions(group.canonical_decisions),
     reconciliation_suggestions: normalizeProductGroupReconciliationSuggestions(
       group.reconciliation_suggestions,
@@ -3620,6 +3693,46 @@ export function deletePersistedProductGroupRule(
 ) {
   return request<{ id: string; rescore_jobs_enqueued: number }>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/rules/${encodeURIComponent(ruleId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function createPersistedProductGroupAuthenticityRule(
+  ipId: string,
+  groupId: string,
+  input: ProductGroupAuthenticityRuleInput,
+) {
+  return request<{
+    rule: ProductGroupAuthenticityRule;
+    assessment_jobs_enqueued: number;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/authenticity-rules`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function updatePersistedProductGroupAuthenticityRule(
+  ipId: string,
+  groupId: string,
+  ruleId: string,
+  input: ProductGroupAuthenticityRuleInput,
+) {
+  return request<{
+    rule: ProductGroupAuthenticityRule;
+    assessment_jobs_enqueued: number;
+  }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/authenticity-rules/${encodeURIComponent(ruleId)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function deletePersistedProductGroupAuthenticityRule(
+  ipId: string,
+  groupId: string,
+  ruleId: string,
+) {
+  return request<{ id: string; assessment_jobs_enqueued: number }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}/authenticity-rules/${encodeURIComponent(ruleId)}`,
     { method: "DELETE" },
   );
 }
