@@ -90,6 +90,7 @@ import { useAuth } from "../context/AuthContext";
 type ProductGroupView = "triage" | "all";
 type GroupMode = "same" | "related" | "visual";
 type ProductWorkspaceSection = "review" | "offers" | "settings" | "history";
+const PRODUCT_GROUP_VIEW = "all" as const;
 const EMPTY_AUTHENTICITY_RULE: ProductGroupAuthenticityRuleInput = {
   expected_feature: "",
   violation_pattern: "",
@@ -546,7 +547,6 @@ export default function ProductClusters() {
   const [, setSemanticOverview] = useState<PersistedProductGroupOverview | null>(null);
   const [visualOverview, setVisualOverview] =
     useState<PersistedProductGroupOverview | null>(null);
-  const [productGroupView, setProductGroupView] = useState<ProductGroupView>("triage");
   const [productSearch, setProductSearch] = useState("");
   const [productSort, setProductSort] = useState<"work" | "name">("work");
   const [focusedGroup, setFocusedGroup] = useState<PersistedProductGroup | null>(null);
@@ -591,7 +591,6 @@ export default function ProductClusters() {
   const batchRequestSequence = useRef(0);
   const semanticPageRequestSequence = useRef(0);
   const visualPageRequestSequence = useRef(0);
-  const workspaceQueueHydrationAttempt = useRef<string | null>(null);
   const acknowledgedProductTaskResolutions = useRef(
     new Map<string, AcknowledgedProductTaskResolution>(),
   );
@@ -717,7 +716,7 @@ export default function ProductClusters() {
   }, []);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
-    `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${productGroupView}`;
+    `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${PRODUCT_GROUP_VIEW}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
   const selectedScopeAvailable =
     scopesLoadedKey === scopesRequestKey && selectedScope != null;
@@ -780,7 +779,7 @@ export default function ProductClusters() {
     void getPersistedProductGroups(
       selectedIpId,
       "same",
-      productGroupView,
+      PRODUCT_GROUP_VIEW,
       {
         limit: PRODUCT_GROUP_PAGE_SIZE,
         signal: controller.signal,
@@ -801,7 +800,6 @@ export default function ProductClusters() {
   }, [
     selectedIpId,
     selectedScopeAvailable,
-    productGroupView,
     refreshVersion,
     actingTenantId,
     applyAcknowledgedResolutions,
@@ -865,7 +863,7 @@ export default function ProductClusters() {
     setActiveBatch(null);
     setConfirmBatchAction(null);
     setMergeSourceGroupId(null);
-  }, [productGroupView, refreshVersion]);
+  }, [refreshVersion]);
 
   useEffect(() => {
     if (!semanticCorrectionTarget || !selectedIpId || semanticTaxonomyLoaded) return;
@@ -1030,7 +1028,7 @@ export default function ProductClusters() {
           await refreshPersistedProductGroups(
             selectedIpId,
             "same",
-            productGroupView,
+            PRODUCT_GROUP_VIEW,
             { limit: PRODUCT_GROUP_PAGE_SIZE },
           ),
         );
@@ -1055,7 +1053,7 @@ export default function ProductClusters() {
         await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
         ),
       );
@@ -1094,7 +1092,7 @@ export default function ProductClusters() {
           await getPersistedProductGroups(
             selectedIpId,
             "same",
-            productGroupView,
+            PRODUCT_GROUP_VIEW,
             { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
           ),
         );
@@ -1107,29 +1105,6 @@ export default function ProductClusters() {
         }
       }
       setVisualOverview(accumulated);
-      if (productGroupView === "triage") {
-        let allCursor: string | null = null;
-        const seenAllCursors = new Set<string>();
-        do {
-          const allOverview = applyAcknowledgedResolutions(
-            await getPersistedProductGroups(
-              selectedIpId,
-              "same",
-              "all",
-              {
-                limit: PRODUCT_GROUP_PAGE_SIZE,
-                cursor: allCursor,
-              },
-            ),
-          );
-          if (visualPageRequestSequence.current !== requestSequence) return null;
-          const target = allOverview.groups.find((group) => group.id === groupId);
-          if (target) return target;
-          allCursor = allOverview.next_cursor;
-          if (allCursor && seenAllCursors.has(allCursor)) break;
-          if (allCursor) seenAllCursors.add(allCursor);
-        } while (allCursor);
-      }
       return null;
     } catch (caught: unknown) {
       if (visualPageRequestSequence.current === requestSequence) {
@@ -1137,7 +1112,7 @@ export default function ProductClusters() {
       }
       return null;
     }
-  }, [applyAcknowledgedResolutions, productGroupView, selectedIpId, visualOverview]);
+  }, [applyAcknowledgedResolutions, selectedIpId, visualOverview]);
 
   useEffect(() => {
     if (!linkedGroupId) {
@@ -1505,7 +1480,7 @@ export default function ProductClusters() {
         await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE },
         ),
       ));
@@ -1530,7 +1505,7 @@ export default function ProductClusters() {
         await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE },
         ),
       ));
@@ -1555,7 +1530,7 @@ export default function ProductClusters() {
         await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE },
         ),
       ));
@@ -1622,7 +1597,7 @@ export default function ProductClusters() {
       const latestOverview = await getPersistedProductGroups(
         selectedIpId,
         "same",
-        productGroupView,
+        PRODUCT_GROUP_VIEW,
         { limit: PRODUCT_GROUP_PAGE_SIZE },
       ).catch((caught: unknown) => {
         setError(errorMessage(
@@ -1648,7 +1623,7 @@ export default function ProductClusters() {
         const latestOverview = await getPersistedProductGroups(
           selectedIpId,
           "same",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: PRODUCT_GROUP_PAGE_SIZE },
         ).catch(() => null);
         if (latestOverview) {
@@ -1724,7 +1699,7 @@ export default function ProductClusters() {
         },
       );
       setSemanticOverview(
-        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView, {
+        await getPersistedProductGroups(selectedIpId, "semantic", PRODUCT_GROUP_VIEW, {
           limit: SEMANTIC_GROUP_PAGE_SIZE,
         }),
       );
@@ -1748,7 +1723,7 @@ export default function ProductClusters() {
         const latestOverview = await getPersistedProductGroups(
           selectedIpId,
           "semantic",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: SEMANTIC_GROUP_PAGE_SIZE },
         ).catch(() => null);
         if (latestOverview) {
@@ -1780,7 +1755,7 @@ export default function ProductClusters() {
         target.profile.semantic_correction_id,
       );
       setSemanticOverview(
-        await getPersistedProductGroups(selectedIpId, "semantic", productGroupView, {
+        await getPersistedProductGroups(selectedIpId, "semantic", PRODUCT_GROUP_VIEW, {
           limit: SEMANTIC_GROUP_PAGE_SIZE,
         }),
       );
@@ -1799,7 +1774,7 @@ export default function ProductClusters() {
         const latestOverview = await getPersistedProductGroups(
           selectedIpId,
           "semantic",
-          productGroupView,
+          PRODUCT_GROUP_VIEW,
           { limit: SEMANTIC_GROUP_PAGE_SIZE },
         ).catch(() => null);
         if (latestOverview) {
@@ -2023,36 +1998,6 @@ export default function ProductClusters() {
     ? visualOverview?.groups.find((group) => group.id === linkedGroupId) ?? focusedGroup
     : null;
   const showingWorkspace = Boolean(linkedGroupId);
-  const workspaceQueueHydrationKey = selectedIpId && workspaceGroup
-    ? `${selectedIpId}:${workspaceGroup.id}:${refreshVersion}`
-    : null;
-  const workspaceQueueNeedsHydration = Boolean(
-    productGroupView === "triage" &&
-      workspaceGroup &&
-      (workspaceGroup.triage_member_count ?? 0) > 0 &&
-      workspaceGroup.triage_recommendation_counts == null &&
-      loadedGroupTasks[workspaceGroup.id] == null,
-  );
-
-  useEffect(() => {
-    if (
-      !workspaceQueueNeedsHydration ||
-      !workspaceGroup ||
-      !workspaceQueueHydrationKey ||
-      loadingGroupTasksId ||
-      workspaceQueueHydrationAttempt.current === workspaceQueueHydrationKey
-    ) {
-      return;
-    }
-    workspaceQueueHydrationAttempt.current = workspaceQueueHydrationKey;
-    void loadGroupTasks(workspaceGroup.id);
-  }, [
-    loadGroupTasks,
-    loadingGroupTasksId,
-    workspaceGroup,
-    workspaceQueueHydrationKey,
-    workspaceQueueNeedsHydration,
-  ]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
@@ -2141,7 +2086,7 @@ export default function ProductClusters() {
                 index={visualOverview.groups.findIndex((group) => group.id === workspaceGroup.id)}
                 ipId={visualOverview.scope.ip_id}
                 mode="same"
-                showPersistedMembers={productGroupView === "all"}
+                showPersistedMembers
                 triageProjectionAvailable={visualOverview.triage_projection_available}
                 saving={savingGroupId === workspaceGroup.id}
                 mergeSourceGroup={mergeSourceGroupId
@@ -2202,11 +2147,9 @@ export default function ProductClusters() {
         ) : (
           <ProductQueue
             overview={visualOverview}
-            view={productGroupView}
             search={productSearch}
             sort={productSort}
             loadingMore={loadingMoreVisualGroups}
-            onViewChange={setProductGroupView}
             onSearchChange={setProductSearch}
             onSortChange={setProductSort}
             onLoadMore={() => void loadMoreVisualGroups()}
@@ -2275,32 +2218,25 @@ export default function ProductClusters() {
 
 function ProductQueue({
   overview,
-  view,
   search,
   sort,
   loadingMore,
   currentSearch,
-  onViewChange,
   onSearchChange,
   onSortChange,
   onLoadMore,
 }: {
   overview: PersistedProductGroupOverview;
-  view: ProductGroupView;
   search: string;
   sort: "work" | "name";
   loadingMore: boolean;
   currentSearch: string;
-  onViewChange: (view: ProductGroupView) => void;
   onSearchChange: (search: string) => void;
   onSortChange: (sort: "work" | "name") => void;
   onLoadMore: () => void;
 }) {
   const normalizedSearch = search.trim().toLocaleLowerCase();
-  const candidateGroups = view === "triage"
-    ? overview.groups.filter(productGroupHasReviewQueueWork)
-    : overview.groups;
-  const visibleGroups = candidateGroups
+  const visibleGroups = overview.groups
     .filter((group) => {
       if (!normalizedSearch) return true;
       const searchable = [
@@ -2319,9 +2255,7 @@ function ProductQueue({
       return (right.triage_member_count ?? 0) - (left.triage_member_count ?? 0) ||
         right.member_count - left.member_count;
     });
-  const productCount = view === "triage"
-    ? overview.triage_group_count ?? candidateGroups.length
-    : overview.group_count;
+  const productCount = overview.group_count;
 
   return (
     <section className="mt-5" aria-labelledby="product-queue-heading">
@@ -2345,8 +2279,7 @@ function ProductQueue({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <ProductGroupViewToggle view={view} onChange={onViewChange} />
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
         <div className="flex flex-col gap-2 sm:flex-row">
           <label className="relative block min-w-0 sm:w-72">
             <span className="sr-only">Search products</span>
@@ -2380,7 +2313,7 @@ function ProductQueue({
       <div className="mt-5 flex items-end justify-between gap-4">
         <div>
           <h2 id="product-queue-heading" className="text-lg font-black text-stone-950">
-            {view === "triage" ? "Products requiring attention" : "All products"}
+            All products
           </h2>
           <p className="mt-1 text-sm text-stone-500">
             Open a product to review its listings, offers and group settings.
@@ -2397,7 +2330,6 @@ function ProductQueue({
             <ProductQueueRow
               key={group.id}
               group={group}
-              view={view}
               currentSearch={currentSearch}
             />
           ))}
@@ -2405,12 +2337,12 @@ function ProductQueue({
       ) : (
         <div className="mt-3 rounded-xl border border-dashed border-stone-300 bg-white px-6 py-12 text-center">
           <h3 className="text-base font-black text-stone-900">
-            {search ? "No products match this search" : "No products need attention"}
+            {search ? "No products match this search" : "No product groups yet"}
           </h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
             {search
               ? "Try a product name, listing title or comparable offer."
-              : "This IP has no product groups in the current review queue."}
+              : "This IP has no product groups yet."}
           </p>
           {search && (
             <button
@@ -2443,18 +2375,15 @@ function ProductQueue({
 
 function ProductQueueRow({
   group,
-  view,
   currentSearch,
 }: {
   group: PersistedProductGroup;
-  view: ProductGroupView;
   currentSearch: string;
 }) {
-  const representative = (view === "triage" ? group.triage_members[0] : null) ??
-    group.members[0] ?? group.triage_members[0] ?? null;
+  const representative = group.members[0] ?? group.triage_members[0] ?? null;
   const triageCount = group.triage_member_count ?? 0;
   const offerCount = group.commercial_subgroups.filter((subgroup) =>
-    view === "triage" ? subgroup.triage_member_count > 0 : subgroup.member_count > 0
+    subgroup.member_count > 0
   ).length;
   const priceRange = productGroupPriceRange(group);
   const confirmed = group.confirmation_status === "confirmed";
