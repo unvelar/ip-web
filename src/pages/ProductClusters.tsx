@@ -6599,6 +6599,9 @@ function ProductGroupCard({
             const count = showingPersistedMembers
               ? subgroup.member_count
               : subgroup.triage_member_count;
+            const needsTriageCount = subgroup.triage_member_count;
+            const triagedCount = Math.max(0, subgroup.member_count - needsTriageCount);
+            const triageComplete = needsTriageCount === 0;
             const subgroupMembers = displayedMembers.filter(
               (member) => member.commercial_subgroup_key === subgroup.key,
             );
@@ -6619,7 +6622,11 @@ function ProductGroupCard({
                   setWorkspaceSection("review");
                   setManaging(false);
                 }}
-                className="flex min-h-24 w-full items-center gap-3 border-b border-stone-200 p-3 text-left transition last:border-b-0 hover:bg-stone-50 sm:gap-4 sm:p-4"
+                className={`flex min-h-24 w-full items-center gap-3 border-b border-stone-200 p-3 text-left transition last:border-b-0 sm:gap-4 sm:p-4 ${
+                  triageComplete
+                    ? "bg-emerald-50/40 hover:bg-emerald-50/70"
+                    : "bg-white hover:bg-amber-50/50"
+                }`}
               >
                 <span className="flex h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-stone-100 sm:h-20 sm:w-20">
                   {representative?.image_url ? (
@@ -6640,6 +6647,25 @@ function ProductGroupCard({
                   </span>
                   <span className="mt-0.5 block text-xs text-stone-500">
                     {count} {count === 1 ? "listing" : "listings"}
+                  </span>
+                  <span className="mt-2 flex flex-wrap gap-1.5">
+                    {needsTriageCount > 0 && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-inset ring-amber-200">
+                        {needsTriageCount} {needsTriageCount === 1 ? "needs triage" : "need triage"}
+                      </span>
+                    )}
+                    {triagedCount > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 ring-1 ring-inset ring-emerald-200">
+                        <Check size={10} aria-hidden="true" />
+                        {triagedCount} triaged
+                      </span>
+                    )}
+                    {triageComplete && triagedCount === 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 ring-1 ring-inset ring-emerald-200">
+                        <Check size={10} aria-hidden="true" />
+                        Triage complete
+                      </span>
+                    )}
                   </span>
                 </span>
                 <span className={`shrink-0 text-right text-sm font-black ${
