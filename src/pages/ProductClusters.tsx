@@ -1191,6 +1191,11 @@ export default function ProductClusters() {
     }
   }, [loadedGroupTasks, loadingGroupTasksId, omitAcknowledgedGroupFindings, selectedIpId]);
 
+  useEffect(() => {
+    if (!linkedGroupId) return;
+    void loadGroupTasks(linkedGroupId);
+  }, [linkedGroupId, loadGroupTasks]);
+
   async function toggleGroupSubgroupListings(
     groupId: string,
     bucket: ProductGroupRecommendationBucket,
@@ -2109,7 +2114,7 @@ export default function ProductClusters() {
                 index={visualOverview.groups.findIndex((group) => group.id === workspaceGroup.id)}
                 ipId={visualOverview.scope.ip_id}
                 mode="same"
-                showPersistedMembers
+                showPersistedMembers={false}
                 triageProjectionAvailable={visualOverview.triage_projection_available}
                 saving={savingGroupId === workspaceGroup.id}
                 mergeSourceGroup={mergeSourceGroupId
@@ -6630,6 +6635,14 @@ function ProductGroupCard({
             const count = showingPersistedMembers
               ? subgroup.member_count
               : subgroup.triage_member_count;
+            const needsTriageCount = subgroup.triage_member_count;
+            const triagedCount = Math.max(0, subgroup.member_count - needsTriageCount);
+            const triageComplete = needsTriageCount === 0;
+            const subgroupMembers = displayedMembers.filter(
+              (member) => member.commercial_subgroup_key === subgroup.key,
+            );
+            const representative = subgroupMembers.find((member) => member.image_url) ??
+              subgroupMembers[0] ?? null;
             const priceRange = subgroup.price_range;
             const priceLabel = !priceRange
               ? "Price unavailable"
@@ -6645,9 +6658,26 @@ function ProductGroupCard({
                   setWorkspaceSection("review");
                   setManaging(false);
                 }}
-                className="flex min-h-16 w-full items-center justify-between gap-4 border-b border-stone-200 px-4 text-left transition last:border-b-0 hover:bg-stone-50"
+                className={`flex min-h-24 w-full items-center gap-3 border-b border-stone-200 p-3 text-left transition last:border-b-0 sm:gap-4 sm:p-4 ${
+                  triageComplete
+                    ? "bg-emerald-50/40 hover:bg-emerald-50/70"
+                    : "bg-white hover:bg-amber-50/50"
+                }`}
               >
-                <span className="min-w-0">
+                <span className="flex h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-stone-100 sm:h-20 sm:w-20">
+                  {representative?.image_url ? (
+                    <img
+                      src={representative.image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-lg font-black text-stone-400">
+                      {subgroup.variant_label.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-black text-stone-950">
                     {subgroup.variant_label}
                   </span>
@@ -6660,11 +6690,31 @@ function ProductGroupCard({
                       <span>{count} {count === 1 ? "listing" : "listings"}</span>
                     )}
                   </span>
+                  <span className="mt-2 flex flex-wrap gap-1.5">
+                    {needsTriageCount > 0 && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-inset ring-amber-200">
+                        {needsTriageCount} {needsTriageCount === 1 ? "needs triage" : "need triage"}
+                      </span>
+                    )}
+                    {triagedCount > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 ring-1 ring-inset ring-emerald-200">
+                        <Check size={10} aria-hidden="true" />
+                        {triagedCount} triaged
+                      </span>
+                    )}
+                    {triageComplete && triagedCount === 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 ring-1 ring-inset ring-emerald-200">
+                        <Check size={10} aria-hidden="true" />
+                        Triage complete
+                      </span>
+                    )}
+                  </span>
                 </span>
-                <span className={`shrink-0 text-sm font-bold ${
+                <span className={`shrink-0 text-right text-sm font-black ${
                   subgroup.price_band === "unusually_low" ? "text-red-700" : "text-stone-700"
                 }`}>
-                  {priceLabel} →
+                  <span className="block">{priceLabel}</span>
+                  <span className="mt-1 block text-xs font-bold text-stone-400">View listings →</span>
                 </span>
               </button>
             );
