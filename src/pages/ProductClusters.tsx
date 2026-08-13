@@ -6587,10 +6587,21 @@ function ProductGroupCard({
                       : "border-stone-300 bg-white text-stone-700 hover:border-stone-500"
                   }`}
                 >
-                  {subgroup.variant_label}
-                  {subgroup.price_band === "unusually_low" ? " · unusually low" : ""}
-                  <span className={`ml-2 text-xs ${selected ? "text-stone-300" : "text-stone-400"}`}>
-                    {count}
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>{subgroup.variant_label}</span>
+                    {subgroup.price_band === "unusually_low" ? (
+                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ring-1 ring-inset ${
+                        selected
+                          ? "bg-red-400/20 text-red-100 ring-red-300/30"
+                          : "bg-red-50 text-red-700 ring-red-200"
+                      }`}>
+                        {count} low-price {count === 1 ? "listing" : "listings"}
+                      </span>
+                    ) : (
+                      <span className={`text-xs ${selected ? "text-stone-300" : "text-stone-400"}`}>
+                        {count}
+                      </span>
+                    )}
                   </span>
                 </button>
               );
@@ -6626,8 +6637,14 @@ function ProductGroupCard({
                   <span className="block truncate text-sm font-black text-stone-950">
                     {subgroup.variant_label}
                   </span>
-                  <span className="mt-0.5 block text-xs text-stone-500">
-                    {count} {count === 1 ? "listing" : "listings"}
+                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-stone-500">
+                    {subgroup.price_band === "unusually_low" ? (
+                      <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-700 ring-1 ring-inset ring-red-200">
+                        {count} low-price {count === 1 ? "listing" : "listings"}
+                      </span>
+                    ) : (
+                      <span>{count} {count === 1 ? "listing" : "listings"}</span>
+                    )}
                   </span>
                 </span>
                 <span className={`shrink-0 text-sm font-bold ${
@@ -6762,7 +6779,7 @@ function ProductGroupCard({
                           : "bg-emerald-100 text-emerald-800"
                     }`}>
                       {commercialSubgroup.price_band === "unusually_low"
-                        ? `Unusually low · ${priceRangeLabel}`
+                        ? `Low-price range · ${priceRangeLabel}`
                         : priceRangeLabel}
                     </span>
                     <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-stone-600 ring-1 ring-inset ring-stone-200">
@@ -6772,6 +6789,17 @@ function ProductGroupCard({
                     </span>
                   </div>
                 </div>
+                {commercialSubgroup.price_band === "unusually_low" && (
+                  <p className="mt-2 rounded-lg border border-red-100 bg-white/70 px-2.5 py-2 text-[11px] font-medium text-red-800">
+                    <span className="font-bold">Price signal:</span>{" "}
+                    {commercialSubgroup.price_summary?.unusually_low_threshold_usd
+                      ? `Below ${formatMoney(
+                          commercialSubgroup.price_summary.unusually_low_threshold_usd,
+                          "USD",
+                        )} compared with other ${commercialSubgroup.variant_label} listings.`
+                      : `Priced unusually low compared with other ${commercialSubgroup.variant_label} listings.`}
+                  </p>
+                )}
                 <ProductGroupMemberSubgroups
                   profiles={profiles}
                   priceSummary={commercialSubgroup.price_summary}
