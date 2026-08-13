@@ -2798,6 +2798,7 @@ export interface ProductGroupCommercialSubgroup {
   price_band: ProductCommercialPriceBand;
   price_range: ProductCommercialPriceRange | null;
   member_count: number;
+  preview_members: ProductClusterProfile[];
   triage_member_count: number;
   triage_recommendation_counts: ProductGroupRecommendationCounts;
   triage_case_ids: string[];
@@ -3251,6 +3252,9 @@ function normalizeProductCommercialSubgroups(
       price_band: priceBand,
       price_range: priceRange,
       member_count: Math.max(0, Math.trunc(subgroup.member_count)),
+      preview_members: Array.isArray(subgroup.preview_members)
+        ? subgroup.preview_members.map(normalizeProductClusterProfile)
+        : [],
       triage_member_count: Math.max(0, Math.trunc(subgroup.triage_member_count)),
       triage_recommendation_counts: counts,
       triage_case_ids: Array.isArray(subgroup.triage_case_ids)

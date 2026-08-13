@@ -475,7 +475,10 @@ function optimisticallyExcludeProductGroupMember(
   const groups = overview.groups.map((group) => {
     if (group.id !== groupId) return group;
     const profile = group.members.find((member) => member.id === profileId) ??
-      group.triage_members.find((member) => member.id === profileId);
+      group.triage_members.find((member) => member.id === profileId) ??
+      group.commercial_subgroups
+        .flatMap((subgroup) => subgroup.preview_members)
+        .find((member) => member.id === profileId);
     if (!profile) return group;
     removedPersistedMember = true;
     removedTriageMember = group.triage_members.some((member) => member.id === profileId);
@@ -499,6 +502,9 @@ function optimisticallyExcludeProductGroupMember(
           : subgroup.triage_recommendation_counts,
         triage_case_ids: subgroup.triage_case_ids.filter(
           (caseId) => caseId !== profile.case_id,
+        ),
+        preview_members: subgroup.preview_members.filter(
+          (member) => member.id !== profileId,
         ),
       };
     });
@@ -6704,9 +6710,15 @@ function ProductGroupCard({
               group.id,
               commercialSubgroup.key,
             );
-            const profiles = displayedMembers.filter(
-              (profile) => profile.commercial_subgroup_key === commercialSubgroup.key,
-            );
+            const profiles = showingPersistedMembers
+              ? commercialSubgroup.preview_members.length > 0
+                ? commercialSubgroup.preview_members
+                : displayedMembers.filter(
+                  (profile) => profile.commercial_subgroup_key === commercialSubgroup.key,
+                )
+              : displayedMembers.filter(
+                (profile) => profile.commercial_subgroup_key === commercialSubgroup.key,
+              );
             const commercialCaseIds = new Set(commercialSubgroup.triage_case_ids);
             const subgroupFindings = !showingPersistedMembers && allFindings
               ? allFindings.filter((finding) =>
@@ -6794,9 +6806,15 @@ function ProductGroupCard({
                   onToggleSubgroupListings={(bucket) =>
                     onToggleSubgroupListings(bucket, commercialSubgroup)}
                 />
+                {showingPersistedMembers && profiles.length > 0 &&
+                  profiles.length < commercialSubgroup.member_count && (
+                    <p className="mt-2 text-[11px] text-stone-500">
+                      Showing {profiles.length} representative listings from this offer.
+                    </p>
+                  )}
                 {profiles.length === 0 && (
                   <p className="mt-2 text-[11px] text-stone-500">
-                    This comparable group is not represented in the current preview.
+                    A listing preview could not be loaded for this offer.
                   </p>
                 )}
               </section>
