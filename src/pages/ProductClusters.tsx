@@ -1185,6 +1185,11 @@ export default function ProductClusters() {
     }
   }, [loadedGroupTasks, loadingGroupTasksId, omitAcknowledgedGroupFindings, selectedIpId]);
 
+  useEffect(() => {
+    if (!linkedGroupId) return;
+    void loadGroupTasks(linkedGroupId);
+  }, [linkedGroupId, loadGroupTasks]);
+
   async function toggleGroupSubgroupListings(
     groupId: string,
     bucket: ProductGroupRecommendationBucket,
@@ -2103,7 +2108,7 @@ export default function ProductClusters() {
                 index={visualOverview.groups.findIndex((group) => group.id === workspaceGroup.id)}
                 ipId={visualOverview.scope.ip_id}
                 mode="same"
-                showPersistedMembers
+                showPersistedMembers={false}
                 triageProjectionAvailable={visualOverview.triage_projection_available}
                 saving={savingGroupId === workspaceGroup.id}
                 mergeSourceGroup={mergeSourceGroupId
