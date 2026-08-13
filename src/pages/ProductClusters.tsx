@@ -4830,6 +4830,7 @@ function ProductGroupMergeReviewDialog({
   targetVisibleOnPage,
   suggestion,
   saving,
+  error,
   onClose,
   onMerge,
 }: {
@@ -4838,6 +4839,7 @@ function ProductGroupMergeReviewDialog({
   targetVisibleOnPage: boolean;
   suggestion: ProductGroupReconciliationSuggestion;
   saving: boolean;
+  error: string | null;
   onClose: () => void;
   onMerge: () => Promise<void>;
 }) {
@@ -4905,6 +4907,16 @@ function ProductGroupMergeReviewDialog({
           ) : (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-800">
               The target group could not be loaded for review. No merge can be submitted until its listings are available.
+            </div>
+          )}
+
+          {error && (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold leading-5 text-red-800"
+            >
+              {error}
             </div>
           )}
 
@@ -5125,6 +5137,7 @@ function ProductGroupCard({
   const [savingReferenceImageId, setSavingReferenceImageId] = useState<string | null>(null);
   const [resettingReferences, setResettingReferences] = useState(false);
   const [mergeReviewTargetId, setMergeReviewTargetId] = useState<string | null>(null);
+  const [mergeReviewError, setMergeReviewError] = useState<string | null>(null);
   const [resolvedMergeReviewTarget, setResolvedMergeReviewTarget] =
     useState<PersistedProductGroup | null>(null);
   const [loadingMergeReviewTargetId, setLoadingMergeReviewTargetId] =
@@ -5272,6 +5285,7 @@ function ProductGroupCard({
 
   async function openMergeReview(targetGroupId: string) {
     setLoadingMergeReviewTargetId(targetGroupId);
+    setMergeReviewError(null);
     try {
       const target = availableGroups.find((candidate) => candidate.id === targetGroupId) ??
         await onLoadGroupForReview(targetGroupId);
@@ -6918,12 +6932,21 @@ function ProductGroupCard({
             (candidate) => candidate.id === mergeReviewSuggestion.target_group_id,
           )}
           suggestion={mergeReviewSuggestion}
+          error={mergeReviewError}
           saving={savingMergeKey === [group.id, mergeReviewSuggestion.target_group_id]
             .sort().join(":")}
-          onClose={() => setMergeReviewTargetId(null)}
-          onMerge={async () => {
-            await onMergeGroups(group.id, mergeReviewSuggestion.target_group_id);
+          onClose={() => {
             setMergeReviewTargetId(null);
+            setMergeReviewError(null);
+          }}
+          onMerge={async () => {
+            setMergeReviewError(null);
+            try {
+              await onMergeGroups(group.id, mergeReviewSuggestion.target_group_id);
+              setMergeReviewTargetId(null);
+            } catch (caught: unknown) {
+              setMergeReviewError(errorMessage(caught, "Unable to merge these products."));
+            }
           }}
         />
       )}
