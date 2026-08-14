@@ -5607,6 +5607,9 @@ function ProductGroupCard({
           : subgroup.triage_member_count > 0
       )
     : [];
+  const availableCommercialSubgroups = mode === "same"
+    ? group.commercial_subgroups.filter((subgroup) => subgroup.member_count > 0)
+    : [];
   const selectedCommercialSubgroup = displayedCommercialSubgroups.find(
     (subgroup) => subgroup.key === selectedCommercialSubgroupKey,
   ) ?? displayedCommercialSubgroups[0] ?? null;
@@ -5922,7 +5925,7 @@ function ProductGroupCard({
           {([
             ["review", `Review queue · ${triageMemberCount}`],
             ["history", `Task history · ${group.catalog_task_count}`],
-            ["offers", `Offers · ${displayedCommercialSubgroups.length}`],
+            ["offers", `Offers · ${availableCommercialSubgroups.length}`],
             ["settings", "Group settings"],
             ["audit", `Merge audit · ${group.canonical_decisions.length}`],
           ] as Array<[ProductWorkspaceSection, string]>).map(([section, label]) => (
@@ -7001,14 +7004,12 @@ function ProductGroupCard({
 
       {workspace && workspaceSection === "offers" && (
         <div className="mt-5 overflow-hidden rounded-xl border border-stone-200">
-          {displayedCommercialSubgroups.length > 0 ? displayedCommercialSubgroups.map((subgroup) => {
-            const count = showingPersistedMembers
-              ? subgroup.member_count
-              : subgroup.triage_member_count;
+          {availableCommercialSubgroups.length > 0 ? availableCommercialSubgroups.map((subgroup) => {
+            const count = subgroup.member_count;
             const needsTriageCount = subgroup.triage_member_count;
             const triagedCount = Math.max(0, subgroup.member_count - needsTriageCount);
             const triageComplete = needsTriageCount === 0;
-            const subgroupMembers = displayedMembers.filter(
+            const subgroupMembers = group.members.filter(
               (member) => member.commercial_subgroup_key === subgroup.key,
             );
             const representative = subgroupMembers.find((member) => member.image_url) ??
