@@ -27,39 +27,3 @@ export const MONITORING_PLATFORM_OPTIONS: MonitoringPlatformOption[] = [
 ];
 
 export const KNOWN_PLATFORMS = MONITORING_PLATFORM_OPTIONS.map((platform) => platform.value);
-
-/**
- * Human-readable marketplace name. Catalog entries preserve intentional brand
- * casing (such as "eBay"); domains that are not in the catalog still get a
- * useful label derived from their registrable-domain segment.
- */
-export function monitoringPlatformLabel(domain: string): string {
-  const normalizedDomain = domain
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .replace(/\/+$/, "");
-  const knownLabel = MONITORING_PLATFORM_OPTIONS.find(
-    (platform) => platform.value === normalizedDomain,
-  )?.label;
-  if (knownLabel) return knownLabel;
-
-  const hostname = normalizedDomain.split(/[/?#]/, 1)[0].split(":", 1)[0];
-  const parts = hostname.split(".").filter(Boolean);
-  if (parts.length < 2) return domain;
-
-  // In country-code domains such as example.co.uk, `co` is the suffix rather
-  // than the marketplace name. Other subdomains do not need special handling.
-  const commonSecondLevelSuffixes = new Set(["ac", "co", "com", "edu", "gov", "net", "org"]);
-  const hasCountryCodeSuffix =
-    parts.at(-1)?.length === 2 && commonSecondLevelSuffixes.has(parts.at(-2) ?? "");
-  const name = parts.at(hasCountryCodeSuffix ? -3 : -2);
-  if (!name) return domain;
-
-  return name
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
