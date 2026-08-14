@@ -27,3 +27,7 @@ export const MONITORING_PLATFORM_OPTIONS: MonitoringPlatformOption[] = [
 ];
 
 export const KNOWN_PLATFORMS = MONITORING_PLATFORM_OPTIONS.map((platform) => platform.value);
+
+export function monitoringPlatformLabel(domain: string): string {
+  return MONITORING_PLATFORM_OPTIONS.find((platform) => platform.value === domain)?.label ?? domain;
+}
