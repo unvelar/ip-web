@@ -27,3 +27,11 @@ export const MONITORING_PLATFORM_OPTIONS: MonitoringPlatformOption[] = [
 ];
 
 export const KNOWN_PLATFORMS = MONITORING_PLATFORM_OPTIONS.map((platform) => platform.value);
+
+/** Human-readable marketplace name, falling back to the domain for unknown platforms. */
+export function monitoringPlatformLabel(domain: string): string {
+  const normalizedDomain = domain.trim().toLowerCase().replace(/^www\./, "").replace(/\/$/, "");
+  return (
+    MONITORING_PLATFORM_OPTIONS.find((platform) => platform.value === normalizedDomain)?.label ?? domain
+  );
+}
