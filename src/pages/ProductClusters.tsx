@@ -59,6 +59,7 @@ import {
   type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
   type ProductClusterProfile,
+  type ProductCatalogScope,
   type ProductClusterScope,
   type ProductGroupCorrectionReason,
   type ProductGroupCommercialSubgroup,
@@ -547,6 +548,10 @@ export default function ProductClusters() {
   }>();
   const { actingTenantId } = useAuth();
   const requestedCategoryId = new URLSearchParams(location.search).get("category");
+  const requestedCatalogScope = new URLSearchParams(location.search).get("scope");
+  const catalogScope: ProductCatalogScope = requestedCatalogScope === "history"
+    ? "history"
+    : "catalog";
   const selectedCategoryId = requestedCategoryId === "unclassified" ||
       /^gid:\/\/shopify\/TaxonomyCategory\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
         requestedCategoryId ?? "",
@@ -735,7 +740,7 @@ export default function ProductClusters() {
   }, []);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
-    `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${PRODUCT_GROUP_VIEW}:category:${selectedCategoryId ?? "all"}`;
+    `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${PRODUCT_GROUP_VIEW}:${catalogScope}:category:${selectedCategoryId ?? "all"}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
   const selectedScopeAvailable =
     scopesLoadedKey === scopesRequestKey && selectedScope != null;
@@ -802,6 +807,7 @@ export default function ProductClusters() {
       {
         limit: PRODUCT_GROUP_PAGE_SIZE,
         categoryId: selectedCategoryId,
+        catalogScope,
         signal: controller.signal,
       },
     ).then((nextOverview) => {
@@ -825,6 +831,7 @@ export default function ProductClusters() {
     applyAcknowledgedResolutions,
     groupsRequestKey,
     selectedCategoryId,
+    catalogScope,
   ]);
 
   useEffect(() => {
@@ -1093,7 +1100,7 @@ export default function ProductClusters() {
             selectedIpId,
             "same",
             PRODUCT_GROUP_VIEW,
-            { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
+            { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId, catalogScope },
           ),
         );
         setVisualOverview(nextOverview);
@@ -1118,7 +1125,12 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE, cursor, categoryId: selectedCategoryId },
+          {
+            limit: PRODUCT_GROUP_PAGE_SIZE,
+            cursor,
+            categoryId: selectedCategoryId,
+            catalogScope,
+          },
         ),
       );
       if (visualPageRequestSequence.current !== requestSequence) return;
@@ -1154,7 +1166,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: 1, productId: groupId },
+          { limit: 1, productId: groupId, catalogScope },
         ),
       );
       if (visualPageRequestSequence.current !== requestSequence) return null;
@@ -1175,7 +1187,7 @@ export default function ProductClusters() {
             selectedIpId,
             "same",
             PRODUCT_GROUP_VIEW,
-            { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
+            { limit: PRODUCT_GROUP_PAGE_SIZE, cursor, catalogScope },
           ),
         );
         if (visualPageRequestSequence.current !== requestSequence) return null;
@@ -1190,7 +1202,7 @@ export default function ProductClusters() {
       }
       return null;
     }
-  }, [applyAcknowledgedResolutions, selectedIpId, visualOverview]);
+  }, [applyAcknowledgedResolutions, catalogScope, selectedIpId, visualOverview]);
 
   useEffect(() => {
     if (!linkedGroupId) {
@@ -1633,7 +1645,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
+          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId, catalogScope },
         ),
       ));
     } catch (caught: unknown) {
@@ -1658,7 +1670,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
+          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId, catalogScope },
         ),
       ));
       setMergeSourceGroupId(null);
@@ -1683,7 +1695,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
+          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId, catalogScope },
         ),
       ));
     } catch (caught: unknown) {
@@ -1750,7 +1762,7 @@ export default function ProductClusters() {
         selectedIpId,
         "same",
         PRODUCT_GROUP_VIEW,
-        { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
+        { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId, catalogScope },
       ).catch((caught: unknown) => {
         setError(errorMessage(
           caught,
@@ -1776,7 +1788,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
+          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId, catalogScope },
         ).catch(() => null);
         if (latestOverview) {
           setVisualOverview(
@@ -2167,6 +2179,16 @@ export default function ProductClusters() {
       search: params.toString() ? `?${params.toString()}` : "",
     });
   };
+  const selectCatalogScope = (nextScope: ProductCatalogScope) => {
+    const params = new URLSearchParams(location.search);
+    params.delete("category");
+    if (nextScope === "history") params.set("scope", "history");
+    else params.delete("scope");
+    navigate({
+      pathname: "/monitoring/products",
+      search: params.toString() ? `?${params.toString()}` : "",
+    });
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
@@ -2337,7 +2359,9 @@ export default function ProductClusters() {
             onLoadMore={() => void loadMoreVisualGroups()}
             currentSearch={location.search}
             selectedCategoryId={selectedCategoryId}
+            catalogScope={catalogScope}
             onSelectCategory={selectCatalogCategory}
+            onSelectScope={selectCatalogScope}
           />
         )
       ) : null}
@@ -2410,10 +2434,12 @@ function ProductQueue({
   loadingMore,
   currentSearch,
   selectedCategoryId,
+  catalogScope,
   onSearchChange,
   onSortChange,
   onLoadMore,
   onSelectCategory,
+  onSelectScope,
 }: {
   overview: PersistedProductGroupOverview;
   search: string;
@@ -2421,10 +2447,12 @@ function ProductQueue({
   loadingMore: boolean;
   currentSearch: string;
   selectedCategoryId: string | null;
+  catalogScope: ProductCatalogScope;
   onSearchChange: (search: string) => void;
   onSortChange: (sort: "work" | "name") => void;
   onLoadMore: () => void;
   onSelectCategory: (categoryId: string | null) => void;
+  onSelectScope: (scope: ProductCatalogScope) => void;
 }) {
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const visibleGroups = overview.groups
@@ -2449,26 +2477,34 @@ function ProductQueue({
         right.member_count - left.member_count;
     });
   const categoryTree = buildProductCatalogCategoryTree(overview.catalog_categories);
-  const productCount = overview.group_count;
+  const productCount = catalogScope === "history"
+    ? overview.catalog_history_product_count
+    : overview.catalog_product_count;
   const selectedCategoryName = selectedCategoryId === "unclassified"
     ? "Unclassified"
     : selectedCategoryId
       ? findProductCatalogCategoryName(categoryTree, selectedCategoryId) ?? "Products"
-      : "All products";
+      : catalogScope === "history"
+        ? "Discovery history"
+        : "All products";
 
   return (
     <section className="mt-5" aria-labelledby="product-queue-heading">
       <div className="border-y border-stone-200 bg-white py-3">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-stone-600">
-          <span>
-            <strong className="font-black text-stone-950">
-              {overview.triage_profile_count ?? 0}
-            </strong>{" "}
-            listings need review
-          </span>
+          {catalogScope === "catalog" && (
+            <span>
+              <strong className="font-black text-stone-950">
+                {overview.triage_profile_count ?? 0}
+              </strong>{" "}
+              catalog listings need review
+            </span>
+          )}
           <span>
             <strong className="font-black text-stone-950">{productCount}</strong>{" "}
-            {productCount === 1 ? "product" : "products"}
+            {catalogScope === "history"
+              ? productCount === 1 ? "historical candidate" : "historical candidates"
+              : productCount === 1 ? "product" : "products"}
           </span>
           {overview.pending_snapshot_count ? (
             <span className="text-amber-800">
@@ -2481,6 +2517,41 @@ function ProductQueue({
       <div className="mt-5 grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <aside className="self-start rounded-xl border border-stone-200 bg-white p-3 lg:sticky lg:top-4">
           <p className="px-2 text-xs font-black uppercase tracking-[0.12em] text-stone-500">
+            Catalog views
+          </p>
+          <nav className="mt-2 space-y-1" aria-label="Catalog views">
+            <button
+              type="button"
+              onClick={() => onSelectScope("catalog")}
+              className={`flex min-h-10 w-full items-center justify-between rounded-lg px-2 text-left text-sm font-bold transition ${
+                catalogScope === "catalog"
+                  ? "bg-stone-950 text-white"
+                  : "text-stone-700 hover:bg-stone-100"
+              }`}
+            >
+              <span>Product catalog</span>
+              <span className={catalogScope === "catalog" ? "text-stone-300" : "text-stone-400"}>
+                {overview.catalog_product_count}
+              </span>
+            </button>
+            {overview.catalog_history_product_count > 0 && (
+              <button
+                type="button"
+                onClick={() => onSelectScope("history")}
+                className={`flex min-h-10 w-full items-center justify-between rounded-lg px-2 text-left text-sm font-semibold transition ${
+                  catalogScope === "history"
+                    ? "bg-amber-100 text-amber-950"
+                    : "text-stone-600 hover:bg-stone-100"
+                }`}
+              >
+                <span>Discovery history</span>
+                <span className={catalogScope === "history" ? "text-amber-700" : "text-stone-400"}>
+                  {overview.catalog_history_product_count}
+                </span>
+              </button>
+            )}
+          </nav>
+          <p className="mt-4 px-2 text-xs font-black uppercase tracking-[0.12em] text-stone-500">
             Categories
           </p>
           <nav className="mt-2" aria-label="Product categories">
@@ -2493,7 +2564,7 @@ function ProductQueue({
                   : "text-stone-700 hover:bg-stone-100"
               }`}
             >
-              <span>All products</span>
+              <span>{catalogScope === "history" ? "All history" : "All products"}</span>
               <span className={selectedCategoryId == null ? "text-stone-300" : "text-stone-400"}>
                 {productCount}
               </span>
@@ -2550,7 +2621,9 @@ function ProductQueue({
                 {selectedCategoryName}
               </h2>
               <p className="mt-1 text-sm text-stone-500">
-                Open a product to review current tasks, history, offers and settings.
+                {catalogScope === "history"
+                  ? "Low-relevance discoveries stay auditable here without defining the catalog."
+                  : "Open a product to review current tasks, history, offers and settings."}
               </p>
             </div>
             <span className="shrink-0 text-xs font-semibold text-stone-500">
@@ -2566,18 +2639,25 @@ function ProductQueue({
                   group={group}
                   currentSearch={currentSearch}
                   catalogSupported={overview.catalog_supported}
+                  historyOnly={catalogScope === "history"}
                 />
               ))}
             </div>
           ) : (
             <div className="mt-3 rounded-xl border border-dashed border-stone-300 bg-white px-6 py-12 text-center">
               <h3 className="text-base font-black text-stone-900">
-                {search ? "No products match this search" : "No products in this category"}
+                {search
+                  ? "No products match this search"
+                  : catalogScope === "history"
+                    ? "No historical discoveries in this category"
+                    : "No products in this category"}
               </h3>
               <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
                 {search
                   ? "Try a product name, category or comparable offer."
-                  : "Choose another category or show all products."}
+                  : catalogScope === "history"
+                    ? "Choose another history category or return to the product catalog."
+                    : "Choose another category or show all products."}
               </p>
               {search && (
                 <button type="button" onClick={() => onSearchChange("")} className="mt-4 min-h-11 rounded-lg border border-stone-300 bg-white px-4 text-sm font-bold text-stone-800 hover:bg-stone-50">
@@ -2700,10 +2780,12 @@ function ProductCatalogCard({
   group,
   currentSearch,
   catalogSupported,
+  historyOnly,
 }: {
   group: PersistedProductGroup;
   currentSearch: string;
   catalogSupported: boolean;
+  historyOnly: boolean;
 }) {
   const representative = group.members[0] ?? group.triage_members[0] ?? null;
   const triageCount = group.triage_member_count ?? 0;
@@ -2736,9 +2818,13 @@ function ProductCatalogCard({
           {productGroupDisplayName(group)}
         </h3>
         <p className={`mt-2 text-sm font-black ${
-          triageCount > 0 ? "text-red-800" : "text-emerald-700"
+          historyOnly
+            ? "text-amber-800"
+            : triageCount > 0 ? "text-red-800" : "text-emerald-700"
         }`}>
-          {triageCount > 0 ? `${triageCount} to review` : "Review complete"}
+          {historyOnly
+            ? "History only"
+            : triageCount > 0 ? `${triageCount} to review` : "Review complete"}
         </p>
         <div className="mt-3 grid grid-cols-3 gap-2 border-y border-stone-100 py-3 text-center">
           <span><strong className="block text-sm text-stone-950">{group.member_count}</strong><small className="text-[10px] text-stone-500">Listings</small></span>
@@ -2761,7 +2847,7 @@ function ProductCatalogCard({
           aria-label={`Open ${productGroupDisplayName(group)}`}
           className="mt-3 inline-flex min-h-11 items-center justify-center rounded-lg bg-stone-950 px-4 text-sm font-bold text-white transition hover:bg-stone-800"
         >
-          Open product
+          {historyOnly ? "Open history" : "Open product"}
         </Link>
       </div>
     </article>

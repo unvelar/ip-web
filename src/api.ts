@@ -2855,6 +2855,8 @@ export interface ProductCatalogCategoryFacet {
   product_count: number;
 }
 
+export type ProductCatalogScope = "catalog" | "history";
+
 export interface ProductCanonicalDecision {
   id: string;
   canonical_product_id: string;
@@ -2996,6 +2998,9 @@ export interface PersistedProductGroupOverview {
   pagination_group_count: number;
   next_cursor: string | null;
   truncated: boolean;
+  catalog_scope: ProductCatalogScope;
+  catalog_product_count: number;
+  catalog_history_product_count: number;
   catalog_categories: ProductCatalogCategoryFacet[];
   unclassified_product_count: number;
   /** False only while the frontend is talking to a pre-catalog API release. */
@@ -3469,6 +3474,13 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
     next_cursor: typeof overview.next_cursor === "string" && overview.next_cursor
       ? overview.next_cursor
       : null,
+    catalog_scope: (overview.catalog_scope === "history" ? "history" : "catalog") as ProductCatalogScope,
+    catalog_product_count: Number.isFinite(overview.catalog_product_count)
+      ? Math.max(0, Math.trunc(overview.catalog_product_count))
+      : Number(overview.group_count),
+    catalog_history_product_count: Number.isFinite(overview.catalog_history_product_count)
+      ? Math.max(0, Math.trunc(overview.catalog_history_product_count))
+      : 0,
     catalog_categories: Array.isArray(overview.catalog_categories)
       ? overview.catalog_categories.map((category) => ({
         ...category,
@@ -3490,6 +3502,7 @@ export async function getPersistedProductGroups(
     includeUngrouped?: boolean;
     categoryId?: string | null;
     productId?: string | null;
+    catalogScope?: ProductCatalogScope;
     signal?: AbortSignal;
   } = {},
 ) {
@@ -3499,6 +3512,7 @@ export async function getPersistedProductGroups(
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.categoryId) params.set("category_id", options.categoryId);
   if (options.productId) params.set("product_id", options.productId);
+  if (options.catalogScope) params.set("catalog_scope", options.catalogScope);
   const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups?${params.toString()}`,
     { signal: options.signal },
@@ -3515,6 +3529,7 @@ export async function refreshPersistedProductGroups(
     includeUngrouped?: boolean;
     categoryId?: string | null;
     productId?: string | null;
+    catalogScope?: ProductCatalogScope;
   } = {},
 ) {
   const params = new URLSearchParams({ relationship, view });
@@ -3522,6 +3537,7 @@ export async function refreshPersistedProductGroups(
   if (options.limit) params.set("limit", String(options.limit));
   if (options.categoryId) params.set("category_id", options.categoryId);
   if (options.productId) params.set("product_id", options.productId);
+  if (options.catalogScope) params.set("catalog_scope", options.catalogScope);
   const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?${params.toString()}`,
     { method: "POST" },
