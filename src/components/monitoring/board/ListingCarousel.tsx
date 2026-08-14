@@ -109,6 +109,11 @@ export function ListingCarousel({
   const bboxByUrl = new Map(
     scored.filter((s) => s.bbox).map((s) => [s.url, s.bbox!]),
   );
+  const archivedUrls = useMemo(
+    () => f.archived_image_urls ?? [],
+    [f.archived_image_urls],
+  );
+  const archivedUrlSet = new Set(archivedUrls);
   // Order: page screenshot first (when captured — wide page context the lawyer
   // anchors on), then scored gallery (best-matched first), then any unscored
   // gallery URL, then the discovery thumbnail. Dedupe by URL.
@@ -122,11 +127,12 @@ export function ListingCarousel({
       }
     };
     add(f.screenshot_url);
+    for (const u of archivedUrls) add(u);
     for (const s of scored) add(s.url);
     for (const u of f.image_urls ?? []) add(u);
     add(f.image_url);
     return out;
-  }, [f.screenshot_url, scored, f.image_urls, f.image_url]);
+  }, [f.screenshot_url, archivedUrls, scored, f.image_urls, f.image_url]);
 
   const [idx, setIdx] = useState(0);
   const [allowingUrl, setAllowingUrl] = useState<string | null>(null);
@@ -155,7 +161,8 @@ export function ListingCarousel({
   const bestUrl = scored[0]?.url;
   // Only honor the measurement when it belongs to the current slide.
   const activeNatural = natural?.url === active ? natural : null;
-  const canAllowImage = !!ipId && !!active && active !== f.screenshot_url && !f.dismissed_at;
+  const canAllowImage = !!ipId && !!active && active !== f.screenshot_url &&
+    !archivedUrlSet.has(active) && !f.dismissed_at;
   const activeAllowed = active ? allowedUrls.has(active) : false;
   const canZoomHero = !compact;
 

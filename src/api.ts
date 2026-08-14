@@ -1444,6 +1444,7 @@ export interface IpReviewFinding {
   description_language: string | null;
   item_details: Record<string, unknown> | null;
   image_urls: string[] | null;
+  archived_image_urls?: string[];
   /** Per-image similarity (vs this finding's IP), sorted desc — lets the
    *  carousel mark which listing photo actually matched. Entries with a
    *  strong enough match also carry `bbox` (in gallery-image pixel coords)
@@ -1971,7 +1972,7 @@ export type MonitoringSortMode =
 
 export type MonitoringPriorityBand = "high" | "med" | "low";
 export type MonitoringStatusFilter =
-  | "preparing" | "pending" | "review" | "takedown_pending" | "takedown_sent" | "enforced" | "dismissed";
+  | "all" | "preparing" | "pending" | "review" | "takedown_pending" | "takedown_sent" | "enforced" | "dismissed";
 export type MonitoringDismissalReasonFilter =
   | "false_positive"
   | "do_not_pursue"
@@ -2254,6 +2255,7 @@ export interface MonitoringFindingsQuery {
   status?: MonitoringStatusFilter | null;
   ip_id?: string | null;
   product_group_id?: string | null;
+  catalog_product_id?: string | null;
   platform?: string | null;
   seller?: string | null;
   dismissal_reason?: MonitoringDismissalReasonFilter | null;
@@ -2278,6 +2280,7 @@ export function listMonitoringFindingsGlobal(
   if (opts.status)       params.set("status", opts.status);
   if (opts.ip_id)        params.set("ip_id", opts.ip_id);
   if (opts.product_group_id) params.set("product_group_id", opts.product_group_id);
+  if (opts.catalog_product_id) params.set("catalog_product_id", opts.catalog_product_id);
   if (opts.platform)     params.set("platform", opts.platform);
   if (opts.seller)       params.set("seller", opts.seller);
   if (opts.dismissal_reason) params.set("dismissal_reason", opts.dismissal_reason);
@@ -2812,6 +2815,13 @@ export interface PersistedProductGroup {
   confirmation_status: "candidate" | "confirmed";
   confirmed_at: string | null;
   canonical_product_id: string | null;
+  catalog_display_name: string;
+  catalog_name_source: "manual" | "identity_facts" | "fallback";
+  catalog_task_count: number;
+  catalog_primary_category_id: string | null;
+  catalog_primary_category_name: string | null;
+  catalog_primary_category_path: string | null;
+  catalog_primary_category_version: string | null;
   atomic_cohort_count: number;
   parent_group_id: string | null;
   semantic_kind: "category" | "color" | null;
@@ -2835,6 +2845,14 @@ export interface PersistedProductGroup {
   authenticity_rules: ProductGroupAuthenticityRule[];
   canonical_decisions: ProductCanonicalDecision[];
   reconciliation_suggestions: ProductGroupReconciliationSuggestion[];
+}
+
+export interface ProductCatalogCategoryFacet {
+  id: string;
+  name: string;
+  path: string;
+  version: string;
+  product_count: number;
 }
 
 export interface ProductCanonicalDecision {
@@ -2978,6 +2996,10 @@ export interface PersistedProductGroupOverview {
   pagination_group_count: number;
   next_cursor: string | null;
   truncated: boolean;
+  catalog_categories: ProductCatalogCategoryFacet[];
+  unclassified_product_count: number;
+  /** False only while the frontend is talking to a pre-catalog API release. */
+  catalog_supported: boolean;
 }
 
 export type ProductGroupCorrectionReason = "wrong_product" | "different_variant";
@@ -3333,8 +3355,20 @@ function normalizeProductGroupReconciliationSuggestions(
 }
 
 function normalizePersistedProductGroupOverview(overview: PersistedProductGroupOverview) {
+  const catalogSupported = Array.isArray(overview.catalog_categories);
   const groups = overview.groups.map((group) => ({
     ...group,
+    catalog_display_name: group.catalog_display_name?.trim() ||
+      group.display_name?.trim() || "Unnamed product",
+    catalog_name_source: group.catalog_name_source ??
+      (group.name_source === "manual" ? "manual" : "fallback"),
+    catalog_task_count: Number.isFinite(group.catalog_task_count)
+      ? Number(group.catalog_task_count)
+      : Number(group.member_count),
+    catalog_primary_category_id: group.catalog_primary_category_id ?? null,
+    catalog_primary_category_name: group.catalog_primary_category_name ?? null,
+    catalog_primary_category_path: group.catalog_primary_category_path ?? null,
+    catalog_primary_category_version: group.catalog_primary_category_version ?? null,
     canonical_product_id: typeof group.canonical_product_id === "string"
       ? group.canonical_product_id
       : null,
@@ -3435,6 +3469,14 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
     next_cursor: typeof overview.next_cursor === "string" && overview.next_cursor
       ? overview.next_cursor
       : null,
+    catalog_categories: Array.isArray(overview.catalog_categories)
+      ? overview.catalog_categories.map((category) => ({
+        ...category,
+        product_count: Number(category.product_count),
+      }))
+      : [],
+    unclassified_product_count: Number(overview.unclassified_product_count ?? 0),
+    catalog_supported: catalogSupported,
   };
 }
 
@@ -3446,6 +3488,8 @@ export async function getPersistedProductGroups(
     limit?: number;
     cursor?: string | null;
     includeUngrouped?: boolean;
+    categoryId?: string | null;
+    productId?: string | null;
     signal?: AbortSignal;
   } = {},
 ) {
@@ -3453,6 +3497,8 @@ export async function getPersistedProductGroups(
   params.set("include_ungrouped", String(options.includeUngrouped ?? false));
   if (options.limit) params.set("limit", String(options.limit));
   if (options.cursor) params.set("cursor", options.cursor);
+  if (options.categoryId) params.set("category_id", options.categoryId);
+  if (options.productId) params.set("product_id", options.productId);
   const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups?${params.toString()}`,
     { signal: options.signal },
@@ -3464,11 +3510,18 @@ export async function refreshPersistedProductGroups(
   ipId: string,
   relationship: "same" | "related" | "visual" | "semantic",
   view: "triage" | "all" = "triage",
-  options: { limit?: number; includeUngrouped?: boolean } = {},
+  options: {
+    limit?: number;
+    includeUngrouped?: boolean;
+    categoryId?: string | null;
+    productId?: string | null;
+  } = {},
 ) {
   const params = new URLSearchParams({ relationship, view });
   params.set("include_ungrouped", String(options.includeUngrouped ?? false));
   if (options.limit) params.set("limit", String(options.limit));
+  if (options.categoryId) params.set("category_id", options.categoryId);
+  if (options.productId) params.set("product_id", options.productId);
   const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?${params.toString()}`,
     { method: "POST" },

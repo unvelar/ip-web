@@ -58,6 +58,7 @@ export interface BoardFilters {
   priority: MonitoringPriorityBand | null;
   ip_id: string | null;
   product_group_id: string | null;
+  catalog_product_id: string | null;
   platform: string | null;
   seller: string | null;
   dismissal_reason: MonitoringDismissalReasonFilter | null;
@@ -1130,7 +1131,11 @@ export function MonitoringBoard({
                 label="All"
                 count={facets.total}
                 active={!filters.ip_id}
-                onClick={() => onFiltersChange({ ip_id: null, product_group_id: null })}
+                onClick={() => onFiltersChange({
+                  ip_id: null,
+                  product_group_id: null,
+                  catalog_product_id: null,
+                })}
               />
               {facets.ips.map((ip) => (
                 <FilterPill
@@ -1142,6 +1147,7 @@ export function MonitoringBoard({
                     onFiltersChange({
                       ip_id: filters.ip_id === ip.ip_id ? null : ip.ip_id,
                       product_group_id: null,
+                      catalog_product_id: null,
                     })
                   }
                   title={`${ip.name ?? "Unnamed IP"} · ${ip.n} finding${ip.n === 1 ? "" : "s"}`}

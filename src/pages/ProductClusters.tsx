@@ -91,7 +91,7 @@ import { useAuth } from "../context/AuthContext";
 
 type ProductGroupView = "triage" | "all";
 type GroupMode = "same" | "related" | "visual";
-type ProductWorkspaceSection = "review" | "offers" | "settings" | "history";
+type ProductWorkspaceSection = "review" | "history" | "offers" | "settings" | "audit";
 const PRODUCT_GROUP_VIEW = "all" as const;
 const EMPTY_AUTHENTICITY_RULE: ProductGroupAuthenticityRuleInput = {
   expected_feature: "",
@@ -138,7 +138,7 @@ type SemanticCorrectionTarget = {
   profile: ProductClusterProfile;
 };
 
-const PRODUCT_GROUP_PAGE_SIZE = 8;
+const PRODUCT_GROUP_PAGE_SIZE = 24;
 const SEMANTIC_GROUP_PAGE_SIZE = 4;
 const NEW_PRODUCT_TYPE_VALUE = "__new_product_type__";
 type ProductGroupRecommendationBucket =
@@ -546,6 +546,13 @@ export default function ProductClusters() {
     taskId: string;
   }>();
   const { actingTenantId } = useAuth();
+  const requestedCategoryId = new URLSearchParams(location.search).get("category");
+  const selectedCategoryId = requestedCategoryId === "unclassified" ||
+      /^gid:\/\/shopify\/TaxonomyCategory\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
+        requestedCategoryId ?? "",
+      )
+    ? requestedCategoryId
+    : null;
   const {
     activeIpId: selectedIpId,
     activeIp,
@@ -587,6 +594,9 @@ export default function ProductClusters() {
   const [taskError, setTaskError] = useState<string | null>(null);
   const [loadingGroupTasksId, setLoadingGroupTasksId] = useState<string | null>(null);
   const [loadedGroupTasks, setLoadedGroupTasks] = useState<Record<string, IpReviewFinding[]>>({});
+  const [productTaskHistory, setProductTaskHistory] =
+    useState<Record<string, IpReviewFinding[]>>({});
+  const [loadingProductHistoryId, setLoadingProductHistoryId] = useState<string | null>(null);
   const [expandedSubgroupKeys, setExpandedSubgroupKeys] = useState<Set<string>>(
     () => new Set(),
   );
@@ -595,6 +605,7 @@ export default function ProductClusters() {
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
   const taskRequestSequence = useRef(0);
+  const productHistoryRequestSequence = useRef(0);
   const closingTaskRouteRef = useRef<string | null>(null);
   const batchRequestSequence = useRef(0);
   const semanticPageRequestSequence = useRef(0);
@@ -724,7 +735,7 @@ export default function ProductClusters() {
   }, []);
   const scopesRequestKey = `${actingTenantId ?? ""}:${refreshVersion}`;
   const groupsRequestKey =
-    `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${PRODUCT_GROUP_VIEW}`;
+    `${scopesRequestKey}:${selectedIpId ?? ""}:same-product:${PRODUCT_GROUP_VIEW}:category:${selectedCategoryId ?? "all"}`;
   const selectedScope = scopes.find((scope) => scope.ip_id === selectedIpId) ?? null;
   const selectedScopeAvailable =
     scopesLoadedKey === scopesRequestKey && selectedScope != null;
@@ -790,6 +801,7 @@ export default function ProductClusters() {
       PRODUCT_GROUP_VIEW,
       {
         limit: PRODUCT_GROUP_PAGE_SIZE,
+        categoryId: selectedCategoryId,
         signal: controller.signal,
       },
     ).then((nextOverview) => {
@@ -812,6 +824,7 @@ export default function ProductClusters() {
     actingTenantId,
     applyAcknowledgedResolutions,
     groupsRequestKey,
+    selectedCategoryId,
   ]);
 
   useEffect(() => {
@@ -821,12 +834,15 @@ export default function ProductClusters() {
     setBatchResult(null);
     setLoadingGroupTasksId(null);
     setLoadedGroupTasks({});
+    setProductTaskHistory({});
+    setLoadingProductHistoryId(null);
     setExpandedSubgroupKeys(new Set());
     setActiveBatch(null);
     setConfirmBatchAction(null);
     setBatchProgress(null);
     batchRequestSequence.current += 1;
     taskRequestSequence.current += 1;
+    productHistoryRequestSequence.current += 1;
     setActiveTask(null);
     setLoadingTaskProfileId(null);
     setSemanticCorrectionTarget(null);
@@ -851,9 +867,15 @@ export default function ProductClusters() {
     void getMonitoringFinding(linkedTaskId)
       .then(({ finding }) => {
         if (taskRequestSequence.current !== requestSequence) return;
+        const resolvedGroup = visualOverview?.groups.find((group) =>
+          group.id === linkedGroupId || group.canonical_product_id === linkedGroupId
+        ) ?? (focusedGroup && (
+          focusedGroup.id === linkedGroupId ||
+          focusedGroup.canonical_product_id === linkedGroupId
+        ) ? focusedGroup : null);
         setActiveTask({
           profileId: findingProfileId(finding),
-          groupId: linkedGroupId,
+          groupId: resolvedGroup?.id ?? linkedGroupId,
           finding,
         });
       })
@@ -861,7 +883,25 @@ export default function ProductClusters() {
         if (taskRequestSequence.current !== requestSequence) return;
         setTaskError(errorMessage(caught, "Unable to open the linked task."));
       });
-  }, [activeTask?.finding.result_id, linkedGroupId, linkedTaskId]);
+  }, [
+    activeTask?.finding.result_id,
+    focusedGroup,
+    linkedGroupId,
+    linkedTaskId,
+    visualOverview,
+  ]);
+
+  useEffect(() => {
+    if (!activeTask || !linkedGroupId) return;
+    const resolvedGroup = visualOverview?.groups.find((group) =>
+      group.id === linkedGroupId || group.canonical_product_id === linkedGroupId
+    ) ?? (focusedGroup && (
+      focusedGroup.id === linkedGroupId ||
+      focusedGroup.canonical_product_id === linkedGroupId
+    ) ? focusedGroup : null);
+    if (!resolvedGroup || activeTask.groupId === resolvedGroup.id) return;
+    setActiveTask((current) => current ? { ...current, groupId: resolvedGroup.id } : current);
+  }, [activeTask, focusedGroup, linkedGroupId, visualOverview]);
 
   useEffect(() => {
     batchRequestSequence.current += 1;
@@ -931,9 +971,14 @@ export default function ProductClusters() {
       if (taskRequestSequence.current !== requestSequence) return;
       setActiveTask({ profileId: profile.id, groupId, finding });
       if (groupId) {
+        const routeGroup = visualOverview?.groups.find((group) => group.id === groupId) ??
+          (focusedGroup?.id === groupId ? focusedGroup : null);
+        const routeProductId = visualOverview?.catalog_supported
+          ? routeGroup?.canonical_product_id ?? groupId
+          : groupId;
         rememberTaskRouteScrollPosition();
         navigate({
-          pathname: `/monitoring/products/${encodeURIComponent(groupId)}/tasks/${encodeURIComponent(finding.result_id)}`,
+          pathname: `/monitoring/products/${encodeURIComponent(routeProductId)}/tasks/${encodeURIComponent(finding.result_id)}`,
           search: location.search,
         });
       }
@@ -957,9 +1002,14 @@ export default function ProductClusters() {
       groupId,
       finding,
     });
+    const routeGroup = visualOverview?.groups.find((group) => group.id === groupId) ??
+      (focusedGroup?.id === groupId ? focusedGroup : null);
+    const routeProductId = visualOverview?.catalog_supported
+      ? routeGroup?.canonical_product_id ?? groupId
+      : groupId;
     rememberTaskRouteScrollPosition();
     navigate({
-      pathname: `/monitoring/products/${encodeURIComponent(groupId)}/tasks/${encodeURIComponent(finding.result_id)}`,
+      pathname: `/monitoring/products/${encodeURIComponent(routeProductId)}/tasks/${encodeURIComponent(finding.result_id)}`,
       search: location.search,
     });
   }
@@ -1043,7 +1093,7 @@ export default function ProductClusters() {
             selectedIpId,
             "same",
             PRODUCT_GROUP_VIEW,
-            { limit: PRODUCT_GROUP_PAGE_SIZE },
+            { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
           ),
         );
         setVisualOverview(nextOverview);
@@ -1068,7 +1118,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE, cursor },
+          { limit: PRODUCT_GROUP_PAGE_SIZE, cursor, categoryId: selectedCategoryId },
         ),
       );
       if (visualPageRequestSequence.current !== requestSequence) return;
@@ -1089,18 +1139,36 @@ export default function ProductClusters() {
   }
 
   const loadProductGroupForReview = useCallback(async (groupId: string) => {
-    if (!selectedIpId || !visualOverview) return null;
-    const alreadyLoaded = visualOverview.groups.find((group) => group.id === groupId);
+    if (!selectedIpId) return null;
+    const alreadyLoaded = visualOverview?.groups.find((group) =>
+      group.id === groupId || group.canonical_product_id === groupId
+    );
     if (alreadyLoaded) return alreadyLoaded;
 
     const requestSequence = ++visualPageRequestSequence.current;
     setLoadingMoreVisualGroups(false);
     setError(null);
-    let accumulated = visualOverview;
-    const seenCursors = new Set<string>();
     try {
-      while (accumulated.next_cursor && !seenCursors.has(accumulated.next_cursor)) {
-        const cursor = accumulated.next_cursor;
+      const productOverview = applyAcknowledgedResolutions(
+        await getPersistedProductGroups(
+          selectedIpId,
+          "same",
+          PRODUCT_GROUP_VIEW,
+          { limit: 1, productId: groupId },
+        ),
+      );
+      if (visualPageRequestSequence.current !== requestSequence) return null;
+      const directMatch = productOverview.groups.find((group) =>
+        group.id === groupId || group.canonical_product_id === groupId
+      ) ?? null;
+      if (directMatch || productOverview.catalog_supported) return directMatch;
+
+      // A pre-catalog API ignores product_id. Preserve the old deep-link
+      // behavior by walking its ordinary group pages instead of accepting the
+      // unrelated first result as the requested product.
+      let cursor = productOverview.next_cursor;
+      const seenCursors = new Set<string>();
+      while (cursor && !seenCursors.has(cursor)) {
         seenCursors.add(cursor);
         const nextOverview = applyAcknowledgedResolutions(
           await getPersistedProductGroups(
@@ -1111,14 +1179,10 @@ export default function ProductClusters() {
           ),
         );
         if (visualPageRequestSequence.current !== requestSequence) return null;
-        accumulated = appendProductGroupPage(accumulated, nextOverview);
-        const target = accumulated.groups.find((group) => group.id === groupId);
-        if (target) {
-          setVisualOverview(accumulated);
-          return target;
-        }
+        const match = nextOverview.groups.find((group) => group.id === groupId);
+        if (match) return match;
+        cursor = nextOverview.next_cursor;
       }
-      setVisualOverview(accumulated);
       return null;
     } catch (caught: unknown) {
       if (visualPageRequestSequence.current === requestSequence) {
@@ -1134,7 +1198,9 @@ export default function ProductClusters() {
       setFocusedGroupResolvedId(null);
       return;
     }
-    const loadedGroup = visualOverview?.groups.find((group) => group.id === linkedGroupId);
+    const loadedGroup = visualOverview?.groups.find((group) =>
+      group.id === linkedGroupId || group.canonical_product_id === linkedGroupId
+    );
     if (loadedGroup) {
       setFocusedGroup(loadedGroup);
       setFocusedGroupResolvedId(linkedGroupId);
@@ -1195,6 +1261,64 @@ export default function ProductClusters() {
     if (!linkedGroupId) return;
     void loadGroupTasks(linkedGroupId);
   }, [linkedGroupId, loadGroupTasks]);
+
+  const loadProductTaskHistory = useCallback(async (input: {
+    historyKey: string;
+    groupId: string;
+    catalogSupported: boolean;
+  }) => {
+    if (Object.prototype.hasOwnProperty.call(productTaskHistory, input.historyKey)) {
+      return productTaskHistory[input.historyKey];
+    }
+    if (!selectedIpId || loadingProductHistoryId) return null;
+    const requestSequence = ++productHistoryRequestSequence.current;
+    setLoadingProductHistoryId(input.historyKey);
+    setError(null);
+    try {
+      const findings: IpReviewFinding[] = [];
+      const seenResultIds = new Set<string>();
+      const seenCursors = new Set<string>();
+      let cursor: string | null = null;
+      do {
+        const page = await listMonitoringFindingsGlobal({
+          status: "all",
+          show_dismissed: true,
+          ip_id: selectedIpId,
+          catalog_product_id: input.catalogSupported ? input.historyKey : null,
+          product_group_id: input.catalogSupported ? null : input.groupId,
+          sort: "updated_desc",
+          limit: 200,
+          cursor,
+        });
+        if (productHistoryRequestSequence.current !== requestSequence) return null;
+        for (const finding of page.findings) {
+          if (seenResultIds.has(finding.result_id)) continue;
+          seenResultIds.add(finding.result_id);
+          findings.push(finding);
+        }
+        cursor = page.next_cursor;
+        if (cursor && seenCursors.has(cursor)) break;
+        if (cursor) seenCursors.add(cursor);
+      } while (cursor);
+      if (productHistoryRequestSequence.current !== requestSequence) return null;
+      setProductTaskHistory((current) => ({
+        ...current,
+        [input.historyKey]: findings,
+      }));
+      return findings;
+    } catch (caught: unknown) {
+      if (productHistoryRequestSequence.current === requestSequence) {
+        setError(errorMessage(caught, "Unable to load this product's task history."));
+      }
+      return null;
+    } finally {
+      if (productHistoryRequestSequence.current === requestSequence) {
+        setLoadingProductHistoryId((current) =>
+          current === input.historyKey ? null : current
+        );
+      }
+    }
+  }, [loadingProductHistoryId, productTaskHistory, selectedIpId]);
 
   async function toggleGroupSubgroupListings(
     groupId: string,
@@ -1509,7 +1633,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE },
+          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
         ),
       ));
     } catch (caught: unknown) {
@@ -1534,7 +1658,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE },
+          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
         ),
       ));
       setMergeSourceGroupId(null);
@@ -1559,7 +1683,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE },
+          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
         ),
       ));
     } catch (caught: unknown) {
@@ -1626,7 +1750,7 @@ export default function ProductClusters() {
         selectedIpId,
         "same",
         PRODUCT_GROUP_VIEW,
-        { limit: PRODUCT_GROUP_PAGE_SIZE },
+        { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
       ).catch((caught: unknown) => {
         setError(errorMessage(
           caught,
@@ -1652,7 +1776,7 @@ export default function ProductClusters() {
           selectedIpId,
           "same",
           PRODUCT_GROUP_VIEW,
-          { limit: PRODUCT_GROUP_PAGE_SIZE },
+          { limit: PRODUCT_GROUP_PAGE_SIZE, categoryId: selectedCategoryId },
         ).catch(() => null);
         if (latestOverview) {
           setVisualOverview(
@@ -2023,9 +2147,26 @@ export default function ProductClusters() {
   }
 
   const workspaceGroup = linkedGroupId
-    ? visualOverview?.groups.find((group) => group.id === linkedGroupId) ?? focusedGroup
+    ? visualOverview?.groups.find((group) =>
+      group.id === linkedGroupId || group.canonical_product_id === linkedGroupId
+    ) ?? focusedGroup
+    : null;
+  const workspaceCatalogSupported = visualOverview?.catalog_supported === true;
+  const workspaceHistoryKey = workspaceGroup
+    ? workspaceCatalogSupported
+      ? workspaceGroup.canonical_product_id ?? workspaceGroup.id
+      : workspaceGroup.id
     : null;
   const showingWorkspace = Boolean(linkedGroupId);
+  const selectCatalogCategory = (categoryId: string | null) => {
+    const params = new URLSearchParams(location.search);
+    if (categoryId) params.set("category", categoryId);
+    else params.delete("category");
+    navigate({
+      pathname: "/monitoring/products",
+      search: params.toString() ? `?${params.toString()}` : "",
+    });
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
@@ -2126,6 +2267,11 @@ export default function ProductClusters() {
                 activeTaskProfileId={activeTask?.profileId ?? null}
                 loadingTaskProfileId={loadingTaskProfileId}
                 allFindings={loadedGroupTasks[workspaceGroup.id] ?? null}
+                taskHistory={workspaceHistoryKey
+                  ? productTaskHistory[workspaceHistoryKey] ?? null
+                  : null}
+                loadingTaskHistory={loadingProductHistoryId === workspaceHistoryKey}
+                catalogSupported={workspaceCatalogSupported}
                 expandedSubgroupKeys={expandedSubgroupKeys}
                 loadingAllFindings={loadingGroupTasksId === workspaceGroup.id}
                 activeBatch={activeBatch}
@@ -2152,6 +2298,14 @@ export default function ProductClusters() {
                 )}
                 onOpenTask={(profile, groupId) => void openTask(profile, groupId)}
                 onOpenFinding={openLoadedFinding}
+                onLoadTaskHistory={() => {
+                  if (!workspaceHistoryKey) return;
+                  void loadProductTaskHistory({
+                    historyKey: workspaceHistoryKey,
+                    groupId: workspaceGroup.id,
+                    catalogSupported: workspaceCatalogSupported,
+                  });
+                }}
                 onConfirmGroup={confirmGroup}
                 onSelectMergeSource={setMergeSourceGroupId}
                 onLoadGroupForReview={loadProductGroupForReview}
@@ -2182,6 +2336,8 @@ export default function ProductClusters() {
             onSortChange={setProductSort}
             onLoadMore={() => void loadMoreVisualGroups()}
             currentSearch={location.search}
+            selectedCategoryId={selectedCategoryId}
+            onSelectCategory={selectCatalogCategory}
           />
         )
       ) : null}
@@ -2253,18 +2409,22 @@ function ProductQueue({
   sort,
   loadingMore,
   currentSearch,
+  selectedCategoryId,
   onSearchChange,
   onSortChange,
   onLoadMore,
+  onSelectCategory,
 }: {
   overview: PersistedProductGroupOverview;
   search: string;
   sort: "work" | "name";
   loadingMore: boolean;
   currentSearch: string;
+  selectedCategoryId: string | null;
   onSearchChange: (search: string) => void;
   onSortChange: (sort: "work" | "name") => void;
   onLoadMore: () => void;
+  onSelectCategory: (categoryId: string | null) => void;
 }) {
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const visibleGroups = overview.groups
@@ -2273,6 +2433,8 @@ function ProductQueue({
       const searchable = [
         productGroupDisplayName(group),
         group.display_name,
+        group.catalog_primary_category_name,
+        group.catalog_primary_category_path,
         ...group.members.slice(0, 4).map((member) => profileTitle(member)),
         ...group.triage_members.slice(0, 4).map((member) => profileTitle(member)),
         ...group.commercial_subgroups.map((subgroup) => subgroup.variant_label),
@@ -2286,7 +2448,13 @@ function ProductQueue({
       return (right.triage_member_count ?? 0) - (left.triage_member_count ?? 0) ||
         right.member_count - left.member_count;
     });
+  const categoryTree = buildProductCatalogCategoryTree(overview.catalog_categories);
   const productCount = overview.group_count;
+  const selectedCategoryName = selectedCategoryId === "unclassified"
+    ? "Unclassified"
+    : selectedCategoryId
+      ? findProductCatalogCategoryName(categoryTree, selectedCategoryId) ?? "Products"
+      : "All products";
 
   return (
     <section className="mt-5" aria-labelledby="product-queue-heading">
@@ -2310,82 +2478,116 @@ function ProductQueue({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <label className="relative block min-w-0 sm:w-72">
-            <span className="sr-only">Search products</span>
-            <Search
-              size={16}
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
-            />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search products or offers"
-              className="min-h-11 w-full rounded-lg border border-stone-300 bg-white py-2 pl-9 pr-3 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-          </label>
-          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700">
-            <span className="text-stone-500">Sort</span>
-            <select
-              value={sort}
-              onChange={(event) => onSortChange(event.target.value as "work" | "name")}
-              className="min-w-0 flex-1 bg-transparent text-stone-950 outline-none"
-            >
-              <option value="work">Most work</option>
-              <option value="name">Product name</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div className="mt-5 flex items-end justify-between gap-4">
-        <div>
-          <h2 id="product-queue-heading" className="text-lg font-black text-stone-950">
-            All products
-          </h2>
-          <p className="mt-1 text-sm text-stone-500">
-            Open a product to review its listings, offers and group settings.
+      <div className="mt-5 grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <aside className="self-start rounded-xl border border-stone-200 bg-white p-3 lg:sticky lg:top-4">
+          <p className="px-2 text-xs font-black uppercase tracking-[0.12em] text-stone-500">
+            Categories
           </p>
-        </div>
-        <span className="shrink-0 text-xs font-semibold text-stone-500">
-          {visibleGroups.length} shown
-        </span>
-      </div>
-
-      {visibleGroups.length > 0 ? (
-        <div className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white">
-          {visibleGroups.map((group) => (
-            <ProductQueueRow
-              key={group.id}
-              group={group}
-              currentSearch={currentSearch}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="mt-3 rounded-xl border border-dashed border-stone-300 bg-white px-6 py-12 text-center">
-          <h3 className="text-base font-black text-stone-900">
-            {search ? "No products match this search" : "No product groups yet"}
-          </h3>
-          <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
-            {search
-              ? "Try a product name, listing title or comparable offer."
-              : "This IP has no product groups yet."}
-          </p>
-          {search && (
+          <nav className="mt-2" aria-label="Product categories">
             <button
               type="button"
-              onClick={() => onSearchChange("")}
-              className="mt-4 min-h-11 rounded-lg border border-stone-300 bg-white px-4 text-sm font-bold text-stone-800 hover:bg-stone-50"
+              onClick={() => onSelectCategory(null)}
+              className={`flex min-h-10 w-full items-center justify-between rounded-lg px-2 text-left text-sm font-bold transition ${
+                selectedCategoryId == null
+                  ? "bg-stone-950 text-white"
+                  : "text-stone-700 hover:bg-stone-100"
+              }`}
             >
-              Clear search
+              <span>All products</span>
+              <span className={selectedCategoryId == null ? "text-stone-300" : "text-stone-400"}>
+                {productCount}
+              </span>
             </button>
+            <ProductCatalogCategoryList
+              nodes={categoryTree}
+              selectedCategoryId={selectedCategoryId}
+              onSelectCategory={onSelectCategory}
+            />
+            {overview.unclassified_product_count > 0 && (
+              <button
+                type="button"
+                onClick={() => onSelectCategory("unclassified")}
+                className={`mt-1 flex min-h-10 w-full items-center justify-between rounded-lg px-2 text-left text-sm font-semibold transition ${
+                  selectedCategoryId === "unclassified"
+                    ? "bg-stone-950 text-white"
+                    : "text-stone-600 hover:bg-stone-100"
+                }`}
+              >
+                <span>Unclassified</span>
+                <span className={selectedCategoryId === "unclassified" ? "text-stone-300" : "text-stone-400"}>
+                  {overview.unclassified_product_count}
+                </span>
+              </button>
+            )}
+          </nav>
+        </aside>
+
+        <div className="min-w-0">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+            <label className="relative block min-w-0 sm:w-72">
+              <span className="sr-only">Search products</span>
+              <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => onSearchChange(event.target.value)}
+                placeholder="Search products or offers"
+                className="min-h-11 w-full rounded-lg border border-stone-300 bg-white py-2 pl-9 pr-3 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+            <label className="flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700">
+              <span className="text-stone-500">Sort</span>
+              <select value={sort} onChange={(event) => onSortChange(event.target.value as "work" | "name")} className="min-w-0 flex-1 bg-transparent text-stone-950 outline-none">
+                <option value="work">Most work</option>
+                <option value="name">Product name</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-5 flex items-end justify-between gap-4">
+            <div>
+              <h2 id="product-queue-heading" className="text-lg font-black text-stone-950">
+                {selectedCategoryName}
+              </h2>
+              <p className="mt-1 text-sm text-stone-500">
+                Open a product to review current tasks, history, offers and settings.
+              </p>
+            </div>
+            <span className="shrink-0 text-xs font-semibold text-stone-500">
+              {visibleGroups.length} shown
+            </span>
+          </div>
+
+          {visibleGroups.length > 0 ? (
+            <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleGroups.map((group) => (
+                <ProductCatalogCard
+                  key={group.id}
+                  group={group}
+                  currentSearch={currentSearch}
+                  catalogSupported={overview.catalog_supported}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-xl border border-dashed border-stone-300 bg-white px-6 py-12 text-center">
+              <h3 className="text-base font-black text-stone-900">
+                {search ? "No products match this search" : "No products in this category"}
+              </h3>
+              <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
+                {search
+                  ? "Try a product name, category or comparable offer."
+                  : "Choose another category or show all products."}
+              </p>
+              {search && (
+                <button type="button" onClick={() => onSearchChange("")} className="mt-4 min-h-11 rounded-lg border border-stone-300 bg-white px-4 text-sm font-bold text-stone-800 hover:bg-stone-50">
+                  Clear search
+                </button>
+              )}
+            </div>
           )}
         </div>
-      )}
+      </div>
 
       {overview.next_cursor && (
         <div className="mt-4 flex justify-center">
@@ -2404,12 +2606,104 @@ function ProductQueue({
   );
 }
 
-function ProductQueueRow({
+type ProductCatalogCategoryNode = {
+  id: string;
+  name: string;
+  productCount: number;
+  children: ProductCatalogCategoryNode[];
+};
+
+function buildProductCatalogCategoryTree(
+  categories: PersistedProductGroupOverview["catalog_categories"],
+) {
+  const nodes = new Map<string, ProductCatalogCategoryNode>();
+  const roots: ProductCatalogCategoryNode[] = [];
+  for (const category of categories) {
+    const names = category.path.split(" > ").map((name) => name.trim()).filter(Boolean);
+    const handleParts = category.id.split("/").at(-1)?.split("-") ?? [];
+    let parent: ProductCatalogCategoryNode | null = null;
+    for (let index = 0; index < Math.min(names.length, handleParts.length); index += 1) {
+      const id = `gid://shopify/TaxonomyCategory/${handleParts.slice(0, index + 1).join("-")}`;
+      let node = nodes.get(id);
+      if (!node) {
+        node = { id, name: names[index], productCount: 0, children: [] };
+        nodes.set(id, node);
+        if (parent) parent.children.push(node);
+        else roots.push(node);
+      }
+      node.productCount += Number(category.product_count);
+      parent = node;
+    }
+  }
+  const sortNodes = (items: ProductCatalogCategoryNode[]) => {
+    items.sort((left, right) => left.name.localeCompare(right.name));
+    for (const item of items) sortNodes(item.children);
+  };
+  sortNodes(roots);
+  return roots;
+}
+
+function findProductCatalogCategoryName(
+  nodes: ProductCatalogCategoryNode[],
+  categoryId: string,
+): string | null {
+  for (const node of nodes) {
+    if (node.id === categoryId) return node.name;
+    const childName = findProductCatalogCategoryName(node.children, categoryId);
+    if (childName) return childName;
+  }
+  return null;
+}
+
+function ProductCatalogCategoryList({
+  nodes,
+  selectedCategoryId,
+  onSelectCategory,
+  depth = 0,
+}: {
+  nodes: ProductCatalogCategoryNode[];
+  selectedCategoryId: string | null;
+  onSelectCategory: (categoryId: string) => void;
+  depth?: number;
+}) {
+  if (nodes.length === 0) return null;
+  return (
+    <ul className={depth === 0 ? "mt-1" : "ml-2 border-l border-stone-200 pl-1"}>
+      {nodes.map((node) => (
+        <li key={node.id}>
+          <button
+            type="button"
+            onClick={() => onSelectCategory(node.id)}
+            style={{ paddingLeft: `${8 + Math.min(depth, 4) * 4}px` }}
+            className={`flex min-h-9 w-full items-center justify-between gap-2 rounded-lg pr-2 text-left text-xs font-semibold transition ${
+              selectedCategoryId === node.id
+                ? "bg-blue-50 text-blue-900"
+                : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+            }`}
+          >
+            <span className="min-w-0 truncate">{node.name}</span>
+            <span className="shrink-0 text-[10px] text-stone-400">{node.productCount}</span>
+          </button>
+          <ProductCatalogCategoryList
+            nodes={node.children}
+            selectedCategoryId={selectedCategoryId}
+            onSelectCategory={onSelectCategory}
+            depth={depth + 1}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProductCatalogCard({
   group,
   currentSearch,
+  catalogSupported,
 }: {
   group: PersistedProductGroup;
   currentSearch: string;
+  catalogSupported: boolean;
 }) {
   const representative = group.members[0] ?? group.triage_members[0] ?? null;
   const triageCount = group.triage_member_count ?? 0;
@@ -2420,9 +2714,8 @@ function ProductQueueRow({
   const confirmed = group.confirmation_status === "confirmed";
 
   return (
-    <article className="border-b border-stone-200 p-3 last:border-b-0 sm:p-4">
-      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
-        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-stone-100 sm:h-20 sm:w-20">
+    <article className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-md">
+      <div className="aspect-[4/3] w-full overflow-hidden bg-stone-100">
           {representative?.image_url ? (
             <img
               src={representative.image_url}
@@ -2430,53 +2723,45 @@ function ProductQueueRow({
               className="h-full w-full object-cover"
             />
           ) : (
-            <span className="flex h-full items-center justify-center text-xl font-black text-stone-400">
+            <span className="flex h-full items-center justify-center text-3xl font-black text-stone-400">
               {productGroupDisplayName(group).slice(0, 1).toUpperCase()}
             </span>
           )}
+      </div>
+      <div className="flex flex-1 flex-col p-4">
+        <p className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-stone-500">
+          {group.catalog_primary_category_name ?? "Unclassified"}
+        </p>
+        <h3 className="mt-1 line-clamp-2 text-lg font-black text-stone-950">
+          {productGroupDisplayName(group)}
+        </h3>
+        <p className={`mt-2 text-sm font-black ${
+          triageCount > 0 ? "text-red-800" : "text-emerald-700"
+        }`}>
+          {triageCount > 0 ? `${triageCount} to review` : "Review complete"}
+        </p>
+        <div className="mt-3 grid grid-cols-3 gap-2 border-y border-stone-100 py-3 text-center">
+          <span><strong className="block text-sm text-stone-950">{group.member_count}</strong><small className="text-[10px] text-stone-500">Listings</small></span>
+          <span><strong className="block text-sm text-stone-950">{group.catalog_task_count}</strong><small className="text-[10px] text-stone-500">Tasks</small></span>
+          <span><strong className="block text-sm text-stone-950">{offerCount}</strong><small className="text-[10px] text-stone-500">Offers</small></span>
         </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-            <div className="min-w-0">
-              <p className={`text-xs font-black uppercase tracking-[0.08em] ${
-                confirmed ? "text-emerald-700" : "text-amber-800"
-              }`}>
-                {confirmed ? "Confirmed product" : "Needs confirmation"}
-              </p>
-              <h3 className="mt-1 line-clamp-2 text-base font-black text-stone-950 sm:text-lg">
-                {productGroupDisplayName(group)}
-              </h3>
-            </div>
-            <div className="shrink-0 text-left sm:text-right">
-              <p className={`text-base font-black ${
-                triageCount > 0 ? "text-red-800" : "text-emerald-700"
-              }`}>
-                {triageCount > 0 ? `${triageCount} to review` : "Review complete"}
-              </p>
-              <p className="mt-0.5 text-xs text-stone-500">
-                {group.member_count} total listings
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-stone-600">
-            <span>{offerCount} comparable {offerCount === 1 ? "offer" : "offers"}</span>
-            {priceRange && <span>{priceRange}</span>}
-            <span>Similarity {group.average_score?.toFixed(2) ?? "—"}</span>
-          </div>
+        <div className="mt-3 flex min-h-6 items-center justify-between gap-2 text-xs text-stone-500">
+          <span className={confirmed ? "font-semibold text-emerald-700" : "font-semibold text-amber-800"}>
+            {confirmed ? "Confirmed" : "Needs confirmation"}
+          </span>
+          {priceRange && <span className="truncate font-semibold text-stone-700">{priceRange}</span>}
         </div>
-
         <Link
           to={{
-            pathname: `/monitoring/products/${encodeURIComponent(group.id)}`,
+            pathname: `/monitoring/products/${encodeURIComponent(
+              catalogSupported ? group.canonical_product_id ?? group.id : group.id,
+            )}`,
             search: currentSearch,
           }}
           aria-label={`Open ${productGroupDisplayName(group)}`}
-          className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-stone-950 px-4 text-sm font-bold text-white transition hover:bg-stone-800"
+          className="mt-3 inline-flex min-h-11 items-center justify-center rounded-lg bg-stone-950 px-4 text-sm font-bold text-white transition hover:bg-stone-800"
         >
-          <span className="hidden sm:inline">Open</span>
-          <span className="sm:hidden" aria-hidden="true">→</span>
+          Open product
         </Link>
       </div>
     </article>
@@ -2484,9 +2769,7 @@ function ProductQueueRow({
 }
 
 function productGroupDisplayName(group: PersistedProductGroup) {
-  return group.display_name?.trim() ||
-    (group.triage_members[0] ? profileTitle(group.triage_members[0]) : null) ||
-    (group.members[0] ? profileTitle(group.members[0]) : null) ||
+  return group.catalog_display_name?.trim() || group.display_name?.trim() ||
     "Unnamed product";
 }
 
@@ -3032,8 +3315,10 @@ function productClusterProfileForFinding(
       priceSummary,
       priceSignalByCaseId,
     ),
-    image_count: finding.image_urls?.length ?? (finding.image_url ? 1 : 0),
-    image_url: finding.image_url ?? finding.screenshot_url,
+    image_count: finding.archived_image_urls?.length ??
+      finding.image_urls?.length ?? (finding.image_url ? 1 : 0),
+    image_url: finding.archived_image_urls?.[0] ??
+      finding.image_url ?? finding.screenshot_url,
     actionability: finding.actionability,
     updated_at: finding.updated_at,
   };
@@ -4994,6 +5279,9 @@ function ProductGroupCard({
   activeTaskProfileId,
   loadingTaskProfileId,
   allFindings,
+  taskHistory = null,
+  loadingTaskHistory = false,
+  catalogSupported = false,
   expandedSubgroupKeys,
   loadingAllFindings,
   activeBatch,
@@ -5007,6 +5295,7 @@ function ProductGroupCard({
   onToggleSubgroupListings,
   onOpenTask,
   onOpenFinding,
+  onLoadTaskHistory = () => undefined,
   onConfirmGroup,
   onSelectMergeSource,
   onLoadGroupForReview,
@@ -5038,6 +5327,9 @@ function ProductGroupCard({
   activeTaskProfileId: string | null;
   loadingTaskProfileId: string | null;
   allFindings: IpReviewFinding[] | null;
+  taskHistory?: IpReviewFinding[] | null;
+  loadingTaskHistory?: boolean;
+  catalogSupported?: boolean;
   expandedSubgroupKeys: ReadonlySet<string>;
   loadingAllFindings: boolean;
   activeBatch: ProductGroupBatch | null;
@@ -5057,6 +5349,7 @@ function ProductGroupCard({
   ) => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
+  onLoadTaskHistory?: () => void;
   onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
   onSelectMergeSource: (groupId: string | null) => void;
   onLoadGroupForReview: (groupId: string) => Promise<PersistedProductGroup | null>;
@@ -5182,6 +5475,11 @@ function ProductGroupCard({
   const taskQuery = taskLinkMode === "pending"
     ? "status=pending"
     : "status=all&show_dismissed=true";
+  const taskProductFilter = taskLinkMode === "pending"
+    ? `product_group_id=${encodeURIComponent(group.id)}`
+    : catalogSupported
+      ? `catalog_product_id=${encodeURIComponent(group.canonical_product_id ?? group.id)}`
+      : `product_group_id=${encodeURIComponent(group.id)}`;
   const canConfirm = mode === "same" || mode === "visual";
   const trimmedName = name.trim();
   const nextEmbeddingThreshold = embeddingThresholdEnabled
@@ -5468,6 +5766,11 @@ function ProductGroupCard({
               Confirmed {new Date(group.confirmed_at).toLocaleString()}
             </p>
           )}
+          {workspace && group.catalog_primary_category_path && (
+            <p className="mt-1 line-clamp-2 text-xs text-stone-500">
+              {group.catalog_primary_category_path}
+            </p>
+          )}
           {mode === "same" && group.atomic_cohort_count > 1 && (
             <p className="mt-1 inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-800 ring-1 ring-inset ring-violet-200">
               {group.atomic_cohort_count} evidence cohorts combined
@@ -5618,9 +5921,10 @@ function ProductGroupCard({
         >
           {([
             ["review", `Review queue · ${triageMemberCount}`],
+            ["history", `Task history · ${group.catalog_task_count}`],
             ["offers", `Offers · ${displayedCommercialSubgroups.length}`],
             ["settings", "Group settings"],
-            ["history", `History · ${group.canonical_decisions.length}`],
+            ["audit", `Merge audit · ${group.canonical_decisions.length}`],
           ] as Array<[ProductWorkspaceSection, string]>).map(([section, label]) => (
             <button
               key={section}
@@ -5629,6 +5933,9 @@ function ProductGroupCard({
               onClick={() => {
                 setWorkspaceSection(section);
                 setManaging(section === "settings");
+                if (section === "history") {
+                  onLoadTaskHistory();
+                }
               }}
               className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-bold transition ${
                 workspaceSection === section
@@ -5648,7 +5955,7 @@ function ProductGroupCard({
       )}
 
       {mode === "same" && reconciliationSuggestions.length > 0 &&
-        (!workspace || workspaceSection === "history") && (
+        (!workspace || workspaceSection === "audit") && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
           <p className="text-xs font-bold text-amber-950">Possible duplicate product group</p>
           <p className="mt-0.5 text-[11px] leading-4 text-amber-800">
@@ -5672,7 +5979,7 @@ function ProductGroupCard({
       )}
 
       {mode === "same" && group.canonical_decisions.length > 0 &&
-        (!workspace || workspaceSection === "history") && (
+        (!workspace || workspaceSection === "audit") && (
         <details className="mt-3 rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2.5">
           <summary className="cursor-pointer text-xs font-bold text-violet-900">
             Merge history · {group.canonical_decisions.length}
@@ -6629,6 +6936,69 @@ function ProductGroupCard({
         </div>
       )}
 
+      {workspace && workspaceSection === "history" && (
+        <div className="mt-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black text-stone-950">All linked tasks</h3>
+              <p className="mt-1 text-sm text-stone-500">
+                {catalogSupported
+                  ? "Current and resolved tasks stay attached to this canonical product."
+                  : "Current and resolved tasks linked to this product group."}
+              </p>
+            </div>
+            {taskHistory && (
+              <span className="text-xs font-semibold text-stone-500">
+                {taskHistory.length} {taskHistory.length === 1 ? "task" : "tasks"}
+              </span>
+            )}
+          </div>
+          {loadingTaskHistory ? (
+            <div className="mt-3 flex min-h-32 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-sm font-semibold text-stone-500">
+              <RefreshCw size={16} className="mr-2 animate-spin" />
+              Loading task history…
+            </div>
+          ) : taskHistory && taskHistory.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {taskHistory.map((finding) => {
+                const profile = productClusterProfileForFinding(finding, group.price_summary);
+                const statusLabel = finding.dismissed_at
+                  ? (finding.dismissal_reason ?? "dismissed").replaceAll("_", " ")
+                  : (finding.review_status ?? "pending").replaceAll("_", " ");
+                return (
+                  <div key={finding.result_id} className="rounded-xl bg-stone-50 p-2">
+                    <ProductListingRow
+                      profile={profile}
+                      active={activeTaskProfileId === profile.id}
+                      statusLabel={statusLabel}
+                      onOpen={() => onOpenFinding(finding, group.id)}
+                    />
+                    <p className="mt-1 px-1 text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                      Updated {new Date(finding.updated_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : taskHistory ? (
+            <div className="mt-3 rounded-xl border border-dashed border-stone-300 px-4 py-10 text-center">
+              <p className="text-sm font-bold text-stone-900">No linked tasks found</p>
+              <p className="mt-1 text-sm text-stone-500">
+                New discoveries will appear here when they are assigned to this product.
+              </p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onLoadTaskHistory}
+              className="mt-3 min-h-11 rounded-lg border border-stone-300 bg-white px-4 text-sm font-bold text-stone-800 hover:bg-stone-50"
+            >
+              Load task history
+            </button>
+          )}
+        </div>
+      )}
+
       {workspace && workspaceSection === "offers" && (
         <div className="mt-5 overflow-hidden rounded-xl border border-stone-200">
           {displayedCommercialSubgroups.length > 0 ? displayedCommercialSubgroups.map((subgroup) => {
@@ -6726,7 +7096,7 @@ function ProductGroupCard({
         </div>
       )}
 
-      {workspace && workspaceSection === "history" && (
+      {workspace && workspaceSection === "audit" && (
         <div className="mt-5 rounded-xl border border-stone-200 bg-stone-50 p-4">
           <p className="text-sm font-black text-stone-950">Merge another product</p>
           <p className="mt-1 text-sm text-stone-500">
@@ -6762,7 +7132,7 @@ function ProductGroupCard({
         </div>
       )}
 
-      {workspace && workspaceSection === "history" &&
+      {workspace && workspaceSection === "audit" &&
         reconciliationSuggestions.length === 0 && group.canonical_decisions.length === 0 && (
         <div className="mt-5 rounded-xl border border-dashed border-stone-300 px-4 py-10 text-center">
           <p className="text-sm font-bold text-stone-900">No merge history yet</p>
@@ -6958,7 +7328,7 @@ function ProductGroupCard({
               </>}
         </span>
         <Link
-          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}${taskLinkMode === "pending" ? "&select_all=true" : ""}`}
+          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&${taskProductFilter}${taskLinkMode === "pending" ? "&select_all=true" : ""}`}
           className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
             taskLinkMode === "pending"
               ? "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100"
@@ -7040,6 +7410,7 @@ function ProductListingRow({
   active = false,
   loading = false,
   correctionDisabled = false,
+  statusLabel,
   onOpen,
   onRemove,
 }: {
@@ -7047,6 +7418,7 @@ function ProductListingRow({
   active?: boolean;
   loading?: boolean;
   correctionDisabled?: boolean;
+  statusLabel?: string;
   onOpen: () => void;
   onRemove?: () => void;
 }) {
@@ -7057,6 +7429,9 @@ function ProductListingRow({
     ? formatMoney(priceValueUsd, "USD")
     : "Price unavailable";
   const bucket = productGroupRecommendationBucket(recommendationBucketForProfile(profile));
+  const displayedStatus = statusLabel
+    ? statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1)
+    : bucket.label;
   const unusualPrice = profile.price_signal?.unusually_low === true;
 
   return (
@@ -7094,8 +7469,10 @@ function ProductListingRow({
           <span className={`block text-sm font-black ${unusualPrice ? "text-red-700" : "text-stone-950"}`}>
             {price}
           </span>
-          <span className={`mt-1 block text-xs font-bold ${bucket.labelClassName}`}>
-            {bucket.label}
+          <span className={`mt-1 block text-xs font-bold ${
+            statusLabel ? "text-stone-700" : bucket.labelClassName
+          }`}>
+            {displayedStatus}
           </span>
         </span>
         <span className="shrink-0 text-stone-400" aria-hidden="true">→</span>

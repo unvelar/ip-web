@@ -31,6 +31,7 @@ interface InboxFilters {
   priority: MonitoringPriorityBand | null;
   ip_id: string | null;
   product_group_id: string | null;
+  catalog_product_id: string | null;
   platform: string | null;
   seller: string | null;
   dismissal_reason: MonitoringDismissalReasonFilter | null;
@@ -63,6 +64,7 @@ function parseFilters(params: URLSearchParams): InboxFilters {
     priority: null,
     ip_id: params.get("ip_id"),
     product_group_id: params.get("product_group_id"),
+    catalog_product_id: params.get("catalog_product_id"),
     platform: params.get("platform"),
     seller: seller && seller.trim() ? seller.trim() : null,
     dismissal_reason:
@@ -110,6 +112,7 @@ function writeFilters(base: URLSearchParams, f: InboxFilters): URLSearchParams {
   setOrDel("priority", f.priority);
   setOrDel("ip_id", f.ip_id);
   setOrDel("product_group_id", f.product_group_id);
+  setOrDel("catalog_product_id", f.catalog_product_id);
   setOrDel("platform", f.platform);
   setOrDel("seller", f.seller);
   setOrDel("dismissal_reason", f.dismissal_reason);
@@ -143,6 +146,7 @@ export function MonitoringInboxView() {
     ...urlFilters,
     ip_id: activeIpId,
     product_group_id: urlIpChanged ? null : urlFilters.product_group_id,
+    catalog_product_id: urlIpChanged ? null : urlFilters.catalog_product_id,
   };
   const campaignBatchId = params.get("campaign_batch");
   const selectAllProductGroupTasks =
@@ -181,12 +185,28 @@ export function MonitoringInboxView() {
       setErr("");
       try {
         const limit = q.limit ?? MONITORING_PAGE_SIZE;
-        const page = await listMonitoringFindingsGlobal({ ...q, cursor: null, limit });
+        const apiQuery: MonitoringFindingsQuery = {
+          ...q,
+          status: q.status ?? (
+            q.show_dismissed && (q.product_group_id || q.catalog_product_id)
+              ? "all"
+              : null
+          ),
+        };
+        const page = await listMonitoringFindingsGlobal({
+          ...apiQuery,
+          cursor: null,
+          limit,
+        });
         if (reqSeq.current !== seq) return;
         const allFindings = [...page.findings];
         let cursor = page.next_cursor;
         while (cursor && allFindings.length < minRows) {
-          const nextPage = await listMonitoringFindingsGlobal({ ...q, cursor, limit });
+          const nextPage = await listMonitoringFindingsGlobal({
+            ...apiQuery,
+            cursor,
+            limit,
+          });
           if (reqSeq.current !== seq) return;
           allFindings.push(...nextPage.findings);
           cursor = nextPage.next_cursor;
@@ -292,6 +312,7 @@ export function MonitoringInboxView() {
       ...previousFilters,
       ip_id: activeIpId,
       product_group_id: ipChanged ? null : previousFilters.product_group_id,
+      catalog_product_id: ipChanged ? null : previousFilters.catalog_product_id,
     });
     if (ipChanged) {
       next.delete("campaign_batch");
@@ -358,6 +379,11 @@ export function MonitoringInboxView() {
     try {
       const page = await listMonitoringFindingsGlobal({
         ...filters,
+        status: filters.status ?? (
+          filters.show_dismissed && (
+            filters.product_group_id || filters.catalog_product_id
+          ) ? "all" : null
+        ),
         cursor: nextCursor,
       });
       setFindings((prev) => [...prev, ...page.findings]);
@@ -483,7 +509,7 @@ export function MonitoringInboxView() {
       ? facets.product_groups.find((group) =>
         group.product_group_id === filters.product_group_id
       )?.name ?? "selected product"
-      : null;
+      : filters.catalog_product_id ? "selected product" : null;
     return `${count} finding${count === 1 ? "" : "s"} ${statusLabel} · ${ipName}${
       productName ? ` · ${productName}` : ""
     }.`;
@@ -491,6 +517,7 @@ export function MonitoringInboxView() {
     facets,
     filters.ip_id,
     filters.product_group_id,
+    filters.catalog_product_id,
     filters.show_dismissed,
     filters.status,
   ]);
