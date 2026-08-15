@@ -2876,6 +2876,17 @@ export interface ProductCanonicalDecision {
   created_at: string;
 }
 
+export interface ProductGroupMergeCandidate {
+  group_id: string;
+  canonical_product_id: string | null;
+  display_name: string;
+  confirmation_status: "candidate" | "confirmed";
+  member_count: number;
+  category_name: string | null;
+  category_path: string | null;
+  representative_listing_title: string | null;
+}
+
 export interface ProductGroupReconciliationSuggestion {
   target_group_id: string;
   target_display_name: string | null;
@@ -3581,6 +3592,21 @@ export function mergePersistedProductGroups(
         right_group_id: rightGroupId,
       }),
     },
+  );
+}
+
+export function searchPersistedProductGroupMergeCandidates(
+  ipId: string,
+  sourceGroupId: string,
+  query: string,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ q: query, limit: "20" });
+  return request<{ candidates: ProductGroupMergeCandidate[] }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${
+      encodeURIComponent(sourceGroupId)
+    }/merge-candidates?${params.toString()}`,
+    { signal },
   );
 }
 
