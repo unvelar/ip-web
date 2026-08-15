@@ -2794,6 +2794,7 @@ function ProductCatalogCard({
   ).length;
   const priceRange = productGroupPriceRange(group);
   const confirmed = group.confirmation_status === "confirmed";
+  const nameProvenance = historyOnly ? null : productGroupNameProvenance(group);
 
   return (
     <article className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-md">
@@ -2817,6 +2818,11 @@ function ProductCatalogCard({
         <h3 className="mt-1 line-clamp-2 text-lg font-black text-stone-950">
           {productGroupDisplayName(group)}
         </h3>
+        {nameProvenance && (
+          <p className="mt-1 line-clamp-1 text-[10px] font-medium text-stone-500">
+            {nameProvenance}
+          </p>
+        )}
         <p className={`mt-2 text-sm font-black ${
           historyOnly
             ? "text-amber-800"
@@ -2856,7 +2862,26 @@ function ProductCatalogCard({
 
 function productGroupDisplayName(group: PersistedProductGroup) {
   return group.catalog_display_name?.trim() || group.display_name?.trim() ||
-    "Unnamed product";
+    "Product awaiting classification";
+}
+
+function productGroupNameProvenance(group: PersistedProductGroup) {
+  if (group.catalog_name_source === "generated_traits") {
+    const support = group.catalog_name_support_count;
+    if ((group.catalog_name_confidence ?? 0) === 0) {
+      return "Temporary catalog code · awaiting shared visual evidence";
+    }
+    return support && support > 1
+      ? `Generated working label · shared by ${support} listings`
+      : "Generated working label · gallery evidence";
+  }
+  if (group.catalog_name_source === "identity_facts") {
+    return "Suggested identity · repeated listing evidence";
+  }
+  if (group.catalog_name_source === "fallback") {
+    return "Category fallback · awaiting shared evidence";
+  }
+  return null;
 }
 
 function productGroupPriceRange(group: PersistedProductGroup) {
@@ -4867,7 +4892,7 @@ function productGroupPreviewProfiles(
 
 function productGroupReviewLabel(group: PersistedProductGroup) {
   return group.display_name?.trim() ||
-    `Unnamed group · ${group.member_count} ${group.member_count === 1 ? "listing" : "listings"}`;
+    `Product group · ${group.member_count} ${group.member_count === 1 ? "listing" : "listings"}`;
 }
 
 function productGroupRepresentativeTitle(group: PersistedProductGroup) {
@@ -4990,7 +5015,7 @@ function ProductGroupReconciliationPreview({
   const targetLabel = targetGroup
     ? productGroupReviewLabel(targetGroup)
     : suggestion.target_display_name?.trim() ||
-      `Unnamed group · ${suggestion.target_member_count} listings`;
+      `Product group · ${suggestion.target_member_count} listings`;
   const suggestedRepresentative = suggestion.target_preview_members.find(
     (profile) => profile.listing_title?.trim(),
   );
@@ -5846,7 +5871,7 @@ function ProductGroupCard({
               <p className="mt-1 text-[11px] text-stone-500">
                 {mode === "visual"
                   ? "Automatically grouped by shared gallery appearance"
-                  : "Unnamed until confirmed"}
+                  : productGroupNameProvenance(group) ?? "Awaiting confirmation"}
               </p>
             </>
           )}

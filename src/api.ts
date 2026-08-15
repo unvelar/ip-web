@@ -2816,7 +2816,10 @@ export interface PersistedProductGroup {
   confirmed_at: string | null;
   canonical_product_id: string | null;
   catalog_display_name: string;
-  catalog_name_source: "manual" | "identity_facts" | "fallback";
+  catalog_name_source: "manual" | "identity_facts" | "generated_traits" | "fallback";
+  catalog_name_confidence: number | null;
+  catalog_name_support_count: number | null;
+  catalog_name_policy_version: string | null;
   catalog_task_count: number;
   catalog_primary_category_id: string | null;
   catalog_primary_category_name: string | null;
@@ -3364,9 +3367,18 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
   const groups = overview.groups.map((group) => ({
     ...group,
     catalog_display_name: group.catalog_display_name?.trim() ||
-      group.display_name?.trim() || "Unnamed product",
+      group.display_name?.trim() || "Product awaiting classification",
     catalog_name_source: group.catalog_name_source ??
       (group.name_source === "manual" ? "manual" : "fallback"),
+    catalog_name_confidence: isFiniteNumber(group.catalog_name_confidence)
+      ? Number(group.catalog_name_confidence)
+      : null,
+    catalog_name_support_count: isFiniteNumber(group.catalog_name_support_count)
+      ? Number(group.catalog_name_support_count)
+      : null,
+    catalog_name_policy_version: typeof group.catalog_name_policy_version === "string"
+      ? group.catalog_name_policy_version
+      : null,
     catalog_task_count: Number.isFinite(group.catalog_task_count)
       ? Number(group.catalog_task_count)
       : Number(group.member_count),
