@@ -8,6 +8,7 @@ import {
   Eye,
   Images,
   ListFilter,
+  LockKeyhole,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -5952,6 +5953,13 @@ function ProductGroupCard({
     (reference) => reference.selection_source === "manual",
   ).length ?? 0;
 
+  function beginProductConfirmation() {
+    setName("");
+    setSelectedShopifyCategory(productGroupShopifyCategory(group));
+    setManaging(false);
+    setEditingName(true);
+  }
+
   async function saveName() {
     if (!trimmedName) return;
     try {
@@ -6270,9 +6278,9 @@ function ProductGroupCard({
           <button
             type="button"
             onClick={() => {
-              setName(confirmed ? group.display_name ?? "" : "");
-              setSelectedShopifyCategory(productGroupShopifyCategory(group));
               if (confirmed) {
+                setName(group.display_name ?? "");
+                setSelectedShopifyCategory(productGroupShopifyCategory(group));
                 if (workspace) {
                   setWorkspaceSection("settings");
                   setManaging(true);
@@ -6280,7 +6288,7 @@ function ProductGroupCard({
                   setManaging((current) => !current);
                 }
               } else {
-                setEditingName(true);
+                beginProductConfirmation();
               }
             }}
             className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
@@ -6369,7 +6377,10 @@ function ProductGroupCard({
             ["review", `Review queue · ${triageMemberCount}`],
             ["history", `Task history · ${group.catalog_task_count}`],
             ["offers", `Offers · ${availableCommercialSubgroups.length}`],
-            ["settings", "Group settings"],
+            [
+              "settings",
+              confirmed ? "Group settings" : "Group settings · Confirm first",
+            ],
             ["audit", `Merge audit · ${group.canonical_decisions.length}`],
           ] as Array<[ProductWorkspaceSection, string]>).map(([section, label]) => (
             <button
@@ -6378,7 +6389,7 @@ function ProductGroupCard({
               aria-current={workspaceSection === section ? "page" : undefined}
               onClick={() => {
                 setWorkspaceSection(section);
-                setManaging(section === "settings");
+                setManaging(section === "settings" && confirmed);
                 if (section === "history") {
                   onLoadTaskHistory();
                 }
@@ -6517,6 +6528,32 @@ function ProductGroupCard({
             </button>
           </div>
         </form>
+      )}
+
+      {workspace && workspaceSection === "settings" && !confirmed && !editingName && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+          <div className="flex items-start gap-3">
+            <span className="rounded-lg bg-white p-2 text-amber-700 ring-1 ring-inset ring-amber-200">
+              <LockKeyhole size={18} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-amber-950">
+                Confirm this product to unlock group settings
+              </p>
+              <p className="mt-1 text-xs leading-5 text-amber-800">
+                Review the product name and category first. After confirmation, you can change matching, representative images, and reviewer rules.
+              </p>
+              <button
+                type="button"
+                onClick={beginProductConfirmation}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-800"
+              >
+                <CheckCircle2 size={14} />
+                Confirm &amp; edit product
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {confirmed && managing && (!workspace || workspaceSection === "settings") && (
