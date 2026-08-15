@@ -2825,6 +2825,12 @@ export interface PersistedProductGroup {
   catalog_primary_category_name: string | null;
   catalog_primary_category_path: string | null;
   catalog_primary_category_version: string | null;
+  catalog_primary_category_source:
+    | "backfill"
+    | "classifier"
+    | "semantic_correction"
+    | "reviewer"
+    | null;
   atomic_cohort_count: number;
   parent_group_id: string | null;
   semantic_kind: "category" | "color" | null;
@@ -3386,6 +3392,7 @@ function normalizePersistedProductGroupOverview(overview: PersistedProductGroupO
     catalog_primary_category_name: group.catalog_primary_category_name ?? null,
     catalog_primary_category_path: group.catalog_primary_category_path ?? null,
     catalog_primary_category_version: group.catalog_primary_category_version ?? null,
+    catalog_primary_category_source: group.catalog_primary_category_source ?? null,
     canonical_product_id: typeof group.canonical_product_id === "string"
       ? group.canonical_product_id
       : null,
@@ -3596,18 +3603,52 @@ export function confirmPersistedProductGroup(
   ipId: string,
   groupId: string,
   displayName: string,
+  shopifyTaxonomyId?: string,
 ) {
   return request<{
     group: Pick<
       PersistedProductGroup,
-      "id" | "display_name" | "name_source" | "confirmation_status" | "confirmed_at"
+      | "id"
+      | "display_name"
+      | "name_source"
+      | "confirmation_status"
+      | "confirmed_at"
+      | "catalog_primary_category_id"
+      | "catalog_primary_category_name"
+      | "catalog_primary_category_path"
+      | "catalog_primary_category_version"
+      | "catalog_primary_category_source"
     >;
   }>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/${encodeURIComponent(groupId)}`,
     {
       method: "PATCH",
-      body: JSON.stringify({ display_name: displayName }),
+      body: JSON.stringify({
+        display_name: displayName,
+        ...(shopifyTaxonomyId ? { shopify_taxonomy_id: shopifyTaxonomyId } : {}),
+      }),
     },
+  );
+}
+
+export interface ShopifyProductTaxonomyCategory {
+  id: string;
+  name: string;
+  path: string;
+  version: string;
+}
+
+export function searchShopifyProductTaxonomy(
+  ipId: string,
+  query: string,
+  limit = 20,
+) {
+  const params = new URLSearchParams({
+    q: query.trim(),
+    limit: String(limit),
+  });
+  return request<{ categories: ShopifyProductTaxonomyCategory[] }>(
+    `/api/product-clusters/${encodeURIComponent(ipId)}/shopify-taxonomy?${params.toString()}`,
   );
 }
 

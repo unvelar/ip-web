@@ -49,6 +49,7 @@ import {
   resetPersistedProductGroupReferenceImages,
   revokePersistedProductGroupMerge,
   restoreProductSemanticCorrection,
+  searchShopifyProductTaxonomy,
   updatePersistedProductGroupEmbeddingSettings,
   updatePersistedProductGroupAuthenticityRule,
   updatePersistedProductGroupRule,
@@ -72,6 +73,7 @@ import {
   type ProductGroupVisualEvidence,
   type ProductSemanticCategory,
   type ProductSemanticColor,
+  type ShopifyProductTaxonomyCategory,
 } from "../api";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
@@ -1628,7 +1630,11 @@ export default function ProductClusters() {
     setRefreshVersion((version) => version + 1);
   }
 
-  async function confirmGroup(groupId: string, displayName: string) {
+  async function confirmGroup(
+    groupId: string,
+    displayName: string,
+    shopifyCategory?: ShopifyProductTaxonomyCategory,
+  ) {
     if (!selectedIpId) return;
     visualPageRequestSequence.current += 1;
     setLoadingMoreVisualGroups(false);
@@ -1639,6 +1645,7 @@ export default function ProductClusters() {
         selectedIpId,
         groupId,
         displayName,
+        shopifyCategory?.id,
       );
       setVisualOverview(applyAcknowledgedResolutions(
         await getPersistedProductGroups(
@@ -2882,6 +2889,142 @@ function productGroupNameProvenance(group: PersistedProductGroup) {
     return "Category fallback · awaiting shared evidence";
   }
   return null;
+}
+
+function productGroupShopifyCategory(
+  group: PersistedProductGroup,
+): ShopifyProductTaxonomyCategory | null {
+  if (
+    !group.catalog_primary_category_id ||
+    !group.catalog_primary_category_name ||
+    !group.catalog_primary_category_path ||
+    !group.catalog_primary_category_version
+  ) return null;
+  return {
+    id: group.catalog_primary_category_id,
+    name: group.catalog_primary_category_name,
+    path: group.catalog_primary_category_path,
+    version: group.catalog_primary_category_version,
+  };
+}
+
+function ShopifyCategoryPicker({
+  ipId,
+  selected,
+  onSelect,
+  disabled = false,
+}: {
+  ipId: string;
+  selected: ShopifyProductTaxonomyCategory | null;
+  onSelect: (category: ShopifyProductTaxonomyCategory) => void;
+  disabled?: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [matches, setMatches] = useState<ShopifyProductTaxonomyCategory[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const trimmedQuery = query.trim();
+    if (disabled || trimmedQuery.length < 2) return;
+    let alive = true;
+    const timeout = window.setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      void searchShopifyProductTaxonomy(ipId, trimmedQuery)
+        .then(({ categories }) => {
+          if (alive) setMatches(categories);
+        })
+        .catch((caught: unknown) => {
+          if (alive) {
+            setMatches([]);
+            setError(errorMessage(caught, "Unable to search Shopify categories."));
+          }
+        })
+        .finally(() => {
+          if (alive) setLoading(false);
+        });
+    }, 200);
+    return () => {
+      alive = false;
+      window.clearTimeout(timeout);
+    };
+  }, [disabled, ipId, query]);
+
+  return (
+    <div>
+      <span className="text-xs font-bold text-stone-800">Shopify category</span>
+      {selected && (
+        <div className="mt-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2">
+          <p className="text-xs font-bold text-stone-900">{selected.name}</p>
+          <p className="mt-0.5 text-[10px] leading-4 text-stone-500">{selected.path}</p>
+        </div>
+      )}
+      <div className="relative mt-2">
+        <Search
+          size={14}
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3 top-3 text-stone-400"
+        />
+        <input
+          type="search"
+          value={query}
+          disabled={disabled}
+          onChange={(event) => {
+            const nextQuery = event.target.value;
+            setQuery(nextQuery);
+            if (nextQuery.trim().length < 2) {
+              setMatches([]);
+              setLoading(false);
+              setError(null);
+            }
+          }}
+          placeholder="Search all Shopify categories"
+          aria-label="Search Shopify categories"
+          className="w-full rounded-lg border border-stone-300 bg-white py-2 pl-9 pr-3 text-sm text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
+        />
+      </div>
+      {loading && <p className="mt-1.5 text-[10px] text-stone-500">Searching categories…</p>}
+      {error && <p className="mt-1.5 text-[10px] text-red-700">{error}</p>}
+      {!loading && query.trim().length >= 2 && !error && matches.length === 0 && (
+        <p className="mt-1.5 text-[10px] text-stone-500">No matching Shopify category.</p>
+      )}
+      {matches.length > 0 && (
+        <div
+          role="listbox"
+          aria-label="Shopify category results"
+          className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-stone-200 bg-white p-1 shadow-sm"
+        >
+          {matches.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              role="option"
+              aria-selected={selected?.id === category.id}
+              onClick={() => {
+                onSelect(category);
+                setQuery("");
+                setMatches([]);
+              }}
+              className={`block w-full rounded-md px-3 py-2 text-left transition ${
+                selected?.id === category.id
+                  ? "bg-blue-100 text-blue-950"
+                  : "hover:bg-stone-100"
+              }`}
+            >
+              <span className="block text-xs font-bold">{category.name}</span>
+              <span className="mt-0.5 block text-[10px] leading-4 text-stone-500">
+                {category.path}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="mt-1.5 text-[10px] leading-4 text-stone-500">
+        A reviewer-selected category takes precedence over future classifier refreshes.
+      </p>
+    </div>
+  );
 }
 
 function productGroupPriceRange(group: PersistedProductGroup) {
@@ -4556,7 +4699,11 @@ export function ProductGroupsOverview({
   onLoadMore: () => void;
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
-  onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
+  onConfirmGroup: (
+    groupId: string,
+    displayName: string,
+    shopifyCategory?: ShopifyProductTaxonomyCategory,
+  ) => Promise<void>;
   onSelectMergeSource: (groupId: string | null) => void;
   onLoadGroupForReview: (groupId: string) => Promise<PersistedProductGroup | null>;
   onMergeGroups: (leftGroupId: string, rightGroupId: string) => Promise<void>;
@@ -5461,7 +5608,11 @@ function ProductGroupCard({
   onOpenTask: (profile: ProductClusterProfile, groupId: string | null) => void;
   onOpenFinding: (finding: IpReviewFinding, groupId: string) => void;
   onLoadTaskHistory?: () => void;
-  onConfirmGroup: (groupId: string, displayName: string) => Promise<void>;
+  onConfirmGroup: (
+    groupId: string,
+    displayName: string,
+    shopifyCategory?: ShopifyProductTaxonomyCategory,
+  ) => Promise<void>;
   onSelectMergeSource: (groupId: string | null) => void;
   onLoadGroupForReview: (groupId: string) => Promise<PersistedProductGroup | null>;
   onMergeGroups: (leftGroupId: string, rightGroupId: string) => Promise<void>;
@@ -5521,6 +5672,10 @@ function ProductGroupCard({
   const [name, setName] = useState(
     group.confirmation_status === "confirmed" ? group.display_name ?? "" : "",
   );
+  const [selectedShopifyCategory, setSelectedShopifyCategory] =
+    useState<ShopifyProductTaxonomyCategory | null>(() =>
+      productGroupShopifyCategory(group)
+    );
   const [ruleDraft, setRuleDraft] = useState("");
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editingRuleText, setEditingRuleText] = useState("");
@@ -5593,6 +5748,12 @@ function ProductGroupCard({
       : `product_group_id=${encodeURIComponent(group.id)}`;
   const canConfirm = mode === "same" || mode === "visual";
   const trimmedName = name.trim();
+  const canEditShopifyCategory = mode === "same" && Boolean(group.canonical_product_id);
+  const shopifyCategoryChanged = canEditShopifyCategory &&
+    (selectedShopifyCategory?.id ?? null) !== group.catalog_primary_category_id;
+  const productDetailsChanged = confirmed
+    ? trimmedName !== group.display_name || shopifyCategoryChanged
+    : Boolean(trimmedName);
   const nextEmbeddingThreshold = embeddingThresholdEnabled
     ? embeddingThresholdDraft
     : null;
@@ -5633,7 +5794,13 @@ function ProductGroupCard({
   async function saveName() {
     if (!trimmedName) return;
     try {
-      await onConfirmGroup(group.id, trimmedName);
+      await onConfirmGroup(
+        group.id,
+        trimmedName,
+        shopifyCategoryChanged && selectedShopifyCategory
+          ? selectedShopifyCategory
+          : undefined,
+      );
       setEditingName(false);
       setManaging(true);
     } catch {
@@ -5883,6 +6050,9 @@ function ProductGroupCard({
           {workspace && group.catalog_primary_category_path && (
             <p className="mt-1 line-clamp-2 text-xs text-stone-500">
               {group.catalog_primary_category_path}
+              {group.catalog_primary_category_source === "reviewer" && (
+                <span className="font-semibold text-blue-700"> · Reviewer selected</span>
+              )}
             </p>
           )}
           {mode === "same" && group.atomic_cohort_count > 1 && (
@@ -5940,6 +6110,7 @@ function ProductGroupCard({
             type="button"
             onClick={() => {
               setName(confirmed ? group.display_name ?? "" : "");
+              setSelectedShopifyCategory(productGroupShopifyCategory(group));
               if (confirmed) {
                 if (workspace) {
                   setWorkspaceSection("settings");
@@ -5962,7 +6133,7 @@ function ProductGroupCard({
               ? workspace
                 ? "Manage product"
                 : (managing ? "Close group settings" : "Manage group")
-              : "Confirm & name"}
+              : "Confirm & edit"}
           </button>
           {confirmed && mode === "same" && !managing && (
             <button
@@ -6142,7 +6313,7 @@ function ProductGroupCard({
           }}
         >
           <label className="block">
-            <span className="text-xs font-bold text-emerald-900">Group name</span>
+            <span className="text-xs font-bold text-emerald-900">Product name</span>
             <input
               autoFocus
               type="text"
@@ -6152,8 +6323,21 @@ function ProductGroupCard({
               onChange={(event) => setName(event.target.value)}
               className="mt-1.5 w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             />
+            <span className="mt-1 block text-[10px] leading-4 text-emerald-800">
+              Use a concise, generic English name for this product—not one marketplace listing title.
+            </span>
           </label>
-          <div className="mt-2 flex justify-end gap-2">
+          {canEditShopifyCategory && (
+            <div className="mt-3 border-t border-emerald-200 pt-3">
+              <ShopifyCategoryPicker
+                ipId={ipId}
+                selected={selectedShopifyCategory}
+                onSelect={setSelectedShopifyCategory}
+                disabled={saving}
+              />
+            </div>
+          )}
+          <div className="mt-3 flex justify-end gap-2">
             <button
               type="button"
               disabled={saving}
@@ -6164,11 +6348,11 @@ function ProductGroupCard({
             </button>
             <button
               type="submit"
-              disabled={saving || !trimmedName || (confirmed && trimmedName === group.display_name)}
+              disabled={saving || !trimmedName || !productDetailsChanged}
               className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckCircle2 size={13} />
-              {saving ? "Saving…" : confirmed ? "Save name" : "Confirm & name"}
+              {saving ? "Saving…" : confirmed ? "Save details" : "Confirm product"}
             </button>
           </div>
         </form>
@@ -6184,7 +6368,7 @@ function ProductGroupCard({
               </p>
               <p className="mt-1 text-[11px] text-blue-700">
                 {mode === "same"
-                  ? "Rename the product, adjust how closely new listings must match, manage representative images and rules, or remove a listing below."
+                  ? "Update the product name or Shopify category, adjust how closely new listings must match, manage representative images and rules, or remove a listing below."
                   : "Rename this confirmed group or remove an incorrect image-backed placement below."}
               </p>
             </div>
@@ -6204,25 +6388,38 @@ function ProductGroupCard({
               void saveName();
             }}
           >
-            <label className="block">
-              <span className="text-xs font-bold text-stone-800">Group name</span>
-              <div className="mt-1.5 flex gap-2">
+            <div className={`grid gap-4 ${canEditShopifyCategory ? "lg:grid-cols-2" : ""}`}>
+              <label className="block">
+                <span className="text-xs font-bold text-stone-800">Product name</span>
                 <input
                   type="text"
                   value={name}
                   maxLength={200}
                   onChange={(event) => setName(event.target.value)}
-                  className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
-                <button
-                  type="submit"
-                  disabled={saving || !trimmedName || trimmedName === group.display_name}
-                  className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-40"
-                >
-                  {saving ? "Saving…" : "Save name"}
-                </button>
-              </div>
-            </label>
+                <span className="mt-1 block text-[10px] leading-4 text-stone-500">
+                  Keep it concise, generic and independent of any one listing title.
+                </span>
+              </label>
+              {canEditShopifyCategory && (
+                <ShopifyCategoryPicker
+                  ipId={ipId}
+                  selected={selectedShopifyCategory}
+                  onSelect={setSelectedShopifyCategory}
+                  disabled={saving}
+                />
+              )}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="submit"
+                disabled={saving || !trimmedName || !productDetailsChanged}
+                className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-40"
+              >
+                {saving ? "Saving…" : "Save product details"}
+              </button>
+            </div>
           </form>
 
           {mode === "same" && (
