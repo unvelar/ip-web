@@ -6,12 +6,15 @@ import {
   sendTakedown,
   approveTakedown,
   autoSendTakedown,
+  DEFAULT_TAKEDOWN_FEEDBACK_SCOPES,
   replyTakedown,
   type TakedownDraftResponse,
   type TakedownMessage,
   type TakedownRequestStatus,
+  type TakedownFeedbackAssociationScope,
   type TakedownThread,
 } from "../api";
+import { TakedownFeedbackScopeFields } from "./TakedownFeedbackScopeFields";
 
 const STATUS_META: Record<TakedownRequestStatus, { label: string; cls: string }> = {
   queued: { label: "Queued", cls: "bg-stone-100 text-stone-600" },
@@ -52,6 +55,9 @@ export default function TakedownPanel({
   const [directSending, setDirectSending] = useState(false);
   const [composing, setComposing] = useState(false);
   const [composeDecisionReason, setComposeDecisionReason] = useState("");
+  const [composeAssociationScopes, setComposeAssociationScopes] = useState<
+    TakedownFeedbackAssociationScope[]
+  >(() => [...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
   const [replyDraft, setReplyDraft] = useState("");
   const [replying, setReplying] = useState(false);
   const [error, setError] = useState("");
@@ -98,18 +104,22 @@ export default function TakedownPanel({
   }
 
   // Resolve the decision through the automatic/manual routing API.
-  async function sendDirect(decisionReason: string) {
+  async function sendDirect(
+    decisionReason: string,
+    associationScopes: TakedownFeedbackAssociationScope[],
+  ) {
     setDirectSending(true);
     setError("");
     try {
       if (thread) {
-        const result = await autoSendTakedown(caseId, decisionReason);
+        const result = await autoSendTakedown(caseId, decisionReason, associationScopes);
         if (result.status === "unconfigured") {
           setError("Email isn't configured yet — contact your administrator.");
           return;
         }
         if (result.status === "needs_compose") {
           setComposeDecisionReason(decisionReason);
+          setComposeAssociationScopes(associationScopes);
           setConfirming(false);
           setComposing(true);
           return;
@@ -118,7 +128,7 @@ export default function TakedownPanel({
         await reload();
         return;
       }
-      await approveTakedown(caseId, decisionReason);
+      await approveTakedown(caseId, decisionReason, associationScopes);
       setConfirming(false);
       await reload();
     } catch (e) {
@@ -162,6 +172,7 @@ export default function TakedownPanel({
             onClick={() => {
               setError("");
               setComposeDecisionReason("");
+              setComposeAssociationScopes([...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
               setConfirming(true);
             }}
             className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-xs font-semibold text-stone-700"
@@ -191,6 +202,7 @@ export default function TakedownPanel({
             onClick={() => {
               setError("");
               setComposeDecisionReason("");
+              setComposeAssociationScopes([...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
               setConfirming(true);
             }}
             className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-sm font-semibold text-white"
@@ -262,8 +274,9 @@ export default function TakedownPanel({
           error={error}
           legalFallback={!thread}
           onSend={sendDirect}
-          onEdit={(decisionReason) => {
+          onEdit={(decisionReason, associationScopes) => {
             setComposeDecisionReason(decisionReason);
+            setComposeAssociationScopes(associationScopes);
             setConfirming(false);
             setComposing(true);
           }}
@@ -280,13 +293,16 @@ export default function TakedownPanel({
           caseId={caseId}
           ipId={ipId}
           initialDecisionReason={composeDecisionReason}
+          initialAssociationScopes={composeAssociationScopes}
           onClose={() => {
             setComposing(false);
             setComposeDecisionReason("");
+            setComposeAssociationScopes([...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
           }}
           onSent={async () => {
             setComposing(false);
             setComposeDecisionReason("");
+            setComposeAssociationScopes([...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
             await reload();
           }}
         />
@@ -308,6 +324,7 @@ export function ConfirmSendModal({
   error,
   legalFallback = true,
   initialDecisionReason = "",
+  initialAssociationScopes = DEFAULT_TAKEDOWN_FEEDBACK_SCOPES,
   decisionReasonRequired = true,
   onSend,
   onEdit,
@@ -318,13 +335,26 @@ export function ConfirmSendModal({
   error: string;
   legalFallback?: boolean;
   initialDecisionReason?: string;
+  initialAssociationScopes?: TakedownFeedbackAssociationScope[];
   decisionReasonRequired?: boolean;
-  onSend: (decisionReason: string) => void;
-  onEdit?: (decisionReason: string) => void;
+  onSend: (
+    decisionReason: string,
+    associationScopes: TakedownFeedbackAssociationScope[],
+  ) => void;
+  onEdit?: (
+    decisionReason: string,
+    associationScopes: TakedownFeedbackAssociationScope[],
+  ) => void;
   onCancel: () => void;
 }) {
   const [decisionReason, setDecisionReason] = useState(initialDecisionReason);
-  const reasonValid = !decisionReasonRequired || decisionReason.trim().length >= 3;
+  const [associationScopes, setAssociationScopes] = useState<
+    TakedownFeedbackAssociationScope[]
+  >(() => [...initialAssociationScopes]);
+  const reasonValid = !decisionReasonRequired || (
+    decisionReason.trim().length >= 3 && associationScopes.length > 0
+  );
+  const selectedAssociationScopes = decisionReasonRequired ? associationScopes : [];
   return (
     <div
       onClick={onCancel}
@@ -339,7 +369,7 @@ export function ConfirmSendModal({
           event.target instanceof HTMLButtonElement
         ) return;
         event.preventDefault();
-        onSend(decisionReason.trim());
+        onSend(decisionReason.trim(), selectedAssociationScopes);
       }}
       role="dialog"
       aria-modal="true"
@@ -348,12 +378,12 @@ export function ConfirmSendModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-2xl border border-stone-200 max-w-md w-full overflow-hidden"
+        className="bg-white rounded-2xl border border-stone-200 max-w-md w-full max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
       >
         <div className="px-5 py-4 border-b border-stone-100">
           <h3 className="font-bold text-stone-900">Takedown</h3>
         </div>
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3 overflow-y-auto">
           <p className="text-sm text-stone-600">
             {legalFallback ? (
               <>
@@ -388,8 +418,14 @@ export function ConfirmSendModal({
               className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 focus:border-stone-400 focus:outline-none"
             />
             <p className="text-[11px] text-stone-500">
-              This is not sent to the marketplace. It helps improve future suggestions for this IP.
+              This note stays attached to the exact finding that you are acting on.
             </p>
+            <TakedownFeedbackScopeFields
+              idPrefix="takedown-feedback"
+              scopes={associationScopes}
+              onChange={setAssociationScopes}
+              disabled={sending}
+            />
           </div>}
           {error && (
             <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-3 py-2">
@@ -407,7 +443,7 @@ export function ConfirmSendModal({
           </button>
           {onEdit && (
             <button
-              onClick={() => onEdit(decisionReason.trim())}
+              onClick={() => onEdit(decisionReason.trim(), selectedAssociationScopes)}
               disabled={sending}
               className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-xs font-semibold text-stone-700 disabled:opacity-50"
             >
@@ -415,7 +451,7 @@ export function ConfirmSendModal({
             </button>
           )}
           <button
-            onClick={() => onSend(decisionReason.trim())}
+            onClick={() => onSend(decisionReason.trim(), selectedAssociationScopes)}
             disabled={sending || !reasonValid}
             className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -455,6 +491,7 @@ export function ComposeModal({
   caseId,
   ipId,
   initialDecisionReason = "",
+  initialAssociationScopes = DEFAULT_TAKEDOWN_FEEDBACK_SCOPES,
   onClose,
   onSent,
 }: {
@@ -462,6 +499,7 @@ export function ComposeModal({
   /** IP the case belongs to — links the incomplete-signer notice to /ips/{ipId}. */
   ipId?: string;
   initialDecisionReason?: string;
+  initialAssociationScopes?: TakedownFeedbackAssociationScope[];
   onClose: () => void;
   onSent: (outcome: "sent" | "legal_queue") => Promise<void> | void;
 }) {
@@ -471,6 +509,9 @@ export function ComposeModal({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [decisionReason, setDecisionReason] = useState(initialDecisionReason);
+  const [associationScopes, setAssociationScopes] = useState<
+    TakedownFeedbackAssociationScope[]
+  >(() => [...initialAssociationScopes]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
@@ -499,7 +540,7 @@ export function ComposeModal({
 
   const routes = resp?.routes ?? [];
   const missing = resp?.draft?.missing_fields ?? [];
-  const reasonValid = decisionReason.trim().length >= 3;
+  const reasonValid = decisionReason.trim().length >= 3 && associationScopes.length > 0;
   const canQueueLegal =
     !!resp && (!resp.configured || routes.length === 0) && reasonValid && !sending;
   const canSend =
@@ -510,7 +551,11 @@ export function ComposeModal({
       setSending(true);
       setError("");
       try {
-        const result = await approveTakedown(caseId, decisionReason.trim());
+        const result = await approveTakedown(
+          caseId,
+          decisionReason.trim(),
+          associationScopes,
+        );
         await onSent(result.status === "automatic" ? "sent" : "legal_queue");
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -527,6 +572,7 @@ export function ComposeModal({
         subject: subject.trim(),
         body: body.trim(),
         decision_reason: decisionReason.trim(),
+        association_scopes: associationScopes,
       });
       await onSent("sent");
     } catch (e) {
@@ -648,8 +694,14 @@ export function ComposeModal({
                   className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-800 focus:border-stone-400 focus:outline-none"
                 />
                 <p className="text-[11px] text-stone-500">
-                  Internal learning note only — it is not included in the marketplace email.
+                  This note stays attached to the exact finding that you are acting on.
                 </p>
+                <TakedownFeedbackScopeFields
+                  idPrefix="compose-takedown-feedback"
+                  scopes={associationScopes}
+                  onChange={setAssociationScopes}
+                  disabled={sending}
+                />
               </div>
 
               <div className="space-y-1.5">

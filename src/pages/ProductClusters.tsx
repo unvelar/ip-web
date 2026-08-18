@@ -77,6 +77,7 @@ import {
   type ProductSemanticCategory,
   type ProductSemanticColor,
   type ShopifyProductTaxonomyCategory,
+  type TakedownFeedbackAssociationScope,
 } from "../api";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { BatchOperationBar } from "../components/monitoring/board/BatchOperationBar";
@@ -1520,7 +1521,11 @@ export default function ProductClusters() {
     return { eligible, skipped };
   }
 
-  async function runGroupBatch(action: BatchAction, decisionReason?: string) {
+  async function runGroupBatch(
+    action: BatchAction,
+    decisionReason?: string,
+    associationScopes?: TakedownFeedbackAssociationScope[],
+  ) {
     const { eligible, skipped } = partitionGroupBatch(action);
     const completedBatch = activeBatch;
     const skipCounts = { ...skipped };
@@ -1541,6 +1546,7 @@ export default function ProductClusters() {
         const result = await approveTakedownBatch(
           eligible.map((finding) => finding.case_id as string),
           decisionReason ?? "",
+          associationScopes ?? [],
         );
         for (const item of result.skipped) bump(item.reason);
         const queued = result.queued_case_ids.length;
@@ -2412,10 +2418,10 @@ export default function ProductClusters() {
             (finding) => finding.actionability?.key !== "send_takedown",
           )}
           onCancel={() => setConfirmBatchAction(null)}
-          onConfirm={(decisionReason) => {
+          onConfirm={(decisionReason, associationScopes) => {
             const action = confirmBatchAction;
             setConfirmBatchAction(null);
-            void runGroupBatch(action, decisionReason);
+            void runGroupBatch(action, decisionReason, associationScopes);
           }}
         />
       )}

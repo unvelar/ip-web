@@ -531,6 +531,14 @@ export function getTakedownDraft(caseId: string) {
   return request<TakedownDraftResponse>(`/api/cases/${caseId}/takedown/draft`);
 }
 
+export type TakedownFeedbackAssociationScope =
+  | "visual_similarity"
+  | "product_category";
+
+export const DEFAULT_TAKEDOWN_FEEDBACK_SCOPES: TakedownFeedbackAssociationScope[] = [
+  "visual_similarity",
+];
+
 export function sendTakedown(
   caseId: string,
   payload: {
@@ -538,6 +546,7 @@ export function sendTakedown(
     subject: string;
     body: string;
     decision_reason: string;
+    association_scopes: TakedownFeedbackAssociationScope[];
   },
 ) {
   return request<{ request: TakedownRequest }>(
@@ -576,12 +585,17 @@ export interface BatchTakedownSendResponse {
 
 /** Resolve and queue a selection as one API request. Compatible cases (same
  *  IP and intake route) share one notice containing all listing links. */
-export function approveTakedownBatch(caseIds: string[], decisionReason: string) {
+export function approveTakedownBatch(
+  caseIds: string[],
+  decisionReason: string,
+  associationScopes: TakedownFeedbackAssociationScope[] = [],
+) {
   return request<BatchTakedownSendResponse>("/api/takedowns/batch/send", {
     method: "POST",
     body: JSON.stringify({
       case_ids: Array.from(new Set(caseIds)),
       decision_reason: decisionReason.trim(),
+      association_scopes: associationScopes,
     }),
   });
 }
@@ -590,8 +604,12 @@ export function approveTakedownBatch(caseIds: string[], decisionReason: string) 
  * send-only action to approval + automatic/manual routing. */
 export const autoSendTakedownBatch = approveTakedownBatch;
 
-export async function approveTakedown(caseId: string, decisionReason: string) {
-  const result = await approveTakedownBatch([caseId], decisionReason);
+export async function approveTakedown(
+  caseId: string,
+  decisionReason: string,
+  associationScopes: TakedownFeedbackAssociationScope[] = [],
+) {
+  const result = await approveTakedownBatch([caseId], decisionReason, associationScopes);
   if (result.queued_case_ids.includes(caseId)) {
     return {
       status: "automatic" as const,
@@ -616,12 +634,19 @@ export function markTakedownsSubmitted(caseIds: string[]) {
   });
 }
 
-export function markTakedownSentWithoutEmail(caseId: string, decisionReason: string) {
+export function markTakedownSentWithoutEmail(
+  caseId: string,
+  decisionReason: string,
+  associationScopes: TakedownFeedbackAssociationScope[] = [],
+) {
   return request<{ ok: boolean; emailed: false }>(
     `/api/cases/${caseId}/takedown/mark-sent`,
     {
       method: "POST",
-      body: JSON.stringify({ decision_reason: decisionReason.trim() }),
+      body: JSON.stringify({
+        decision_reason: decisionReason.trim(),
+        association_scopes: associationScopes,
+      }),
     },
   );
 }
@@ -633,6 +658,7 @@ export function markTakedownSentWithoutEmail(caseId: string, decisionReason: str
 export async function autoSendTakedown(
   caseId: string,
   decisionReason: string,
+  associationScopes: TakedownFeedbackAssociationScope[] = [],
 ): Promise<
   | { status: "sent"; request: TakedownRequest }
   | { status: "needs_compose" }
@@ -647,6 +673,7 @@ export async function autoSendTakedown(
     subject: d.draft.subject,
     body: d.draft.body,
     decision_reason: decisionReason.trim(),
+    association_scopes: associationScopes,
   });
   return { status: "sent", request };
 }

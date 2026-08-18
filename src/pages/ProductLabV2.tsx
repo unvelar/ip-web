@@ -31,6 +31,7 @@ import {
   type MonitoringReviewOutcome,
   type PersistedProductGroup,
   type PersistedProductGroupOverview,
+  type TakedownFeedbackAssociationScope,
 } from "../api";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import {
@@ -753,7 +754,11 @@ export default function ProductLabV2() {
     return { eligible, skipped };
   }
 
-  async function runBatch(action: ProductLabBatchAction, decisionReason?: string) {
+  async function runBatch(
+    action: ProductLabBatchAction,
+    decisionReason?: string,
+    associationScopes?: TakedownFeedbackAssociationScope[],
+  ) {
     const { eligible, skipped } = partitionBatch(action);
     if (eligible.length === 0) {
       setBatchNotice("None of the selected listings can use that action yet.");
@@ -769,6 +774,7 @@ export default function ProductLabV2() {
         const result = await approveTakedownBatch(
           eligible.map((finding) => finding.case_id as string),
           decisionReason ?? "",
+          associationScopes ?? [],
         );
         completed = result.queued_case_ids.length + (result.legal_queue?.length ?? 0);
         failed = result.failed.length;
@@ -1159,10 +1165,10 @@ export default function ProductLabV2() {
             (finding) => finding.actionability?.key !== "send_takedown",
           )}
           onCancel={() => setConfirmBatchAction(null)}
-          onConfirm={(decisionReason) => {
+          onConfirm={(decisionReason, associationScopes) => {
             const action = confirmBatchAction;
             setConfirmBatchAction(null);
-            void runBatch(action, decisionReason);
+            void runBatch(action, decisionReason, associationScopes);
           }}
         />
       )}

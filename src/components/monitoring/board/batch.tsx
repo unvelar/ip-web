@@ -1,5 +1,10 @@
 import { useState, type KeyboardEvent } from "react";
-import type { IpReviewFinding } from "../../../api";
+import type {
+  IpReviewFinding,
+  TakedownFeedbackAssociationScope,
+} from "../../../api";
+import { DEFAULT_TAKEDOWN_FEEDBACK_SCOPES } from "../../../api";
+import { TakedownFeedbackScopeFields } from "../../TakedownFeedbackScopeFields";
 import { BATCH_META, type BatchAction } from "./batchUtils";
 
 export function BatchConfirmModal({
@@ -16,14 +21,22 @@ export function BatchConfirmModal({
   eligible: IpReviewFinding[];
   skipped: Record<string, number>;
   decisionReasonRequired?: boolean;
-  onConfirm: (decisionReason?: string) => void;
+  onConfirm: (
+    decisionReason?: string,
+    associationScopes?: TakedownFeedbackAssociationScope[],
+  ) => void;
   onCancel: () => void;
 }) {
   const [decisionReason, setDecisionReason] = useState("");
+  const [associationScopes, setAssociationScopes] = useState<
+    TakedownFeedbackAssociationScope[]
+  >(() => [...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
   const meta = BATCH_META[action];
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
   const reasonValid =
-    action !== "send" || !decisionReasonRequired || decisionReason.trim().length >= 3;
+    action !== "send" || !decisionReasonRequired || (
+      decisionReason.trim().length >= 3 && associationScopes.length > 0
+    );
   const canConfirm = eligible.length > 0 && reasonValid;
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -35,7 +48,10 @@ export function BatchConfirmModal({
 
     if (event.key === "Enter" && !event.nativeEvent.isComposing && canConfirm) {
       event.preventDefault();
-      onConfirm(action === "send" ? decisionReason.trim() : undefined);
+      onConfirm(
+        action === "send" ? decisionReason.trim() : undefined,
+        action === "send" && decisionReasonRequired ? associationScopes : undefined,
+      );
     }
   }
 
@@ -50,12 +66,12 @@ export function BatchConfirmModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-2xl border border-stone-200 max-w-md w-full overflow-hidden"
+        className="bg-white rounded-2xl border border-stone-200 max-w-md w-full max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
       >
         <div className="px-5 py-4 border-b border-stone-100">
           <h3 className="font-bold text-stone-900">{meta.label}</h3>
         </div>
-        <div className="px-5 py-4 space-y-3 text-sm text-stone-600">
+        <div className="px-5 py-4 space-y-3 text-sm text-stone-600 overflow-y-auto">
           {eligible.length > 0 ? (
             <p>
               {meta.gerund}{" "}
@@ -107,8 +123,13 @@ export function BatchConfirmModal({
                 className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 focus:border-stone-400 focus:outline-none"
               />
               <p className="text-[11px] text-stone-500">
-                Asked once for this batch. The same internal note teaches each selected IP and is not sent to marketplaces.
+                Asked once for this batch. The note stays linked to every selected finding.
               </p>
+              <TakedownFeedbackScopeFields
+                idPrefix="batch-takedown-feedback"
+                scopes={associationScopes}
+                onChange={setAssociationScopes}
+              />
             </div>
           )}
         </div>
@@ -122,7 +143,10 @@ export function BatchConfirmModal({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(action === "send" ? decisionReason.trim() : undefined)}
+            onClick={() => onConfirm(
+              action === "send" ? decisionReason.trim() : undefined,
+              action === "send" && decisionReasonRequired ? associationScopes : undefined,
+            )}
             disabled={!canConfirm}
             className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >

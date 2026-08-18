@@ -28,6 +28,7 @@ import {
   type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
   type MonitoringCampaignSummary,
+  type TakedownFeedbackAssociationScope,
 } from "../api";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
@@ -442,7 +443,11 @@ function CampaignDetailPanel({
     return { eligible, skipped };
   }
 
-  async function runCampaignBatch(action: BatchAction, decisionReason?: string) {
+  async function runCampaignBatch(
+    action: BatchAction,
+    decisionReason?: string,
+    associationScopes?: TakedownFeedbackAssociationScope[],
+  ) {
     const { eligible, skipped } = partitionCampaignSelection(action);
     const skipCounts: Record<string, number> = { ...skipped };
     let ok = 0;
@@ -464,6 +469,7 @@ function CampaignDetailPanel({
         const result = await approveTakedownBatch(
           eligible.map((finding) => finding.case_id as string),
           decisionReason ?? "",
+          associationScopes ?? [],
         );
         for (const item of result.skipped) bump(item.reason);
         const queued = result.queued_case_ids.length;
@@ -832,10 +838,10 @@ function CampaignDetailPanel({
           decisionReasonRequired={partitionCampaignSelection(confirmAction).eligible.some(
             (finding) => finding.actionability?.key !== "send_takedown",
           )}
-          onConfirm={(decisionReason) => {
+          onConfirm={(decisionReason, associationScopes) => {
             const action = confirmAction;
             setConfirmAction(null);
-            void runCampaignBatch(action, decisionReason);
+            void runCampaignBatch(action, decisionReason, associationScopes);
           }}
           onCancel={() => setConfirmAction(null)}
         />

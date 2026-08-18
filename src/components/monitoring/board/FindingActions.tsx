@@ -3,6 +3,7 @@ import { ComposeModal, ConfirmSendModal } from "../../TakedownPanel";
 import {
   addIpLicense,
   approveTakedown,
+  DEFAULT_TAKEDOWN_FEEDBACK_SCOPES,
   markIpFindingNeedsReview,
   markIpFindingEnforced,
   markTakedownsSubmitted,
@@ -13,6 +14,7 @@ import {
   type IpReviewFinding,
   type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
+  type TakedownFeedbackAssociationScope,
 } from "../../../api";
 import { ButtonWithShortcut } from "./ButtonWithShortcut";
 import { legalQueueReasonLabel } from "./utils";
@@ -63,6 +65,9 @@ export function FindingActions({
   const [licensing, setLicensing] = useState(false);
   const [composing, setComposing] = useState(false);
   const [composeDecisionReason, setComposeDecisionReason] = useState("");
+  const [composeAssociationScopes, setComposeAssociationScopes] = useState<
+    TakedownFeedbackAssociationScope[]
+  >(() => [...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
   const [confirming, setConfirming] = useState(false);
   const [directSending, setDirectSending] = useState(false);
   const [sendErr, setSendErr] = useState("");
@@ -70,12 +75,19 @@ export function FindingActions({
 
   // Resolve the reviewer decision through the automatic/manual routing API.
   // Automatic routes submit immediately; everything else enters the legal queue.
-  async function sendDirect(decisionReason: string) {
+  async function sendDirect(
+    decisionReason: string,
+    associationScopes: TakedownFeedbackAssociationScope[],
+  ) {
     if (!f.case_id) return;
     setDirectSending(true);
     setSendErr("");
     try {
-      const result = await approveTakedown(f.case_id, decisionReason);
+      const result = await approveTakedown(
+        f.case_id,
+        decisionReason,
+        associationScopes,
+      );
       if (result.status === "automatic") {
         onTakedownSent();
       }
@@ -92,8 +104,9 @@ export function FindingActions({
   function beginTakedown() {
     setSendErr("");
     setComposeDecisionReason("");
+    setComposeAssociationScopes([...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
     if (f.actionability?.key === "send_takedown") {
-      void sendDirect("");
+      void sendDirect("", []);
       return;
     }
     setConfirming(true);
@@ -566,8 +579,9 @@ export function FindingActions({
           error={sendErr}
           decisionReasonRequired={f.actionability?.key !== "send_takedown"}
           onSend={sendDirect}
-          onEdit={(decisionReason) => {
+          onEdit={(decisionReason, associationScopes) => {
             setComposeDecisionReason(decisionReason);
+            setComposeAssociationScopes(associationScopes);
             setConfirming(false);
             setComposing(true);
           }}
@@ -583,13 +597,16 @@ export function FindingActions({
           caseId={f.case_id}
           ipId={f.ip_id}
           initialDecisionReason={composeDecisionReason}
+          initialAssociationScopes={composeAssociationScopes}
           onClose={() => {
             setComposing(false);
             setComposeDecisionReason("");
+            setComposeAssociationScopes([...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
           }}
           onSent={(outcome) => {
             setComposing(false);
             setComposeDecisionReason("");
+            setComposeAssociationScopes([...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
             if (outcome === "sent") {
               onTakedownSent();
             }

@@ -23,6 +23,7 @@ import {
   type MonitoringSortMode,
   type MonitoringStatusFilter,
   type ProductGroupCorrectionReason,
+  type TakedownFeedbackAssociationScope,
 } from "../../api";
 import { ConfirmSendModal } from "../TakedownPanel";
 import { BatchConfirmModal } from "./board/batch";
@@ -749,7 +750,11 @@ export function MonitoringBoard({
     return { eligible, skipped };
   }
 
-  async function runBatch(action: BatchAction, decisionReason?: string) {
+  async function runBatch(
+    action: BatchAction,
+    decisionReason?: string,
+    associationScopes?: TakedownFeedbackAssociationScope[],
+  ) {
     const { eligible, skipped } = partitionSelection(action);
     const skipCounts: Record<string, number> = { ...skipped };
     let ok = 0;
@@ -785,6 +790,7 @@ export function MonitoringBoard({
         const result = await approveTakedownBatch(
           eligible.map((f) => f.case_id as string),
           decisionReason ?? "",
+          associationScopes ?? [],
         );
         for (const item of result.skipped) bump(item.reason);
         const queued = result.queued_case_ids.length;
@@ -907,7 +913,10 @@ export function MonitoringBoard({
     onRefresh();
   }
 
-  async function confirmShortcutTakedown(decisionReason: string) {
+  async function confirmShortcutTakedown(
+    decisionReason: string,
+    associationScopes: TakedownFeedbackAssociationScope[],
+  ) {
     const targetFinding = shortcutSendFinding;
     const targetCaseId = targetFinding?.case_id;
     if (!targetFinding || !targetCaseId || shortcutSending) return;
@@ -917,7 +926,11 @@ export function MonitoringBoard({
     setResultCompleting(targetFinding.result_id, true);
     advanceAfterAction(targetFinding.result_id);
     try {
-      const result = await approveTakedown(targetCaseId, decisionReason);
+      const result = await approveTakedown(
+        targetCaseId,
+        decisionReason,
+        associationScopes,
+      );
       if (result.status === "automatic") {
         rememberTakedownAction(targetFinding);
       } else {
@@ -1448,8 +1461,8 @@ export function MonitoringBoard({
           sending={shortcutSending}
           error={shortcutSendError}
           decisionReasonRequired={shortcutSendFinding.actionability?.key !== "send_takedown"}
-          onSend={(decisionReason) => {
-            void confirmShortcutTakedown(decisionReason);
+          onSend={(decisionReason, associationScopes) => {
+            void confirmShortcutTakedown(decisionReason, associationScopes);
           }}
           onCancel={() => {
             if (shortcutSending) return;
@@ -1467,10 +1480,10 @@ export function MonitoringBoard({
             (finding) => finding.actionability?.key !== "send_takedown",
           )}
           onCancel={() => setConfirmAction(null)}
-          onConfirm={(decisionReason) => {
+          onConfirm={(decisionReason, associationScopes) => {
             const a = confirmAction;
             setConfirmAction(null);
-            void runBatch(a, decisionReason);
+            void runBatch(a, decisionReason, associationScopes);
           }}
         />
       )}
