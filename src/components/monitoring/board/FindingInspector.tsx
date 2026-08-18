@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import type {
   IpReviewFinding,
   MonitoringDismissReasonCode,
@@ -32,6 +32,7 @@ export function FindingInspector({
   onCorrectProductGroup,
   showRelatedItems = true,
   taskHref,
+  navigation,
 }: {
   f: IpReviewFinding;
   ipId?: string;
@@ -52,6 +53,12 @@ export function FindingInspector({
   showRelatedItems?: boolean;
   /** Optional escape hatch when the inspector is opened outside the Tasks page. */
   taskHref?: string;
+  navigation?: {
+    position: number;
+    total: number;
+    onPrevious?: () => void;
+    onNext?: () => void;
+  };
 }) {
   const inspectorRef = useRef<HTMLElement>(null);
 
@@ -60,7 +67,7 @@ export function FindingInspector({
   }, [f.result_id]);
 
   useEffect(() => {
-    function hasNativeEnterBehavior(target: EventTarget | null) {
+    function hasNativeKeyboardBehavior(target: EventTarget | null) {
       if (!(target instanceof HTMLElement)) return false;
       return Boolean(target.closest(
         "input, textarea, select, button, a, summary, label, [role='button'], [role='link'], [contenteditable]",
@@ -68,16 +75,28 @@ export function FindingInspector({
     }
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Enter" || event.repeat || event.isComposing) return;
+      if (event.repeat || event.isComposing) return;
       if (
         event.defaultPrevented ||
         event.metaKey ||
         event.ctrlKey ||
         event.altKey ||
         event.shiftKey ||
-        hasNativeEnterBehavior(event.target)
+        hasNativeKeyboardBehavior(event.target)
       ) return;
       if (document.querySelector('[aria-modal="true"]')) return;
+
+      if (event.key === "ArrowLeft" && navigation?.onPrevious) {
+        event.preventDefault();
+        navigation.onPrevious();
+        return;
+      }
+      if (event.key === "ArrowRight" && navigation?.onNext) {
+        event.preventDefault();
+        navigation.onNext();
+        return;
+      }
+      if (event.key !== "Enter") return;
 
       const recommendedButton = inspectorRef.current?.querySelector<HTMLButtonElement>(
         "button[data-recommended-action]",
@@ -90,7 +109,7 @@ export function FindingInspector({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [navigation]);
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none flex justify-end">
@@ -110,6 +129,36 @@ export function FindingInspector({
             </div>
             <div className="text-[11px] text-stone-400 truncate">{f.domain}</div>
           </div>
+          {navigation && navigation.total > 1 && (
+            <div
+              className="flex shrink-0 items-center rounded-md border border-stone-200 bg-white"
+              aria-label="Listing navigation"
+            >
+              <button
+                type="button"
+                onClick={navigation.onPrevious}
+                disabled={!navigation.onPrevious}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-l-md text-stone-500 hover:bg-stone-50 hover:text-stone-900 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-white"
+                aria-label="Previous listing"
+                title="Previous listing (Left arrow)"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="min-w-12 border-x border-stone-200 px-2 text-center text-[11px] tabular-nums text-stone-500">
+                {navigation.position} / {navigation.total}
+              </span>
+              <button
+                type="button"
+                onClick={navigation.onNext}
+                disabled={!navigation.onNext}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-r-md text-stone-500 hover:bg-stone-50 hover:text-stone-900 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-white"
+                aria-label="Next listing"
+                title="Next listing (Right arrow)"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
           {taskHref && (
             <Link
               to={taskHref}

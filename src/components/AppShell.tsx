@@ -15,6 +15,7 @@ import {
   Building2,
   GitBranch,
   Network,
+  Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -254,7 +255,14 @@ function AppShellContent() {
             to="/monitoring/products"
             icon={<Network size={18} />}
             label="Product lab"
-            active={isActive("/monitoring/products")}
+            active={pathname === "/monitoring/products" || pathname.startsWith("/monitoring/products/")}
+            collapsed={collapsed}
+          />
+          <NavItem
+            to="/monitoring/products-v2"
+            icon={<Sparkles size={18} />}
+            label="Product lab v2"
+            active={pathname === "/monitoring/products-v2"}
             collapsed={collapsed}
           />
           <NavItem

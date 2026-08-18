@@ -229,7 +229,7 @@ export function FindingActions({
   const dontPursueBtn = outcomeButton(
     "do-not-pursue",
     "do_not_pursue",
-    "Don't pursue",
+    "Mark as OK",
     "do_not_pursue",
     undefined,
     "Shortcut 3: valid detection, intentionally tolerated or not worth enforcement",

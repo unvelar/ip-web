@@ -16,6 +16,7 @@ import Findings from "./pages/Findings";
 import MonitoringTasks from "./pages/MonitoringTasks";
 import MonitoringCampaigns from "./pages/MonitoringCampaigns";
 import ProductClusters from "./pages/ProductClusters";
+import ProductLabV2 from "./pages/ProductLabV2";
 import MonitoringNew from "./pages/MonitoringNew";
 import SellerProfile from "./pages/SellerProfile";
 import Monitors from "./pages/Monitors";
@@ -131,6 +132,7 @@ export default function App() {
           <Route path="/monitoring/products" element={<ProductClusters />} />
           <Route path="/monitoring/products/:groupId" element={<ProductClusters />} />
           <Route path="/monitoring/products/:groupId/tasks/:taskId" element={<ProductClusters />} />
+          <Route path="/monitoring/products-v2" element={<ProductLabV2 />} />
           <Route path="/monitoring/new" element={<MonitoringNew />} />
           <Route path="/monitoring/settings" element={<Monitors />} />
           <Route path="/clearance/tasks" element={<ClearanceTasks />} />

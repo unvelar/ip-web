@@ -2264,6 +2264,7 @@ export interface MonitoringFindingsQuery {
   sort?: MonitoringSortMode;
   cursor?: string | null;
   limit?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -2292,6 +2293,7 @@ export function listMonitoringFindingsGlobal(
   const qs = params.toString();
   return request<MonitoringFindingsPage>(
     `/api/monitoring/findings${qs ? `?${qs}` : ""}`,
+    { signal: opts.signal },
   );
 }
 

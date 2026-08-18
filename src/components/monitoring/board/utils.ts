@@ -154,7 +154,7 @@ export function dismissalBadge(reason: string | null) {
     case "false_positive":
       return { label: "false positive", cls: "bg-stone-200 text-stone-600" };
     case "do_not_pursue":
-      return { label: "don't pursue", cls: "bg-sky-100 text-sky-700" };
+      return { label: "marked OK", cls: "bg-sky-100 text-sky-700" };
     case "second_hand":
     case "resale":
       return { label: "resale", cls: "bg-purple-100 text-purple-700" };
@@ -385,7 +385,7 @@ export function suggestionMeta(outcome: IpReviewFinding["suggested_review_outcom
     case "false_positive":
       return { label: "Different product", shortcut: "0", cls: "bg-stone-800 text-white" };
     case "do_not_pursue":
-      return { label: "Don't pursue", shortcut: "1", cls: "bg-sky-700 text-white" };
+      return { label: "Mark as OK", shortcut: "1", cls: "bg-sky-700 text-white" };
     case "takedown":
       return { label: "Takedown", shortcut: "2", cls: "bg-blue-700 text-white" };
     case "second_hand":
@@ -449,6 +449,23 @@ export function compactListingTitle(f: IpReviewFinding) {
   } catch {
     return "Marketplace listing";
   }
+}
+
+export function findingPlatformLabel(
+  f: Pick<IpReviewFinding, "domain" | "seller_url" | "page_url">,
+) {
+  const domain = f.domain?.trim();
+  if (domain) return domain.replace(/^www\./i, "");
+
+  for (const url of [f.seller_url, f.page_url]) {
+    if (!url) continue;
+    try {
+      return new URL(url).hostname.replace(/^www\./i, "");
+    } catch {
+      // Try the next available URL before falling back to generic copy.
+    }
+  }
+  return "Marketplace";
 }
 
 export function findingChips(f: IpReviewFinding, showIp?: boolean) {

@@ -11,12 +11,12 @@ import {
 } from "../../../api";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
-import { monitoringPlatformLabel } from "../../../lib/platforms";
 import { sellerProfilePath } from "../../../lib/sellers";
 import {
   actionabilityMeta,
   dismissalBadge,
   findingFlaggedReason,
+  findingPlatformLabel,
   findingStatusBadge,
   formatAgo,
   formatMoney,
@@ -424,7 +424,7 @@ export function FindingComparison({
           </span>
           {f.seller_url && (
             <a href={f.seller_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 hover:underline">
-              {monitoringPlatformLabel(f.domain)} <ExternalLink size={12} />
+              {findingPlatformLabel(f)} <ExternalLink size={12} />
             </a>
           )}
           {f.seller_rating != null && (

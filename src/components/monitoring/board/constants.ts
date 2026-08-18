@@ -10,7 +10,7 @@ export const FILTER_SELECT =
 
 export const DISMISSAL_REASON_LABELS: Record<MonitoringDismissalReasonFilter, string> = {
   false_positive: "Different product",
-  do_not_pursue: "Don't pursue",
+  do_not_pursue: "Marked OK",
   second_hand: "Second hand",
   licensed: "Licensed",
   allowed_product: "Allowed product",
@@ -21,7 +21,7 @@ export const DISMISSAL_REASON_LABELS: Record<MonitoringDismissalReasonFilter, st
 export const CANDIDATE_OUTCOME_LABELS: Record<MonitoringCandidateOutcome, string> = {
   takedown: "Takedown",
   second_hand: "Second hand",
-  do_not_pursue: "Don't pursue",
+  do_not_pursue: "Mark as OK",
   false_positive: "Different product",
   none: "Unsorted",
 };
