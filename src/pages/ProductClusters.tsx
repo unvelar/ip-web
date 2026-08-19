@@ -91,6 +91,7 @@ import {
   summarizeTakedownBatch,
 } from "../components/monitoring/board/batchUtils";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
+import { AssigneeAvatar } from "../components/monitoring/board/AssigneeAvatar";
 import { formatMoney } from "../components/monitoring/board/utils";
 import { profileTitle } from "../components/product-clusters/productClusterGraphUtils";
 import { useActiveIp } from "../context/ActiveIpContext";
@@ -4746,6 +4747,15 @@ function SemanticProductGroupCard({
                 profile={profile}
                 active={activeTaskProfileId === profile.id}
                 onClick={() => onOpenFinding(finding, group.id)}
+                assignee={finding.assigned_to_account_id ? (
+                  <AssigneeAvatar
+                    accountId={finding.assigned_to_account_id}
+                    displayName={finding.assignee_display_name}
+                    email={finding.assignee_email}
+                    pictureUrl={finding.assignee_picture_url}
+                    size={22}
+                  />
+                ) : null}
               />
             </div>
           );
@@ -6135,6 +6145,15 @@ function ProductGroupCard({
           profile={profile}
           active={activeTaskProfileId === profile.id}
           onOpen={() => onOpenFinding(finding, group.id)}
+          assignee={finding.assigned_to_account_id ? (
+            <AssigneeAvatar
+              accountId={finding.assigned_to_account_id}
+              displayName={finding.assignee_display_name}
+              email={finding.assignee_email}
+              pictureUrl={finding.assignee_picture_url}
+              size={24}
+            />
+          ) : null}
         />
       );
     }
@@ -6144,6 +6163,15 @@ function ProductGroupCard({
           profile={profile}
           active={activeTaskProfileId === profile.id}
           onClick={() => onOpenFinding(finding, group.id)}
+          assignee={finding.assigned_to_account_id ? (
+            <AssigneeAvatar
+              accountId={finding.assigned_to_account_id}
+              displayName={finding.assignee_display_name}
+              email={finding.assignee_email}
+              pictureUrl={finding.assignee_picture_url}
+              size={22}
+            />
+          ) : null}
         />
       </div>
     );
@@ -7919,6 +7947,7 @@ function ProductListingRow({
   loading = false,
   correctionDisabled = false,
   statusLabel,
+  assignee,
   onOpen,
   onRemove,
 }: {
@@ -7927,6 +7956,7 @@ function ProductListingRow({
   loading?: boolean;
   correctionDisabled?: boolean;
   statusLabel?: string;
+  assignee?: ReactNode;
   onOpen: () => void;
   onRemove?: () => void;
 }) {
@@ -7973,6 +8003,7 @@ function ProductListingRow({
             {profile.platform || "Marketplace listing"}
           </span>
         </span>
+        {assignee && <span className="shrink-0">{assignee}</span>}
         <span className="hidden shrink-0 text-right sm:block">
           <span className={`block text-sm font-black ${unusualPrice ? "text-red-700" : "text-stone-950"}`}>
             {price}
@@ -8007,6 +8038,7 @@ function ListingTile({
   groupImageSimilarity,
   groupImagePosition,
   visualSupportIsReference = false,
+  assignee,
 }: {
   profile: ProductClusterProfile;
   onClick?: () => void;
@@ -8015,6 +8047,7 @@ function ListingTile({
   groupImageSimilarity?: number | null;
   groupImagePosition?: number | null;
   visualSupportIsReference?: boolean;
+  assignee?: ReactNode;
 }) {
   const hasGroupImageSimilarity = groupImageSimilarity !== undefined;
   const priceValueUsd = profile.price_value_usd == null
@@ -8076,6 +8109,11 @@ function ListingTile({
         {unusualPrice && (
           <span className="absolute left-1.5 top-1.5 rounded bg-red-700/95 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm">
             {unusualPrice.percent_below_reference}% below {priceComparisonLabel}
+          </span>
+        )}
+        {assignee && (
+          <span className="pointer-events-none absolute right-1.5 top-1.5 z-10">
+            {assignee}
           </span>
         )}
         {hasGroupImageSimilarity && groupImagePosition != null && (

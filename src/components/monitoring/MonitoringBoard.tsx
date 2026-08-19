@@ -53,6 +53,7 @@ import { SortHeader } from "./board/SortHeader";
 import { FilterPill, StatusTabs } from "./board/StatusTabs";
 import { compactListingTitle, hasReviewAnalysis, selectedFindingSummary } from "./board/utils";
 import { useTenantMembers } from "../../hooks/useTenantMembers";
+import { AssigneeAvatar, AssigneeAvatarStack } from "./board/AssigneeAvatar";
 
 /** Shape pushed up to the parent — must match Findings.tsx::InboxFilters. */
 export interface BoardFilters {
@@ -192,6 +193,9 @@ export function MonitoringBoard({
     loading: tenantMembersLoading,
     error: tenantMembersError,
   } = useTenantMembers();
+  const selectedAssigneeMember = filters.assignee && filters.assignee !== "unassigned"
+    ? tenantMembers.find((member) => member.id === filters.assignee) ?? null
+    : null;
   // Optimistically-dismissed result_ids — the next refetch replaces these
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
@@ -1218,31 +1222,48 @@ export function MonitoringBoard({
               <span className={filterHeaderLabel}>
                 Assignee
               </span>
-              <select
-                value={filters.assignee ?? "all"}
-                onChange={(event) =>
-                  onFiltersChange({
-                    assignee: event.target.value === "all" ? null : event.target.value,
-                  })
-                }
-                disabled={tenantMembersLoading}
-                aria-label="Filter tasks by assignee"
-                title="Filter tasks by their assigned tenant member"
-                className={`${FILTER_SELECT} max-w-sm`}
-              >
-                <option value="all">All assignees</option>
-                <option value="unassigned">Unassigned</option>
-                {filters.assignee && filters.assignee !== "unassigned" && !tenantMembers.some(
-                  (member) => member.id === filters.assignee,
-                ) && (
-                  <option value={filters.assignee}>Selected user</option>
-                )}
-                {tenantMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {tenantMemberLabel(member)}
-                  </option>
-                ))}
-              </select>
+              <div className="relative min-w-56 max-w-sm">
+                <span className="pointer-events-none absolute left-2 top-1/2 z-10 flex -translate-y-1/2 items-center">
+                  {selectedAssigneeMember ? (
+                    <AssigneeAvatar
+                      accountId={selectedAssigneeMember.id}
+                      displayName={selectedAssigneeMember.display_name}
+                      email={selectedAssigneeMember.email}
+                      pictureUrl={selectedAssigneeMember.picture_url}
+                      size={18}
+                    />
+                  ) : filters.assignee === "unassigned" ? (
+                    <AssigneeAvatar showUnassigned size={18} />
+                  ) : (
+                    <AssigneeAvatarStack members={tenantMembers} size={18} />
+                  )}
+                </span>
+                <select
+                  value={filters.assignee ?? "all"}
+                  onChange={(event) =>
+                    onFiltersChange({
+                      assignee: event.target.value === "all" ? null : event.target.value,
+                    })
+                  }
+                  disabled={tenantMembersLoading}
+                  aria-label="Filter tasks by assignee"
+                  title="Filter tasks by their assigned tenant member"
+                  className={`${FILTER_SELECT} w-full max-w-sm pl-11`}
+                >
+                  <option value="all">All assignees</option>
+                  <option value="unassigned">Unassigned</option>
+                  {filters.assignee && filters.assignee !== "unassigned" && !tenantMembers.some(
+                    (member) => member.id === filters.assignee,
+                  ) && (
+                    <option value={filters.assignee}>Selected user</option>
+                  )}
+                  {tenantMembers.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {tenantMemberLabel(member)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {tenantMembersError && (
                 <span className="text-[11px] text-red-600">{tenantMembersError}</span>
               )}
@@ -1415,6 +1436,7 @@ export function MonitoringBoard({
                   <SortHeader label="Similarity" col="rate" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="w-20" />
                   <th className="py-1.5 px-2 font-semibold w-16"><span className="sr-only">Image</span></th>
                   <th className="py-1.5 px-2 font-semibold">Listing</th>
+                  <th className="hidden w-16 px-2 py-1.5 font-semibold md:table-cell">Assignee</th>
                   <SortHeader label="Seller" col="seller" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="hidden md:table-cell" />
                   <SortHeader label="Platform" col="platform" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="hidden lg:table-cell" />
                   <th className="hidden sm:table-cell py-1.5 px-2 font-semibold">Status</th>

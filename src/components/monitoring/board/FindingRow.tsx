@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { IpReviewFinding } from "../../../api";
 import { sellerProfilePath } from "../../../lib/sellers";
 import { ActionabilityBadge } from "./ActionabilityBadge";
+import { AssigneeAvatar } from "./AssigneeAvatar";
 import {
   QTY_FALLBACK,
   actionabilityMeta,
@@ -85,7 +86,6 @@ export function FindingRow({
   const priceText = priceUsd ?? f.price ?? null;
   const chips = findingChips(f, showIp);
   const actionability = actionabilityMeta(f.actionability);
-  const assigneeLabel = f.assignee_display_name || f.assignee_email;
 
   return (
     <>
@@ -134,12 +134,15 @@ export function FindingRow({
               Moved
             </span>
           )}
-          {assigneeLabel && (
-            <span
-              className="max-w-32 shrink-0 truncate rounded bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-blue-700"
-              title={`Assigned to ${f.assignee_email || assigneeLabel}`}
-            >
-              {assigneeLabel}
+          {f.assigned_to_account_id && (
+            <span className="shrink-0 md:hidden">
+              <AssigneeAvatar
+                accountId={f.assigned_to_account_id}
+                displayName={f.assignee_display_name}
+                email={f.assignee_email}
+                pictureUrl={f.assignee_picture_url}
+                size={18}
+              />
             </span>
           )}
           {chips.slice(0, 3).map((chip) => (
@@ -152,6 +155,17 @@ export function FindingRow({
             </span>
           ))}
         </div>
+      </td>
+
+      {/* Assignee — a compact ownership signal, matching issue-list patterns. */}
+      <td className="hidden w-16 px-2 py-1 align-middle md:table-cell">
+        <AssigneeAvatar
+          accountId={f.assigned_to_account_id}
+          displayName={f.assignee_display_name}
+          email={f.assignee_email}
+          pictureUrl={f.assignee_picture_url}
+          size={22}
+        />
       </td>
 
       {/* Seller. */}

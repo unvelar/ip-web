@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { IpReviewFinding, MonitoringDismissReasonCode, MonitoringReviewOutcome } from "../../../api";
 import { sellerProfilePath } from "../../../lib/sellers";
 import { ActionabilityBadge } from "./ActionabilityBadge";
+import { AssigneeAvatar } from "./AssigneeAvatar";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
 import {
@@ -55,7 +56,6 @@ export function GridFindingCard({
   const actionability = actionabilityMeta(f.actionability);
   const whyFlagged = findingFlaggedReason(f);
   const chips = findingChips(f, showIp);
-  const assigneeLabel = f.assignee_display_name || f.assignee_email;
   const similarity = f.similarity_score ?? f.enforcement_priority;
   const similarityText = Number.isFinite(similarity)
     ? `${Math.round(similarity * 100)}% similarity`
@@ -138,14 +138,6 @@ export function GridFindingCard({
               Moved
             </span>
           )}
-          {assigneeLabel && (
-            <span
-              className="max-w-[9rem] truncate rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
-              title={`Assigned to ${f.assignee_email || assigneeLabel}`}
-            >
-              {assigneeLabel}
-            </span>
-          )}
           {chips.slice(0, 5).map((chip) => (
             <span
               key={chip}
@@ -158,17 +150,26 @@ export function GridFindingCard({
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${status.cls}`}>
             {status.label}
           </span>
-          <a
-            href={f.page_url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-stone-200 bg-white text-stone-500 hover:bg-stone-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
-            title="Open listing"
-            aria-label="Open listing"
-          >
-            <ExternalLink size={12} aria-hidden="true" />
-          </a>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5">
+            <AssigneeAvatar
+              accountId={f.assigned_to_account_id}
+              displayName={f.assignee_display_name}
+              email={f.assignee_email}
+              pictureUrl={f.assignee_picture_url}
+              size={22}
+            />
+            <a
+              href={f.page_url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-stone-200 bg-white text-stone-500 hover:bg-stone-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+              title="Open listing"
+              aria-label="Open listing"
+            >
+              <ExternalLink size={12} aria-hidden="true" />
+            </a>
+          </span>
         </div>
         <div className="text-[11px] text-stone-500 truncate">
           {sellerTarget ? (

@@ -13,7 +13,12 @@ interface Props {
 
 export default function Avatar({ pictureUrl, name, size = 32, className = "" }: Props) {
   const [errored, setErrored] = useState(false);
-  const initial = (name?.trim()?.[0] ?? "?").toUpperCase();
+  const initials = (name?.trim() || "?")
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
   const showImage = pictureUrl && !errored;
 
   const style = { width: size, height: size, fontSize: size * 0.42 };
@@ -35,7 +40,7 @@ export default function Avatar({ pictureUrl, name, size = 32, className = "" }: 
       style={style}
       className={`rounded-full bg-gradient-to-br from-stone-200 to-stone-300 text-stone-600 font-bold flex items-center justify-center ${className}`}
     >
-      {initial}
+      {initials}
     </div>
   );
 }

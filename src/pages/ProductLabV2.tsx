@@ -39,6 +39,7 @@ import {
   runPool,
 } from "../components/monitoring/board/batchUtils";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
+import { AssigneeAvatar } from "../components/monitoring/board/AssigneeAvatar";
 import {
   findingPlatformLabel,
   formatMoney,
@@ -1772,6 +1773,17 @@ function BatchListingCard({
         >
           {selected ? <Check size={15} strokeWidth={3} /> : <Square size={14} />}
         </button>
+        {finding.assigned_to_account_id && (
+          <span className="pointer-events-none absolute right-2 top-2 z-20">
+            <AssigneeAvatar
+              accountId={finding.assigned_to_account_id}
+              displayName={finding.assignee_display_name}
+              email={finding.assignee_email}
+              pictureUrl={finding.assignee_picture_url}
+              size={24}
+            />
+          </span>
+        )}
         <span className={`absolute bottom-2 left-2 rounded border px-1.5 py-0.5 text-[8px] font-semibold ${bucketMeta.badge}`}>
           {bucketMeta.label}
         </span>

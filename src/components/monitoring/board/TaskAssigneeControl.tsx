@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { UserRound } from "lucide-react";
+import { ChevronDown, UserRound } from "lucide-react";
 import {
   updateMonitoringFindingAssignment,
   type IpReviewFinding,
@@ -7,6 +7,7 @@ import {
   type TenantMember,
 } from "../../../api";
 import { useTenantMembers } from "../../../hooks/useTenantMembers";
+import { AssigneeAvatar } from "./AssigneeAvatar";
 import type { FindingUpdateOptions } from "./FindingActions";
 
 function memberLabel(member: Pick<TenantMember, "display_name" | "email">) {
@@ -80,30 +81,47 @@ export function TaskAssigneeControl({
           <UserRound size={15} className="text-stone-400" aria-hidden="true" />
           <label htmlFor={`task-assignee-${finding.result_id}`}>Assignee</label>
         </div>
-        <select
-          id={`task-assignee-${finding.result_id}`}
-          value={selectedId}
-          onChange={(event) => void changeAssignee(event.target.value)}
-          disabled={disabled}
-          title={disabledReason}
-          aria-label="Assign task to a tenant member"
-          className="h-8 min-w-56 flex-1 rounded-md border border-stone-300 bg-white px-2 text-xs text-stone-800 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
-        >
-          <option value="">Unassigned</option>
-          {selectedMemberMissing && assignment.assigned_to_account_id && (
-            <option value={assignment.assigned_to_account_id}>
-              {memberLabel({
-                display_name: assignment.assignee_display_name,
-                email: assignment.assignee_email,
-              })}
-            </option>
-          )}
-          {members.map((member) => (
-            <option key={member.id} value={member.id}>
-              {memberLabel(member)}
-            </option>
-          ))}
-        </select>
+        <div className="relative min-w-56 flex-1">
+          <span className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2">
+            <AssigneeAvatar
+              accountId={assignment.assigned_to_account_id}
+              displayName={assignment.assignee_display_name}
+              email={assignment.assignee_email}
+              pictureUrl={assignment.assignee_picture_url}
+              size={22}
+              showUnassigned
+            />
+          </span>
+          <select
+            id={`task-assignee-${finding.result_id}`}
+            value={selectedId}
+            onChange={(event) => void changeAssignee(event.target.value)}
+            disabled={disabled}
+            title={disabledReason}
+            aria-label="Assign task to a tenant member"
+            className="h-9 w-full appearance-none rounded-md border border-stone-300 bg-white pl-10 pr-8 text-xs font-medium text-stone-800 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
+          >
+            <option value="">Unassigned</option>
+            {selectedMemberMissing && assignment.assigned_to_account_id && (
+              <option value={assignment.assigned_to_account_id}>
+                {memberLabel({
+                  display_name: assignment.assignee_display_name,
+                  email: assignment.assignee_email,
+                })}
+              </option>
+            )}
+            {members.map((member) => (
+              <option key={member.id} value={member.id}>
+                {memberLabel(member)}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={14}
+            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400"
+            aria-hidden="true"
+          />
+        </div>
         {saving && <span className="text-[11px] text-stone-400">Saving…</span>}
       </div>
       {(error || membersError || !finding.case_id) && (
