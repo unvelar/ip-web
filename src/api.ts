@@ -74,6 +74,13 @@ export interface AuthUser {
   role?: "user" | "admin";
 }
 
+export interface TenantMember {
+  id: string;
+  email: string | null;
+  display_name: string | null;
+  picture_url: string | null;
+}
+
 /** URL the browser navigates to in order to start a WorkOS AuthKit sign-in.
  *  Optional `returnTo` is a same-origin path the backend will echo back to
  *  the SPA as `?next=…` after the OAuth round-trip succeeds. */
@@ -89,6 +96,10 @@ export function workosLoginUrl(returnTo?: string, options: { forceReauth?: boole
 
 export function getMe() {
   return request<{ user: AuthUser | null }>("/api/auth/me");
+}
+
+export function listTenantMembers() {
+  return request<{ members: TenantMember[] }>("/api/tenant/members");
 }
 
 export async function logout() {
@@ -1462,6 +1473,12 @@ export interface IpReviewFinding {
   takedown_submission_method: "email" | "manual" | null;
   takedown_submitted_by: string | null;
   enforced_at: string | null;
+  /** Durable case-scoped task assignment shared by Tasks and Product Lab. */
+  assigned_to_account_id: string | null;
+  assignee_display_name: string | null;
+  assignee_email: string | null;
+  assignee_picture_url: string | null;
+  assignment_updated_at: string | null;
   // Round-3 dashboard metadata — all nullable (only populated when visible on
   // the listing page during enrichment). Typed for filter/sort/aggregation.
   published_at: string | null;
@@ -2285,6 +2302,8 @@ export interface MonitoringFindingsQuery {
   catalog_product_id?: string | null;
   platform?: string | null;
   seller?: string | null;
+  /** Tenant-member account id, or the literal "unassigned". */
+  assignee?: string | null;
   dismissal_reason?: MonitoringDismissalReasonFilter | null;
   candidate_outcome?: MonitoringCandidateOutcome | null;
   show_dismissed?: boolean;
@@ -2311,6 +2330,7 @@ export function listMonitoringFindingsGlobal(
   if (opts.catalog_product_id) params.set("catalog_product_id", opts.catalog_product_id);
   if (opts.platform)     params.set("platform", opts.platform);
   if (opts.seller)       params.set("seller", opts.seller);
+  if (opts.assignee)     params.set("assignee", opts.assignee);
   if (opts.dismissal_reason) params.set("dismissal_reason", opts.dismissal_reason);
   if (opts.candidate_outcome) params.set("candidate_outcome", opts.candidate_outcome);
   if (opts.show_dismissed) params.set("show_dismissed", "true");
@@ -2327,6 +2347,27 @@ export function listMonitoringFindingsGlobal(
 export function getMonitoringFinding(resultId: string) {
   return request<{ finding: IpReviewFinding }>(
     `/api/monitoring/findings/${encodeURIComponent(resultId)}`,
+  );
+}
+
+export interface MonitoringTaskAssignment {
+  assigned_to_account_id: string | null;
+  assignee_display_name: string | null;
+  assignee_email: string | null;
+  assignee_picture_url: string | null;
+  assignment_updated_at: string | null;
+}
+
+export function updateMonitoringFindingAssignment(
+  resultId: string,
+  assigneeAccountId: string | null,
+) {
+  return request<{ assignment: MonitoringTaskAssignment }>(
+    `/api/monitoring/findings/${encodeURIComponent(resultId)}/assignment`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ assignee_account_id: assigneeAccountId }),
+    },
   );
 }
 

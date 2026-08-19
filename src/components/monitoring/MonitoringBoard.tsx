@@ -52,6 +52,7 @@ import type { FindingUpdateOptions } from "./board/FindingActions";
 import { SortHeader } from "./board/SortHeader";
 import { FilterPill, StatusTabs } from "./board/StatusTabs";
 import { compactListingTitle, hasReviewAnalysis, selectedFindingSummary } from "./board/utils";
+import { useTenantMembers } from "../../hooks/useTenantMembers";
 
 /** Shape pushed up to the parent — must match Findings.tsx::InboxFilters. */
 export interface BoardFilters {
@@ -62,6 +63,7 @@ export interface BoardFilters {
   catalog_product_id: string | null;
   platform: string | null;
   seller: string | null;
+  assignee: string | null;
   dismissal_reason: MonitoringDismissalReasonFilter | null;
   candidate_outcome: MonitoringCandidateOutcome | null;
   show_dismissed: boolean;
@@ -121,6 +123,13 @@ function isBatchSelectableFinding(f: IpReviewFinding) {
   );
 }
 
+function tenantMemberLabel(member: { display_name: string | null; email: string | null }) {
+  const name = member.display_name?.trim();
+  const email = member.email?.trim();
+  if (name && email) return `${name} (${email})`;
+  return name || email || "Unnamed user";
+}
+
 /**
  * Tenant-wide findings board. Filter state lives in the URL (managed by
  * Findings.tsx); the board is a "dumb" renderer that consumes the page of
@@ -178,6 +187,11 @@ export function MonitoringBoard({
   seedBatchKey?: string | null;
 }) {
   const ipAware = showIpColumn ?? findings.some((f) => !!f.ip_id);
+  const {
+    members: tenantMembers,
+    loading: tenantMembersLoading,
+    error: tenantMembersError,
+  } = useTenantMembers();
   // Optimistically-dismissed result_ids — the next refetch replaces these
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
@@ -1197,6 +1211,41 @@ export function MonitoringBoard({
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+          {(tenantMembersLoading || tenantMembers.length > 0 || tenantMembersError || filters.assignee) && (
+            <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+              <span className={filterHeaderLabel}>
+                Assignee
+              </span>
+              <select
+                value={filters.assignee ?? "all"}
+                onChange={(event) =>
+                  onFiltersChange({
+                    assignee: event.target.value === "all" ? null : event.target.value,
+                  })
+                }
+                disabled={tenantMembersLoading}
+                aria-label="Filter tasks by assignee"
+                title="Filter tasks by their assigned tenant member"
+                className={`${FILTER_SELECT} max-w-sm`}
+              >
+                <option value="all">All assignees</option>
+                <option value="unassigned">Unassigned</option>
+                {filters.assignee && filters.assignee !== "unassigned" && !tenantMembers.some(
+                  (member) => member.id === filters.assignee,
+                ) && (
+                  <option value={filters.assignee}>Selected user</option>
+                )}
+                {tenantMembers.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {tenantMemberLabel(member)}
+                  </option>
+                ))}
+              </select>
+              {tenantMembersError && (
+                <span className="text-[11px] text-red-600">{tenantMembersError}</span>
+              )}
             </div>
           )}
           {facets.platforms.length > 1 && (

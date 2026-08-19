@@ -55,6 +55,7 @@ export function GridFindingCard({
   const actionability = actionabilityMeta(f.actionability);
   const whyFlagged = findingFlaggedReason(f);
   const chips = findingChips(f, showIp);
+  const assigneeLabel = f.assignee_display_name || f.assignee_email;
   const similarity = f.similarity_score ?? f.enforcement_priority;
   const similarityText = Number.isFinite(similarity)
     ? `${Math.round(similarity * 100)}% similarity`
@@ -135,6 +136,14 @@ export function GridFindingCard({
               title="Manually moved during grouped triage"
             >
               Moved
+            </span>
+          )}
+          {assigneeLabel && (
+            <span
+              className="max-w-[9rem] truncate rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
+              title={`Assigned to ${f.assignee_email || assigneeLabel}`}
+            >
+              {assigneeLabel}
             </span>
           )}
           {chips.slice(0, 5).map((chip) => (

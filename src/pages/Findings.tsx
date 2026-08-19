@@ -34,6 +34,7 @@ interface InboxFilters {
   catalog_product_id: string | null;
   platform: string | null;
   seller: string | null;
+  assignee: string | null;
   dismissal_reason: MonitoringDismissalReasonFilter | null;
   candidate_outcome: MonitoringCandidateOutcome | null;
   show_dismissed: boolean;
@@ -49,6 +50,7 @@ function parseFilters(params: URLSearchParams): InboxFilters {
   const dismissalReason = params.get("dismissal_reason");
   const candidateOutcome = params.get("candidate_outcome");
   const seller = params.get("seller");
+  const assignee = params.get("assignee");
   return {
     // Default to "To triage" (pending); an explicit `status=all` clears it.
     status:
@@ -67,6 +69,7 @@ function parseFilters(params: URLSearchParams): InboxFilters {
     catalog_product_id: params.get("catalog_product_id"),
     platform: params.get("platform"),
     seller: seller && seller.trim() ? seller.trim() : null,
+    assignee: assignee && assignee.trim() ? assignee.trim() : null,
     dismissal_reason:
       dismissalReason === "false_positive" ||
       dismissalReason === "do_not_pursue" ||
@@ -115,6 +118,7 @@ function writeFilters(base: URLSearchParams, f: InboxFilters): URLSearchParams {
   setOrDel("catalog_product_id", f.catalog_product_id);
   setOrDel("platform", f.platform);
   setOrDel("seller", f.seller);
+  setOrDel("assignee", f.assignee);
   setOrDel("dismissal_reason", f.dismissal_reason);
   setOrDel("candidate_outcome", f.candidate_outcome);
   setOrDel("show_dismissed", f.show_dismissed ? "true" : null);

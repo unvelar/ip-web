@@ -85,6 +85,7 @@ export function FindingRow({
   const priceText = priceUsd ?? f.price ?? null;
   const chips = findingChips(f, showIp);
   const actionability = actionabilityMeta(f.actionability);
+  const assigneeLabel = f.assignee_display_name || f.assignee_email;
 
   return (
     <>
@@ -131,6 +132,14 @@ export function FindingRow({
               title="Manually moved during grouped triage"
             >
               Moved
+            </span>
+          )}
+          {assigneeLabel && (
+            <span
+              className="max-w-32 shrink-0 truncate rounded bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-blue-700"
+              title={`Assigned to ${f.assignee_email || assigneeLabel}`}
+            >
+              {assigneeLabel}
             </span>
           )}
           {chips.slice(0, 3).map((chip) => (

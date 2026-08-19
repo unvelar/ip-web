@@ -11,6 +11,7 @@ import CaseComments from "../../CaseComments";
 import { FindingComparison, FindingTechnicalDetails } from "./FindingComparison";
 import type { FindingUpdateOptions } from "./FindingActions";
 import { RelatedItemsPanel } from "./RelatedItemsPanel";
+import { TaskAssigneeControl } from "./TaskAssigneeControl";
 import { compactListingTitle } from "./utils";
 
 export function FindingInspector({
@@ -178,6 +179,7 @@ export function FindingInspector({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+          <TaskAssigneeControl finding={f} onUpdated={onUpdated} />
           <FindingComparison
             key={f.result_id}
             f={f}
