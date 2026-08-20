@@ -31,6 +31,7 @@ import AdminIntakes from "./pages/AdminIntakes";
 import AdminIpDetail from "./pages/AdminIpDetail";
 import AdminTenants from "./pages/AdminTenants";
 import Settings from "./pages/Settings";
+import Notifications from "./pages/Notifications";
 
 function TrademarkRedirect() {
   const { id } = useParams();
@@ -50,18 +51,6 @@ function RegistryAuditRedirect() {
 function IpReviewRedirect() {
   const { id } = useParams();
   return <Navigate to={`/clearance/tasks/${id}`} replace />;
-}
-
-/** `/inbox` → `/monitoring/tasks` (or `/clearance/tasks` if `?tab=clearance`).
- *  The old unified inbox is gone; preserve any non-tab params on the way. */
-function InboxRedirect() {
-  const { search } = useLocation();
-  const params = new URLSearchParams(search);
-  const tab = params.get("tab");
-  params.delete("tab");
-  const qs = params.toString();
-  const target = tab === "clearance" ? "/clearance/tasks" : "/monitoring/tasks";
-  return <Navigate to={qs ? `${target}?${qs}` : target} replace />;
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -149,6 +138,7 @@ export default function App() {
           <Route path="/clearance/designs/catalog" element={<DesignsCatalog />} />
           <Route path="/clearance/pop/catalog" element={<PopCultureCatalog />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/inbox" element={<Notifications />} />
         </Route>
 
         {/* Admin (separate gate, same shell) */}
@@ -171,7 +161,6 @@ export default function App() {
         <Route path="/registry/:id" element={<RegistryRedirect />} />
         <Route path="/registry/:id/audit" element={<RegistryAuditRedirect />} />
         <Route path="/monitoring" element={<Navigate to="/monitoring/tasks" replace />} />
-        <Route path="/inbox" element={<InboxRedirect />} />
         <Route path="/trademarks" element={<Navigate to="/ips" replace />} />
         <Route path="/trademarks/:id" element={<TrademarkRedirect />} />
         <Route path="/ip-reviews" element={<Navigate to="/clearance/tasks" replace />} />
