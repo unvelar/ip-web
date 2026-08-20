@@ -391,6 +391,8 @@ export interface CaseComment {
   id: string;
   case_id: string;
   body: string;
+  mentions: string[];
+  mentioned_accounts: TenantMember[];
   created_at: string;
   author: {
     id: string;
@@ -434,11 +436,64 @@ export function listCaseComments(caseId: string) {
   return request<{ comments: CaseComment[] }>(`/api/cases/${caseId}/comments`);
 }
 
-export function postCaseComment(caseId: string, body: string) {
+export function postCaseComment(caseId: string, body: string, mentions: string[] = []) {
   return request<{ comment: CaseComment }>(`/api/cases/${caseId}/comments`, {
     method: "POST",
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, mentions }),
   });
+}
+
+export function getCaseSubscription(caseId: string) {
+  return request<{ subscribed: boolean }>(`/api/cases/${caseId}/subscription`);
+}
+
+export function updateCaseSubscription(caseId: string, subscribed: boolean) {
+  return request<{ subscribed: boolean }>(`/api/cases/${caseId}/subscription`, {
+    method: "PATCH",
+    body: JSON.stringify({ subscribed }),
+  });
+}
+
+export type AccountNotificationType =
+  | "task_assigned"
+  | "comment_mention"
+  | "task_comment";
+
+export interface AccountNotification {
+  id: string;
+  type: AccountNotificationType;
+  case_id: string;
+  comment_id: string | null;
+  payload: { comment_preview?: string; result_id?: string };
+  read_at: string | null;
+  created_at: string;
+  actor: TenantMember | null;
+  task: {
+    result_id: string | null;
+    title: string | null;
+    source_url: string | null;
+  };
+}
+
+export function listAccountNotifications(limit = 60) {
+  return request<{ notifications: AccountNotification[]; unread_count: number }>(
+    `/api/notifications?limit=${encodeURIComponent(limit)}`,
+  );
+}
+
+export function getAccountNotificationUnreadCount() {
+  return request<{ count: number }>("/api/notifications/unread-count");
+}
+
+export function updateAccountNotificationRead(notificationId: string, read: boolean) {
+  return request<{ notification: { id: string; read_at: string | null } }>(
+    `/api/notifications/${encodeURIComponent(notificationId)}`,
+    { method: "PATCH", body: JSON.stringify({ read }) },
+  );
+}
+
+export function markAllAccountNotificationsRead() {
+  return request<{ updated: number }>("/api/notifications/read-all", { method: "POST" });
 }
 
 export function deleteCaseComment(caseId: string, commentId: string) {

@@ -18,6 +18,8 @@ import {
   Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
+  Inbox as InboxIcon,
+  Bell,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "./Avatar";
@@ -25,6 +27,7 @@ import BrandMark from "./BrandMark";
 import {
   getIpReviewsAttentionCount,
   getMonitoringFindingsCount,
+  getAccountNotificationUnreadCount,
   listTenants,
   tenantLabel,
   type Tenant,
@@ -41,6 +44,7 @@ const MON_OPEN_KEY = "appshell.mon.open";
 const CLE_OPEN_KEY = "appshell.cle.open";
 const SIDEBAR_COLLAPSED_KEY = "appshell.sidebar.collapsed";
 const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
+const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
 
 /**
  * Application shell — left sidebar (lg+) / off-canvas drawer (below lg) +
@@ -98,6 +102,7 @@ function AppShellContent() {
   const { pathname } = useLocation();
   const [clearanceCount, setClearanceCount] = useState(0);
   const [monitoringCount, setMonitoringCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
     loadBoolean(SIDEBAR_COLLAPSED_KEY, false),
@@ -148,28 +153,30 @@ function AppShellContent() {
     if (!user) {
       setClearanceCount(0);
       setMonitoringCount(0);
+      setNotificationCount(0);
       return;
     }
     if (adminPathActive) return;
     let alive = true;
     async function refresh() {
-      try {
-        const [{ count: clearanceCount }, { count: monitoringCount }] = await Promise.all([
-          getIpReviewsAttentionCount(),
-          getMonitoringFindingsCount(),
-        ]);
-        if (!alive) return;
-        setClearanceCount(clearanceCount);
-        setMonitoringCount(monitoringCount);
-      } catch {
-        // Non-fatal — badges just stay at the prior value.
-      }
+      const [clearance, monitoring, notifications] = await Promise.allSettled([
+        getIpReviewsAttentionCount(),
+        getMonitoringFindingsCount(),
+        getAccountNotificationUnreadCount(),
+      ]);
+      if (!alive) return;
+      if (clearance.status === "fulfilled") setClearanceCount(clearance.value.count);
+      if (monitoring.status === "fulfilled") setMonitoringCount(monitoring.value.count);
+      if (notifications.status === "fulfilled") setNotificationCount(notifications.value.count);
     }
     void refresh();
     const t = setInterval(refresh, INBOX_POLL_MS);
+    const onNotificationsChanged = () => void refresh();
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, onNotificationsChanged);
     return () => {
       alive = false;
       clearInterval(t);
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onNotificationsChanged);
     };
   }, [user, pathname, adminPathActive]);
 
@@ -220,6 +227,22 @@ function AppShellContent() {
           >
             <PanelLeftOpen size={18} />
           </button>
+        )}
+        <div className={`mb-3 border-b border-stone-200/60 pb-3 ${collapsed ? "" : "space-y-0.5"}`}>
+          <NavItem
+            to="/inbox"
+            icon={<InboxIcon size={18} />}
+            label="Inbox"
+            active={isActive("/inbox")}
+            badge={notificationCount}
+            collapsed={collapsed}
+          />
+        </div>
+
+        {!collapsed && (
+          <div className="px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">
+            Workspace
+          </div>
         )}
         <NavItem
           to="/dashboard"
@@ -355,8 +378,9 @@ function AppShellContent() {
           <BrandMark className="h-6 w-6 shrink-0" />
           <span className="hidden text-sm font-bold tracking-tight sm:inline">Unvelar</span>
         </Link>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
           <TopbarIpSelector active={isActive("/ips")} />
+          <NotificationBell count={notificationCount} active={isActive("/inbox")} />
         </div>
       </div>
 
@@ -398,13 +422,41 @@ function AppShellContent() {
           )}
           {/* Desktop topbar — the working IP is global application context.
               Registry management stays beside it without competing in nav. */}
-          <div className="hidden lg:flex sticky top-0 z-20 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 items-center justify-end px-6">
+          <div className="hidden lg:flex sticky top-0 z-20 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 items-center justify-end gap-2 px-6">
             <TopbarIpSelector active={isActive("/ips")} />
+            <div className="ml-1 h-5 w-px bg-stone-200" aria-hidden />
+            <NotificationBell count={notificationCount} active={isActive("/inbox")} />
           </div>
           <Outlet />
         </main>
       </div>
     </div>
+  );
+}
+
+function NotificationBell({ count, active }: { count: number; active: boolean }) {
+  const title = count > 0
+    ? `${count} unread notification${count === 1 ? "" : "s"}`
+    : "Notifications";
+
+  return (
+    <Link
+      to="/inbox"
+      className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 ${
+        active
+          ? "bg-stone-200 text-stone-900"
+          : "text-stone-500 hover:bg-stone-100 hover:text-stone-900"
+      }`}
+      aria-label={title}
+      title={title}
+    >
+      <Bell size={18} strokeWidth={1.8} aria-hidden />
+      {count > 0 && (
+        <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-cream bg-red-600 px-1 text-[8px] font-bold leading-none text-white">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </Link>
   );
 }
 
