@@ -101,9 +101,7 @@ type ProductRecommendationFields = {
 
 export function productNeedsAttention(group: ProductAttentionFields) {
   const triageMemberCount = group.triage_member_count ?? 0;
-  return group.confirmation_status === "confirmed"
-    ? triageMemberCount > 0
-    : triageMemberCount > 1;
+  return triageMemberCount > 0;
 }
 
 export function productShouldStayInAttention(
