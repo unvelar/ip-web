@@ -9,12 +9,14 @@ import {
   Clock3,
   ExternalLink,
   Layers3,
+  Link2,
   LoaderCircle,
   RefreshCw,
   RotateCcw,
   Search,
   Square,
   Sparkles,
+  X,
 } from "lucide-react";
 import {
   approveTakedownBatch,
@@ -24,13 +26,17 @@ import {
   listMonitoringFindingsGlobal,
   listProductClusterScopes,
   markIpFindingNeedsReview,
+  mergePersistedProductGroups,
   reopenIpFinding,
+  revokePersistedProductGroupMerge,
+  searchPersistedProductGroupMergeCandidates,
   undismissIpFinding,
   type IpReviewFinding,
   type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
   type PersistedProductGroup,
   type PersistedProductGroupOverview,
+  type ProductGroupMergeCandidate,
   type TakedownFeedbackAssociationScope,
 } from "../api";
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
@@ -64,6 +70,16 @@ import {
 type ProductLabView = "attention" | "history" | "all";
 type ReviewBucket = "all" | "takedown" | "second_hand" | "might_be_ok" | "needs_review";
 const PAGE_SIZE = 24;
+
+type ProductMergeNotice = {
+  message: string;
+  tone: "success" | "error";
+  undo?: {
+    decisionId: string;
+    groupId: string;
+    sourceGroupId: string;
+  };
+};
 
 type CategorizedProduct = {
   group: PersistedProductGroup;
@@ -351,6 +367,9 @@ export default function ProductLabV2() {
   const [confirmBatchAction, setConfirmBatchAction] = useState<ProductLabBatchAction | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchNotice, setBatchNotice] = useState<string | null>(null);
+  const [mergeSourceGroup, setMergeSourceGroup] = useState<PersistedProductGroup | null>(null);
+  const [mergeNotice, setMergeNotice] = useState<ProductMergeNotice | null>(null);
+  const [undoingMerge, setUndoingMerge] = useState(false);
   const [activeFinding, setActiveFinding] = useState<IpReviewFinding | null>(null);
   const [dismissingResultId, setDismissingResultId] = useState<string | null>(null);
   const [recentDecisions, setRecentDecisions] = useState<IpReviewFinding[]>([]);
@@ -378,6 +397,12 @@ export default function ProductLabV2() {
     else next.delete("group");
     setSearchParams(next);
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    setMergeSourceGroup(null);
+    setMergeNotice(null);
+    setUndoingMerge(false);
+  }, [activeIpId, actingTenantId]);
 
   useEffect(() => {
     if (loadingIp) return;
@@ -636,6 +661,7 @@ export default function ProductLabV2() {
     next.delete("group");
     setQuery("");
     setActiveFinding(null);
+    setMergeSourceGroup(null);
     setSearchParams(next);
   }
 
@@ -907,6 +933,74 @@ export default function ProductLabV2() {
       });
   }
 
+  async function mergeSelectedProduct(target: ProductGroupMergeCandidate) {
+    if (!activeIpId || !mergeSourceGroup) return;
+    const source = mergeSourceGroup;
+    const { decision } = await mergePersistedProductGroups(
+      activeIpId,
+      source.id,
+      target.group_id,
+    );
+
+    let mergedGroupId = source.id;
+    try {
+      const mergedOverview = await getPersistedProductGroups(
+        activeIpId,
+        "same",
+        "all",
+        {
+          limit: 1,
+          productId: decision.canonical_product_id,
+          catalogScope: "catalog",
+        },
+      );
+      mergedGroupId = mergedOverview.groups[0]?.id ?? mergedGroupId;
+    } catch {
+      // The merge itself is already durable. A normal overview refresh below
+      // will recover the selected product if this follow-up read is stale.
+    }
+
+    setMergeSourceGroup(null);
+    setMergeNotice({
+      message: `“${productName(source)}” and “${target.display_name}” are now one product. Future matching listings will use this reviewer decision.`,
+      tone: "success",
+      undo: {
+        decisionId: decision.id,
+        groupId: mergedGroupId,
+        sourceGroupId: source.id,
+      },
+    });
+    selectGroup(mergedGroupId);
+    setRefreshToken((token) => token + 1);
+  }
+
+  async function undoLastProductMerge() {
+    const undo = mergeNotice?.undo;
+    if (!activeIpId || !undo || undoingMerge) return;
+    setUndoingMerge(true);
+    try {
+      await revokePersistedProductGroupMerge(
+        activeIpId,
+        undo.groupId,
+        undo.decisionId,
+      );
+      setMergeNotice({
+        message: "Same-product decision undone. The previous product groups will be restored.",
+        tone: "success",
+      });
+      selectGroup(undo.sourceGroupId);
+      setRefreshToken((token) => token + 1);
+    } catch (caught: unknown) {
+      setMergeNotice({
+        message: `Unable to undo the same-product decision. ${messageFor(caught)}`,
+        tone: "error",
+        undo,
+      });
+    } finally {
+      setUndoingMerge(false);
+    }
+  }
+
   return (
     <div className="min-h-[calc(100dvh-3rem)] bg-[#f7f6f3] text-stone-950 lg:h-[calc(100dvh-3rem)] lg:overflow-hidden">
       <header className="border-b border-stone-200/80 bg-[#faf9f7] px-4 py-4 sm:px-6 lg:px-7">
@@ -1143,6 +1237,7 @@ export default function ProductLabV2() {
               onOpenFinding={setActiveFinding}
               onSetSelection={(resultIds) => setSelectedResultIds(new Set(resultIds))}
               onBatchAction={setConfirmBatchAction}
+              onMergeProduct={() => setMergeSourceGroup(selectedGroup)}
               onDismissNotice={() => setBatchNotice(null)}
             />
           ) : (
@@ -1172,6 +1267,50 @@ export default function ProductLabV2() {
             void runBatch(action, decisionReason, associationScopes);
           }}
         />
+      )}
+      {mergeSourceGroup && activeIpId && (
+        <ProductMergeDialog
+          key={mergeSourceGroup.id}
+          ipId={activeIpId}
+          sourceGroup={mergeSourceGroup}
+          onClose={() => setMergeSourceGroup(null)}
+          onMerge={mergeSelectedProduct}
+        />
+      )}
+      {mergeNotice && (
+        <div
+          role={mergeNotice.tone === "error" ? "alert" : "status"}
+          aria-live="polite"
+          className={`fixed bottom-4 left-1/2 z-[70] flex w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 items-start gap-3 rounded-xl border px-4 py-3 shadow-xl ${
+            mergeNotice.tone === "error"
+              ? "border-red-200 bg-red-50 text-red-900"
+              : "border-emerald-200 bg-emerald-50 text-emerald-950"
+          }`}
+        >
+          <Check size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-[11px] font-medium leading-5">
+            {mergeNotice.message}
+          </p>
+          {mergeNotice.undo && (
+            <button
+              type="button"
+              disabled={undoingMerge}
+              onClick={() => void undoLastProductMerge()}
+              className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-current/20 bg-white/70 px-2 text-[10px] font-semibold hover:bg-white disabled:opacity-50"
+            >
+              {undoingMerge && <LoaderCircle size={11} className="animate-spin" />}
+              {undoingMerge ? "Undoing…" : "Undo"}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Dismiss same-product notice"
+            onClick={() => setMergeNotice(null)}
+            className="grid size-7 shrink-0 place-items-center rounded-md opacity-60 hover:bg-white/70 hover:opacity-100"
+          >
+            <X size={13} />
+          </button>
+        </div>
       )}
       {activeFinding && (
         <FindingInspector
@@ -1389,6 +1528,287 @@ function ProductRow({
   );
 }
 
+function ProductMergeDialog({
+  ipId,
+  sourceGroup,
+  onClose,
+  onMerge,
+}: {
+  ipId: string;
+  sourceGroup: PersistedProductGroup;
+  onClose: () => void;
+  onMerge: (target: ProductGroupMergeCandidate) => Promise<void>;
+}) {
+  const [query, setQuery] = useState("");
+  const [candidates, setCandidates] = useState<ProductGroupMergeCandidate[]>([]);
+  const [selected, setSelected] = useState<ProductGroupMergeCandidate | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || saving) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose, saving]);
+
+  useEffect(() => {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length < 2) return;
+
+    const controller = new AbortController();
+    let alive = true;
+    const timeout = window.setTimeout(() => {
+      setSearching(true);
+      setSearchError(null);
+      void searchPersistedProductGroupMergeCandidates(
+        ipId,
+        sourceGroup.id,
+        trimmedQuery,
+        controller.signal,
+      )
+        .then(({ candidates: matches }) => {
+          if (alive) setCandidates(matches);
+        })
+        .catch((caught: unknown) => {
+          if (!alive || controller.signal.aborted) return;
+          setCandidates([]);
+          setSearchError(messageFor(caught));
+        })
+        .finally(() => {
+          if (alive) setSearching(false);
+        });
+    }, 250);
+
+    return () => {
+      alive = false;
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [ipId, query, sourceGroup.id]);
+
+  async function submitMerge() {
+    if (!selected || saving) return;
+    setSaving(true);
+    setSubmitError(null);
+    try {
+      await onMerge(selected);
+    } catch (caught: unknown) {
+      setSubmitError(messageFor(caught));
+      setSaving(false);
+    }
+  }
+
+  const sourceImage = representativeImage(sourceGroup);
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !saving) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="same-product-dialog-title"
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-5 py-4 sm:px-6">
+          <div className="min-w-0">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-violet-700">
+              Same-product decision
+            </p>
+            <h2 id="same-product-dialog-title" className="mt-1 text-[18px] font-semibold tracking-[-0.02em] text-stone-950">
+              Mark another product as the same
+            </h2>
+            <p className="mt-1 max-w-xl text-[11px] leading-5 text-stone-500">
+              Choose the matching product. Product Lab will keep every listing, combine both identities, and use your decision when grouping future matches.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close same-product dialog"
+            disabled={saving}
+            onClick={onClose}
+            className="grid size-8 shrink-0 place-items-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-stone-400">
+            Selected product
+          </p>
+          <div className="mt-2 flex items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+            <div className="size-12 shrink-0 overflow-hidden rounded-lg border border-stone-200 bg-white">
+              {sourceImage ? (
+                <img src={sourceImage} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="grid h-full place-items-center text-sm font-semibold text-stone-400">
+                  {productName(sourceGroup).slice(0, 1).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-stone-950">
+                {productName(sourceGroup)}
+              </p>
+              <p className="mt-1 text-[10px] text-stone-500">
+                {offerCount(sourceGroup)} {offerCount(sourceGroup) === 1 ? "offer" : "offers"}
+                {sourceGroup.catalog_primary_category_name
+                  ? ` · ${sourceGroup.catalog_primary_category_name}`
+                  : ""}
+              </p>
+            </div>
+          </div>
+
+          <label htmlFor="same-product-search" className="mt-5 block text-[10px] font-semibold text-stone-700">
+            Find the matching product
+          </label>
+          <div className="relative mt-2">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+              aria-hidden="true"
+            />
+            <input
+              id="same-product-search"
+              type="search"
+              autoFocus
+              value={query}
+              disabled={saving}
+              onChange={(event) => {
+                const nextQuery = event.target.value;
+                setQuery(nextQuery);
+                setCandidates([]);
+                setSearching(nextQuery.trim().length >= 2);
+                setSearchError(null);
+                setSelected(null);
+                setSubmitError(null);
+              }}
+              placeholder="Search product names, categories, or offer titles"
+              aria-controls="same-product-candidates"
+              aria-expanded={candidates.length > 0}
+              className="h-10 w-full rounded-lg border border-stone-300 bg-white pl-9 pr-3 text-[12px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+            />
+          </div>
+
+          <div className="mt-2 min-h-5" aria-live="polite">
+            {searching ? (
+              <p className="inline-flex items-center gap-1.5 text-[10px] text-stone-500">
+                <LoaderCircle size={11} className="animate-spin" />
+                Searching the full product catalog…
+              </p>
+            ) : searchError ? (
+              <p className="text-[10px] text-red-700">{searchError}</p>
+            ) : query.trim().length > 0 && query.trim().length < 2 ? (
+              <p className="text-[10px] text-stone-400">Type at least two characters.</p>
+            ) : query.trim().length >= 2 && candidates.length === 0 ? (
+              <p className="text-[10px] text-stone-500">No other products match that search.</p>
+            ) : null}
+          </div>
+
+          {candidates.length > 0 && (
+            <div
+              id="same-product-candidates"
+              role="listbox"
+              aria-label="Matching products"
+              className="mt-1 overflow-hidden rounded-xl border border-stone-200"
+            >
+              {candidates.map((candidate) => {
+                const isSelected = selected?.group_id === candidate.group_id;
+                return (
+                  <button
+                    key={candidate.group_id}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    disabled={saving}
+                    onClick={() => {
+                      setSelected(candidate);
+                      setSubmitError(null);
+                    }}
+                    className={`flex w-full items-start gap-3 border-b border-stone-200 px-3 py-3 text-left transition last:border-b-0 disabled:opacity-50 ${
+                      isSelected
+                        ? "bg-violet-50 ring-1 ring-inset ring-violet-300"
+                        : "bg-white hover:bg-stone-50"
+                    }`}
+                  >
+                    <span className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border ${
+                      isSelected
+                        ? "border-violet-700 bg-violet-700 text-white"
+                        : "border-stone-300 bg-white text-transparent"
+                    }`}>
+                      <Check size={11} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-semibold text-stone-900">
+                        {candidate.display_name}
+                      </span>
+                      <span className="mt-1 block text-[10px] text-stone-500">
+                        {candidate.member_count} {candidate.member_count === 1 ? "listing" : "listings"}
+                        {candidate.category_name ? ` · ${candidate.category_name}` : ""}
+                        {candidate.confirmation_status === "confirmed" ? " · Confirmed" : ""}
+                      </span>
+                      {candidate.representative_listing_title && (
+                        <span className="mt-1 block truncate text-[9px] text-stone-400">
+                          Example: {candidate.representative_listing_title}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {selected && (
+            <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5 text-[10px] leading-4 text-violet-900">
+              “{productName(sourceGroup)}” and “{selected.display_name}” will become one durable product identity. Listing review decisions, prices, and variants remain unchanged.
+            </div>
+          )}
+          {submitError && (
+            <div role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-[10px] leading-4 text-red-800">
+              {submitError}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-stone-200 bg-stone-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p className="max-w-md text-[9px] leading-4 text-stone-500">
+            This is reversible. If the products cross an active Different product correction, Product Lab will leave them separate and explain why.
+          </p>
+          <div className="flex shrink-0 items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={onClose}
+              className="h-9 rounded-lg px-3 text-[11px] font-medium text-stone-600 hover:bg-stone-200/70 hover:text-stone-900 disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!selected || saving}
+              onClick={() => void submitMerge()}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-violet-700 px-3.5 text-[11px] font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {saving ? <LoaderCircle size={12} className="animate-spin" /> : <Link2 size={12} />}
+              {saving ? "Combining…" : "Mark as same product"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function recentDecisionPresentation(finding: IpReviewFinding) {
   const kind = recentDecisionKind(finding);
   if (kind === "dismissed") {
@@ -1537,6 +1957,7 @@ function BatchWorkspace({
   onOpenFinding,
   onSetSelection,
   onBatchAction,
+  onMergeProduct,
   onDismissNotice,
 }: {
   group: PersistedProductGroup;
@@ -1553,6 +1974,7 @@ function BatchWorkspace({
   onOpenFinding: (finding: IpReviewFinding) => void;
   onSetSelection: (resultIds: string[]) => void;
   onBatchAction: (action: ProductLabBatchAction) => void;
+  onMergeProduct: () => void;
   onDismissNotice: () => void;
 }) {
   const status = productStatus(group);
@@ -1608,13 +2030,23 @@ function BatchWorkspace({
               {findings?.length ?? group.triage_member_count ?? 0} listings in this batch
             </p>
           </div>
-          <Link
-            to={`/monitoring/products/${encodeURIComponent(group.id)}`}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-stone-200 px-2.5 text-[10px] font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800"
-          >
-            Settings
-            <ExternalLink size={11} />
-          </Link>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onMergeProduct}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-semibold text-violet-800 transition hover:border-violet-300 hover:bg-violet-100"
+            >
+              <Link2 size={12} />
+              Same product
+            </button>
+            <Link
+              to={`/monitoring/products/${encodeURIComponent(group.id)}`}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-stone-200 px-2.5 text-[10px] font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800"
+            >
+              Settings
+              <ExternalLink size={11} />
+            </Link>
+          </div>
         </div>
       </div>
 
