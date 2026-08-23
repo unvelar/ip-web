@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Check,
-  CheckSquare2,
   ChevronDown,
   ChevronRight,
   Clock3,
@@ -60,13 +59,18 @@ import {
   recentDecisionTimestamp,
   removeProcessedFindings,
   resetOptimisticProductStateAfterUndo,
-  shouldLoadMoreProductGroups,
   sortRecentDecisions,
   type ProductLabBatchAction,
 } from "./productLabV2Utils";
 
 type ProductLabView = "attention" | "history" | "all";
-type ReviewBucket = "all" | "takedown" | "second_hand" | "might_be_ok" | "needs_review";
+type ReviewBucket =
+  | "all"
+  | "takedown"
+  | "second_hand"
+  | "different_product"
+  | "licensed"
+  | "needs_review";
 const PAGE_SIZE = 24;
 
 type ProductMergeNotice = {
@@ -254,34 +258,18 @@ async function loadProductGroupPage(
   view: Exclude<ProductLabView, "history">,
   options: {
     cursor?: string | null;
+    query?: string | null;
+    allProducts?: boolean;
     signal?: AbortSignal;
   } = {},
 ) {
-  let accumulated: PersistedProductGroupOverview = await getPersistedProductGroups(
+  const { allProducts = false, ...requestOptions } = options;
+  return getPersistedProductGroups(
     ipId,
     "same",
-    "all",
-    { limit: PAGE_SIZE, ...options },
+    view === "attention" && !allProducts ? "triage" : "all",
+    { limit: PAGE_SIZE, ...requestOptions },
   );
-  const seenCursors = new Set<string>();
-
-  while (shouldLoadMoreProductGroups(
-    view,
-    accumulated.next_cursor,
-  )) {
-    const cursor = accumulated.next_cursor;
-    if (!cursor || seenCursors.has(cursor)) break;
-    seenCursors.add(cursor);
-    const next = await getPersistedProductGroups(
-      ipId,
-      "same",
-      "all",
-      { limit: PAGE_SIZE, cursor, signal: options.signal },
-    );
-    accumulated = appendPage(accumulated, next);
-  }
-
-  return accumulated;
 }
 
 async function loadCanonicalProductGroup(
@@ -318,7 +306,8 @@ function reviewBucket(finding: IpReviewFinding): Exclude<ReviewBucket, "all"> {
   const key = finding.actionability?.key;
   if (key === "send_takedown") return "takedown";
   if (key === "allowed_resale") return "second_hand";
-  if (key === "licensed_seller" || key === "false_positive") return "might_be_ok";
+  if (key === "licensed_seller") return "licensed";
+  if (key === "false_positive") return "different_product";
   return "needs_review";
 }
 
@@ -349,34 +338,62 @@ async function loadProductGroupFindings(ipId: string, groupId: string) {
   return findings;
 }
 
-async function loadRecentDecisions(ipId: string, signal?: AbortSignal) {
-  const statuses = [
-    "dismissed",
-    "review",
-    "takedown_pending",
-    "takedown_sent",
-    "enforced",
-  ] as const;
+const RECENT_DECISION_STATUSES = [
+  "dismissed",
+  "review",
+  "takedown_pending",
+  "takedown_sent",
+  "enforced",
+] as const;
+type RecentDecisionStatus = typeof RECENT_DECISION_STATUSES[number];
+type RecentDecisionCursors = Record<RecentDecisionStatus, string | null>;
+
+function mergeRecentDecisions(
+  current: IpReviewFinding[],
+  incoming: IpReviewFinding[],
+) {
+  const byResultId = new Map(current.map((finding) => [finding.result_id, finding]));
+  for (const finding of incoming) {
+    const existing = byResultId.get(finding.result_id);
+    if (
+      !existing ||
+      Date.parse(recentDecisionTimestamp(finding)) >
+        Date.parse(recentDecisionTimestamp(existing))
+    ) byResultId.set(finding.result_id, finding);
+  }
+  return sortRecentDecisions([...byResultId.values()]);
+}
+
+async function loadRecentDecisionPages(
+  ipId: string,
+  cursors?: RecentDecisionCursors,
+  signal?: AbortSignal,
+) {
+  const statuses = RECENT_DECISION_STATUSES.filter((status) =>
+    cursors === undefined || Boolean(cursors[status])
+  );
   const pages = await Promise.all(statuses.map((status) =>
     listMonitoringFindingsGlobal({
       ip_id: ipId,
       status,
       show_dismissed: status === "dismissed",
       sort: "updated_desc",
-      limit: 30,
+      limit: 50,
+      cursor: cursors?.[status] ?? null,
       signal,
     })
   ));
-  const byResultId = new Map<string, IpReviewFinding>();
-  for (const finding of pages.flatMap((page) => page.findings)) {
-    const current = byResultId.get(finding.result_id);
-    if (
-      !current ||
-      Date.parse(recentDecisionTimestamp(finding)) >
-        Date.parse(recentDecisionTimestamp(current))
-    ) byResultId.set(finding.result_id, finding);
-  }
-  return sortRecentDecisions([...byResultId.values()]).slice(0, 50);
+  const nextCursors = Object.fromEntries(
+    RECENT_DECISION_STATUSES.map((status) => [status, null]),
+  ) as RecentDecisionCursors;
+  if (cursors) Object.assign(nextCursors, cursors);
+  statuses.forEach((status, index) => {
+    nextCursors[status] = pages[index].next_cursor;
+  });
+  return {
+    findings: mergeRecentDecisions([], pages.flatMap((page) => page.findings)),
+    cursors: nextCursors,
+  };
 }
 
 export default function ProductLabV2() {
@@ -387,8 +404,10 @@ export default function ProductLabV2() {
   const [scopeAvailable, setScopeAvailable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [backgroundLoading, setBackgroundLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [debouncedProductQuery, setDebouncedProductQuery] = useState("");
   const [refreshToken, setRefreshToken] = useState(0);
   const [batchFindings, setBatchFindings] = useState<IpReviewFinding[] | null>(null);
   const [loadingBatch, setLoadingBatch] = useState(false);
@@ -410,6 +429,13 @@ export default function ProductLabV2() {
   const [activeFinding, setActiveFinding] = useState<IpReviewFinding | null>(null);
   const [dismissingResultId, setDismissingResultId] = useState<string | null>(null);
   const [recentDecisions, setRecentDecisions] = useState<IpReviewFinding[]>([]);
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(50);
+  const [historyCursors, setHistoryCursors] = useState<RecentDecisionCursors>(() =>
+    Object.fromEntries(
+      RECENT_DECISION_STATUSES.map((status) => [status, null]),
+    ) as RecentDecisionCursors
+  );
+  const [loadingOlderHistory, setLoadingOlderHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
@@ -427,6 +453,14 @@ export default function ProductLabV2() {
     ? requestedView
     : "attention";
   const selectedGroupId = searchParams.get("group");
+
+  useEffect(() => {
+    if (view === "history") return;
+    const timer = window.setTimeout(() => {
+      setDebouncedProductQuery(query.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query, view]);
 
   const selectGroup = useCallback((groupId: string | null) => {
     const next = new URLSearchParams(searchParams);
@@ -471,39 +505,72 @@ export default function ProductLabV2() {
       setScopeAvailable(null);
     }
     setLoading(true);
+    setBackgroundLoading(false);
     setError(null);
 
-    void listProductClusterScopes(controller.signal)
-      .then(async ({ scopes }) => {
+    void (async () => {
+      try {
+        const { scopes } = await listProductClusterScopes(controller.signal);
         if (!alive) return;
         const available = scopes.some((scope) => scope.ip_id === activeIpId);
         setScopeAvailable(available);
-        if (!available) return null;
-        return loadProductGroupPage(activeIpId, view, { signal: controller.signal });
-      })
-      .then((nextOverview) => {
-        if (!alive || !nextOverview) return;
-        const reconciledOverview = Object.entries(exactPendingCountsRef.current)
-          .reduce(
-            (current, [groupId, exactPendingCount]) =>
-              reconcileProductAttentionOverview(current, groupId, exactPendingCount),
-            nextOverview,
-          );
-        setOverview(reconciledOverview);
-      })
-      .catch((caught: unknown) => {
+        if (!available) return;
+
+        let accumulated: PersistedProductGroupOverview = await loadProductGroupPage(activeIpId, view, {
+          query: debouncedProductQuery || null,
+          allProducts: Boolean(mergeSourceGroup),
+          signal: controller.signal,
+        });
+        if (!alive) return;
+        accumulated = Object.entries(exactPendingCountsRef.current).reduce(
+          (current, [groupId, exactPendingCount]) =>
+            reconcileProductAttentionOverview(current, groupId, exactPendingCount),
+          accumulated,
+        );
+        setOverview(accumulated);
+        setLoading(false);
+
+        if (view !== "attention" || mergeSourceGroup || !accumulated.next_cursor) return;
+        setBackgroundLoading(true);
+        const seenCursors = new Set<string>();
+        while (alive && accumulated.next_cursor) {
+          const cursor = accumulated.next_cursor;
+          if (seenCursors.has(cursor)) break;
+          seenCursors.add(cursor);
+          const next = await loadProductGroupPage(activeIpId, view, {
+            cursor,
+            query: debouncedProductQuery || null,
+            allProducts: Boolean(mergeSourceGroup),
+            signal: controller.signal,
+          });
+          if (!alive) return;
+          accumulated = appendPage(accumulated, next);
+          setOverview(accumulated);
+        }
+      } catch (caught: unknown) {
         if (!alive || controller.signal.aborted) return;
         setError(messageFor(caught));
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+      } finally {
+        if (alive) {
+          setLoading(false);
+          setBackgroundLoading(false);
+        }
+      }
+    })();
 
     return () => {
       alive = false;
       controller.abort();
     };
-  }, [activeIpId, actingTenantId, loadingIp, refreshToken, view]);
+  }, [
+    activeIpId,
+    actingTenantId,
+    debouncedProductQuery,
+    loadingIp,
+    mergeSourceGroup,
+    refreshToken,
+    view,
+  ]);
 
   useEffect(() => {
     if (loadingIp || view !== "history") return;
@@ -515,10 +582,14 @@ export default function ProductLabV2() {
     let alive = true;
     const controller = new AbortController();
     setLoadingHistory(true);
+    setHistoryVisibleCount(50);
     setHistoryError(null);
-    void loadRecentDecisions(activeIpId, controller.signal)
-      .then((findings) => {
-        if (alive) setRecentDecisions(findings);
+    void loadRecentDecisionPages(activeIpId, undefined, controller.signal)
+      .then((result) => {
+        if (alive) {
+          setRecentDecisions(result.findings);
+          setHistoryCursors(result.cursors);
+        }
       })
       .catch((caught: unknown) => {
         if (alive && !controller.signal.aborted) setHistoryError(messageFor(caught));
@@ -531,6 +602,10 @@ export default function ProductLabV2() {
       controller.abort();
     };
   }, [activeIpId, actingTenantId, loadingIp, refreshToken, view]);
+
+  useEffect(() => {
+    if (view === "history") setHistoryVisibleCount(50);
+  }, [query, view]);
 
   const visibleGroups = useMemo(() => {
     if (!overview) return [];
@@ -758,6 +833,8 @@ export default function ProductLabV2() {
     try {
       const next = await loadProductGroupPage(activeIpId, view, {
         cursor: overview.next_cursor,
+        query: debouncedProductQuery || null,
+        allProducts: Boolean(mergeSourceGroup),
       });
       setOverview((current) => current ? appendPage(current, next) : next);
     } catch (caught: unknown) {
@@ -770,7 +847,7 @@ export default function ProductLabV2() {
   const attentionCount = overview?.triage_group_count ?? null;
   const productCount = overview?.group_count ?? 0;
   const showMobileInspector = Boolean(selectedGroupId && selectedGroup && !mergeSourceGroup);
-  const visibleRecentDecisions = useMemo(() => {
+  const matchingRecentDecisions = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     if (!needle) return recentDecisions;
     return recentDecisions.filter((finding) => [
@@ -781,6 +858,34 @@ export default function ProductLabV2() {
       finding.review_status,
     ].filter(Boolean).join(" ").toLocaleLowerCase().includes(needle));
   }, [query, recentDecisions]);
+  const visibleRecentDecisions = useMemo(
+    () => matchingRecentDecisions.slice(0, historyVisibleCount),
+    [historyVisibleCount, matchingRecentDecisions],
+  );
+  const historyHasServerPages = Object.values(historyCursors).some(Boolean);
+  const historyHasOlder =
+    historyVisibleCount < matchingRecentDecisions.length || historyHasServerPages;
+
+  async function loadOlderHistory() {
+    if (!activeIpId || loadingOlderHistory) return;
+    if (historyVisibleCount < matchingRecentDecisions.length) {
+      setHistoryVisibleCount((count) => count + 50);
+      return;
+    }
+    if (!historyHasServerPages) return;
+    setLoadingOlderHistory(true);
+    setHistoryError(null);
+    try {
+      const result = await loadRecentDecisionPages(activeIpId, historyCursors);
+      setHistoryCursors(result.cursors);
+      setRecentDecisions((current) => mergeRecentDecisions(current, result.findings));
+      setHistoryVisibleCount((count) => count + 50);
+    } catch (caught: unknown) {
+      setHistoryError(messageFor(caught));
+    } finally {
+      setLoadingOlderHistory(false);
+    }
+  }
 
   const selectedFindings = batchFindings?.filter((finding) =>
     selectedResultIds.has(finding.result_id)
@@ -1307,14 +1412,41 @@ export default function ProductLabV2() {
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                aria-label={view === "history"
+                  ? "Search decision history"
+                  : view === "all" || mergeSourceGroup
+                    ? "Search all products"
+                    : "Search products needing attention"}
                 placeholder={view === "history"
                   ? "Search recent decisions"
                   : mergeSourceGroup
-                    ? "Filter this list (optional)"
-                    : "Search products"}
+                    ? "Search all products to merge"
+                    : view === "all"
+                      ? "Search all products"
+                      : "Search products needing attention"}
                 className="h-8 w-full rounded-md border border-stone-200 bg-white pl-8 pr-3 text-[12px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/70"
               />
             </label>
+            {view !== "history" && backgroundLoading && overview && (
+              <div className="mt-2" role="status" aria-live="polite">
+                <div className="flex items-center justify-between gap-3 text-[10px] text-stone-500">
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <LoaderCircle size={11} className="shrink-0 animate-spin" aria-hidden="true" />
+                    <span className="truncate">
+                      Loading the complete {query.trim() ? "matching " : ""}product list
+                    </span>
+                  </span>
+                  <span className="shrink-0 tabular-nums">
+                    {overview.groups.length} / {overview.pagination_group_count}
+                  </span>
+                </div>
+                <progress
+                  value={overview.groups.length}
+                  max={Math.max(overview.pagination_group_count, overview.groups.length, 1)}
+                  className="mt-1 h-1 w-full accent-stone-700"
+                />
+              </div>
+            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -1353,18 +1485,39 @@ export default function ProductLabV2() {
                       : "Decisions you make for this IP will appear here."}
                   />
                 ) : (
-                  <div role="listbox" aria-label="Recent decisions">
-                    {visibleRecentDecisions.map((finding) => (
-                      <RecentDecisionRow
-                        key={finding.result_id}
-                        finding={finding}
-                        selected={activeFinding?.result_id === finding.result_id}
-                        undoing={undoingResultIds.has(finding.result_id)}
-                        onOpen={() => setActiveFinding(finding)}
-                        onUndo={() => void undoRecentDecision(finding)}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    <div className="flex items-center justify-between border-b border-stone-200/70 bg-white px-4 py-2 text-[10px] text-stone-500 sm:px-6 lg:px-4">
+                      <span>
+                        Showing {visibleRecentDecisions.length} of {matchingRecentDecisions.length} loaded decisions
+                      </span>
+                      <span>Newest first</span>
+                    </div>
+                    <div role="listbox" aria-label="Decision history">
+                      {visibleRecentDecisions.map((finding) => (
+                        <RecentDecisionRow
+                          key={finding.result_id}
+                          finding={finding}
+                          selected={activeFinding?.result_id === finding.result_id}
+                          undoing={undoingResultIds.has(finding.result_id)}
+                          onOpen={() => setActiveFinding(finding)}
+                          onUndo={() => void undoRecentDecision(finding)}
+                        />
+                      ))}
+                    </div>
+                    {historyHasOlder && (
+                      <div className="border-t border-stone-200/80 p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => void loadOlderHistory()}
+                          disabled={loadingOlderHistory}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-medium text-stone-600 transition hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50"
+                        >
+                          {loadingOlderHistory && <LoaderCircle size={12} className="animate-spin" aria-hidden="true" />}
+                          {loadingOlderHistory ? "Loading older decisions…" : "Load 50 older decisions"}
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             ) : loading && !overview ? (
@@ -1478,7 +1631,6 @@ export default function ProductLabV2() {
                 setBatchNotice(null);
               }}
               onOpenFinding={setActiveFinding}
-              onSetSelection={(resultIds) => setSelectedResultIds(new Set(resultIds))}
               onBatchAction={setConfirmBatchAction}
               onMergeProduct={() => beginProductMergeSelection(selectedGroup)}
               onDismissNotice={() => setBatchNotice(null)}
@@ -1875,6 +2027,15 @@ function decisionTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
 }
 
+function decisionExactTime(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "Unknown time";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
 function RecentDecisionRow({
   finding,
   selected,
@@ -1891,6 +2052,10 @@ function RecentDecisionRow({
   const presentation = recentDecisionPresentation(finding);
   const canUndo = recentDecisionCanUndo(finding);
   const title = finding.listing_title?.trim() || "Untitled listing";
+  const decisionAuthor = finding.decision_by_display_name?.trim() ||
+    finding.decision_by_email?.trim() || null;
+  const decisionReason = finding.decision_reason?.trim() || null;
+  const decisionBatchSize = Math.max(1, finding.decision_batch_size ?? 1);
   return (
     <div
       role="option"
@@ -1923,8 +2088,35 @@ function RecentDecisionRow({
             </span>
             <span className="truncate">{findingPlatformLabel(finding)}</span>
             <span>·</span>
-            <span className="shrink-0">{decisionTime(recentDecisionTimestamp(finding))}</span>
+            <span
+              className="shrink-0"
+              title={decisionTime(recentDecisionTimestamp(finding))}
+            >
+              {decisionExactTime(recentDecisionTimestamp(finding))}
+            </span>
           </div>
+          {(decisionAuthor || decisionReason || decisionBatchSize > 1) && (
+            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-stone-500">
+              {finding.decision_by_account_id && (
+                <AssigneeAvatar
+                  accountId={finding.decision_by_account_id}
+                  displayName={finding.decision_by_display_name}
+                  email={finding.decision_by_email}
+                  pictureUrl={finding.decision_by_picture_url}
+                  size={16}
+                />
+              )}
+              <span className="shrink-0">{decisionAuthor ?? "Legacy or system action"}</span>
+              {decisionBatchSize > 1 && (
+                <span className="shrink-0 rounded bg-stone-100 px-1 py-0.5">
+                  Batch of {decisionBatchSize}
+                </span>
+              )}
+              {decisionReason && (
+                <span className="truncate" title={decisionReason}>· {decisionReason}</span>
+              )}
+            </div>
+          )}
         </div>
       </button>
       {canUndo && (
@@ -1950,7 +2142,8 @@ const REVIEW_BUCKETS: Array<{
   { key: "all", label: "All", badge: "border-stone-200 bg-white text-stone-600" },
   { key: "takedown", label: "Takedown", badge: "border-red-200 bg-red-50 text-red-800" },
   { key: "second_hand", label: "Second hand", badge: "border-violet-200 bg-violet-50 text-violet-800" },
-  { key: "might_be_ok", label: "Likely OK", badge: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+  { key: "different_product", label: "Different product", badge: "border-sky-200 bg-sky-50 text-sky-800" },
+  { key: "licensed", label: "Licensed seller", badge: "border-emerald-200 bg-emerald-50 text-emerald-800" },
   { key: "needs_review", label: "Review", badge: "border-amber-200 bg-amber-50 text-amber-800" },
 ];
 
@@ -1968,7 +2161,6 @@ function BatchWorkspace({
   onFilterChange,
   onToggleFinding,
   onOpenFinding,
-  onSetSelection,
   onBatchAction,
   onMergeProduct,
   onDismissNotice,
@@ -1986,7 +2178,6 @@ function BatchWorkspace({
   onFilterChange: (filter: ReviewBucket) => void;
   onToggleFinding: (resultId: string) => void;
   onOpenFinding: (finding: IpReviewFinding) => void;
-  onSetSelection: (resultIds: string[]) => void;
   onBatchAction: (action: ProductLabBatchAction) => void;
   onMergeProduct: () => void;
   onDismissNotice: () => void;
@@ -2000,12 +2191,6 @@ function BatchWorkspace({
   const visibleFindings = (findings ?? []).filter((finding) =>
     filter === "all" || reviewBucket(finding) === filter
   );
-  const visibleResultIds = visibleFindings.map((finding) => finding.result_id);
-  const selectedVisibleCount = visibleFindings.filter((finding) =>
-    selectedResultIds.has(finding.result_id)
-  ).length;
-  const allVisibleSelected = visibleFindings.length > 0 &&
-    selectedVisibleCount === visibleFindings.length;
   const selectedFindings = (findings ?? []).filter((finding) =>
     selectedResultIds.has(finding.result_id)
   );
@@ -2088,15 +2273,9 @@ function BatchWorkspace({
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            disabled={visibleFindings.length === 0 || Boolean(batchProgress)}
-            onClick={() => onSetSelection(allVisibleSelected ? [] : visibleResultIds)}
-            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2 text-[10px] font-medium text-stone-600 hover:border-stone-300 hover:text-stone-900 disabled:opacity-40"
-          >
-            {allVisibleSelected ? <CheckSquare2 size={13} /> : <Square size={13} />}
-            {allVisibleSelected ? "Clear" : "Select all"}
-          </button>
+          <span className="shrink-0 text-[10px] text-stone-500">
+            Select reviewed cards individually
+          </span>
         </div>
       </div>
 
@@ -2147,8 +2326,8 @@ function BatchWorkspace({
         <div className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-3 shadow-[0_-12px_28px_-24px_rgba(28,25,23,0.8)] backdrop-blur sm:px-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold text-stone-900">{selectedResultIds.size} selected</p>
-              <p className="text-[9px] text-stone-400">One decision applies to the whole selection.</p>
+              <p className="text-[11px] font-semibold text-stone-900">{selectedResultIds.size} manually selected</p>
+              <p className="text-[9px] text-stone-400">Only cards you selected will be changed.</p>
             </div>
             {batchProgress ? (
               <span className="inline-flex items-center gap-2 text-[11px] text-stone-500">
@@ -2271,12 +2450,17 @@ function BatchDecisionButton({
       onClick={onClick}
       aria-label={primary ? `Recommended action: ${label}` : undefined}
       data-recommended-action={primary ? "Recommended" : undefined}
-      className={`h-8 rounded-md px-2.5 text-[10px] font-semibold transition ${
+      className={`inline-flex h-8 items-center rounded-md px-2.5 text-[10px] font-semibold transition ${
         primary
           ? "bg-stone-950 text-white hover:bg-stone-800"
           : "border border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:text-stone-900"
       }`}
     >
+      {primary && (
+        <span className="mr-1 rounded bg-white/15 px-1 py-0.5 text-[8px] uppercase tracking-wide">
+          Recommended
+        </span>
+      )}
       {label}
     </button>
   );

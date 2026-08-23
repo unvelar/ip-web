@@ -19,6 +19,8 @@ export function BatchOperationBar({
   showShortcuts = true,
   disabled = false,
   statusMessage,
+  assigneeOptions = [],
+  onAssign,
 }: {
   selectedCount: number;
   selectedSummary: string[];
@@ -36,6 +38,8 @@ export function BatchOperationBar({
   showShortcuts?: boolean;
   disabled?: boolean;
   statusMessage?: string | null;
+  assigneeOptions?: Array<{ id: string; label: string }>;
+  onAssign?: (assigneeId: string | null) => void;
 }) {
   if (selectedCount <= 0) return null;
 
@@ -57,7 +61,7 @@ export function BatchOperationBar({
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs font-semibold text-stone-700 shrink-0">
-              {selectedCount} selected
+              {selectedCount} manually selected
             </span>
             {selectedSummary.map((part) => (
               <span
@@ -77,6 +81,26 @@ export function BatchOperationBar({
               </span>
             ) : (
               <>
+                {onAssign && (
+                  <select
+                    defaultValue=""
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (!value) return;
+                      onAssign(value === "unassigned" ? null : value);
+                      event.target.value = "";
+                    }}
+                    disabled={actionDisabled}
+                    aria-label="Assign manually selected tasks"
+                    className="h-7 rounded-md border border-stone-300 bg-white px-2 text-[11px] font-semibold text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Assign…</option>
+                    <option value="unassigned">Unassign</option>
+                    {assigneeOptions.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                )}
                 {showTakedown && (
                   <button
                     type="button"

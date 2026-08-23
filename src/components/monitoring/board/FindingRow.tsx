@@ -68,7 +68,7 @@ export function FindingRow({
   active: boolean;
   showIp?: boolean;
 }) {
-  const similarity = f.similarity_score ?? f.enforcement_priority;
+  const priority = f.enforcement_priority;
   const thumbUrls = tableImageUrls(f);
   const market = estimatedMarket(f);
   const sb = findingStatusBadge(f);
@@ -89,7 +89,7 @@ export function FindingRow({
 
   return (
     <>
-      {/* Similarity — secondary evidence; active marker owns row focus. */}
+      {/* Review priority — this is the exact value used by the sortable column. */}
       <td className="py-1 px-2 align-middle whitespace-nowrap">
         <span className="inline-flex items-center gap-1.5">
           <span
@@ -100,9 +100,9 @@ export function FindingRow({
           </span>
           <span
             className="text-[10px] font-semibold tabular-nums rounded px-1 py-0.5 bg-stone-100 text-stone-500"
-            title="Visual/text similarity"
+            title="Enforcement priority"
           >
-            {Number.isFinite(similarity) ? `${Math.round(similarity * 100)}%` : "—"}
+            {Number.isFinite(priority) ? `${Math.round(priority * 100)}%` : "—"}
           </span>
         </span>
       </td>

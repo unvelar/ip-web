@@ -649,6 +649,20 @@ export interface BatchTakedownSendResponse {
   failed: BatchTakedownCaseResult[];
 }
 
+export interface BatchTakedownPreflightResponse {
+  automatic_case_ids: string[];
+  legal_queue: TakedownLegalQueueResult[];
+  skipped: BatchTakedownCaseResult[];
+  route_groups: Array<{ label: string; domain: string; case_count: number }>;
+}
+
+export function preflightTakedownBatch(caseIds: string[]) {
+  return request<BatchTakedownPreflightResponse>("/api/takedowns/batch/preflight", {
+    method: "POST",
+    body: JSON.stringify({ case_ids: Array.from(new Set(caseIds)) }),
+  });
+}
+
 /** Resolve and queue a selection as one API request. Compatible cases (same
  *  IP and intake route) share one notice containing all listing links. */
 export function approveTakedownBatch(
@@ -1534,6 +1548,14 @@ export interface IpReviewFinding {
   assignee_email: string | null;
   assignee_picture_url: string | null;
   assignment_updated_at: string | null;
+  decision_by_account_id?: string | null;
+  decision_by_display_name?: string | null;
+  decision_by_email?: string | null;
+  decision_by_picture_url?: string | null;
+  decision_reason?: string | null;
+  decision_source?: string | null;
+  decision_batch_size?: number | null;
+  decision_feedback_at?: string | null;
   // Round-3 dashboard metadata — all nullable (only populated when visible on
   // the listing page during enrichment). Typed for filter/sort/aggregation.
   published_at: string | null;
@@ -2357,6 +2379,7 @@ export interface MonitoringFindingsQuery {
   catalog_product_id?: string | null;
   platform?: string | null;
   seller?: string | null;
+  query?: string | null;
   /** Tenant-member account id, or the literal "unassigned". */
   assignee?: string | null;
   dismissal_reason?: MonitoringDismissalReasonFilter | null;
@@ -2385,6 +2408,7 @@ export function listMonitoringFindingsGlobal(
   if (opts.catalog_product_id) params.set("catalog_product_id", opts.catalog_product_id);
   if (opts.platform)     params.set("platform", opts.platform);
   if (opts.seller)       params.set("seller", opts.seller);
+  if (opts.query)        params.set("q", opts.query);
   if (opts.assignee)     params.set("assignee", opts.assignee);
   if (opts.dismissal_reason) params.set("dismissal_reason", opts.dismissal_reason);
   if (opts.candidate_outcome) params.set("candidate_outcome", opts.candidate_outcome);
@@ -3658,6 +3682,7 @@ export async function getPersistedProductGroups(
     categoryId?: string | null;
     productId?: string | null;
     catalogScope?: ProductCatalogScope;
+    query?: string | null;
     signal?: AbortSignal;
   } = {},
 ) {
@@ -3668,6 +3693,7 @@ export async function getPersistedProductGroups(
   if (options.categoryId) params.set("category_id", options.categoryId);
   if (options.productId) params.set("product_id", options.productId);
   if (options.catalogScope) params.set("catalog_scope", options.catalogScope);
+  if (options.query) params.set("q", options.query);
   const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups?${params.toString()}`,
     { signal: options.signal },
@@ -3685,6 +3711,7 @@ export async function refreshPersistedProductGroups(
     categoryId?: string | null;
     productId?: string | null;
     catalogScope?: ProductCatalogScope;
+    query?: string | null;
   } = {},
 ) {
   const params = new URLSearchParams({ relationship, view });
@@ -3693,6 +3720,7 @@ export async function refreshPersistedProductGroups(
   if (options.categoryId) params.set("category_id", options.categoryId);
   if (options.productId) params.set("product_id", options.productId);
   if (options.catalogScope) params.set("catalog_scope", options.catalogScope);
+  if (options.query) params.set("q", options.query);
   const overview = await request<PersistedProductGroupOverview>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/groups/refresh?${params.toString()}`,
     { method: "POST" },

@@ -105,10 +105,6 @@ export function FindingActions({
     setSendErr("");
     setComposeDecisionReason("");
     setComposeAssociationScopes([...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
-    if (f.actionability?.key === "send_takedown") {
-      void sendDirect("", []);
-      return;
-    }
     setConfirming(true);
   }
 
@@ -132,6 +128,10 @@ export function FindingActions({
 
   async function handleLicense() {
     if (licensing || !ipId) return;
+    const seller = f.seller_name?.trim() || f.seller_url?.trim() || "this seller";
+    if (!window.confirm(
+      `Mark ${seller} as licensed on ${f.domain}? This dismisses current matching tasks and suppresses future findings for this seller on this website.`,
+    )) return;
     setLicensing(true);
     try {
       const result = await addIpLicense(ipId, {
@@ -517,7 +517,9 @@ export function FindingActions({
           type="button"
           disabled={!ipId || busy === "enforce"}
           onClick={() =>
-            ipId &&
+            ipId && window.confirm(
+              "Mark this task as enforced? Use this only after the listing has been removed or enforcement is confirmed.",
+            ) &&
             run(
               "enforce",
               async () => {

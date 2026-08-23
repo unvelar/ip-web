@@ -80,20 +80,14 @@ function relatedPreviewText(f: MonitoringRelatedFinding) {
     .join(" · ");
 }
 
-function relatedOpenItems(bucket: MonitoringRelatedBucket) {
-  return bucket.items.filter((item) => item.triageable);
-}
-
 function CampaignSuggestionRow({
   suggestion,
   sourceResultId,
   findingsById,
-  onAddToBatch,
 }: {
   suggestion: MonitoringCampaignSuggestion;
   sourceResultId: string;
   findingsById: Map<string, IpReviewFinding>;
-  onAddToBatch: (findings: IpReviewFinding[]) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [confirmed, setConfirmed] = useState<MonitoringCampaign | null>(null);
@@ -146,14 +140,6 @@ function CampaignSuggestionRow({
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            onClick={() => onAddToBatch(findings)}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-300 bg-white px-2 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
-          >
-            <Plus size={12} aria-hidden />
-            Select {findings.length}
-          </button>
-          <button
-            type="button"
             onClick={confirmCampaign}
             disabled={saving || !!confirmed}
             className="inline-flex h-7 items-center gap-1 rounded-md bg-amber-700 px-2 text-[11px] font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-amber-300 whitespace-nowrap"
@@ -173,7 +159,13 @@ function CampaignSuggestionRow({
   );
 }
 
-function RelatedFindingRow({ item }: { item: MonitoringRelatedFinding }) {
+function RelatedFindingRow({
+  item,
+  onSelect,
+}: {
+  item: MonitoringRelatedFinding;
+  onSelect?: () => void;
+}) {
   const status = findingStatusBadge(item);
   const score = scoreLabel(item.relation_score);
   const preview = relatedPreviewText(item);
@@ -219,16 +211,28 @@ function RelatedFindingRow({ item }: { item: MonitoringRelatedFinding }) {
             )}
           </div>
         </div>
-        <a
-          href={item.page_url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-          title="Open listing"
-          aria-label="Open listing"
-        >
-          <ExternalLink size={13} />
-        </a>
+        <div className="flex shrink-0 items-center gap-1">
+          {onSelect && (
+            <button
+              type="button"
+              onClick={onSelect}
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 text-[11px] font-semibold text-stone-700 hover:bg-stone-100"
+            >
+              <Plus size={12} aria-hidden />
+              Select
+            </button>
+          )}
+          <a
+            href={item.page_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            title="Open listing"
+            aria-label="Open listing"
+          >
+            <ExternalLink size={13} />
+          </a>
+        </div>
       </div>
     </div>
   );
@@ -241,7 +245,6 @@ function RelatedBucketSection({
   bucket: MonitoringRelatedBucket;
   onAddToBatch: (findings: IpReviewFinding[]) => void;
 }) {
-  const openItems = relatedOpenItems(bucket);
   const hasContent =
     bucket.items.length > 0 ||
     (bucket.decisions?.length ?? 0) > 0 ||
@@ -255,16 +258,6 @@ function RelatedBucketSection({
           <h4 className="shrink-0 text-xs font-semibold text-stone-700">{bucket.label}</h4>
           <span className="truncate text-[11px] text-stone-400">· {bucket.summary}</span>
         </div>
-        {openItems.length > 0 && (
-          <button
-            type="button"
-            onClick={() => onAddToBatch(openItems)}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 text-[11px] font-semibold text-stone-700 hover:bg-stone-50"
-          >
-            <Plus size={12} aria-hidden />
-            Select {openItems.length}
-          </button>
-        )}
       </div>
 
       {bucket.outcome_counts && (
@@ -281,7 +274,11 @@ function RelatedBucketSection({
 
       <div className="grid gap-2">
         {bucket.items.slice(0, 5).map((item) => (
-          <RelatedFindingRow key={item.result_id} item={item} />
+          <RelatedFindingRow
+            key={item.result_id}
+            item={item}
+            onSelect={item.triageable ? () => onAddToBatch([item]) : undefined}
+          />
         ))}
       </div>
 
@@ -445,7 +442,6 @@ export function RelatedItemsPanel({
               suggestion={suggestion}
               sourceResultId={related.anchor.result_id}
               findingsById={findingsById}
-              onAddToBatch={onAddToBatch}
             />
           ))}
         </div>

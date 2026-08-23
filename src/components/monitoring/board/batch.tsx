@@ -1,9 +1,10 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type {
+  BatchTakedownPreflightResponse,
   IpReviewFinding,
   TakedownFeedbackAssociationScope,
 } from "../../../api";
-import { DEFAULT_TAKEDOWN_FEEDBACK_SCOPES } from "../../../api";
+import { DEFAULT_TAKEDOWN_FEEDBACK_SCOPES, preflightTakedownBatch } from "../../../api";
 import { TakedownFeedbackScopeFields } from "../../TakedownFeedbackScopeFields";
 import { BATCH_META, type BatchAction } from "./batchUtils";
 
@@ -31,6 +32,9 @@ export function BatchConfirmModal({
   const [associationScopes, setAssociationScopes] = useState<
     TakedownFeedbackAssociationScope[]
   >(() => [...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
+  const [preflight, setPreflight] = useState<BatchTakedownPreflightResponse | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState(false);
+  const [preflightError, setPreflightError] = useState("");
   const meta = BATCH_META[action];
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
   const reasonValid =
@@ -38,6 +42,47 @@ export function BatchConfirmModal({
       decisionReason.trim().length >= 3 && associationScopes.length > 0
     );
   const canConfirm = eligible.length > 0 && reasonValid;
+  const platformCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    eligible.forEach((finding) => {
+      const platform = finding.domain || "Unknown website";
+      counts.set(platform, (counts.get(platform) ?? 0) + 1);
+    });
+    return [...counts.entries()].sort((left, right) => right[1] - left[1]);
+  }, [eligible]);
+  const recommendedCount = eligible.filter((finding) => {
+    const key = finding.actionability?.key;
+    if (action === "send") return key === "send_takedown";
+    if (action === "false_positive") return key === "false_positive";
+    if (action === "second_hand") return key === "allowed_resale";
+    if (action === "review") return key === "needs_review";
+    return false;
+  }).length;
+
+  useEffect(() => {
+    if (action !== "send") return;
+    const caseIds = eligible.flatMap((finding) => finding.case_id ? [finding.case_id] : []);
+    if (caseIds.length === 0) return;
+    let active = true;
+    setPreflight(null);
+    setPreflightError("");
+    setPreflightLoading(true);
+    void preflightTakedownBatch(caseIds)
+      .then((result) => {
+        if (active) setPreflight(result);
+      })
+      .catch((caught: unknown) => {
+        if (active) {
+          setPreflightError(caught instanceof Error ? caught.message : "Route check failed");
+        }
+      })
+      .finally(() => {
+        if (active) setPreflightLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [action, eligible]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -102,6 +147,58 @@ export function BatchConfirmModal({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+          {eligible.length > 0 && (
+            <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-xs">
+              <p className="font-semibold text-stone-800">Selection preflight</p>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wide text-stone-400">Recommendation</span>
+                  <span className="font-semibold text-stone-700">
+                    {recommendedCount} aligned · {eligible.length - recommendedCount} conflicting
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wide text-stone-400">Websites</span>
+                  <span className="font-semibold text-stone-700">
+                    {platformCounts.map(([platform, count]) => `${platform} ${count}`).join(" · ")}
+                  </span>
+                </div>
+              </div>
+              {action === "send" && (
+                <div className="mt-2 border-t border-stone-200 pt-2">
+                  <span className="block text-[10px] uppercase tracking-wide text-stone-400">Delivery route</span>
+                  {preflightLoading ? (
+                    <span className="text-stone-500">Checking automatic and legal routes…</span>
+                  ) : preflight ? (
+                    <div className="mt-1 space-y-1 text-stone-700">
+                      <p>
+                        <strong>{preflight.automatic_case_ids.length}</strong> automatic ·{" "}
+                        <strong>{preflight.legal_queue.length}</strong> legal queue ·{" "}
+                        <strong>{preflight.skipped.length}</strong> skipped
+                      </p>
+                      {preflight.route_groups.map((route) => (
+                        <p key={`${route.domain}:${route.label}`} className="text-[11px] text-stone-500">
+                          {route.case_count} via {route.label} ({route.domain})
+                        </p>
+                      ))}
+                      {Object.entries(preflight.legal_queue.reduce<Record<string, number>>(
+                        (counts, item) => ({ ...counts, [item.reason]: (counts[item.reason] ?? 0) + 1 }),
+                        {},
+                      )).map(([reason, count]) => (
+                        <p key={reason} className="text-[11px] text-stone-500">
+                          {count} legal queue: {reason.replace(/_/g, " ")}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-amber-700">
+                      Route check unavailable{preflightError ? `: ${preflightError}` : "."}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {action === "send" && eligible.length > 0 && decisionReasonRequired && (

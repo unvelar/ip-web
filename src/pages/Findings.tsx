@@ -34,6 +34,7 @@ interface InboxFilters {
   catalog_product_id: string | null;
   platform: string | null;
   seller: string | null;
+  query: string | null;
   assignee: string | null;
   dismissal_reason: MonitoringDismissalReasonFilter | null;
   candidate_outcome: MonitoringCandidateOutcome | null;
@@ -50,6 +51,7 @@ function parseFilters(params: URLSearchParams): InboxFilters {
   const dismissalReason = params.get("dismissal_reason");
   const candidateOutcome = params.get("candidate_outcome");
   const seller = params.get("seller");
+  const query = params.get("q");
   const assignee = params.get("assignee");
   return {
     // Default to "To triage" (pending); an explicit `status=all` clears it.
@@ -69,6 +71,7 @@ function parseFilters(params: URLSearchParams): InboxFilters {
     catalog_product_id: params.get("catalog_product_id"),
     platform: params.get("platform"),
     seller: seller && seller.trim() ? seller.trim() : null,
+    query: query && query.trim() ? query.trim() : null,
     assignee: assignee && assignee.trim() ? assignee.trim() : null,
     dismissal_reason:
       dismissalReason === "false_positive" ||
@@ -118,6 +121,7 @@ function writeFilters(base: URLSearchParams, f: InboxFilters): URLSearchParams {
   setOrDel("catalog_product_id", f.catalog_product_id);
   setOrDel("platform", f.platform);
   setOrDel("seller", f.seller);
+  setOrDel("q", f.query);
   setOrDel("assignee", f.assignee);
   setOrDel("dismissal_reason", f.dismissal_reason);
   setOrDel("candidate_outcome", f.candidate_outcome);
@@ -153,11 +157,6 @@ export function MonitoringInboxView() {
     catalog_product_id: urlIpChanged ? null : urlFilters.catalog_product_id,
   };
   const campaignBatchId = params.get("campaign_batch");
-  const selectAllProductGroupTasks =
-    params.get("select_all") === "true" &&
-    filters.status === "pending" &&
-    Boolean(filters.ip_id && filters.product_group_id);
-
   const [findings, setFindings] = useState<IpReviewFinding[]>([]);
   const [linkedFinding, setLinkedFinding] = useState<IpReviewFinding | null>(null);
   const [campaignBatchFindings, setCampaignBatchFindings] = useState<IpReviewFinding[]>([]);
@@ -290,7 +289,7 @@ export function MonitoringInboxView() {
     }
     void loadFirstPage(
       filters,
-      selectAllProductGroupTasks ? Number.POSITIVE_INFINITY : MONITORING_PAGE_SIZE,
+      MONITORING_PAGE_SIZE,
     );
     // filterKey is enough; parseFilters is pure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -299,7 +298,6 @@ export function MonitoringInboxView() {
     filterKey,
     loadFirstPage,
     loadingActiveIp,
-    selectAllProductGroupTasks,
   ]);
 
   // Keep task URLs shareable while the top bar remains the control that owns
@@ -320,7 +318,6 @@ export function MonitoringInboxView() {
     });
     if (ipChanged) {
       next.delete("campaign_batch");
-      next.delete("select_all");
     }
     const nextSearch = next.toString();
     navigate({
@@ -431,7 +428,6 @@ export function MonitoringInboxView() {
           ...next,
           ip_id: activeIpId,
         });
-        nextParams.delete("select_all");
         return nextParams;
       }, {
         replace: true,
@@ -470,17 +466,6 @@ export function MonitoringInboxView() {
     add(linkedFinding);
     return out;
   }, [campaignBatchFindings, findings, linkedFinding]);
-
-  const productGroupBatchReady =
-    selectAllProductGroupTasks && loaded && !err && nextCursor === null;
-  const seedBatchFindings = productGroupBatchReady
-    ? findings
-    : campaignBatchFindings;
-  const seedBatchKey = productGroupBatchReady
-    ? `product-group:${filters.ip_id}:${filters.product_group_id}`
-    : campaignBatchId
-      ? `${campaignBatchId}:${campaignBatchFindings.map((f) => f.result_id).join(",")}`
-      : null;
 
   const queueSummary = useMemo(() => {
     if (!facets) return "Loading…";
@@ -547,7 +532,7 @@ export function MonitoringInboxView() {
       )}
       {campaignBatchId && campaignBatchFindings.length > 0 && (
         <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
-          Campaign batch loaded: {campaignBatchTitle || campaignBatchId}
+          Campaign view loaded: {campaignBatchTitle || campaignBatchId}. Select only the rows you have reviewed.
         </div>
       )}
 
@@ -574,8 +559,6 @@ export function MonitoringInboxView() {
           showIpFilter={false}
           activeFindingId={taskId ?? null}
           onActiveFindingChange={onActiveFindingChange}
-          seedBatchFindings={seedBatchFindings}
-          seedBatchKey={seedBatchKey}
         />
       )}
     </div>

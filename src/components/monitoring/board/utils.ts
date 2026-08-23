@@ -30,6 +30,16 @@ export function selectedFindingSummary(findings: IpReviewFinding[]) {
   if (takedownCount === findings.length) parts.push("Takedown");
   else if (takedownCount > 0) parts.push(`${takedownCount} AI takedown recs`);
 
+  const assignees = uniqueDefined(findings.map((finding) =>
+    finding.assigned_to_account_id
+      ? finding.assignee_display_name || finding.assignee_email || finding.assigned_to_account_id
+      : null
+  ));
+  const unassignedCount = findings.filter((finding) => !finding.assigned_to_account_id).length;
+  if (unassignedCount === findings.length) parts.push("Unassigned");
+  else if (assignees.length === 1 && unassignedCount === 0) parts.push(`Owner: ${assignees[0]}`);
+  else parts.push(`${assignees.length} owners · ${unassignedCount} unassigned`);
+
   const similarities = findings
     .map(findingSimilarity)
     .filter((score) => Number.isFinite(score));

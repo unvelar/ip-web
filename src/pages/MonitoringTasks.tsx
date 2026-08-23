@@ -8,7 +8,7 @@ import { MonitoringInboxView } from "./Findings";
 export default function MonitoringTasks() {
   return (
     <div className="max-w-7xl mx-auto px-6 py-2 space-y-2">
-        <h1 className="text-2xl font-black text-stone-900 tracking-tight">Triage Queue</h1>
+        <h1 className="text-2xl font-black text-stone-900 tracking-tight">Monitoring tasks</h1>
       <MonitoringInboxView />
     </div>
   );

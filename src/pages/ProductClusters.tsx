@@ -4777,7 +4777,7 @@ function SemanticProductGroupCard({
               : `${group.member_count} classified in this product type`}
         </span>
         <Link
-          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}${taskLinkMode === "pending" ? "&select_all=true" : ""}`}
+          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&product_group_id=${encodeURIComponent(group.id)}`}
           className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
             taskLinkMode === "pending"
               ? "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100"
@@ -7864,7 +7864,7 @@ function ProductGroupCard({
               </>}
         </span>
         <Link
-          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&${taskProductFilter}${taskLinkMode === "pending" ? "&select_all=true" : ""}`}
+          to={`/monitoring/tasks?${taskQuery}&ip_id=${encodeURIComponent(ipId)}&${taskProductFilter}`}
           className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
             taskLinkMode === "pending"
               ? "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleCheck, X } from "lucide-react";
+import { CircleCheck, Search, X } from "lucide-react";
 import {
   dismissIpFinding,
   excludePersistedProductGroupMember,
@@ -12,6 +12,7 @@ import {
   undismissIpFinding,
   approveTakedown,
   approveTakedownBatch,
+  updateMonitoringFindingAssignment,
   type CaseReviewStatus,
   type IpReviewFinding,
   type MonitoringCandidateOutcome,
@@ -54,6 +55,7 @@ import { FilterPill, StatusTabs } from "./board/StatusTabs";
 import { compactListingTitle, hasReviewAnalysis, selectedFindingSummary } from "./board/utils";
 import { useTenantMembers } from "../../hooks/useTenantMembers";
 import { AssigneeAvatar, AssigneeAvatarStack } from "./board/AssigneeAvatar";
+import { useAuth } from "../../context/AuthContext";
 
 /** Shape pushed up to the parent — must match Findings.tsx::InboxFilters. */
 export interface BoardFilters {
@@ -64,6 +66,7 @@ export interface BoardFilters {
   catalog_product_id: string | null;
   platform: string | null;
   seller: string | null;
+  query: string | null;
   assignee: string | null;
   dismissal_reason: MonitoringDismissalReasonFilter | null;
   candidate_outcome: MonitoringCandidateOutcome | null;
@@ -154,8 +157,6 @@ export function MonitoringBoard({
   showIpFilter = true,
   activeFindingId,
   onActiveFindingChange,
-  seedBatchFindings,
-  seedBatchKey,
 }: {
   findings: IpReviewFinding[];
   facets: MonitoringFacets;
@@ -183,10 +184,8 @@ export function MonitoringBoard({
   activeFindingId?: string | null;
   /** Notifies the route owner when the reviewer opens/collapses a finding. */
   onActiveFindingChange?: (resultId: string | null) => void;
-  /** Optional one-shot selection seed for cross-view batch handoffs. */
-  seedBatchFindings?: IpReviewFinding[];
-  seedBatchKey?: string | null;
 }) {
+  const { user } = useAuth();
   const ipAware = showIpColumn ?? findings.some((f) => !!f.ip_id);
   const {
     members: tenantMembers,
@@ -196,6 +195,40 @@ export function MonitoringBoard({
   const selectedAssigneeMember = filters.assignee && filters.assignee !== "unassigned"
     ? tenantMembers.find((member) => member.id === filters.assignee) ?? null
     : null;
+  const currentTenantMember = user
+    ? tenantMembers.find((member) => member.id === user.id) ?? null
+    : null;
+  const [taskSearch, setTaskSearch] = useState(filters.query ?? "");
+  const [groupSearch, setGroupSearch] = useState("");
+
+  useEffect(() => {
+    setTaskSearch(filters.query ?? "");
+  }, [filters.query]);
+
+  useEffect(() => {
+    const next = taskSearch.trim() || null;
+    if (next === filters.query) return;
+    const timer = window.setTimeout(() => onFiltersChange({ query: next }), 250);
+    return () => window.clearTimeout(timer);
+  }, [filters.query, onFiltersChange, taskSearch]);
+
+  const filteredProductGroups = useMemo(() => {
+    const groups = facets.product_groups ?? [];
+    const needle = groupSearch.trim().toLocaleLowerCase();
+    const isGeneratedName = (name: string) =>
+      /^potential (?:visual|product) group [0-9a-f]{8}$/i.test(name.trim());
+    const matching = needle
+      ? groups.filter((group) =>
+          `${group.name} ${group.product_group_id}`.toLocaleLowerCase().includes(needle)
+        )
+      : groups.filter((group) => !isGeneratedName(group.name)).slice(0, 50);
+    const selected = filters.product_group_id
+      ? groups.find((group) => group.product_group_id === filters.product_group_id) ?? null
+      : null;
+    return selected && !matching.some((group) => group.product_group_id === selected.product_group_id)
+      ? [selected, ...matching]
+      : matching;
+  }, [facets.product_groups, filters.product_group_id, groupSearch]);
   // Optimistically-dismissed result_ids — the next refetch replaces these
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
@@ -284,7 +317,6 @@ export function MonitoringBoard({
   // in a small side map without reordering the visible page.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionExtras, setSelectionExtras] = useState<Map<string, IpReviewFinding>>(new Map());
-  const appliedSeedKey = useRef<string | null>(null);
 
   const displayFindings = useMemo(() => {
     const activeFinding = activeId
@@ -629,34 +661,12 @@ export function MonitoringBoard({
     setSelectionExtras(new Map());
     setProductCorrectedResultIds(new Set());
     setBatchResult(null);
-    appliedSeedKey.current = null;
   }, [filterKey]);
 
   function clearSelection() {
     setSelected(new Set());
     setSelectionExtras(new Map());
   }
-
-  useEffect(() => {
-    if (!seedBatchKey || appliedSeedKey.current === seedBatchKey) return;
-    appliedSeedKey.current = seedBatchKey;
-    const openFindings = (seedBatchFindings ?? []).filter(isBatchSelectableFinding);
-    if (openFindings.length === 0) {
-      setBatchResult("No selectable findings were found.");
-      return;
-    }
-    setSelectionExtras((prev) => {
-      const next = new Map(prev);
-      for (const f of openFindings) next.set(f.result_id, f);
-      return next;
-    });
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const f of openFindings) next.add(f.result_id);
-      return next;
-    });
-    setBatchResult(`Selected ${openFindings.length} finding${openFindings.length === 1 ? "" : "s"}.`);
-  }, [filterKey, seedBatchFindings, seedBatchKey]);
 
   function toggleSelect(resultId: string) {
     setBatchResult(null);
@@ -667,21 +677,6 @@ export function MonitoringBoard({
       return next;
     });
   }
-  function toggleSelectAll() {
-    setBatchResult(null);
-    const visibleIds = new Set(displayFindings.map((f) => f.result_id));
-    const visibleSelected = displayFindings.every((f) => selected.has(f.result_id));
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (visibleSelected) {
-        for (const id of visibleIds) next.delete(id);
-      } else {
-        for (const id of visibleIds) next.add(id);
-      }
-      return next;
-    });
-  }
-
   function addRelatedToBatch(findingsToAdd: IpReviewFinding[]) {
     const openFindings = findingsToAdd.filter(isBatchSelectableFinding);
     if (openFindings.length === 0) {
@@ -931,6 +926,44 @@ export function MonitoringBoard({
     onRefresh();
   }
 
+  async function runBatchAssignment(assigneeAccountId: string | null) {
+    const eligible = selectedActionFindings.filter((finding) => Boolean(finding.case_id));
+    const skipped = selectedActionFindings.length - eligible.length;
+    if (eligible.length === 0) {
+      setBatchResult("No selected tasks are ready to be assigned.");
+      return;
+    }
+    setBatchProgress({ done: 0, total: eligible.length });
+    let updated = 0;
+    let failed = 0;
+    await runPool(eligible, async (finding) => {
+      try {
+        await updateMonitoringFindingAssignment(finding.result_id, assigneeAccountId);
+        updated += 1;
+      } catch {
+        failed += 1;
+      } finally {
+        setBatchProgress((progress) => progress
+          ? { ...progress, done: progress.done + 1 }
+          : progress);
+      }
+    }, 4);
+    const assignee = assigneeAccountId
+      ? tenantMembers.find((member) => member.id === assigneeAccountId) ?? null
+      : null;
+    const label = assigneeAccountId
+      ? tenantMemberLabel(assignee ?? { display_name: null, email: null })
+      : "Unassigned";
+    setBatchProgress(null);
+    clearSelection();
+    setBatchResult([
+      `${label}: ${updated} task${updated === 1 ? "" : "s"}`,
+      skipped ? `${skipped} still preparing` : null,
+      failed ? `${failed} failed` : null,
+    ].filter(Boolean).join(" · "));
+    if (updated > 0) onRefresh();
+  }
+
   async function confirmShortcutTakedown(
     decisionReason: string,
     associationScopes: TakedownFeedbackAssociationScope[],
@@ -1083,9 +1116,6 @@ export function MonitoringBoard({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeFinding, moveActive, runShortcutAction, setActiveFinding]);
 
-  const visibleSelectedCount = displayFindings.filter((f) => selected.has(f.result_id)).length;
-  const allSelected = displayFindings.length > 0 && visibleSelectedCount === displayFindings.length;
-  const someSelected = selected.size > 0 && !allSelected;
   const selectedSummary = useMemo(
     () => selectedFindingSummary(selectedActionFindings),
     [selectedActionFindings],
@@ -1121,12 +1151,47 @@ export function MonitoringBoard({
       showPackagingOnly={selectedActionFindings.length > 0 && selectedActionFindings.every(
         (finding) => finding.offer_subject === "packaging_only",
       )}
+      assigneeOptions={tenantMembers.map((member) => ({
+        id: member.id,
+        label: member.id === currentTenantMember?.id
+          ? `Me — ${tenantMemberLabel(member)}`
+          : tenantMemberLabel(member),
+      }))}
+      onAssign={(assigneeId) => void runBatchAssignment(assigneeId)}
     />
   );
 
   return (
     <>
       <div className="rounded-lg border border-stone-200 bg-white overflow-hidden mb-2">
+        <div className="border-b border-stone-100 bg-white px-3 py-2">
+          <label className="relative block max-w-xl">
+            <span className="sr-only">Search all monitoring tasks</span>
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              value={taskSearch}
+              onChange={(event) => setTaskSearch(event.target.value)}
+              placeholder="Search listings, sellers, URLs, or websites"
+              aria-label="Search all monitoring tasks"
+              className="h-9 w-full rounded-md border border-stone-200 bg-stone-50 pl-8 pr-8 text-xs text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:bg-white focus:ring-2 focus:ring-stone-200/70"
+            />
+            {taskSearch && (
+              <button
+                type="button"
+                onClick={() => setTaskSearch("")}
+                className="absolute right-1.5 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                aria-label="Clear task search"
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            )}
+          </label>
+        </div>
         <div className="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-stone-100 bg-white">
           <span className={filterHeaderLabel}>
             Workflow
@@ -1188,33 +1253,56 @@ export function MonitoringBoard({
             </div>
           )}
           {((facets.product_groups?.length ?? 0) > 0 || filters.product_group_id) && (
-            <div className="flex items-center gap-2 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 px-3 py-2">
               <span className={filterHeaderLabel}>
                 Group
               </span>
-              <select
-                value={filters.product_group_id ?? "all"}
-                onChange={(event) =>
-                  onFiltersChange({
-                    product_group_id: event.target.value === "all" ? null : event.target.value,
-                  })
-                }
-                aria-label="Filter by product or visual group"
-                title="Filter tasks by a stored exact-product or overlapping visual group"
-                className={`${FILTER_SELECT} max-w-sm`}
-              >
-                <option value="all">All groups</option>
-                {filters.product_group_id && !(facets.product_groups ?? []).some(
-                  (group) => group.product_group_id === filters.product_group_id,
-                ) && (
-                  <option value={filters.product_group_id}>Selected group (0)</option>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <label className="relative min-w-52 max-w-xs flex-1">
+                  <span className="sr-only">Search product and visual groups</span>
+                  <Search
+                    size={13}
+                    className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-stone-400"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="search"
+                    value={groupSearch}
+                    onChange={(event) => setGroupSearch(event.target.value)}
+                    placeholder={`Search ${facets.product_groups?.length ?? 0} groups`}
+                    aria-label="Search product and visual groups"
+                    className="h-8 w-full rounded-md border border-stone-200 bg-white pl-7 pr-2 text-[11px] text-stone-800 outline-none focus:border-stone-400"
+                  />
+                </label>
+                <select
+                  value={filters.product_group_id ?? "all"}
+                  onChange={(event) =>
+                    onFiltersChange({
+                      product_group_id: event.target.value === "all" ? null : event.target.value,
+                    })
+                  }
+                  aria-label="Filter by product or visual group"
+                  title="Filter tasks by a stored exact-product or overlapping visual group"
+                  className={`${FILTER_SELECT} min-w-56 max-w-sm`}
+                >
+                  <option value="all">All groups</option>
+                  {filters.product_group_id && !(facets.product_groups ?? []).some(
+                    (group) => group.product_group_id === filters.product_group_id,
+                  ) && (
+                    <option value={filters.product_group_id}>Selected group (0)</option>
+                  )}
+                  {filteredProductGroups.map((group) => (
+                    <option key={group.product_group_id} value={group.product_group_id}>
+                      {group.name} ({group.n})
+                    </option>
+                  ))}
+                </select>
+                {!groupSearch && (facets.product_groups?.length ?? 0) > filteredProductGroups.length && (
+                  <span className="text-[10px] text-stone-400">
+                    Named groups shown; search to find generated groups.
+                  </span>
                 )}
-                {(facets.product_groups ?? []).map((group) => (
-                  <option key={group.product_group_id} value={group.product_group_id}>
-                    {group.name} ({group.n})
-                  </option>
-                ))}
-              </select>
+              </div>
             </div>
           )}
           {(tenantMembersLoading || tenantMembers.length > 0 || tenantMembersError || filters.assignee) && (
@@ -1222,6 +1310,24 @@ export function MonitoringBoard({
               <span className={filterHeaderLabel}>
                 Assignee
               </span>
+              {currentTenantMember && (
+                <button
+                  type="button"
+                  onClick={() => onFiltersChange({
+                    assignee: filters.assignee === currentTenantMember.id
+                      ? null
+                      : currentTenantMember.id,
+                  })}
+                  aria-pressed={filters.assignee === currentTenantMember.id}
+                  className={`h-8 rounded-md border px-2 text-[11px] font-semibold transition ${
+                    filters.assignee === currentTenantMember.id
+                      ? "border-stone-900 bg-stone-900 text-white"
+                      : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
+                  }`}
+                >
+                  Assigned to me
+                </button>
+              )}
               <div className="relative min-w-56 max-w-sm">
                 <span className="pointer-events-none absolute left-2 top-1/2 z-10 flex -translate-y-1/2 items-center">
                   {selectedAssigneeMember ? (
@@ -1354,7 +1460,7 @@ export function MonitoringBoard({
               ))}
               {selected.size > 0 && (
                 <span className="ml-auto text-[11px] font-semibold text-stone-500 whitespace-nowrap">
-                  {selected.size} selected
+                  {selected.size} manually selected
                 </span>
               )}
             </div>
@@ -1420,20 +1526,9 @@ export function MonitoringBoard({
               <thead>
                 <tr className="border-b border-stone-200 bg-stone-50/60 text-[10px] uppercase tracking-wide text-stone-400">
                   <th className="w-9 pl-2 pr-1 py-1.5 align-middle">
-                    <label className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-stone-100 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        aria-label="Select all loaded findings"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected;
-                        }}
-                        onChange={toggleSelectAll}
-                        className="h-4 w-4 align-middle"
-                      />
-                    </label>
+                    <span className="sr-only">Select reviewed task</span>
                   </th>
-                  <SortHeader label="Similarity" col="rate" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="w-20" />
+                  <SortHeader label="Priority" col="rate" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="w-20" />
                   <th className="py-1.5 px-2 font-semibold w-16"><span className="sr-only">Image</span></th>
                   <th className="py-1.5 px-2 font-semibold">Listing</th>
                   <th className="hidden w-16 px-2 py-1.5 font-semibold md:table-cell">Assignee</th>
@@ -1452,7 +1547,15 @@ export function MonitoringBoard({
                     <tr
                       key={f.result_id}
                       onClick={() => setActiveFinding(f.result_id)}
-                      className={`group relative cursor-pointer transition-colors ${
+                      tabIndex={0}
+                      aria-label={`Open task: ${compactListingTitle(f)}`}
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        setActiveFinding(f.result_id);
+                      }}
+                      className={`group relative cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-500 ${
                         active ? "bg-blue-50/70" : "hover:bg-stone-50 focus-within:bg-stone-50"
                       } ${rowDismissed ? "opacity-50" : ""}`}
                     >

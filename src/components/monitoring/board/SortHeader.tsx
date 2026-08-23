@@ -2,7 +2,7 @@ import type { MonitoringSortMode } from "../../../api";
 
 // Sortable table columns → their asc/desc server sort modes. Clicking a header
 // applies `desc` first, then toggles. `score_desc` (the default) mirrors the
-// backend ORDER BY (priority desc, found_at desc).
+// backend ORDER BY (enforcement priority, then found_at).
 type SortCol = "rate" | "seller" | "platform" | "price" | "updated";
 const SORT_COLS: Record<SortCol, { asc: MonitoringSortMode; desc: MonitoringSortMode }> = {
   rate: { desc: "score_desc", asc: "score_asc" },
