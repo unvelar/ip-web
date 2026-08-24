@@ -7,7 +7,6 @@ import {
   recentDecisionCanUndo,
   recentDecisionKind,
   recentDecisionTimestamp,
-  shouldLoadMoreProductGroups,
   sortRecentDecisions,
   productShouldStayInAttention,
   recommendedBatchActionForSelection,
@@ -139,17 +138,6 @@ describe("productShouldStayInAttention", () => {
       ...activeCandidate,
       triage_member_count: 0,
     }, true)).toBe(false);
-  });
-});
-
-describe("shouldLoadMoreProductGroups", () => {
-  test("loads every attention page so category sections and counts are complete", () => {
-    expect(shouldLoadMoreProductGroups("attention", "next-page")).toBe(true);
-  });
-
-  test("does not scan ahead in the all-products view or beyond the last page", () => {
-    expect(shouldLoadMoreProductGroups("all", "next-page")).toBe(false);
-    expect(shouldLoadMoreProductGroups("attention", null)).toBe(false);
   });
 });
 

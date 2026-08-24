@@ -112,13 +112,6 @@ export function productShouldStayInAttention(
     (isActiveBatch && (group.triage_member_count ?? 0) > 0);
 }
 
-export function shouldLoadMoreProductGroups(
-  view: "attention" | "all",
-  nextCursor: string | null,
-) {
-  return view === "attention" && Boolean(nextCursor);
-}
-
 export function reconcileProductAttentionOverview<
   T extends ProductAttentionGroup,
   O extends ProductAttentionOverview<T>,

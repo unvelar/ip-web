@@ -138,12 +138,7 @@ function buildProductCategoryTree(groups: PersistedProductGroup[]): ProductCateg
 
   const finalize = (node: MutableCategoryNode): ProductCategoryNode => {
     const children = [...node.children.values()]
-      .map(finalize)
-      .sort((left, right) => {
-        if (left.key === "unclassified") return 1;
-        if (right.key === "unclassified") return -1;
-        return left.label.localeCompare(right.label);
-      });
+      .map(finalize);
     return {
       ...node,
       children,
@@ -155,12 +150,7 @@ function buildProductCategoryTree(groups: PersistedProductGroup[]): ProductCateg
   };
 
   return [...roots.values()]
-    .map(finalize)
-    .sort((left, right) => {
-      if (left.key === "unclassified") return 1;
-      if (right.key === "unclassified") return -1;
-      return left.label.localeCompare(right.label);
-    });
+    .map(finalize);
 }
 
 function expandedCategoryGroups(
@@ -404,7 +394,6 @@ export default function ProductLabV2() {
   const [scopeAvailable, setScopeAvailable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [backgroundLoading, setBackgroundLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedProductQuery, setDebouncedProductQuery] = useState("");
@@ -505,7 +494,6 @@ export default function ProductLabV2() {
       setScopeAvailable(null);
     }
     setLoading(true);
-    setBackgroundLoading(false);
     setError(null);
 
     void (async () => {
@@ -528,33 +516,11 @@ export default function ProductLabV2() {
           accumulated,
         );
         setOverview(accumulated);
-        setLoading(false);
-
-        if (view !== "attention" || mergeSourceGroup || !accumulated.next_cursor) return;
-        setBackgroundLoading(true);
-        const seenCursors = new Set<string>();
-        while (alive && accumulated.next_cursor) {
-          const cursor = accumulated.next_cursor;
-          if (seenCursors.has(cursor)) break;
-          seenCursors.add(cursor);
-          const next = await loadProductGroupPage(activeIpId, view, {
-            cursor,
-            query: debouncedProductQuery || null,
-            allProducts: Boolean(mergeSourceGroup),
-            signal: controller.signal,
-          });
-          if (!alive) return;
-          accumulated = appendPage(accumulated, next);
-          setOverview(accumulated);
-        }
       } catch (caught: unknown) {
         if (!alive || controller.signal.aborted) return;
         setError(messageFor(caught));
       } finally {
-        if (alive) {
-          setLoading(false);
-          setBackgroundLoading(false);
-        }
+        if (alive) setLoading(false);
       }
     })();
 
@@ -609,48 +575,32 @@ export default function ProductLabV2() {
 
   const visibleGroups = useMemo(() => {
     if (!overview) return [];
-    const needle = query.trim().toLocaleLowerCase();
     return overview.groups
       .filter((group) => {
         if (
           view === "attention" &&
           !productShouldStayInAttention(group, group.id === selectedGroupId)
         ) return false;
-        if (!needle) return true;
-        const haystack = [
-          productName(group),
-          group.catalog_primary_category_name,
-          group.catalog_primary_category_path,
-          ...group.members.slice(0, 4).map((member) => member.listing_title),
-          ...group.triage_members.slice(0, 4).map((member) => member.listing_title),
-          ...group.commercial_subgroups.map((subgroup) => subgroup.variant_label),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLocaleLowerCase();
-        return haystack.includes(needle);
-      })
-      .sort((left, right) => {
-        const confirmationDelta =
-          Number(left.confirmation_status === "confirmed") -
-          Number(right.confirmation_status === "confirmed");
-        return confirmationDelta ||
-          (right.triage_member_count ?? 0) - (left.triage_member_count ?? 0) ||
-          productName(left).localeCompare(productName(right));
+        return true;
       });
-  }, [overview, query, selectedGroupId, view]);
+  }, [overview, selectedGroupId, view]);
 
-  const categoryTree = useMemo(
-    () => buildProductCategoryTree(visibleGroups),
+  const pagedCategoryTrees = useMemo(
+    () => Array.from(
+      { length: Math.ceil(visibleGroups.length / PAGE_SIZE) },
+      (_, pageIndex) => buildProductCategoryTree(
+        visibleGroups.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE),
+      ),
+    ),
     [visibleGroups],
   );
   const navigableGroups = useMemo(
-    () => expandedCategoryGroups(
-      categoryTree,
+    () => pagedCategoryTrees.flatMap((categories) => expandedCategoryGroups(
+      categories,
       collapsedCategoryPaths,
       Boolean(query.trim()),
-    ),
-    [categoryTree, collapsedCategoryPaths, query],
+    )),
+    [collapsedCategoryPaths, pagedCategoryTrees, query],
   );
 
   const toggleCategory = useCallback((path: string) => {
@@ -846,6 +796,14 @@ export default function ProductLabV2() {
 
   const attentionCount = overview?.triage_group_count ?? null;
   const productCount = overview?.group_count ?? 0;
+  const paginatedProductCount = view === "attention" && !mergeSourceGroup
+    ? attentionCount ?? overview?.pagination_group_count ?? 0
+    : overview?.pagination_group_count ?? 0;
+  const remainingProductCount = Math.max(
+    0,
+    paginatedProductCount - visibleGroups.length,
+  );
+  const nextProductPageSize = Math.min(PAGE_SIZE, remainingProductCount);
   const showMobileInspector = Boolean(selectedGroupId && selectedGroup && !mergeSourceGroup);
   const matchingRecentDecisions = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -1427,24 +1385,20 @@ export default function ProductLabV2() {
                 className="h-8 w-full rounded-md border border-stone-200 bg-white pl-8 pr-3 text-[12px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/70"
               />
             </label>
-            {view !== "history" && backgroundLoading && overview && (
-              <div className="mt-2" role="status" aria-live="polite">
-                <div className="flex items-center justify-between gap-3 text-[10px] text-stone-500">
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <LoaderCircle size={11} className="shrink-0 animate-spin" aria-hidden="true" />
-                    <span className="truncate">
-                      Loading the complete {query.trim() ? "matching " : ""}product list
-                    </span>
-                  </span>
-                  <span className="shrink-0 tabular-nums">
-                    {overview.groups.length} / {overview.pagination_group_count}
-                  </span>
-                </div>
-                <progress
-                  value={overview.groups.length}
-                  max={Math.max(overview.pagination_group_count, overview.groups.length, 1)}
-                  className="mt-1 h-1 w-full accent-stone-700"
-                />
+            {view !== "history" && overview && (
+              <div
+                className="mt-2 flex items-center justify-between gap-3 text-[10px] text-stone-500"
+                role="status"
+                aria-live="polite"
+              >
+                <span>
+                  {loading
+                    ? "Updating products…"
+                    : `Showing ${visibleGroups.length} of ${paginatedProductCount} ${query.trim() ? "matching " : ""}products`}
+                </span>
+                {!loading && overview.next_cursor && (
+                  <span className="shrink-0">Load the next page when ready</span>
+                )}
               </div>
             )}
           </div>
@@ -1560,21 +1514,30 @@ export default function ProductLabV2() {
                   selectGroup(navigableGroups[nextIndex].id);
                 }}
               >
-                {categoryTree.map((category) => (
-                  <ProductCategoryBranch
-                    key={category.key}
-                    category={category}
-                    depth={0}
-                    collapsedPaths={collapsedCategoryPaths}
-                    forceExpanded={Boolean(query.trim())}
-                    selectedGroupId={selectedGroup?.id ?? null}
-                    mergeSourceGroupId={mergeSourceGroup?.id ?? null}
-                    mergeTargetGroupIds={mergeTargetGroupIds}
-                    mergeDisabled={savingMerge}
-                    onToggle={toggleCategory}
-                    onSelectGroup={selectGroup}
-                    onToggleMergeGroup={toggleMergeTarget}
-                  />
+                {pagedCategoryTrees.map((categories, pageIndex) => (
+                  <div key={pageIndex}>
+                    {pageIndex > 0 && (
+                      <div className="border-y border-stone-200/80 bg-stone-50 px-4 py-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-stone-400 sm:px-6 lg:px-4">
+                        Page {pageIndex + 1}
+                      </div>
+                    )}
+                    {categories.map((category) => (
+                      <ProductCategoryBranch
+                        key={category.key}
+                        category={category}
+                        depth={0}
+                        collapsedPaths={collapsedCategoryPaths}
+                        forceExpanded={Boolean(query.trim())}
+                        selectedGroupId={selectedGroup?.id ?? null}
+                        mergeSourceGroupId={mergeSourceGroup?.id ?? null}
+                        mergeTargetGroupIds={mergeTargetGroupIds}
+                        mergeDisabled={savingMerge}
+                        onToggle={toggleCategory}
+                        onSelectGroup={selectGroup}
+                        onToggleMergeGroup={toggleMergeTarget}
+                      />
+                    ))}
+                  </div>
                 ))}
               </div>
             )}
@@ -1587,7 +1550,11 @@ export default function ProductLabV2() {
                   disabled={loadingMore}
                   className="h-8 rounded-md px-3 text-[11px] font-medium text-stone-600 transition hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50"
                 >
-                  {loadingMore ? "Loading…" : "Load more"}
+                  {loadingMore
+                    ? "Loading…"
+                    : nextProductPageSize > 0
+                      ? `Load ${nextProductPageSize} more`
+                      : "Load more"}
                 </button>
               </div>
             )}
