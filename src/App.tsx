@@ -15,8 +15,7 @@ import IpReviewDetail from "./pages/IpReviewDetail";
 import Findings from "./pages/Findings";
 import MonitoringTasks from "./pages/MonitoringTasks";
 import MonitoringCampaigns from "./pages/MonitoringCampaigns";
-import ProductClusters from "./pages/ProductClusters";
-import ProductLabV2 from "./pages/ProductLabV2";
+import ProductLab from "./pages/ProductLabV2";
 import MonitoringNew from "./pages/MonitoringNew";
 import SellerProfile from "./pages/SellerProfile";
 import Monitors from "./pages/Monitors";
@@ -51,6 +50,46 @@ function RegistryAuditRedirect() {
 function IpReviewRedirect() {
   const { id } = useParams();
   return <Navigate to={`/clearance/tasks/${id}`} replace />;
+}
+
+function LegacyProductRedirect() {
+  const { groupId, taskId } = useParams();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  if (groupId) params.set("group", groupId);
+  params.delete("view");
+  if (taskId) {
+    params.set("finding", taskId);
+    params.delete("panel");
+  } else {
+    params.set("panel", "settings");
+    params.delete("finding");
+  }
+  const search = params.toString();
+  return (
+    <Navigate
+      to={{
+        pathname: "/monitoring/products",
+        search: search ? `?${search}` : "",
+        hash: location.hash,
+      }}
+      replace
+    />
+  );
+}
+
+function ProductLabV2Redirect() {
+  const location = useLocation();
+  return (
+    <Navigate
+      to={{
+        pathname: "/monitoring/products",
+        search: location.search,
+        hash: location.hash,
+      }}
+      replace
+    />
+  );
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -118,10 +157,10 @@ export default function App() {
           <Route path="/monitoring/campaigns" element={<MonitoringCampaigns />} />
           <Route path="/monitoring/campaigns/:campaignId" element={<MonitoringCampaigns />} />
           <Route path="/monitoring/sellers/:sellerKey" element={<SellerProfile />} />
-          <Route path="/monitoring/products" element={<ProductClusters />} />
-          <Route path="/monitoring/products/:groupId" element={<ProductClusters />} />
-          <Route path="/monitoring/products/:groupId/tasks/:taskId" element={<ProductClusters />} />
-          <Route path="/monitoring/products-v2" element={<ProductLabV2 />} />
+          <Route path="/monitoring/products" element={<ProductLab />} />
+          <Route path="/monitoring/products/:groupId/tasks/:taskId" element={<LegacyProductRedirect />} />
+          <Route path="/monitoring/products/:groupId" element={<LegacyProductRedirect />} />
+          <Route path="/monitoring/products-v2" element={<ProductLabV2Redirect />} />
           <Route path="/monitoring/new" element={<MonitoringNew />} />
           <Route path="/monitoring/settings" element={<Monitors />} />
           <Route path="/clearance/tasks" element={<ClearanceTasks />} />

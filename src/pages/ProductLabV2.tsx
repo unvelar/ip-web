@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
   Clock3,
-  ExternalLink,
   Layers3,
   Link2,
   LoaderCircle,
   RefreshCw,
   RotateCcw,
   Search,
+  Settings2,
   Square,
   Sparkles,
   X,
@@ -49,6 +49,7 @@ import {
 } from "../components/monitoring/board/utils";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
+import { ProductGroupSettings } from "./ProductClusters";
 import {
   adjacentFinding,
   productShouldStayInAttention,
@@ -386,11 +387,14 @@ async function loadRecentDecisionPages(
   };
 }
 
-export default function ProductLabV2() {
+export default function ProductLab() {
   const { actingTenantId } = useAuth();
   const { activeIpId, activeIp, loading: loadingIp } = useActiveIp();
   const [searchParams, setSearchParams] = useSearchParams();
   const [overview, setOverview] = useState<PersistedProductGroupOverview | null>(null);
+  const [focusedGroup, setFocusedGroup] = useState<PersistedProductGroup | null>(null);
+  const [loadingFocusedGroup, setLoadingFocusedGroup] = useState(false);
+  const [focusedGroupError, setFocusedGroupError] = useState<string | null>(null);
   const [scopeAvailable, setScopeAvailable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -442,6 +446,8 @@ export default function ProductLabV2() {
     ? requestedView
     : "attention";
   const selectedGroupId = searchParams.get("group");
+  const requestedFindingId = searchParams.get("finding");
+  const showGroupSettings = searchParams.get("panel") === "settings";
 
   useEffect(() => {
     if (view === "history") return;
@@ -455,7 +461,37 @@ export default function ProductLabV2() {
     const next = new URLSearchParams(searchParams);
     if (groupId) next.set("group", groupId);
     else next.delete("group");
+    next.delete("panel");
+    next.delete("finding");
     setSearchParams(next);
+  }, [searchParams, setSearchParams]);
+
+  const openGroupSettings = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.set("panel", "settings");
+    next.delete("finding");
+    setSearchParams(next);
+  }, [searchParams, setSearchParams]);
+
+  const openReviewQueue = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("panel");
+    setSearchParams(next);
+  }, [searchParams, setSearchParams]);
+
+  const openFinding = useCallback((finding: IpReviewFinding) => {
+    setActiveFinding(finding);
+    const next = new URLSearchParams(searchParams);
+    next.set("finding", finding.result_id);
+    next.delete("panel");
+    setSearchParams(next);
+  }, [searchParams, setSearchParams]);
+
+  const closeFinding = useCallback(() => {
+    setActiveFinding(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("finding");
+    setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -579,7 +615,10 @@ export default function ProductLabV2() {
       .filter((group) => {
         if (
           view === "attention" &&
-          !productShouldStayInAttention(group, group.id === selectedGroupId)
+          !productShouldStayInAttention(
+            group,
+            group.id === selectedGroupId || group.canonical_product_id === selectedGroupId,
+          )
         ) return false;
         return true;
       });
@@ -612,17 +651,80 @@ export default function ProductLabV2() {
     });
   }, []);
 
-  const selectedGroup = selectedGroupId
-    ? overview?.groups.find((group) => group.id === selectedGroupId) ?? null
+  const loadedSelectedGroup = selectedGroupId
+    ? overview?.groups.find((group) =>
+        group.id === selectedGroupId || group.canonical_product_id === selectedGroupId
+      ) ?? null
     : null;
+
+  useEffect(() => {
+    if (!selectedGroupId || !activeIpId) {
+      setFocusedGroup(null);
+      setLoadingFocusedGroup(false);
+      setFocusedGroupError(null);
+      return;
+    }
+    if (loadedSelectedGroup) {
+      setFocusedGroup(null);
+      setLoadingFocusedGroup(false);
+      setFocusedGroupError(null);
+      return;
+    }
+
+    let alive = true;
+    setFocusedGroup(null);
+    setLoadingFocusedGroup(true);
+    setFocusedGroupError(null);
+    void loadCanonicalProductGroup(activeIpId, selectedGroupId)
+      .then((group) => {
+        if (alive) setFocusedGroup(group);
+      })
+      .catch((caught: unknown) => {
+        if (alive) setFocusedGroupError(messageFor(caught));
+      })
+      .finally(() => {
+        if (alive) setLoadingFocusedGroup(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activeIpId, loadedSelectedGroup, selectedGroupId]);
+
+  const selectedGroup = loadedSelectedGroup ?? (
+    selectedGroupId && focusedGroup && (
+      focusedGroup.id === selectedGroupId ||
+      focusedGroup.canonical_product_id === selectedGroupId
+    ) ? focusedGroup : null
+  );
+  const selectedGroupRequestId = selectedGroup?.id ?? selectedGroupId;
+
+  const updateSelectedGroup = useCallback((
+    update: (current: PersistedProductGroup) => PersistedProductGroup,
+  ) => {
+    if (!selectedGroupId) return;
+    setOverview((current) => current ? {
+      ...current,
+      groups: current.groups.map((group) =>
+        group.id === selectedGroupId ||
+        group.canonical_product_id === selectedGroupId
+          ? update(group)
+          : group
+      ),
+    } : current);
+    setFocusedGroup((current) => current && (
+      current.id === selectedGroupId ||
+      current.canonical_product_id === selectedGroupId
+    ) ? update(current) : current);
+  }, [selectedGroupId]);
+
   const mergeTargetGroups = useMemo(() => (overview?.groups ?? []).filter(
     (group) => mergeTargetGroupIds.has(group.id),
   ), [mergeTargetGroupIds, overview]);
   const selectedGroupConfirmationStatus = selectedGroup?.confirmation_status;
 
   useEffect(() => {
-    const nextBatchScope = activeIpId && selectedGroupId
-      ? `${actingTenantId ?? ""}:${activeIpId}:${selectedGroupId}`
+    const nextBatchScope = activeIpId && selectedGroupRequestId
+      ? `${actingTenantId ?? ""}:${activeIpId}:${selectedGroupRequestId}`
       : null;
     const scopeChanged = batchScopeRef.current !== nextBatchScope;
     if (scopeChanged) {
@@ -636,14 +738,14 @@ export default function ProductLabV2() {
       optimisticallyProcessedIdsRef.current.clear();
     }
     setBatchError(null);
-    if (!nextBatchScope || !activeIpId || !selectedGroupId) {
+    if (!nextBatchScope || !activeIpId || !selectedGroupRequestId) {
       setLoadingBatch(false);
       return;
     }
 
     let alive = true;
     setLoadingBatch(true);
-    void loadProductGroupFindings(activeIpId, selectedGroupId)
+    void loadProductGroupFindings(activeIpId, selectedGroupRequestId)
       .then((findings) => {
         if (!alive) return;
         const displayedFindings = removeProcessedFindings(
@@ -664,11 +766,11 @@ export default function ProductLabV2() {
           const next = new Set([...current].filter((resultId) => availableResultIds.has(resultId)));
           return next.size === current.size ? current : next;
         });
-        exactPendingCountsRef.current[selectedGroupId] = displayedFindings.length;
+        exactPendingCountsRef.current[selectedGroupRequestId] = displayedFindings.length;
         setOverview((current) => current
           ? reconcileProductAttentionOverview(
               current,
-              selectedGroupId,
+              selectedGroupRequestId,
               displayedFindings.length,
             )
           : current);
@@ -698,9 +800,26 @@ export default function ProductLabV2() {
     refreshToken,
     selectGroup,
     selectedGroupConfirmationStatus,
-    selectedGroupId,
+    selectedGroupRequestId,
     view,
   ]);
+
+  useEffect(() => {
+    if (!requestedFindingId || activeFinding?.result_id === requestedFindingId) return;
+    let alive = true;
+    void getMonitoringFinding(requestedFindingId)
+      .then(({ finding }) => {
+        if (alive) setActiveFinding(finding);
+      })
+      .catch((caught: unknown) => {
+        if (alive) {
+          setBatchNotice(`Unable to open the linked listing. ${messageFor(caught)}`);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activeFinding?.result_id, requestedFindingId]);
 
   useEffect(() => {
     if (!activeFinding) return;
@@ -708,12 +827,12 @@ export default function ProductLabV2() {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (target instanceof Element && target.closest("[data-finding-inspector]")) return;
-      setActiveFinding(null);
+      closeFinding();
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      setActiveFinding(null);
+      closeFinding();
     };
     document.addEventListener("pointerdown", closeOnOutsidePointer, true);
     window.addEventListener("keydown", closeOnEscape);
@@ -721,7 +840,7 @@ export default function ProductLabV2() {
       document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [activeFinding]);
+  }, [activeFinding, closeFinding]);
 
   useEffect(() => {
     if (!mergeSourceGroup || savingMerge) return;
@@ -768,6 +887,8 @@ export default function ProductLabV2() {
     if (nextView === "attention") next.delete("view");
     else next.set("view", nextView);
     next.delete("group");
+    next.delete("panel");
+    next.delete("finding");
     setQuery("");
     setActiveFinding(null);
     setMergeSourceGroup(null);
@@ -804,7 +925,7 @@ export default function ProductLabV2() {
     paginatedProductCount - visibleGroups.length,
   );
   const nextProductPageSize = Math.min(PAGE_SIZE, remainingProductCount);
-  const showMobileInspector = Boolean(selectedGroupId && selectedGroup && !mergeSourceGroup);
+  const showMobileInspector = Boolean(selectedGroupId && !mergeSourceGroup);
   const matchingRecentDecisions = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     if (!needle) return recentDecisions;
@@ -860,8 +981,8 @@ export default function ProductLabV2() {
   const moveActiveFinding = useCallback((direction: -1 | 1) => {
     if (!activeFinding) return;
     const adjacent = adjacentFinding(inspectorFindings, activeFinding.result_id, direction);
-    if (adjacent) setActiveFinding(adjacent);
-  }, [activeFinding, inspectorFindings]);
+    if (adjacent) openFinding(adjacent);
+  }, [activeFinding, inspectorFindings, openFinding]);
 
   async function undoRecentDecision(finding: IpReviewFinding) {
     const findingIpId = finding.ip_id ?? activeIpId;
@@ -892,7 +1013,7 @@ export default function ProductLabV2() {
       setRecentDecisions((current) => current.filter(
         (item) => item.result_id !== finding.result_id,
       ));
-      if (activeFinding?.result_id === finding.result_id) setActiveFinding(null);
+      if (activeFinding?.result_id === finding.result_id) closeFinding();
       setHistoryNotice("Decision undone. The listing is back in Needs attention.");
       setRefreshToken((token) => token + 1);
     } catch (caught: unknown) {
@@ -999,14 +1120,14 @@ export default function ProductLabV2() {
         setBatchFindings((current) => current
           ? removeProcessedFindings(current, processedResultIds)
           : current);
-        if (selectedGroupId && batchFindings) {
+        if (selectedGroupRequestId && batchFindings) {
           const remainingCount = removeProcessedFindings(
             batchFindings,
             processedResultIds,
           ).length;
-          exactPendingCountsRef.current[selectedGroupId] = remainingCount;
+          exactPendingCountsRef.current[selectedGroupRequestId] = remainingCount;
           setOverview((current) => current
-            ? reconcileProductAttentionOverview(current, selectedGroupId, remainingCount)
+            ? reconcileProductAttentionOverview(current, selectedGroupRequestId, remainingCount)
             : current);
         }
       }
@@ -1036,7 +1157,7 @@ export default function ProductLabV2() {
       next.delete(resolvedResultId);
       return next;
     });
-    setActiveFinding(null);
+    closeFinding();
     setRefreshToken((token) => token + 1);
   }
 
@@ -1246,25 +1367,14 @@ export default function ProductLabV2() {
       <header className="border-b border-stone-200/80 bg-[#faf9f7] px-4 py-4 sm:px-6 lg:px-7">
         <div className="flex min-h-9 items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-[18px] font-semibold tracking-[-0.025em] text-stone-950">
-                Product Lab
-              </h1>
-              <span className="rounded border border-stone-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-stone-500">
-                Preview
-              </span>
-            </div>
+            <h1 className="truncate text-[18px] font-semibold tracking-[-0.025em] text-stone-950">
+              Product Lab
+            </h1>
             <p className="mt-0.5 truncate text-[12px] text-stone-500">
               {activeIp?.name ? `${activeIp.name} · ` : ""}Review what needs attention, then move on.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Link
-              to="/monitoring/products"
-              className="hidden h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 sm:inline-flex"
-            >
-              Legacy view
-            </Link>
             <button
               type="button"
               onClick={() => setRefreshToken((token) => token + 1)}
@@ -1453,7 +1563,7 @@ export default function ProductLabV2() {
                           finding={finding}
                           selected={activeFinding?.result_id === finding.result_id}
                           undoing={undoingResultIds.has(finding.result_id)}
-                          onOpen={() => setActiveFinding(finding)}
+                          onOpen={() => openFinding(finding)}
                           onUndo={() => void undoRecentDecision(finding)}
                         />
                       ))}
@@ -1572,6 +1682,16 @@ export default function ProductLabV2() {
                 </p>
               </div>
             </div>
+          ) : selectedGroup && showGroupSettings && activeIpId ? (
+            <ProductSettingsWorkspace
+              key={selectedGroup.id}
+              group={selectedGroup}
+              ipId={activeIpId}
+              onBack={() => selectGroup(null)}
+              onReview={openReviewQueue}
+              onGroupChange={updateSelectedGroup}
+              onRefresh={() => setRefreshToken((token) => token + 1)}
+            />
           ) : selectedGroup ? (
             <BatchWorkspace
               group={selectedGroup}
@@ -1597,11 +1717,33 @@ export default function ProductLabV2() {
                 });
                 setBatchNotice(null);
               }}
-              onOpenFinding={setActiveFinding}
+              onOpenFinding={openFinding}
               onBatchAction={setConfirmBatchAction}
               onMergeProduct={() => beginProductMergeSelection(selectedGroup)}
+              onOpenSettings={openGroupSettings}
               onDismissNotice={() => setBatchNotice(null)}
             />
+          ) : selectedGroupId && loadingFocusedGroup ? (
+            <div className="grid h-full min-h-[420px] place-items-center px-8 text-center">
+              <div>
+                <LoaderCircle size={20} className="mx-auto animate-spin text-stone-400" />
+                <p className="mt-3 text-[13px] font-medium text-stone-700">Loading product…</p>
+              </div>
+            </div>
+          ) : selectedGroupId && focusedGroupError ? (
+            <div className="grid h-full min-h-[420px] place-items-center px-8 text-center">
+              <div className="max-w-sm">
+                <p className="text-[13px] font-medium text-stone-800">Product not found</p>
+                <p className="mt-1 text-[12px] leading-5 text-stone-500">{focusedGroupError}</p>
+                <button
+                  type="button"
+                  onClick={() => selectGroup(null)}
+                  className="mt-3 h-8 rounded-md border border-stone-200 bg-white px-3 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                >
+                  Back to products
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="grid h-full min-h-[420px] place-items-center px-8 text-center">
               <div>
@@ -1672,7 +1814,7 @@ export default function ProductLabV2() {
           showIp={false}
           isDismissed={Boolean(activeFinding.dismissed_at)}
           isDismissing={dismissingResultId === activeFinding.result_id}
-          onClose={() => setActiveFinding(null)}
+          onClose={closeFinding}
           onDismiss={(reason, reasonCode) => void dismissActiveFinding(reason, reasonCode)}
           onActionComplete={resolveActiveFinding}
           onNeedsReview={resolveActiveFinding}
@@ -1693,7 +1835,8 @@ export default function ProductLabV2() {
               : undefined,
           } : undefined}
           taskHref={selectedGroup
-            ? `/monitoring/products/${encodeURIComponent(selectedGroup.id)}/tasks/${encodeURIComponent(activeFinding.result_id)}`
+            ? `/monitoring/products?group=${encodeURIComponent(selectedGroup.id)}` +
+              `&finding=${encodeURIComponent(activeFinding.result_id)}`
             : undefined}
         />
       )}
@@ -2114,6 +2257,64 @@ const REVIEW_BUCKETS: Array<{
   { key: "needs_review", label: "Review", badge: "border-amber-200 bg-amber-50 text-amber-800" },
 ];
 
+function ProductSettingsWorkspace({
+  group,
+  ipId,
+  onBack,
+  onReview,
+  onGroupChange,
+  onRefresh,
+}: {
+  group: PersistedProductGroup;
+  ipId: string;
+  onBack: () => void;
+  onReview: () => void;
+  onGroupChange: (
+    update: (current: PersistedProductGroup) => PersistedProductGroup,
+  ) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="mx-auto min-h-full w-full max-w-[1040px]">
+      <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-stone-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-7">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-1 inline-flex items-center gap-1 text-[10px] font-medium text-stone-400 hover:text-stone-700 lg:hidden"
+          >
+            <ArrowLeft size={12} />
+            Product groups
+          </button>
+          <div className="flex items-center gap-2">
+            <Settings2 size={15} className="shrink-0 text-stone-500" />
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-stone-900">Group settings</p>
+              <p className="truncate text-[10px] text-stone-400">{productName(group)}</p>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onReview}
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2.5 text-[10px] font-semibold text-stone-700 hover:bg-stone-50 hover:text-stone-950"
+        >
+          <ArrowLeft size={12} />
+          Review queue
+        </button>
+      </div>
+      <div className="px-4 py-4 sm:px-7">
+        <ProductGroupSettings
+          group={group}
+          ipId={ipId}
+          onGroupChange={onGroupChange}
+          onRefresh={onRefresh}
+        />
+      </div>
+    </div>
+  );
+}
+
 function BatchWorkspace({
   group,
   findings,
@@ -2130,6 +2331,7 @@ function BatchWorkspace({
   onOpenFinding,
   onBatchAction,
   onMergeProduct,
+  onOpenSettings,
   onDismissNotice,
 }: {
   group: PersistedProductGroup;
@@ -2147,6 +2349,7 @@ function BatchWorkspace({
   onOpenFinding: (finding: IpReviewFinding) => void;
   onBatchAction: (action: ProductLabBatchAction) => void;
   onMergeProduct: () => void;
+  onOpenSettings: () => void;
   onDismissNotice: () => void;
 }) {
   const status = productStatus(group);
@@ -2206,13 +2409,14 @@ function BatchWorkspace({
               <Link2 size={12} />
               {selectingSameProduct ? "Selecting in list" : "Same product"}
             </button>
-            <Link
-              to={`/monitoring/products/${encodeURIComponent(group.id)}`}
+            <button
+              type="button"
+              onClick={onOpenSettings}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-stone-200 px-2.5 text-[10px] font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800"
             >
-              Settings
-              <ExternalLink size={11} />
-            </Link>
+              <Settings2 size={11} />
+              Group settings
+            </button>
           </div>
         </div>
       </div>
