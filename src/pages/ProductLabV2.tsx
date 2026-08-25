@@ -1912,6 +1912,9 @@ function ProductCategoryBranch({
   const breadcrumbChain = [...ancestors, ...categoryChain];
   const collapsed = !forceExpanded && breadcrumbChain.some((item) => collapsedPaths.has(item.path));
   const breadcrumb = breadcrumbChain.map((item) => item.label).join(" / ");
+  const rootCategory = breadcrumbChain[0];
+  const currentCategory = breadcrumbChain[breadcrumbChain.length - 1];
+  const hiddenCategories = breadcrumbChain.slice(1, -1);
   const categoryGroups = categoryChain.flatMap((item) => item.groups);
   const headerTone = depth === 0
     ? "sticky top-0 z-10 bg-[#f0eeea]/95 font-semibold text-stone-700 backdrop-blur"
@@ -1949,32 +1952,59 @@ function ProductCategoryBranch({
         style={{ paddingLeft: indent }}
         title={breadcrumb}
       >
-        <span className={`flex min-w-0 flex-1 items-center overflow-hidden ${depth === 0 ? "uppercase tracking-[0.07em]" : ""}`}>
-          {breadcrumbChain.map((item, index) => {
-            const itemCollapsed = !forceExpanded && collapsedPaths.has(item.path);
-            return (
-              <span key={item.path} className="flex min-w-0 items-center">
-                {index > 0 && <span className="mx-1 shrink-0 text-stone-300">/</span>}
-                <button
-                  type="button"
-                  aria-expanded={!itemCollapsed}
-                  aria-label={`${itemCollapsed ? "Expand" : "Collapse"} ${item.path}`}
-                  disabled={forceExpanded}
-                  onClick={() => onToggle(item.path)}
-                  className="inline-flex min-w-0 max-w-[150px] items-center gap-0.5 rounded-sm py-0.5 transition hover:text-stone-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 disabled:cursor-default"
-                  title={`${itemCollapsed ? "Expand" : "Collapse"} ${item.path}`}
+        <div className={`flex min-w-0 flex-1 items-center ${depth === 0 ? "uppercase tracking-[0.07em]" : ""}`}>
+          <CategoryPathToggle
+            category={rootCategory}
+            collapsed={!forceExpanded && collapsedPaths.has(rootCategory.path)}
+            forceExpanded={forceExpanded}
+            onToggle={onToggle}
+            className="max-w-[115px]"
+          />
+
+          {hiddenCategories.length > 0 && (
+            <>
+              <span className="mx-1 shrink-0 text-stone-300">/</span>
+              <details className="group/path relative shrink-0 normal-case tracking-normal">
+                <summary
+                  className="flex cursor-pointer list-none items-center gap-1 rounded-sm px-1 py-0.5 text-stone-500 transition hover:bg-stone-200/70 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 [&::-webkit-details-marker]:hidden"
+                  aria-label={`Show ${hiddenCategories.length} hidden category ${hiddenCategories.length === 1 ? "level" : "levels"}`}
+                  title={hiddenCategories.map((item) => item.label).join(" / ")}
                 >
-                  {itemCollapsed ? (
-                    <ChevronRight size={11} className="shrink-0 text-stone-400" />
-                  ) : (
-                    <ChevronDown size={11} className="shrink-0 text-stone-400" />
-                  )}
-                  <span className="truncate">{item.label}</span>
-                </button>
-              </span>
-            );
-          })}
-        </span>
+                  <span className="font-semibold">…</span>
+                  <span className="rounded bg-stone-200/80 px-1 text-[8px] tabular-nums text-stone-500">
+                    {hiddenCategories.length}
+                  </span>
+                </summary>
+                <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-[240px] overflow-hidden rounded-md border border-stone-200 bg-white py-1 shadow-lg">
+                  {hiddenCategories.map((item) => (
+                    <CategoryPathToggle
+                      key={item.path}
+                      category={item}
+                      collapsed={!forceExpanded && collapsedPaths.has(item.path)}
+                      forceExpanded={forceExpanded}
+                      onToggle={onToggle}
+                      closeMenuOnToggle
+                      className="w-full max-w-none px-2.5 py-1.5 text-left font-medium normal-case tracking-normal hover:bg-stone-50"
+                    />
+                  ))}
+                </div>
+              </details>
+            </>
+          )}
+
+          {breadcrumbChain.length > 1 && (
+            <>
+              <span className="mx-1 shrink-0 text-stone-300">/</span>
+              <CategoryPathToggle
+                category={currentCategory}
+                collapsed={!forceExpanded && collapsedPaths.has(currentCategory.path)}
+                forceExpanded={forceExpanded}
+                onToggle={onToggle}
+                className="min-w-0 flex-1 max-w-none font-semibold"
+              />
+            </>
+          )}
+        </div>
         <span className="shrink-0 rounded bg-stone-200/70 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
           {categoryGroups.length}
         </span>
@@ -2021,6 +2051,44 @@ function ProductCategoryBranch({
         </>
       )}
     </div>
+  );
+}
+
+function CategoryPathToggle({
+  category,
+  collapsed,
+  forceExpanded,
+  onToggle,
+  closeMenuOnToggle = false,
+  className = "",
+}: {
+  category: ProductCategoryNode;
+  collapsed: boolean;
+  forceExpanded: boolean;
+  onToggle: (path: string) => void;
+  closeMenuOnToggle?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={!collapsed}
+      aria-label={`${collapsed ? "Expand" : "Collapse"} ${category.path}`}
+      disabled={forceExpanded}
+      onClick={(event) => {
+        onToggle(category.path);
+        if (closeMenuOnToggle) event.currentTarget.closest("details")?.removeAttribute("open");
+      }}
+      className={`inline-flex min-w-0 items-center gap-0.5 rounded-sm py-0.5 transition hover:text-stone-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 disabled:cursor-default ${className}`}
+      title={`${collapsed ? "Expand" : "Collapse"} ${category.path}`}
+    >
+      {collapsed ? (
+        <ChevronRight size={11} className="shrink-0 text-stone-400" />
+      ) : (
+        <ChevronDown size={11} className="shrink-0 text-stone-400" />
+      )}
+      <span className="truncate">{category.label}</span>
+    </button>
   );
 }
 
