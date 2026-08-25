@@ -97,6 +97,13 @@ export function sortRecentDecisions<T extends RecentDecisionFields>(findings: T[
 type ProductRecommendationFields = {
   actionability?: { key: string } | null;
   offer_subject?: string | null;
+  suggested_review_outcome?:
+    | "false_positive"
+    | "do_not_pursue"
+    | "takedown"
+    | "second_hand"
+    | "none"
+    | null;
 };
 
 export function productNeedsAttention(group: ProductAttentionFields) {
@@ -148,18 +155,24 @@ function recommendedBatchAction(
   finding: ProductRecommendationFields,
 ): ProductLabBatchAction | null {
   if (finding.offer_subject === "packaging_only") return null;
-  switch (finding.actionability?.key) {
-    case "send_takedown":
+  switch (finding.suggested_review_outcome) {
+    case "takedown":
       return "send";
-    case "allowed_resale":
+    case "second_hand":
       return "second_hand";
     case "false_positive":
       return "false_positive";
-    case "needs_review":
-      return "review";
+    case "do_not_pursue":
+      return "do_not_pursue";
     default:
       return null;
   }
+}
+
+export function takedownDecisionReasonRequiredForSelection(
+  findings: ProductRecommendationFields[],
+) {
+  return findings.some((finding) => finding.suggested_review_outcome !== "takedown");
 }
 
 export function recommendedBatchActionForSelection(

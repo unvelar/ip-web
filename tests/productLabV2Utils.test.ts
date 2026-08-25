@@ -11,6 +11,7 @@ import {
   productShouldStayInAttention,
   recommendedBatchActionForSelection,
   reconcileProductAttentionOverview,
+  takedownDecisionReasonRequiredForSelection,
 } from "../src/pages/productLabV2Utils";
 
 const decisionFinding = (overrides: Record<string, unknown> = {}) => ({
@@ -182,23 +183,55 @@ describe("reconcileProductAttentionOverview", () => {
 describe("recommendedBatchActionForSelection", () => {
   test("highlights second hand when the selected listing recommends resale", () => {
     expect(recommendedBatchActionForSelection([{
-      actionability: { key: "allowed_resale" },
+      suggested_review_outcome: "second_hand",
       offer_subject: "product",
     }])).toBe("second_hand");
   });
 
   test("does not highlight a misleading action for mixed recommendations", () => {
     expect(recommendedBatchActionForSelection([
-      { actionability: { key: "allowed_resale" }, offer_subject: "product" },
-      { actionability: { key: "needs_review" }, offer_subject: "product" },
+      { suggested_review_outcome: "second_hand", offer_subject: "product" },
+      { suggested_review_outcome: "none", offer_subject: "product" },
     ])).toBeNull();
   });
 
   test("does not map packaging-only resale to the second-hand action", () => {
     expect(recommendedBatchActionForSelection([{
-      actionability: { key: "allowed_resale" },
+      suggested_review_outcome: "second_hand",
       offer_subject: "packaging_only",
     }])).toBeNull();
+  });
+
+  test("uses the persisted suggestion when actionability disagrees", () => {
+    expect(recommendedBatchActionForSelection([{
+      actionability: { key: "send_takedown" },
+      suggested_review_outcome: "none",
+      offer_subject: "product",
+    }])).toBeNull();
+    expect(recommendedBatchActionForSelection([{
+      actionability: { key: "needs_review" },
+      suggested_review_outcome: "takedown",
+      offer_subject: "product",
+    }])).toBe("send");
+  });
+});
+
+describe("takedownDecisionReasonRequiredForSelection", () => {
+  test("does not require a reason when takedown matches every persisted suggestion", () => {
+    expect(takedownDecisionReasonRequiredForSelection([
+      { suggested_review_outcome: "takedown" },
+      { suggested_review_outcome: "takedown" },
+    ])).toBe(false);
+  });
+
+  test("requires a reason when any persisted suggestion differs from takedown", () => {
+    expect(takedownDecisionReasonRequiredForSelection([
+      { suggested_review_outcome: "takedown" },
+      {
+        actionability: { key: "send_takedown" },
+        suggested_review_outcome: "none",
+      },
+    ])).toBe(true);
   });
 });
 

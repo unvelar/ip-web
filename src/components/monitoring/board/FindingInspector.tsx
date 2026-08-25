@@ -34,6 +34,7 @@ export function FindingInspector({
   showRelatedItems = true,
   taskHref,
   navigation,
+  error,
 }: {
   f: IpReviewFinding;
   ipId?: string;
@@ -54,6 +55,7 @@ export function FindingInspector({
   showRelatedItems?: boolean;
   /** Optional escape hatch when the inspector is opened outside the Tasks page. */
   taskHref?: string;
+  error?: string | null;
   navigation?: {
     position: number;
     total: number;
@@ -179,6 +181,14 @@ export function FindingInspector({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+          {error && (
+            <div
+              role="alert"
+              className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              {error}
+            </div>
+          )}
           <TaskAssigneeControl finding={f} onUpdated={onUpdated} />
           <FindingComparison
             key={f.result_id}

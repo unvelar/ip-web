@@ -61,6 +61,7 @@ import {
   removeProcessedFindings,
   resetOptimisticProductStateAfterUndo,
   sortRecentDecisions,
+  takedownDecisionReasonRequiredForSelection,
   type ProductLabBatchAction,
 } from "./productLabV2Utils";
 
@@ -1761,8 +1762,8 @@ export default function ProductLab() {
           action={confirmBatchAction}
           scopeLabel={selectedGroup ? productName(selectedGroup) : undefined}
           {...partitionBatch(confirmBatchAction)}
-          decisionReasonRequired={partitionBatch(confirmBatchAction).eligible.some(
-            (finding) => finding.actionability?.key !== "send_takedown",
+          decisionReasonRequired={takedownDecisionReasonRequiredForSelection(
+            partitionBatch(confirmBatchAction).eligible,
           )}
           onCancel={() => setConfirmBatchAction(null)}
           onConfirm={(decisionReason, associationScopes) => {
