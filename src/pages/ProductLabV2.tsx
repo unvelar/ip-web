@@ -1909,11 +1909,8 @@ function ProductCategoryBranch({
     terminalCategory = terminalCategory.children[0];
     categoryChain.push(terminalCategory);
   }
-  const collapsedCategory = forceExpanded
-    ? null
-    : categoryChain.find((item) => collapsedPaths.has(item.path)) ?? null;
-  const collapsed = collapsedCategory != null;
   const breadcrumbChain = [...ancestors, ...categoryChain];
+  const collapsed = !forceExpanded && breadcrumbChain.some((item) => collapsedPaths.has(item.path));
   const breadcrumb = breadcrumbChain.map((item) => item.label).join(" / ");
   const categoryGroups = categoryChain.flatMap((item) => item.groups);
   const headerTone = depth === 0
@@ -1947,28 +1944,41 @@ function ProductCategoryBranch({
 
   return (
     <div role="group" aria-label={breadcrumb}>
-      <button
-        type="button"
-        aria-expanded={!collapsed}
-        onClick={() => {
-          if (!forceExpanded) onToggle(collapsedCategory?.path ?? terminalCategory.path);
-        }}
+      <div
         className={`flex w-full items-center gap-2 border-b border-stone-200/80 py-2 pr-4 text-left text-[10px] transition hover:bg-stone-100 ${headerTone}`}
         style={{ paddingLeft: indent }}
         title={breadcrumb}
       >
-        {collapsed ? (
-          <ChevronRight size={12} className="shrink-0 text-stone-400" />
-        ) : (
-          <ChevronDown size={12} className="shrink-0 text-stone-400" />
-        )}
-        <span className={`min-w-0 flex-1 truncate ${depth === 0 ? "uppercase tracking-[0.07em]" : ""}`}>
-          {breadcrumb}
+        <span className={`flex min-w-0 flex-1 items-center overflow-hidden ${depth === 0 ? "uppercase tracking-[0.07em]" : ""}`}>
+          {breadcrumbChain.map((item, index) => {
+            const itemCollapsed = !forceExpanded && collapsedPaths.has(item.path);
+            return (
+              <span key={item.path} className="flex min-w-0 items-center">
+                {index > 0 && <span className="mx-1 shrink-0 text-stone-300">/</span>}
+                <button
+                  type="button"
+                  aria-expanded={!itemCollapsed}
+                  aria-label={`${itemCollapsed ? "Expand" : "Collapse"} ${item.path}`}
+                  disabled={forceExpanded}
+                  onClick={() => onToggle(item.path)}
+                  className="inline-flex min-w-0 max-w-[150px] items-center gap-0.5 rounded-sm py-0.5 transition hover:text-stone-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 disabled:cursor-default"
+                  title={`${itemCollapsed ? "Expand" : "Collapse"} ${item.path}`}
+                >
+                  {itemCollapsed ? (
+                    <ChevronRight size={11} className="shrink-0 text-stone-400" />
+                  ) : (
+                    <ChevronDown size={11} className="shrink-0 text-stone-400" />
+                  )}
+                  <span className="truncate">{item.label}</span>
+                </button>
+              </span>
+            );
+          })}
         </span>
         <span className="shrink-0 rounded bg-stone-200/70 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
           {categoryGroups.length}
         </span>
-      </button>
+      </div>
 
       {!collapsed && (
         <>
