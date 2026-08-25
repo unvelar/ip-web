@@ -1583,6 +1583,14 @@ export interface IpReviewFinding {
   description_language: string | null;
   item_details: Record<string, unknown> | null;
   image_urls: string[] | null;
+  archived_images?: Array<{
+    url: string;
+    source_url: string | null;
+    content_hash: string;
+    width: number;
+    height: number;
+  }>;
+  /** Compatibility list for API versions predating archived source metadata. */
   archived_image_urls?: string[];
   /** Per-image similarity (vs this finding's IP), sorted desc — lets the
    *  carousel mark which listing photo actually matched. Entries with a

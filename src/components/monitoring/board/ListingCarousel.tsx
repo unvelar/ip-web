@@ -87,11 +87,187 @@ function BboxOverlay({
   );
 }
 
+const IMAGE_FILE_RE = /\.(?:avif|gif|jpe?g|png|webp)$/i;
+const RESIZE_PATH_SEGMENT_RE = /^(?:f\d{2,5}|\d{2,5}x\d{2,5}|[wh]\d{2,5})$/i;
+const PRESENTATION_PATH_SEGMENT_RE = /^(?:thumbs?|thumbnails?|previews?)$/i;
+const FILENAME_SIZE_SUFFIX_RE = /[-_]\d{2,5}x\d{2,5}$/i;
+const TRANSFORM_FILENAME_RE = /^(?:(?:s|m|l|w|h|f|q|fit|fill|crop|resize|thumb|thumbnail|small|medium|large)[-_]?){1,3}\d{2,5}$/i;
+
+/** Generic CDN identity: retain the object path while discarding only common
+ * presentation transforms. No marketplace hostname or selector is special. */
+function logicalImageKey(raw: string) {
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const path = decodeURIComponent(parsed.pathname);
+    if (!IMAGE_FILE_RE.test(path)) return `exact:${parsed.href}`;
+
+    const segments = path
+      .replace(/\/+$/, "")
+      .split("/")
+      .filter((segment) => !PRESENTATION_PATH_SEGMENT_RE.test(segment))
+      .map((segment) => RESIZE_PATH_SEGMENT_RE.test(segment) ? "{size}" : segment);
+    const filename = segments.at(-1) ?? "";
+    const dot = filename.lastIndexOf(".");
+    const stem = (dot > 0 ? filename.slice(0, dot) : filename)
+      .replace(FILENAME_SIZE_SUFFIX_RE, "");
+    segments[segments.length - 1] = TRANSFORM_FILENAME_RE.test(stem)
+      ? "{size}"
+      : stem;
+    return `asset:${host}${segments.join("/")}`;
+  } catch {
+    return `exact:${raw}`;
+  }
+}
+
+function imageResolutionHint(raw: string) {
+  try {
+    const path = decodeURIComponent(new URL(raw).pathname);
+    const hints: number[] = [];
+    for (const segment of path.replace(/\/+$/, "").split("/")) {
+      if (!RESIZE_PATH_SEGMENT_RE.test(segment)) continue;
+      hints.push(...(segment.match(/\d{2,5}/g) ?? []).map(Number));
+    }
+    const filename = path.split("/").at(-1) ?? "";
+    const dot = filename.lastIndexOf(".");
+    const stem = dot > 0 ? filename.slice(0, dot) : filename;
+    const suffix = stem.match(FILENAME_SIZE_SUFFIX_RE)?.[0];
+    if (suffix) hints.push(...(suffix.match(/\d{2,5}/g) ?? []).map(Number));
+    if (TRANSFORM_FILENAME_RE.test(stem)) {
+      const trailing = stem.match(/\d{2,5}$/)?.[0];
+      if (trailing) hints.push(Number(trailing));
+    }
+    return Math.max(0, ...hints);
+  } catch {
+    return 0;
+  }
+}
+
+type GalleryItem = {
+  key: string;
+  url: string;
+  sourceUrl: string | null;
+  similarity?: number;
+  bbox?: [number, number, number, number];
+  isScreenshot: boolean;
+  isBest: boolean;
+};
+
+function buildGalleryItems(f: IpReviewFinding): GalleryItem[] {
+  const scored = f.gallery_scores ?? [];
+  const scoreByUrl = new Map(scored.map((score) => [score.url, score]));
+  const bestScoreByKey = new Map<string, (typeof scored)[number]>();
+  for (const score of scored) {
+    const key = logicalImageKey(score.url);
+    const current = bestScoreByKey.get(key);
+    if (!current || score.similarity > current.similarity) {
+      bestScoreByKey.set(key, score);
+    }
+  }
+  const bestLogicalKey = scored[0] ? logicalImageKey(scored[0].url) : null;
+
+  type RawGroup = { sourceUrl: string; resolution: number };
+  const rawByKey = new Map<string, RawGroup>();
+  const rawOrder: string[] = [];
+  const addRaw = (sourceUrl: string | null | undefined) => {
+    if (!sourceUrl) return;
+    const key = logicalImageKey(sourceUrl);
+    const resolution = imageResolutionHint(sourceUrl);
+    const current = rawByKey.get(key);
+    if (!current) {
+      rawByKey.set(key, { sourceUrl, resolution });
+      rawOrder.push(key);
+    } else if (resolution > current.resolution) {
+      current.sourceUrl = sourceUrl;
+      current.resolution = resolution;
+    }
+  };
+  for (const score of scored) addRaw(score.url);
+  for (const sourceUrl of f.image_urls ?? []) addRaw(sourceUrl);
+  addRaw(f.image_url);
+
+  type ArchivedImage = NonNullable<IpReviewFinding["archived_images"]>[number];
+  const archiveByKey = new Map<string, ArchivedImage>();
+  const archiveOrder: string[] = [];
+  for (const archive of f.archived_images ?? []) {
+    const key = logicalImageKey(archive.source_url ?? archive.url);
+    const current = archiveByKey.get(key);
+    if (!current) {
+      archiveByKey.set(key, archive);
+      archiveOrder.push(key);
+    } else if (archive.width * archive.height > current.width * current.height) {
+      archiveByKey.set(key, archive);
+    }
+  }
+
+  const out: GalleryItem[] = [];
+  if (f.screenshot_url) {
+    out.push({
+      key: `screenshot:${f.screenshot_url}`,
+      url: f.screenshot_url,
+      sourceUrl: null,
+      isScreenshot: true,
+      isBest: false,
+    });
+  }
+
+  const usedArchiveKeys = new Set<string>();
+  for (const key of rawOrder) {
+    const raw = rawByKey.get(key)!;
+    const archive = archiveByKey.get(key);
+    if (archive) usedArchiveKeys.add(key);
+    const sourceScore = scoreByUrl.get(raw.sourceUrl);
+    out.push({
+      key: `image:${key}`,
+      url: archive?.url ?? raw.sourceUrl,
+      sourceUrl: raw.sourceUrl,
+      similarity: bestScoreByKey.get(key)?.similarity,
+      bbox: archive ? undefined : sourceScore?.bbox,
+      isScreenshot: false,
+      isBest: key === bestLogicalKey,
+    });
+  }
+
+  // Historical archived views that no longer appear in the current raw
+  // gallery remain available once each, grouped by their original source.
+  for (const key of archiveOrder) {
+    if (usedArchiveKeys.has(key)) continue;
+    const archive = archiveByKey.get(key)!;
+    out.push({
+      key: `archive:${key}`,
+      url: archive.url,
+      sourceUrl: archive.source_url,
+      similarity: bestScoreByKey.get(key)?.similarity,
+      isScreenshot: false,
+      isBest: key === bestLogicalKey,
+    });
+  }
+
+  // During a rolling deploy an older API may expose only unstructured archive
+  // URLs without source identity. Use those only when there is no gallery to
+  // replace; appending them recreates the duplicate-slide bug.
+  if (rawOrder.length === 0 && archiveOrder.length === 0) {
+    const seen = new Set<string>();
+    for (const url of f.archived_image_urls ?? []) {
+      if (seen.has(url)) continue;
+      seen.add(url);
+      out.push({
+        key: `legacy-archive:${url}`,
+        url,
+        sourceUrl: null,
+        isScreenshot: false,
+        isBest: false,
+      });
+    }
+  }
+  return out;
+}
+
 /** Hero-with-thumbstrip carousel for the listing's product photos. When
  *  `gallery_scores` is present (worker scored each photo against the IP), the
- *  best-matched image is the default hero, marked MATCHED, and each thumb
- *  shows its similarity %. Falls back to discovery `image_url` only when the
- *  gallery is empty. The page screenshot is rendered separately below. */
+ *  best-matched photo is marked MATCHED and each thumb shows its similarity %.
+ *  Archived copies replace their original sources instead of becoming extra
+ *  slides. The page screenshot stays first as listing-level evidence. */
 export function ListingCarousel({
   f,
   ipId,
@@ -101,42 +277,18 @@ export function ListingCarousel({
   ipId?: string;
   compact?: boolean;
 }) {
-  const scored = useMemo(() => f.gallery_scores ?? [], [f.gallery_scores]);
-  const scoredByUrl = new Map(scored.map((s) => [s.url, s.similarity]));
-  // Per-URL bbox in gallery-image pixel coords from the worker's keypoint
-  // localizer. Drawn as an SVG overlay on the hero so the reviewer can see
-  // where on the photo the IP (logo/label) was found.
-  const bboxByUrl = new Map(
-    scored.filter((s) => s.bbox).map((s) => [s.url, s.bbox!]),
-  );
-  const archivedUrls = useMemo(
-    () => f.archived_image_urls ?? [],
-    [f.archived_image_urls],
-  );
-  const archivedUrlSet = new Set(archivedUrls);
-  // Order: page screenshot first (when captured — wide page context the lawyer
-  // anchors on), then scored gallery (best-matched first), then any unscored
-  // gallery URL, then the discovery thumbnail. Dedupe by URL.
-  const urls = useMemo(() => {
-    const out: string[] = [];
-    const seen = new Set<string>();
-    const add = (u: string | null | undefined) => {
-      if (u && !seen.has(u)) {
-        out.push(u);
-        seen.add(u);
-      }
-    };
-    add(f.screenshot_url);
-    for (const u of archivedUrls) add(u);
-    for (const s of scored) add(s.url);
-    for (const u of f.image_urls ?? []) add(u);
-    add(f.image_url);
-    return out;
-  }, [f.screenshot_url, archivedUrls, scored, f.image_urls, f.image_url]);
+  const items = useMemo(() => buildGalleryItems(f), [
+    f.screenshot_url,
+    f.archived_images,
+    f.archived_image_urls,
+    f.gallery_scores,
+    f.image_urls,
+    f.image_url,
+  ]);
 
   const [idx, setIdx] = useState(0);
   const [allowingUrl, setAllowingUrl] = useState<string | null>(null);
-  const [allowedUrls, setAllowedUrls] = useState<Set<string>>(new Set());
+  const [allowedSourceUrls, setAllowedSourceUrls] = useState<Set<string>>(new Set());
   const [zoomPos, setZoomPos] = useState<{ x: number; y: number } | null>(null);
   // Natural dimensions of the active hero image — needed so the SVG bbox
   // overlay (in pixel coords) lines up under the same `object-contain`
@@ -146,9 +298,9 @@ export function ListingCarousel({
   // resets to 0 on its own — no reset effect needed.
   const [natural, setNatural] = useState<{ url: string; w: number; h: number } | null>(null);
 
-  const active = urls[Math.min(idx, urls.length - 1)];
+  const activeItem = items[Math.min(idx, items.length - 1)];
 
-  if (urls.length === 0) {
+  if (!activeItem) {
     return (
       <div className="w-full aspect-square bg-stone-50 border border-stone-200 rounded-lg flex items-center justify-center text-xs text-stone-400">
         No image
@@ -156,14 +308,17 @@ export function ListingCarousel({
     );
   }
 
-  const activeSim = scoredByUrl.get(active);
-  const activeBbox = bboxByUrl.get(active);
-  const bestUrl = scored[0]?.url;
+  const active = activeItem.url;
+  const activeSourceUrl = activeItem.sourceUrl;
+  const activeSim = activeItem.similarity;
+  const activeBbox = activeItem.bbox;
   // Only honor the measurement when it belongs to the current slide.
   const activeNatural = natural?.url === active ? natural : null;
-  const canAllowImage = !!ipId && !!active && active !== f.screenshot_url &&
-    !archivedUrlSet.has(active) && !f.dismissed_at;
-  const activeAllowed = active ? allowedUrls.has(active) : false;
+  const canAllowImage = !!ipId && !!activeSourceUrl && !activeItem.isScreenshot &&
+    !f.dismissed_at;
+  const activeAllowed = activeSourceUrl
+    ? allowedSourceUrls.has(activeSourceUrl)
+    : false;
   const canZoomHero = !compact;
 
   function updateHeroZoom(e: MouseEvent<HTMLAnchorElement>) {
@@ -181,7 +336,7 @@ export function ListingCarousel({
     setAllowingUrl(imageUrl);
     try {
       await allowIpFindingProductImage(ipId, f.result_id, { image_url: imageUrl });
-      setAllowedUrls((prev) => new Set(prev).add(imageUrl));
+      setAllowedSourceUrls((prev) => new Set(prev).add(imageUrl));
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to allow product image");
     } finally {
@@ -243,25 +398,25 @@ export function ListingCarousel({
         {activeSim != null && (
           <span
             className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[11px] font-bold ${
-              active === bestUrl
+              activeItem.isBest
                 ? "bg-emerald-600 text-white"
                 : "bg-stone-900/80 text-white"
             }`}
             title={`Similarity to the protected IP: ${Math.round(activeSim * 100)}%`}
           >
-            {active === bestUrl ? "MATCHED · " : ""}
+            {activeItem.isBest ? "MATCHED · " : ""}
             {Math.round(activeSim * 100)}%
           </span>
         )}
-        {urls.length > 1 && (
+        {items.length > 1 && (
           <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-900/70 text-white">
-            {idx + 1} / {urls.length}
+            {Math.min(idx, items.length - 1) + 1} / {items.length}
           </span>
         )}
         {canAllowImage && (
           <button
             type="button"
-            onClick={(e) => allowImageUrl(e, active)}
+            onClick={(e) => allowImageUrl(e, activeSourceUrl!)}
             disabled={!!allowingUrl || activeAllowed}
             title="Allow this product image — future similar images for this IP will be ignored"
             className={`absolute bottom-2 left-2 rounded-md font-semibold shadow-sm disabled:opacity-60 ${
@@ -270,26 +425,26 @@ export function ListingCarousel({
                 : "px-2.5 py-1.5 text-xs bg-white/95 text-teal-700 hover:bg-teal-50"
             }`}
           >
-            {allowingUrl === active ? "Queuing…" : activeAllowed ? "Ignored going forward" : compact ? "Allow" : "Allow this image"}
+            {allowingUrl === activeSourceUrl ? "Queuing…" : activeAllowed ? "Ignored going forward" : compact ? "Allow" : "Allow this image"}
           </button>
         )}
       </a>
-      {allowedUrls.size > 0 && (
+      {allowedSourceUrls.size > 0 && (
         <div className="rounded-md border border-teal-200 bg-teal-50 px-2.5 py-2 text-xs font-medium text-teal-800">
           Similar products will be ignored going forward.
         </div>
       )}
 
       {/* Thumb strip — horizontal scroll on overflow, matched thumb framed emerald. */}
-      {urls.length > 1 && (
+      {items.length > 1 && (
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {urls.map((u, i) => {
-            const sim = scoredByUrl.get(u);
+          {items.map((item, i) => {
+            const sim = item.similarity;
             const isActive = i === idx;
-            const isBest = u === bestUrl;
+            const sourceUrl = item.sourceUrl;
             return (
               <button
-                key={`${u}-${i}`}
+                key={item.key}
                 type="button"
                 onMouseEnter={() => setIdx(i)}
                 onClick={(e) => {
@@ -299,29 +454,29 @@ export function ListingCarousel({
                 className={`relative shrink-0 ${compact ? "w-11 h-11" : "w-14 h-14"} rounded overflow-hidden border-2 transition-colors ${
                   isActive
                     ? "border-stone-900"
-                    : isBest
+                    : item.isBest
                       ? "border-emerald-500"
                       : "border-stone-200 hover:border-stone-400"
                 }`}
                 title={sim != null ? `${Math.round(sim * 100)}% match` : undefined}
               >
-                <img src={u} alt="" className="w-full h-full object-cover" loading="lazy" />
+                <img src={item.url} alt="" className="w-full h-full object-cover" loading="lazy" />
                 {sim != null && (
                   <span className="absolute bottom-0 right-0 px-1 py-px bg-stone-900/80 text-white text-[9px] font-bold leading-tight">
                     {Math.round(sim * 100)}
                   </span>
                 )}
-                {ipId && u !== f.screenshot_url && !f.dismissed_at && (
+                {ipId && sourceUrl && !item.isScreenshot && !f.dismissed_at && (
                   <span
-                    onClick={(e) => allowImageUrl(e, u)}
+                    onClick={(e) => allowImageUrl(e, sourceUrl)}
                     className={`absolute top-0 left-0 px-1 py-px text-[9px] font-bold leading-tight rounded-br ${
-                      allowedUrls.has(u)
+                      allowedSourceUrls.has(sourceUrl)
                         ? "bg-teal-600 text-white"
                         : "bg-white/90 text-teal-700 hover:bg-teal-50"
                     }`}
                     title="Allow this individual product image"
                   >
-                    {allowingUrl === u ? "..." : allowedUrls.has(u) ? "OK" : "Allow"}
+                    {allowingUrl === sourceUrl ? "..." : allowedSourceUrls.has(sourceUrl) ? "OK" : "Allow"}
                   </span>
                 )}
               </button>
