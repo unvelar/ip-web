@@ -19,6 +19,7 @@ import {
   PanelLeftOpen,
   Inbox as InboxIcon,
   Bell,
+  Store,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "./Avatar";
@@ -271,6 +272,13 @@ function AppShellContent() {
             icon={<GitBranch size={18} />}
             label="Campaigns"
             active={isActive("/monitoring/campaigns")}
+            collapsed={collapsed}
+          />
+          <NavItem
+            to="/monitoring/sellers"
+            icon={<Store size={18} />}
+            label="Sellers"
+            active={pathname === "/monitoring/sellers" || pathname.startsWith("/monitoring/sellers/")}
             collapsed={collapsed}
           />
           <NavItem

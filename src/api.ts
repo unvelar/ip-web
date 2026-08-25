@@ -457,14 +457,32 @@ export function updateCaseSubscription(caseId: string, subscribed: boolean) {
 export type AccountNotificationType =
   | "task_assigned"
   | "comment_mention"
-  | "task_comment";
+  | "task_comment"
+  | "seller_returned";
+
+export interface SellerReturnedNotificationPayload {
+  seller_key?: string;
+  seller_name?: string;
+  domain?: string;
+  current_result_id?: string;
+  current_ip_id?: string;
+  current_ip_name?: string | null;
+  prior_case_id?: string;
+  prior_ip_id?: string;
+  prior_ip_name?: string | null;
+  prior_takedown_at?: string;
+  new_listing_count?: number;
+}
 
 export interface AccountNotification {
   id: string;
   type: AccountNotificationType;
   case_id: string;
   comment_id: string | null;
-  payload: { comment_preview?: string; result_id?: string };
+  payload: {
+    comment_preview?: string;
+    result_id?: string;
+  } & SellerReturnedNotificationPayload;
   read_at: string | null;
   created_at: string;
   actor: TenantMember | null;
@@ -2459,6 +2477,35 @@ export function getMonitoringFindingForCase(caseId: string) {
 export type MonitoringSellerStatus = "open" | "all" | "dismissed" | "enforced";
 export type MonitoringSellerAvailability = "available" | "blocked" | "unknown" | "unavailable";
 export type MonitoringSellerSort = "found_desc" | "price_desc" | "risk_desc";
+export type MonitoringSellerListStatus = "open" | "returned" | "all";
+
+export interface MonitoringSellerSummary {
+  seller_key: string;
+  seller_name: string;
+  domain: string;
+  profile_url: string | null;
+  rating: number | null;
+  sales: number | null;
+  open_listing_count: number;
+  returned_listing_count: number;
+  prior_enforcement_count: number;
+  affected_ip_count: number;
+  ip_names: string[];
+  monitored_market_usd: number;
+  max_enforcement_priority: number;
+  latest_found_at: string;
+  latest_result_id: string | null;
+  sample_image_url: string | null;
+  last_prior_takedown_at: string | null;
+}
+
+export interface MonitoringSellersPage {
+  sellers: MonitoringSellerSummary[];
+  next_cursor: string | null;
+  total_sellers: number;
+  returned_seller_count: number;
+  platforms: string[];
+}
 
 export interface MonitoringSellerProfilePage {
   seller: {
@@ -2475,18 +2522,40 @@ export interface MonitoringSellerProfilePage {
   summary: {
     monitored_listings: number;
     available_listings: number;
-    /** Present after the workflow/availability API rollout. */
-    blocked_listings?: number;
+    blocked_listings: number;
     unknown_availability: number;
     unavailable_listings: number;
     monitored_market_usd: number;
     affected_ip_count: number;
     prior_enforcement_count: number;
+    returned_listing_count: number;
+    last_prior_takedown_at: string | null;
   };
   ips: Array<{ ip_id: string; ip_name: string; findings: number }>;
   statuses: Record<string, number>;
   findings: IpReviewFinding[];
   next_cursor: string | null;
+}
+
+export function listMonitoringSellers(opts: {
+  status?: MonitoringSellerListStatus;
+  ip_id?: string | null;
+  platform?: string | null;
+  query?: string | null;
+  cursor?: string | null;
+  limit?: number;
+  signal?: AbortSignal;
+} = {}) {
+  const params = new URLSearchParams();
+  if (opts.status) params.set("status", opts.status);
+  if (opts.ip_id) params.set("ip_id", opts.ip_id);
+  if (opts.platform) params.set("platform", opts.platform);
+  if (opts.query) params.set("q", opts.query);
+  if (opts.cursor) params.set("cursor", opts.cursor);
+  params.set("limit", String(opts.limit ?? 24));
+  return request<MonitoringSellersPage>(`/api/monitoring/sellers?${params.toString()}`, {
+    signal: opts.signal,
+  });
 }
 
 export async function getMonitoringSellerProfile(

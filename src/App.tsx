@@ -17,6 +17,7 @@ import MonitoringTasks from "./pages/MonitoringTasks";
 import MonitoringCampaigns from "./pages/MonitoringCampaigns";
 import ProductLab from "./pages/ProductLabV2";
 import MonitoringNew from "./pages/MonitoringNew";
+import Sellers from "./pages/Sellers";
 import SellerProfile from "./pages/SellerProfile";
 import Monitors from "./pages/Monitors";
 import Dashboard from "./pages/Dashboard";
@@ -156,6 +157,7 @@ export default function App() {
           <Route path="/monitoring/tasks/:taskId" element={<MonitoringTasks />} />
           <Route path="/monitoring/campaigns" element={<MonitoringCampaigns />} />
           <Route path="/monitoring/campaigns/:campaignId" element={<MonitoringCampaigns />} />
+          <Route path="/monitoring/sellers" element={<Sellers />} />
           <Route path="/monitoring/sellers/:sellerKey" element={<SellerProfile />} />
           <Route path="/monitoring/products" element={<ProductLab />} />
           <Route path="/monitoring/products/:groupId/tasks/:taskId" element={<LegacyProductRedirect />} />

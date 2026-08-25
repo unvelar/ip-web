@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, Bell, CheckCheck, MessageSquare, UserPlus } from "lucide-react";
+import { AtSign, Bell, CheckCheck, MessageSquare, ShieldAlert, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   listAccountNotifications,
@@ -9,6 +9,7 @@ import {
 } from "../api";
 import Avatar from "../components/Avatar";
 import { useAuth } from "../context/AuthContext";
+import { monitoringPlatformLabel } from "../lib/platforms";
 
 const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
 
@@ -23,6 +24,9 @@ function actorName(notification: AccountNotification) {
 }
 
 function notificationCopy(notification: AccountNotification) {
+  if (notification.type === "seller_returned") {
+    return { icon: ShieldAlert, action: "returned after a previous takedown" };
+  }
   if (notification.type === "task_assigned") {
     return { icon: UserPlus, action: "assigned this task to you" };
   }
@@ -134,6 +138,14 @@ export default function Notifications() {
 
   function openNotification(notification: AccountNotification) {
     if (!notification.read_at) void setRead(notification, true);
+    if (notification.type === "seller_returned" && notification.payload.seller_key) {
+      const query = new URLSearchParams();
+      const resultId = notification.payload.current_result_id ?? notification.task.result_id;
+      if (resultId) query.set("finding", resultId);
+      const suffix = query.toString();
+      navigate(`/monitoring/sellers/${encodeURIComponent(notification.payload.seller_key)}${suffix ? `?${suffix}` : ""}`);
+      return;
+    }
     navigate(notification.task.result_id
       ? `/monitoring/tasks/${encodeURIComponent(notification.task.result_id)}`
       : "/monitoring/tasks");
@@ -149,7 +161,7 @@ export default function Notifications() {
           </div>
           <h1 className="text-2xl font-black tracking-tight text-stone-900">Notifications</h1>
           <p className="mt-1 text-sm text-stone-500">
-            Assignments, mentions, and comments on tasks you follow.
+            Seller returns, assignments, mentions, and comments on tasks you follow.
           </p>
         </div>
         <button
@@ -197,7 +209,7 @@ export default function Notifications() {
               {showUnreadOnly ? "You’re all caught up" : "No notifications yet"}
             </p>
             <p className="mt-1 max-w-sm text-xs leading-relaxed text-stone-400">
-              New task assignments and comment mentions will appear here.
+              Returned sellers, task assignments, and comment mentions will appear here.
             </p>
           </div>
         ) : (
@@ -206,6 +218,12 @@ export default function Notifications() {
               const copy = notificationCopy(notification);
               const Icon = copy.icon;
               const unread = !notification.read_at;
+              const sellerReturned = notification.type === "seller_returned";
+              const sellerName = notification.payload.seller_name?.trim() || "A previous seller";
+              const platform = notification.payload.domain
+                ? monitoringPlatformLabel(notification.payload.domain)
+                : "the marketplace";
+              const newListingCount = Math.max(1, Number(notification.payload.new_listing_count) || 1);
               const preview = typeof notification.payload.comment_preview === "string"
                 ? notification.payload.comment_preview
                 : null;
@@ -213,11 +231,17 @@ export default function Notifications() {
                 <li key={notification.id} className={unread ? "bg-red-50/30" : "bg-white"}>
                   <div className="group flex items-start gap-3 px-4 py-4 sm:px-5">
                     <div className="relative shrink-0">
-                      <Avatar
-                        pictureUrl={notification.actor?.picture_url ?? null}
-                        name={actorName(notification)}
-                        size={34}
-                      />
+                      {sellerReturned ? (
+                        <span className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-red-100 text-red-700">
+                          <ShieldAlert size={17} aria-hidden />
+                        </span>
+                      ) : (
+                        <Avatar
+                          pictureUrl={notification.actor?.picture_url ?? null}
+                          name={actorName(notification)}
+                          size={34}
+                        />
+                      )}
                       <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-stone-700 text-white">
                         <Icon size={9} aria-hidden />
                       </span>
@@ -227,13 +251,27 @@ export default function Notifications() {
                       onClick={() => openNotification(notification)}
                       className="min-w-0 flex-1 text-left"
                     >
-                      <p className="text-sm text-stone-700">
-                        <span className="font-bold text-stone-900">{actorName(notification)}</span>{" "}
-                        {copy.action}
-                      </p>
-                      <p className="mt-0.5 truncate text-xs font-semibold text-stone-600">
-                        {notification.task.title || "Monitoring task"}
-                      </p>
+                      {sellerReturned ? (
+                        <>
+                          <p className="text-sm text-stone-700">
+                            <span className="font-bold text-stone-900">{sellerName}</span>{" "}
+                            is back on {platform}
+                          </p>
+                          <p className="mt-0.5 text-xs font-semibold text-stone-600">
+                            {newListingCount} new {newListingCount === 1 ? "listing was" : "listings were"} found after a previous takedown.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm text-stone-700">
+                            <span className="font-bold text-stone-900">{actorName(notification)}</span>{" "}
+                            {copy.action}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs font-semibold text-stone-600">
+                            {notification.task.title || "Monitoring task"}
+                          </p>
+                        </>
+                      )}
                       {preview && (
                         <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-stone-400">{preview}</p>
                       )}
