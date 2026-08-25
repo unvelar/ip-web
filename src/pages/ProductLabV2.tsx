@@ -1364,14 +1364,14 @@ export default function ProductLab() {
   }
 
   return (
-    <div className="min-h-[calc(100dvh-3rem)] bg-[#f7f6f3] text-stone-950 lg:h-[calc(100dvh-3rem)] lg:overflow-hidden">
-      <header className="border-b border-stone-200/80 bg-[#faf9f7] px-4 py-4 sm:px-6 lg:px-7">
-        <div className="flex min-h-9 items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="truncate text-[18px] font-semibold tracking-[-0.025em] text-stone-950">
+    <div className="min-h-[calc(100dvh-3rem)] bg-[#f7f6f3] text-stone-950 lg:h-[calc(100dvh-40px)] lg:overflow-hidden">
+      <header className="border-b border-stone-200/80 bg-[#faf9f7] px-4 py-[7px] sm:px-6 lg:px-5">
+        <div className="flex min-h-[28px] items-center justify-between gap-4">
+          <div className="flex min-w-0 items-baseline gap-2.5">
+            <h1 className="shrink-0 text-[16px] font-semibold tracking-[-0.025em] text-stone-950">
               Product Lab
             </h1>
-            <p className="mt-0.5 truncate text-[12px] text-stone-500">
+            <p className="hidden truncate text-[11px] text-stone-500 sm:block">
               {activeIp?.name ? `${activeIp.name} · ` : ""}Review what needs attention, then move on.
             </p>
           </div>
@@ -1380,7 +1380,7 @@ export default function ProductLab() {
               type="button"
               onClick={() => setRefreshToken((token) => token + 1)}
               disabled={loading || loadingHistory}
-              className="grid size-8 place-items-center rounded-md text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
+              className="grid size-[28px] place-items-center rounded-md text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
               aria-label="Refresh products"
               title="Refresh products"
             >
@@ -1390,9 +1390,9 @@ export default function ProductLab() {
         </div>
       </header>
 
-      <div className="lg:grid lg:h-[calc(100%-73px)] lg:grid-cols-[minmax(340px,0.82fr)_minmax(430px,1.18fr)]">
+      <div className="lg:grid lg:h-[calc(100%-43px)] lg:grid-cols-[minmax(340px,0.82fr)_minmax(430px,1.18fr)]">
         <section className={`${showMobileInspector ? "hidden lg:flex" : "flex"} min-h-0 flex-col border-stone-200/80 bg-[#faf9f7] lg:border-r`} aria-label="Products">
-          <div className="border-b border-stone-200/80 px-4 pt-3 sm:px-6 lg:px-5">
+          <div className="border-b border-stone-200/80 px-4 sm:px-6 lg:px-4">
             <div className="flex items-center gap-4 overflow-x-auto" role="tablist" aria-label="Product views">
               <ViewTab
                 active={view === "attention"}
@@ -1470,8 +1470,8 @@ export default function ProductLab() {
             </div>
           )}
 
-          <div className="border-b border-stone-200/80 p-3 sm:px-6 lg:px-4">
-            <label className="relative block">
+          <div className="flex items-center gap-3 border-b border-stone-200/80 px-4 py-[7px] sm:px-6 lg:px-4">
+            <label className="relative block min-w-0 flex-1">
               <Search
                 size={14}
                 className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"
@@ -1492,24 +1492,21 @@ export default function ProductLab() {
                     ? "Search all products to merge"
                     : view === "all"
                       ? "Search all products"
-                      : "Search products needing attention"}
-                className="h-8 w-full rounded-md border border-stone-200 bg-white pl-8 pr-3 text-[12px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/70"
+                      : "Search products"}
+                className="block h-[30px] w-full rounded-md border border-stone-200 bg-white pl-8 pr-3 text-[11px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/70"
               />
             </label>
             {view !== "history" && overview && (
               <div
-                className="mt-2 flex items-center justify-between gap-3 text-[10px] text-stone-500"
+                className="shrink-0 text-[10px] leading-[14px] tabular-nums text-stone-500"
                 role="status"
                 aria-live="polite"
               >
                 <span>
                   {loading
-                    ? "Updating products…"
-                    : `Showing ${visibleGroups.length} of ${paginatedProductCount} ${query.trim() ? "matching " : ""}products`}
+                    ? "Updating…"
+                    : `${visibleGroups.length} of ${paginatedProductCount}${query.trim() ? " matches" : ""}`}
                 </span>
-                {!loading && overview.next_cursor && (
-                  <span className="shrink-0">Load the next page when ready</span>
-                )}
               </div>
             )}
           </div>
@@ -1862,7 +1859,7 @@ function ViewTab({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`relative h-9 shrink-0 text-[12px] font-medium transition ${
+      className={`relative h-[34px] shrink-0 text-[11px] font-medium transition ${
         active ? "text-stone-950" : "text-stone-500 hover:text-stone-800"
       }`}
     >

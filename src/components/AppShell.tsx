@@ -422,9 +422,9 @@ function AppShellContent() {
           )}
           {/* Desktop topbar — the working IP is global application context.
               Registry management stays beside it without competing in nav. */}
-          <div className="hidden lg:flex sticky top-0 z-20 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 items-center justify-end gap-2 px-6">
+          <div className="hidden lg:flex sticky top-0 z-20 h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md">
             <TopbarIpSelector active={isActive("/ips")} />
-            <div className="ml-1 h-5 w-px bg-stone-200" aria-hidden />
+            <div className="ml-1 h-[18px] w-px bg-stone-200" aria-hidden />
             <NotificationBell count={notificationCount} active={isActive("/inbox")} />
           </div>
           <Outlet />
@@ -442,7 +442,7 @@ function NotificationBell({ count, active }: { count: number; active: boolean })
   return (
     <Link
       to="/inbox"
-      className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 ${
+      className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 lg:h-[30px] lg:w-[30px] lg:rounded-md ${
         active
           ? "bg-stone-200 text-stone-900"
           : "text-stone-500 hover:bg-stone-100 hover:text-stone-900"
@@ -463,13 +463,13 @@ function NotificationBell({ count, active }: { count: number; active: boolean })
 function TopbarIpSelector({ active }: { active: boolean }) {
   const { ips, activeIpId, loading, error, selectIp } = useActiveIp();
   const manageCls = active
-    ? "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-stone-900 px-2.5 text-xs font-semibold text-white shadow-sm"
-    : "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-semibold text-stone-700 shadow-sm hover:border-stone-400 hover:bg-stone-50";
+    ? "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-stone-900 px-2.5 text-xs font-semibold text-white shadow-sm lg:h-[30px] lg:rounded-md lg:px-2"
+    : "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-semibold text-stone-700 shadow-sm hover:border-stone-400 hover:bg-stone-50 lg:h-[30px] lg:rounded-md lg:px-2";
 
   return (
     <div className="flex min-w-0 items-center gap-1.5">
       <label
-        className="flex h-8 w-[124px] min-w-0 items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-2.5 text-stone-900 shadow-sm transition focus-within:border-stone-400 focus-within:ring-2 focus-within:ring-stone-200 sm:w-[208px] lg:w-64"
+        className="flex h-8 w-[124px] min-w-0 items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-2.5 text-stone-900 shadow-sm transition focus-within:border-stone-400 focus-within:ring-2 focus-within:ring-stone-200 sm:w-[208px] lg:h-[30px] lg:w-60 lg:rounded-md lg:px-2"
         title={error ?? "Choose the IP you are working with"}
       >
         <Library size={15} className="hidden shrink-0 text-stone-500 sm:block" aria-hidden />
@@ -482,7 +482,7 @@ function TopbarIpSelector({ active }: { active: boolean }) {
             onChange={(event) => selectIp(event.target.value)}
             disabled={loading || ips.length === 0}
             aria-label="Working intellectual property"
-            className="h-7 w-full appearance-none truncate bg-transparent pr-5 text-[11px] font-bold text-stone-800 outline-none disabled:cursor-not-allowed disabled:text-stone-400 sm:text-xs"
+            className="h-7 w-full appearance-none truncate bg-transparent pr-5 text-[11px] font-bold text-stone-800 outline-none disabled:cursor-not-allowed disabled:text-stone-400 sm:text-xs lg:h-[28px]"
           >
             {loading ? (
               <option value="">Loading IPs…</option>
