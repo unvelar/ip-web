@@ -1879,6 +1879,7 @@ function ViewTab({
 function ProductCategoryBranch({
   category,
   depth,
+  ancestors = [],
   collapsedPaths,
   forceExpanded,
   selectedGroupId,
@@ -1891,6 +1892,7 @@ function ProductCategoryBranch({
 }: {
   category: ProductCategoryNode;
   depth: number;
+  ancestors?: ProductCategoryNode[];
   collapsedPaths: Set<string>;
   forceExpanded: boolean;
   selectedGroupId: string | null;
@@ -1901,23 +1903,59 @@ function ProductCategoryBranch({
   onSelectGroup: (groupId: string) => void;
   onToggleMergeGroup: (groupId: string) => void;
 }) {
-  const collapsed = !forceExpanded && collapsedPaths.has(category.path);
+  const categoryChain = [category];
+  let terminalCategory = category;
+  while (terminalCategory.children.length === 1) {
+    terminalCategory = terminalCategory.children[0];
+    categoryChain.push(terminalCategory);
+  }
+  const collapsedCategory = forceExpanded
+    ? null
+    : categoryChain.find((item) => collapsedPaths.has(item.path)) ?? null;
+  const collapsed = collapsedCategory != null;
+  const breadcrumbChain = [...ancestors, ...categoryChain];
+  const breadcrumb = breadcrumbChain.map((item) => item.label).join(" / ");
+  const categoryGroups = categoryChain.flatMap((item) => item.groups);
   const headerTone = depth === 0
     ? "sticky top-0 z-10 bg-[#f0eeea]/95 font-semibold text-stone-700 backdrop-blur"
     : "bg-[#faf9f7] font-medium text-stone-600";
   const indent = 16 + Math.min(depth, 5) * 14;
 
+  if (categoryGroups.length === 0 && terminalCategory.children.length > 0) {
+    return (
+      <>
+        {terminalCategory.children.map((child) => (
+          <ProductCategoryBranch
+            key={child.key}
+            category={child}
+            depth={depth}
+            ancestors={breadcrumbChain}
+            collapsedPaths={collapsedPaths}
+            forceExpanded={forceExpanded}
+            selectedGroupId={selectedGroupId}
+            mergeSourceGroupId={mergeSourceGroupId}
+            mergeTargetGroupIds={mergeTargetGroupIds}
+            mergeDisabled={mergeDisabled}
+            onToggle={onToggle}
+            onSelectGroup={onSelectGroup}
+            onToggleMergeGroup={onToggleMergeGroup}
+          />
+        ))}
+      </>
+    );
+  }
+
   return (
-    <div role="group" aria-label={category.path}>
+    <div role="group" aria-label={breadcrumb}>
       <button
         type="button"
         aria-expanded={!collapsed}
         onClick={() => {
-          if (!forceExpanded) onToggle(category.path);
+          if (!forceExpanded) onToggle(collapsedCategory?.path ?? terminalCategory.path);
         }}
         className={`flex w-full items-center gap-2 border-b border-stone-200/80 py-2 pr-4 text-left text-[10px] transition hover:bg-stone-100 ${headerTone}`}
         style={{ paddingLeft: indent }}
-        title={category.path}
+        title={breadcrumb}
       >
         {collapsed ? (
           <ChevronRight size={12} className="shrink-0 text-stone-400" />
@@ -1925,16 +1963,16 @@ function ProductCategoryBranch({
           <ChevronDown size={12} className="shrink-0 text-stone-400" />
         )}
         <span className={`min-w-0 flex-1 truncate ${depth === 0 ? "uppercase tracking-[0.07em]" : ""}`}>
-          {category.label}
+          {breadcrumb}
         </span>
         <span className="shrink-0 rounded bg-stone-200/70 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
-          {category.groupCount}
+          {categoryGroups.length}
         </span>
       </button>
 
       {!collapsed && (
         <>
-          {category.groups.map(({ group, index }) => (
+          {categoryGroups.map(({ group, index }) => (
             <ProductRow
               key={group.id}
               group={group}
@@ -1953,11 +1991,12 @@ function ProductCategoryBranch({
               onToggleMerge={() => onToggleMergeGroup(group.id)}
             />
           ))}
-          {category.children.map((child) => (
+          {terminalCategory.children.map((child) => (
             <ProductCategoryBranch
               key={child.key}
               category={child}
               depth={depth + 1}
+              ancestors={breadcrumbChain}
               collapsedPaths={collapsedPaths}
               forceExpanded={forceExpanded}
               selectedGroupId={selectedGroupId}
