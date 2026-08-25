@@ -2537,6 +2537,12 @@ export interface MonitoringSellerProfilePage {
   next_cursor: string | null;
 }
 
+/** Tenant-wide returned sellers with at least one current open listing — the
+ * Sellers navigation badge. */
+export function getReturnedMonitoringSellersCount() {
+  return request<{ count: number }>("/api/monitoring/sellers/returned-count");
+}
+
 export function listMonitoringSellers(opts: {
   status?: MonitoringSellerListStatus;
   ip_id?: string | null;
