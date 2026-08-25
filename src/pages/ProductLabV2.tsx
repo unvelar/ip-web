@@ -451,6 +451,36 @@ export default function ProductLab() {
   const showGroupSettings = searchParams.get("panel") === "settings";
 
   useEffect(() => {
+    const closeCategoryMenusOutside = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      const target = event.target;
+
+      document
+        .querySelectorAll<HTMLDetailsElement>("details[data-category-overflow-menu][open]")
+        .forEach((menu) => {
+          if (!menu.contains(target)) menu.removeAttribute("open");
+        });
+    };
+    const closeCategoryMenusOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+
+      document
+        .querySelectorAll<HTMLDetailsElement>("details[data-category-overflow-menu][open]")
+        .forEach((menu) => {
+          menu.removeAttribute("open");
+          menu.querySelector<HTMLElement>("summary")?.focus();
+        });
+    };
+
+    document.addEventListener("pointerdown", closeCategoryMenusOutside);
+    document.addEventListener("keydown", closeCategoryMenusOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeCategoryMenusOutside);
+      document.removeEventListener("keydown", closeCategoryMenusOnEscape);
+    };
+  }, []);
+
+  useEffect(() => {
     if (view === "history") return;
     const timer = window.setTimeout(() => {
       setDebouncedProductQuery(query.trim());
@@ -1964,7 +1994,10 @@ function ProductCategoryBranch({
           {hiddenCategories.length > 0 && (
             <>
               <span className="mx-1 shrink-0 text-stone-300">/</span>
-              <details className="group/path relative shrink-0 normal-case tracking-normal">
+              <details
+                data-category-overflow-menu
+                className="group/path relative shrink-0 normal-case tracking-normal"
+              >
                 <summary
                   className="flex cursor-pointer list-none items-center gap-1 rounded-sm px-1 py-0.5 text-stone-500 transition hover:bg-stone-200/70 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 [&::-webkit-details-marker]:hidden"
                   aria-label={`Show ${hiddenCategories.length} hidden category ${hiddenCategories.length === 1 ? "level" : "levels"}`}
