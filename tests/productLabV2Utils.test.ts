@@ -4,6 +4,8 @@ import {
   removeProcessedFindings,
   resetOptimisticProductStateAfterUndo,
   productNeedsAttention,
+  productCommercialReviewLanes,
+  productCommercialSubgroupKeyForCaseId,
   recentDecisionCanUndo,
   recentDecisionKind,
   recentDecisionTimestamp,
@@ -11,6 +13,7 @@ import {
   productShouldStayInAttention,
   recommendedBatchActionForSelection,
   reconcileProductAttentionOverview,
+  scopeFindingsToCommercialSubgroup,
 } from "../src/pages/productLabV2Utils";
 
 const decisionFinding = (overrides: Record<string, unknown> = {}) => ({
@@ -88,6 +91,44 @@ describe("adjacentFinding", () => {
   test("stops at the batch boundaries", () => {
     expect(adjacentFinding(findings, "first", -1)).toBeNull();
     expect(adjacentFinding(findings, "third", 1)).toBeNull();
+  });
+});
+
+describe("commercial offer review lanes", () => {
+  const sample = {
+    key: "sample-offer",
+    triage_member_count: 1,
+    triage_case_ids: ["sample-case"],
+  };
+  const fullSize = {
+    key: "full-size-offer",
+    triage_member_count: 1,
+    triage_case_ids: ["full-size-case"],
+  };
+  const findings = [
+    { result_id: "sample", case_id: "sample-case" },
+    { result_id: "full-size", case_id: "full-size-case" },
+  ];
+
+  test("keeps pending listings in their comparable commercial lanes", () => {
+    const lanes = productCommercialReviewLanes([sample, fullSize], findings);
+
+    expect(lanes.map(({ subgroup, findingCount }) => [subgroup.key, findingCount])).toEqual([
+      ["sample-offer", 1],
+      ["full-size-offer", 1],
+    ]);
+    expect(productCommercialSubgroupKeyForCaseId(lanes, "sample-case")).toBe(
+      "sample-offer",
+    );
+    expect(scopeFindingsToCommercialSubgroup(findings, sample)).toEqual([
+      { result_id: "sample", case_id: "sample-case" },
+    ]);
+  });
+
+  test("does not show empty offer lanes after optimistic processing", () => {
+    const lanes = productCommercialReviewLanes([sample, fullSize], [findings[0]]);
+
+    expect(lanes.map(({ subgroup }) => subgroup.key)).toEqual(["sample-offer"]);
   });
 });
 

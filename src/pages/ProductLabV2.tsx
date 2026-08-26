@@ -32,6 +32,7 @@ import {
   type IpReviewFinding,
   type MonitoringDismissReasonCode,
   type MonitoringReviewOutcome,
+  type ProductGroupCommercialSubgroup,
   type PersistedProductGroup,
   type PersistedProductGroupOverview,
   type TakedownFeedbackAssociationScope,
@@ -52,6 +53,8 @@ import { useAuth } from "../context/AuthContext";
 import { ProductGroupSettings } from "./ProductClusters";
 import {
   adjacentFinding,
+  productCommercialReviewLanes,
+  productCommercialSubgroupKeyForCaseId,
   productShouldStayInAttention,
   recentDecisionCanUndo,
   recommendedBatchActionForSelection,
@@ -60,7 +63,9 @@ import {
   recentDecisionTimestamp,
   removeProcessedFindings,
   resetOptimisticProductStateAfterUndo,
+  scopeFindingsToCommercialSubgroup,
   sortRecentDecisions,
+  type ProductCommercialReviewLane,
   type ProductLabBatchAction,
 } from "./productLabV2Utils";
 
@@ -193,6 +198,16 @@ function representativeImage(group: PersistedProductGroup) {
 
 function offerCount(group: PersistedProductGroup) {
   return group.commercial_subgroups.filter((subgroup) => subgroup.member_count > 0).length;
+}
+
+function commercialReviewLaneLabel(subgroup: ProductGroupCommercialSubgroup) {
+  if (subgroup.price_band === "unusually_low") {
+    return `${subgroup.variant_label} · unusually low`;
+  }
+  if (subgroup.price_band === "unpriced") {
+    return `${subgroup.variant_label} · price unavailable`;
+  }
+  return subgroup.variant_label;
 }
 
 function priceRange(group: PersistedProductGroup) {
@@ -420,6 +435,7 @@ export default function ProductLab() {
   const [mergeNotice, setMergeNotice] = useState<ProductMergeNotice | null>(null);
   const [undoingMerge, setUndoingMerge] = useState(false);
   const [activeFinding, setActiveFinding] = useState<IpReviewFinding | null>(null);
+  const [requestedFindingLookupComplete, setRequestedFindingLookupComplete] = useState(false);
   const [dismissingResultId, setDismissingResultId] = useState<string | null>(null);
   const [recentDecisions, setRecentDecisions] = useState<IpReviewFinding[]>([]);
   const [historyVisibleCount, setHistoryVisibleCount] = useState(50);
@@ -439,6 +455,7 @@ export default function ProductLab() {
   const exactPendingCountsRef = useRef<Record<string, number>>({});
   const exactPendingCountsIpRef = useRef<string | null>(null);
   const batchScopeRef = useRef<string | null>(null);
+  const commercialReviewScopeRef = useRef<string | null>(null);
   const optimisticallyProcessedIdsRef = useRef<Set<string>>(new Set());
 
   const requestedView = searchParams.get("view");
@@ -447,6 +464,7 @@ export default function ProductLab() {
     : "attention";
   const selectedGroupId = searchParams.get("group");
   const requestedFindingId = searchParams.get("finding");
+  const requestedCommercialSubgroupKey = searchParams.get("offer");
   const showGroupSettings = searchParams.get("panel") === "settings";
 
   useEffect(() => {
@@ -463,6 +481,7 @@ export default function ProductLab() {
     else next.delete("group");
     next.delete("panel");
     next.delete("finding");
+    next.delete("offer");
     setSearchParams(next);
   }, [searchParams, setSearchParams]);
 
@@ -698,6 +717,77 @@ export default function ProductLab() {
   );
   const selectedGroupRequestId = selectedGroup?.id ?? selectedGroupId;
 
+  const commercialReviewLanes = useMemo(() => {
+    return productCommercialReviewLanes(
+      selectedGroup?.commercial_subgroups ?? [],
+      batchFindings,
+    );
+  }, [batchFindings, selectedGroup]);
+  const linkedFindingCaseId = requestedFindingId
+    ? batchFindings?.find((finding) => finding.result_id === requestedFindingId)?.case_id ??
+      (activeFinding?.result_id === requestedFindingId ? activeFinding.case_id : null)
+    : null;
+  const linkedCommercialSubgroupKey = productCommercialSubgroupKeyForCaseId(
+    commercialReviewLanes,
+    linkedFindingCaseId,
+  );
+  const waitingForLinkedFinding = Boolean(
+    requestedFindingId && !linkedFindingCaseId && !requestedFindingLookupComplete,
+  );
+  const selectedCommercialSubgroupKey =
+    commercialReviewLanes.some(({ subgroup }) =>
+      subgroup.key === requestedCommercialSubgroupKey
+    )
+      ? requestedCommercialSubgroupKey
+      : linkedCommercialSubgroupKey ?? (
+          waitingForLinkedFinding ? null : commercialReviewLanes[0]?.subgroup.key ?? null
+        );
+  const selectedCommercialSubgroup = commercialReviewLanes.find(({ subgroup }) =>
+    subgroup.key === selectedCommercialSubgroupKey
+  )?.subgroup ?? null;
+  const scopedBatchFindings = useMemo(() => {
+    return scopeFindingsToCommercialSubgroup(
+      batchFindings,
+      selectedCommercialSubgroup,
+    );
+  }, [batchFindings, selectedCommercialSubgroup]);
+
+  useEffect(() => {
+    if (
+      !selectedCommercialSubgroupKey ||
+      requestedCommercialSubgroupKey === selectedCommercialSubgroupKey
+    ) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("offer", selectedCommercialSubgroupKey);
+    setSearchParams(next, { replace: true });
+  }, [
+    requestedCommercialSubgroupKey,
+    searchParams,
+    selectedCommercialSubgroupKey,
+    setSearchParams,
+  ]);
+
+  useEffect(() => {
+    const nextScope = selectedGroupRequestId && selectedCommercialSubgroupKey
+      ? `${selectedGroupRequestId}:${selectedCommercialSubgroupKey}`
+      : null;
+    if (commercialReviewScopeRef.current === nextScope) return;
+    commercialReviewScopeRef.current = nextScope;
+    setReviewFilter("all");
+    setSelectedResultIds(new Set());
+    setConfirmBatchAction(null);
+    setBatchNotice(null);
+  }, [selectedCommercialSubgroupKey, selectedGroupRequestId]);
+
+  const selectCommercialReviewLane = useCallback((subgroupKey: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("offer", subgroupKey);
+    next.delete("finding");
+    next.delete("panel");
+    setActiveFinding(null);
+    setSearchParams(next);
+  }, [searchParams, setSearchParams]);
+
   const updateSelectedGroup = useCallback((
     update: (current: PersistedProductGroup) => PersistedProductGroup,
   ) => {
@@ -805,15 +895,27 @@ export default function ProductLab() {
   ]);
 
   useEffect(() => {
-    if (!requestedFindingId || activeFinding?.result_id === requestedFindingId) return;
+    if (!requestedFindingId) {
+      setRequestedFindingLookupComplete(false);
+      return;
+    }
+    if (activeFinding?.result_id === requestedFindingId) {
+      setRequestedFindingLookupComplete(true);
+      return;
+    }
     let alive = true;
+    setRequestedFindingLookupComplete(false);
     void getMonitoringFinding(requestedFindingId)
       .then(({ finding }) => {
-        if (alive) setActiveFinding(finding);
+        if (alive) {
+          setActiveFinding(finding);
+          setRequestedFindingLookupComplete(true);
+        }
       })
       .catch((caught: unknown) => {
         if (alive) {
           setBatchNotice(`Unable to open the linked listing. ${messageFor(caught)}`);
+          setRequestedFindingLookupComplete(true);
         }
       });
     return () => {
@@ -966,14 +1068,14 @@ export default function ProductLab() {
     }
   }
 
-  const selectedFindings = batchFindings?.filter((finding) =>
+  const selectedFindings = scopedBatchFindings?.filter((finding) =>
     selectedResultIds.has(finding.result_id)
   ) ?? [];
   const inspectorFindings = useMemo(() => view === "history"
     ? visibleRecentDecisions
-    : (batchFindings ?? []).filter((finding) =>
+    : (scopedBatchFindings ?? []).filter((finding) =>
       reviewFilter === "all" || reviewBucket(finding) === reviewFilter
-    ), [batchFindings, reviewFilter, view, visibleRecentDecisions]);
+    ), [reviewFilter, scopedBatchFindings, view, visibleRecentDecisions]);
   const activeFindingIndex = activeFinding
     ? inspectorFindings.findIndex((finding) => finding.result_id === activeFinding.result_id)
     : -1;
@@ -1695,7 +1797,9 @@ export default function ProductLab() {
           ) : selectedGroup ? (
             <BatchWorkspace
               group={selectedGroup}
-              findings={batchFindings}
+              findings={scopedBatchFindings}
+              commercialReviewLanes={commercialReviewLanes}
+              selectedCommercialSubgroupKey={selectedCommercialSubgroupKey}
               loading={loadingBatch}
               error={batchError}
               filter={reviewFilter}
@@ -1708,6 +1812,7 @@ export default function ProductLab() {
                 setReviewFilter(nextFilter);
                 setSelectedResultIds(new Set());
               }}
+              onCommercialSubgroupChange={selectCommercialReviewLane}
               onToggleFinding={(resultId) => {
                 setSelectedResultIds((current) => {
                   const next = new Set(current);
@@ -2318,6 +2423,8 @@ function ProductSettingsWorkspace({
 function BatchWorkspace({
   group,
   findings,
+  commercialReviewLanes,
+  selectedCommercialSubgroupKey,
   loading,
   error,
   filter,
@@ -2327,6 +2434,7 @@ function BatchWorkspace({
   selectingSameProduct,
   onBack,
   onFilterChange,
+  onCommercialSubgroupChange,
   onToggleFinding,
   onOpenFinding,
   onBatchAction,
@@ -2336,6 +2444,8 @@ function BatchWorkspace({
 }: {
   group: PersistedProductGroup;
   findings: IpReviewFinding[] | null;
+  commercialReviewLanes: ProductCommercialReviewLane<ProductGroupCommercialSubgroup>[];
+  selectedCommercialSubgroupKey: string | null;
   loading: boolean;
   error: string | null;
   filter: ReviewBucket;
@@ -2345,6 +2455,7 @@ function BatchWorkspace({
   selectingSameProduct: boolean;
   onBack: () => void;
   onFilterChange: (filter: ReviewBucket) => void;
+  onCommercialSubgroupChange: (subgroupKey: string) => void;
   onToggleFinding: (resultId: string) => void;
   onOpenFinding: (finding: IpReviewFinding) => void;
   onBatchAction: (action: ProductLabBatchAction) => void;
@@ -2421,6 +2532,45 @@ function BatchWorkspace({
         </div>
       </div>
 
+      {commercialReviewLanes.length > 0 && (
+        <div className="border-b border-stone-200 bg-white px-4 py-3 sm:px-7">
+          <div className="flex items-center gap-3">
+            <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.12em] text-stone-400">
+              Offer
+            </span>
+            <div
+              className="flex min-w-0 items-center gap-1 overflow-x-auto"
+              role="tablist"
+              aria-label="Commercial offer variants"
+            >
+              {commercialReviewLanes.map(({ subgroup, findingCount }) => {
+                const selected = subgroup.key === selectedCommercialSubgroupKey;
+                return (
+                  <button
+                    key={subgroup.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    title={commercialReviewLaneLabel(subgroup)}
+                    onClick={() => onCommercialSubgroupChange(subgroup.key)}
+                    className={`inline-flex h-7 max-w-[260px] shrink-0 items-center gap-1.5 rounded-md px-2 text-[10px] font-medium transition ${
+                      selected
+                        ? "bg-violet-100 text-violet-900"
+                        : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+                    }`}
+                  >
+                    <span className="truncate">{commercialReviewLaneLabel(subgroup)}</span>
+                    <span className={selected ? "text-violet-500" : "text-stone-400"}>
+                      {findingCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="border-b border-stone-200 bg-[#faf9f7] px-4 py-3 sm:px-7">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-1 overflow-x-auto" role="tablist" aria-label="Listing recommendations">
@@ -2493,11 +2643,11 @@ function BatchWorkspace({
         )}
       </div>
 
-      {selectedResultIds.size > 0 && (
+      {selectedFindings.length > 0 && (
         <div className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-3 shadow-[0_-12px_28px_-24px_rgba(28,25,23,0.8)] backdrop-blur sm:px-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold text-stone-900">{selectedResultIds.size} manually selected</p>
+              <p className="text-[11px] font-semibold text-stone-900">{selectedFindings.length} manually selected</p>
               <p className="text-[9px] text-stone-400">Only cards you selected will be changed.</p>
             </div>
             {batchProgress ? (

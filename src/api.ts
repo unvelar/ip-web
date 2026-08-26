@@ -2886,6 +2886,7 @@ export interface ProductVariantAttribute {
   normalized_unit: ProductVariantAttributeUnit;
   confidence: number;
   evidence_image_positions: number[];
+  text_evidence: string[];
 }
 
 export interface ProductSemanticCategory {
@@ -3366,6 +3367,12 @@ function normalizeProductVariantAttributes(value: unknown): ProductVariantAttrib
         .map((position) => Math.max(0, Math.trunc(position)))
         .slice(0, 16)
       : [];
+    const textEvidence = Array.isArray(attribute.text_evidence)
+      ? attribute.text_evidence
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .map((value) => value.trim())
+        .slice(0, 4)
+      : [];
     if (
       typeof attribute.key !== "string" ||
       typeof attribute.value !== "string" ||
@@ -3379,6 +3386,7 @@ function normalizeProductVariantAttributes(value: unknown): ProductVariantAttrib
       normalized_unit: attribute.normalized_unit,
       confidence: Math.max(0, Math.min(1, attribute.confidence)),
       evidence_image_positions: evidencePositions,
+      text_evidence: textEvidence,
     }];
   });
 }
