@@ -6,6 +6,7 @@ export type BatchAction =
   | "submit"
   | "false_positive"
   | "do_not_pursue"
+  | "allow_product"
   | "second_hand"
   | "packaging_only"
   | "review"
@@ -19,6 +20,7 @@ export const BATCH_META: Record<
   submit: { label: "Mark submitted", verb: "Marked submitted", gerund: "Mark submitted" },
   false_positive: { label: "Different product", verb: "Cleared", gerund: "Mark as a different product for" },
   do_not_pursue: { label: "Mark as OK", verb: "Marked OK", gerund: "Mark as OK for" },
+  allow_product: { label: "Allow product", verb: "Allowed product", gerund: "Allow product images for" },
   second_hand: { label: "Second hand", verb: "Marked second hand", gerund: "Mark second hand for" },
   packaging_only: { label: "Packaging only", verb: "Marked packaging only", gerund: "Mark packaging only for" },
   review: { label: "Review", verb: "Moved to Review", gerund: "Move to Review" },

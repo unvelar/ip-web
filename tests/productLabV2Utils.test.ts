@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   adjacentFinding,
+  preferredAllowedProductImage,
   removeProcessedFindings,
   resetOptimisticProductStateAfterUndo,
   productNeedsAttention,
@@ -13,6 +14,39 @@ import {
   reconcileProductAttentionOverview,
   takedownDecisionReasonRequiredForSelection,
 } from "../src/pages/productLabV2Utils";
+
+describe("preferredAllowedProductImage", () => {
+  test("uses the strongest eligible gallery image", () => {
+    expect(preferredAllowedProductImage({
+      screenshot_url: "screenshot.jpg",
+      gallery_scores: [
+        { url: "weaker.jpg", similarity: 0.72 },
+        { url: "strongest.jpg", similarity: 0.94 },
+      ],
+      image_url: "fallback.jpg",
+    })).toBe("strongest.jpg");
+  });
+
+  test("skips screenshots and archived enrichment images", () => {
+    expect(preferredAllowedProductImage({
+      screenshot_url: "screenshot.jpg",
+      archived_image_urls: ["archived.jpg"],
+      gallery_scores: [
+        { url: "screenshot.jpg", similarity: 0.99 },
+        { url: "archived.jpg", similarity: 0.95 },
+      ],
+      image_urls: ["eligible.jpg"],
+    })).toBe("eligible.jpg");
+  });
+
+  test("returns null when no eligible product image exists", () => {
+    expect(preferredAllowedProductImage({
+      screenshot_url: "screenshot.jpg",
+      archived_image_urls: ["archived.jpg"],
+      image_urls: ["screenshot.jpg", "archived.jpg"],
+    })).toBeNull();
+  });
+});
 
 const decisionFinding = (overrides: Record<string, unknown> = {}) => ({
   dismissed_at: null,

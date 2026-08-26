@@ -130,7 +130,9 @@ export function BatchConfirmModal({
                 ? ". Listings with an automatic route will be queued now; the rest will move to the legal queue for manual review and submission. Compatible automatic listings share one notice."
                 : action === "submit"
                   ? ". Confirm that the takedown was submitted through the marketplace's manual route."
-                : "."}
+                  : action === "allow_product"
+                    ? ". The strongest eligible product image from each listing will be saved, and future visually similar findings for this IP will be ignored."
+                  : "."}
             </p>
           ) : (
             <p>None of the selected findings are eligible for this action.</p>
@@ -152,13 +154,15 @@ export function BatchConfirmModal({
           {eligible.length > 0 && (
             <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-xs">
               <p className="font-semibold text-stone-800">Selection preflight</p>
-              <div className="mt-1.5 grid grid-cols-2 gap-2">
-                <div>
-                  <span className="block text-[10px] uppercase tracking-wide text-stone-400">Recommendation</span>
-                  <span className="font-semibold text-stone-700">
-                    {recommendedCount} aligned · {eligible.length - recommendedCount} conflicting
-                  </span>
-                </div>
+              <div className={`mt-1.5 grid gap-2 ${action === "allow_product" ? "grid-cols-1" : "grid-cols-2"}`}>
+                {action !== "allow_product" && (
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-wide text-stone-400">Recommendation</span>
+                    <span className="font-semibold text-stone-700">
+                      {recommendedCount} aligned · {eligible.length - recommendedCount} conflicting
+                    </span>
+                  </div>
+                )}
                 <div>
                   <span className="block text-[10px] uppercase tracking-wide text-stone-400">Websites</span>
                   <span className="font-semibold text-stone-700">

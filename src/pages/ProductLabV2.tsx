@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import {
   approveTakedownBatch,
+  allowIpFindingProductImage,
   dismissIpFinding,
   getMonitoringFinding,
   getPersistedProductGroups,
@@ -52,6 +53,7 @@ import { useAuth } from "../context/AuthContext";
 import { ProductGroupSettings } from "./ProductClusters";
 import {
   adjacentFinding,
+  preferredAllowedProductImage,
   productShouldStayInAttention,
   recentDecisionCanUndo,
   recommendedBatchActionForSelection,
@@ -1069,6 +1071,10 @@ export default function ProductLab() {
       if (action === "send") {
         if (!finding.case_id) skip("still preparing");
         else eligible.push(finding);
+      } else if (action === "allow_product") {
+        if (!findingIpId) skip("no associated IP");
+        else if (!preferredAllowedProductImage(finding)) skip("no eligible product image");
+        else eligible.push(finding);
       } else if (action === "review") {
         if (!finding.case_id) skip("still preparing");
         else if (!findingIpId) skip("no associated IP");
@@ -1125,6 +1131,10 @@ export default function ProductLab() {
             const findingIpId = (finding.ip_id ?? activeIpId) as string;
             if (action === "review") {
               await markIpFindingNeedsReview(findingIpId, finding.result_id);
+            } else if (action === "allow_product") {
+              await allowIpFindingProductImage(findingIpId, finding.result_id, {
+                image_url: preferredAllowedProductImage(finding),
+              });
             } else {
               await dismissIpFinding(
                 findingIpId,
@@ -1741,6 +1751,17 @@ export default function ProductLab() {
                   const next = new Set(current);
                   if (next.has(resultId)) next.delete(resultId);
                   else next.add(resultId);
+                  return next;
+                });
+                setBatchNotice(null);
+              }}
+              onSetFindingsSelected={(resultIds, selected) => {
+                setSelectedResultIds((current) => {
+                  const next = new Set(current);
+                  for (const resultId of resultIds) {
+                    if (selected) next.add(resultId);
+                    else next.delete(resultId);
+                  }
                   return next;
                 });
                 setBatchNotice(null);
@@ -2476,6 +2497,7 @@ function BatchWorkspace({
   onBack,
   onFilterChange,
   onToggleFinding,
+  onSetFindingsSelected,
   onOpenFinding,
   onBatchAction,
   onMergeProduct,
@@ -2494,6 +2516,7 @@ function BatchWorkspace({
   onBack: () => void;
   onFilterChange: (filter: ReviewBucket) => void;
   onToggleFinding: (resultId: string) => void;
+  onSetFindingsSelected: (resultIds: string[], selected: boolean) => void;
   onOpenFinding: (finding: IpReviewFinding) => void;
   onBatchAction: (action: ProductLabBatchAction) => void;
   onMergeProduct: () => void;
@@ -2511,6 +2534,10 @@ function BatchWorkspace({
   );
   const selectedFindings = (findings ?? []).filter((finding) =>
     selectedResultIds.has(finding.result_id)
+  );
+  const visibleResultIds = visibleFindings.map((finding) => finding.result_id);
+  const allVisibleSelected = visibleResultIds.length > 0 && visibleResultIds.every((resultId) =>
+    selectedResultIds.has(resultId)
   );
   const recommendedAction = recommendedBatchActionForSelection(selectedFindings);
 
@@ -2592,9 +2619,16 @@ function BatchWorkspace({
               </button>
             ))}
           </div>
-          <span className="shrink-0 text-[10px] text-stone-500">
-            Select reviewed cards individually
-          </span>
+          <button
+            type="button"
+            disabled={visibleResultIds.length === 0 || Boolean(batchProgress)}
+            aria-pressed={allVisibleSelected}
+            onClick={() => onSetFindingsSelected(visibleResultIds, !allVisibleSelected)}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2 text-[10px] font-medium text-stone-600 transition hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900 disabled:cursor-default disabled:opacity-50"
+          >
+            {allVisibleSelected ? <Check size={12} strokeWidth={3} /> : <Square size={12} />}
+            {allVisibleSelected ? "Deselect all" : "Select all"}
+          </button>
         </div>
       </div>
 
@@ -2642,11 +2676,12 @@ function BatchWorkspace({
       </div>
 
       {selectedResultIds.size > 0 && (
-        <div className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-3 shadow-[0_-12px_28px_-24px_rgba(28,25,23,0.8)] backdrop-blur sm:px-7">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold text-stone-900">{selectedResultIds.size} manually selected</p>
-              <p className="text-[9px] text-stone-400">Only cards you selected will be changed.</p>
+        <div className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-2.5 shadow-[0_-12px_28px_-24px_rgba(28,25,23,0.8)] backdrop-blur sm:px-7">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="shrink-0 border-r border-stone-200 pr-2">
+              <p className="whitespace-nowrap text-[10px] font-semibold text-stone-700">
+                {selectedResultIds.size} selected
+              </p>
             </div>
             {batchProgress ? (
               <span className="inline-flex items-center gap-2 text-[11px] text-stone-500">
@@ -2654,12 +2689,15 @@ function BatchWorkspace({
                 Processing {batchProgress.done}/{batchProgress.total}
               </span>
             ) : (
-              <div className="flex flex-wrap items-center justify-end gap-1.5">
-                <BatchDecisionButton label="Takedown" primary={recommendedAction === "send"} onClick={() => onBatchAction("send")} />
-                <BatchDecisionButton label="Different product" primary={recommendedAction === "false_positive"} onClick={() => onBatchAction("false_positive")} />
-                <BatchDecisionButton label="Second hand" primary={recommendedAction === "second_hand"} onClick={() => onBatchAction("second_hand")} />
-                <BatchDecisionButton label="Mark as OK" onClick={() => onBatchAction("do_not_pursue")} />
-                <BatchDecisionButton label="Needs review" primary={recommendedAction === "review"} onClick={() => onBatchAction("review")} />
+              <div className="min-w-0 flex-1 overflow-x-auto pb-0.5">
+                <div className="flex min-w-max items-center gap-1">
+                  <BatchDecisionButton label="Takedown" primary={recommendedAction === "send"} onClick={() => onBatchAction("send")} />
+                  <BatchDecisionButton label="Different product" primary={recommendedAction === "false_positive"} onClick={() => onBatchAction("false_positive")} />
+                  <BatchDecisionButton label="Second hand" primary={recommendedAction === "second_hand"} onClick={() => onBatchAction("second_hand")} />
+                  <BatchDecisionButton label="Mark OK" onClick={() => onBatchAction("do_not_pursue")} />
+                  <BatchDecisionButton label="Allow product" onClick={() => onBatchAction("allow_product")} />
+                  <BatchDecisionButton label="Review" primary={recommendedAction === "review"} onClick={() => onBatchAction("review")} />
+                </div>
               </div>
             )}
           </div>
@@ -2769,16 +2807,14 @@ function BatchDecisionButton({
       onClick={onClick}
       aria-label={primary ? `Recommended action: ${label}` : undefined}
       data-recommended-action={primary ? "Recommended" : undefined}
-      className={`inline-flex h-8 items-center rounded-md px-2.5 text-[10px] font-semibold transition ${
+      className={`inline-flex h-8 items-center whitespace-nowrap rounded-md px-2 text-[10px] font-semibold transition ${
         primary
-          ? "bg-stone-950 text-white hover:bg-stone-800"
+          ? "gap-1.5 bg-stone-950 text-white hover:bg-stone-800"
           : "border border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:text-stone-900"
       }`}
     >
       {primary && (
-        <span className="mr-1 rounded bg-white/15 px-1 py-0.5 text-[8px] uppercase tracking-wide">
-          Recommended
-        </span>
+        <Sparkles size={11} aria-hidden="true" />
       )}
       {label}
     </button>
