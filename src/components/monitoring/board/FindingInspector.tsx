@@ -13,6 +13,7 @@ import type { FindingUpdateOptions } from "./FindingActions";
 import { RelatedItemsPanel } from "./RelatedItemsPanel";
 import { TaskAssigneeControl } from "./TaskAssigneeControl";
 import { compactListingTitle } from "./utils";
+import { APP_SHELL_OVERLAY_TOP } from "../../appShellLayout";
 
 export function FindingInspector({
   f,
@@ -115,7 +116,10 @@ export function FindingInspector({
   }, [navigation]);
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-12 z-40 pointer-events-none flex justify-end">
+    <div
+      className="fixed inset-x-0 bottom-0 z-40 pointer-events-none flex justify-end"
+      style={{ top: APP_SHELL_OVERLAY_TOP }}
+    >
       <aside
         ref={inspectorRef}
         data-finding-inspector
@@ -162,6 +166,7 @@ export function FindingInspector({
               </button>
             </div>
           )}
+          <TaskAssigneeControl finding={f} onUpdated={onUpdated} />
           {taskHref && (
             <Link
               to={taskHref}
@@ -189,7 +194,6 @@ export function FindingInspector({
               {error}
             </div>
           )}
-          <TaskAssigneeControl finding={f} onUpdated={onUpdated} />
           <FindingComparison
             key={f.result_id}
             f={f}

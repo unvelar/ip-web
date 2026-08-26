@@ -263,11 +263,12 @@ export function FindingComparison({
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
     // monitors (which left short text lines + the comment box floating in white).
-    <div className="space-y-2.5 max-w-6xl mx-auto">
-      {/* Top meta strip — status · IP · source · key flags. Similarity remains
-          available, but review decisions should lead with listing economics. */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex items-center gap-x-2 gap-y-1 flex-wrap">
+    <div className="mx-auto max-w-6xl space-y-2.5">
+      {/* Review context and decisions stay light so the listing remains the
+          visual anchor. Ownership lives with the dialog-level controls. */}
+      <div className="border-b border-stone-200 pb-2">
+        <div className="flex min-h-7 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-x-2 gap-y-1 flex-wrap">
           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sb.cls}`}>
             {sb.label}
           </span>
@@ -315,31 +316,30 @@ export function FindingComparison({
               {dismissalBadge(f.dismissal_reason).label}
             </span>
           )}
-        </div>
-        {advancedMenu && (
-          <div className="shrink-0 flex items-center gap-1.5">
-            {advancedMenu}
           </div>
-        )}
-      </div>
+          {advancedMenu && (
+            <div className="ml-auto flex shrink-0 items-center">
+              {advancedMenu}
+            </div>
+          )}
+        </div>
 
-      {/* Primary triage actions — keep them immediately below the opened table
-          row/meta strip so decision controls appear before image + details. */}
-      <div className="border-y border-stone-200 py-2">
-        <FindingActions
-          f={f}
-          ipId={ipId}
-          canLicense={canLicense}
-          isDismissed={isDismissed}
-          isDismissing={isDismissing}
-          onDismiss={onDismiss}
-          onActionComplete={onActionComplete}
-          onNeedsReview={onNeedsReview}
-          onTakedownSent={onTakedownSent}
-          onEnforced={onEnforced}
-          onLicensed={onLicensed}
-          onUpdated={onUpdated}
-        />
+        <div className="mt-1">
+          <FindingActions
+            f={f}
+            ipId={ipId}
+            canLicense={canLicense}
+            isDismissed={isDismissed}
+            isDismissing={isDismissing}
+            onDismiss={onDismiss}
+            onActionComplete={onActionComplete}
+            onNeedsReview={onNeedsReview}
+            onTakedownSent={onTakedownSent}
+            onEnforced={onEnforced}
+            onLicensed={onLicensed}
+            onUpdated={onUpdated}
+          />
+        </div>
       </div>
 
       {/* Two-column body: bounded image left, enrichment data right. Collapses

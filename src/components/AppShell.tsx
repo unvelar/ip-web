@@ -35,6 +35,11 @@ import {
 } from "../api";
 import { CURRENT_BUILD_SHA, CURRENT_BUILD_TIME, buildAgo } from "../lib/buildInfo";
 import { ActiveIpProvider, useActiveIp } from "../context/ActiveIpContext";
+import {
+  APP_SHELL_BANNER_HEIGHT_VAR,
+  APP_SHELL_BANNER_STICKY_TOP_VAR,
+  appShellLayoutStyle,
+} from "./appShellLayout";
 
 /** Inbox badge polling cadence. Cheap server-side aggregation + small payload,
  *  but no need to refetch every few seconds — the badge is a glanceable
@@ -370,7 +375,10 @@ function AppShellContent() {
   );
 
   return (
-    <div className="min-h-dvh bg-cream text-stone-900 font-[Inter,system-ui,sans-serif] lg:fixed lg:inset-0 lg:overflow-hidden">
+    <div
+      className="min-h-dvh bg-cream text-stone-900 font-[Inter,system-ui,sans-serif] [--app-shell-topbar-height:3rem] [--app-shell-banner-sticky-top:3rem] lg:fixed lg:inset-0 lg:overflow-hidden lg:[--app-shell-topbar-height:40px] lg:[--app-shell-banner-sticky-top:0px]"
+      style={appShellLayoutStyle(isActingAsOther)}
+    >
       {/* Mobile topbar */}
       <div className="lg:hidden sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 flex items-center px-3 gap-3">
         <button
@@ -429,7 +437,10 @@ function AppShellContent() {
           )}
           {/* Desktop topbar — the working IP is global application context.
               Registry management stays beside it without competing in nav. */}
-          <div className="hidden lg:flex sticky top-0 z-20 h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md">
+          <div
+            className="hidden lg:flex sticky z-20 h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
+            style={{ top: `var(${APP_SHELL_BANNER_HEIGHT_VAR})` }}
+          >
             <TopbarIpSelector active={isActive("/ips")} />
             <div className="ml-1 h-[18px] w-px bg-stone-200" aria-hidden />
             <NotificationBell count={notificationCount} active={isActive("/inbox")} />
@@ -644,7 +655,10 @@ function loadBoolean(key: string, fallback: boolean): boolean {
  *  so the impersonation is never silent. */
 function ActingTenantBanner({ label, onReturn }: { label: string; onReturn: () => void }) {
   return (
-    <div className="sticky top-0 z-30 flex items-center gap-2 px-4 py-1.5 bg-amber-100 border-b border-amber-300 text-amber-900 text-xs">
+    <div
+      className="sticky z-30 flex h-7 items-center gap-2 px-4 bg-amber-100 border-b border-amber-300 text-amber-900 text-xs"
+      style={{ top: `var(${APP_SHELL_BANNER_STICKY_TOP_VAR})` }}
+    >
       <Building2 size={14} className="shrink-0" />
       <span className="min-w-0 truncate">
         Acting as <span className="font-semibold">{label}</span>
