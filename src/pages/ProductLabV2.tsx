@@ -54,7 +54,7 @@ import { ProductGroupSettings } from "./ProductClusters";
 import {
   adjacentFinding,
   preferredAllowedProductImage,
-  productShouldStayInAttention,
+  productNeedsAttention,
   recentDecisionCanUndo,
   recommendedBatchActionForSelection,
   reconcileProductAttentionOverview,
@@ -648,14 +648,11 @@ export default function ProductLab() {
       .filter((group) => {
         if (
           view === "attention" &&
-          !productShouldStayInAttention(
-            group,
-            group.id === selectedGroupId || group.canonical_product_id === selectedGroupId,
-          )
+          !productNeedsAttention(group)
         ) return false;
         return true;
       });
-  }, [overview, selectedGroupId, view]);
+  }, [overview, view]);
 
   const pagedCategoryTrees = useMemo(
     () => Array.from(
@@ -810,10 +807,10 @@ export default function ProductLab() {
         if (
           view === "attention" &&
           selectedGroupConfirmationStatus &&
-          !productShouldStayInAttention({
+          !productNeedsAttention({
             confirmation_status: selectedGroupConfirmationStatus,
             triage_member_count: displayedFindings.length,
-          }, true)
+          })
         ) {
           selectGroup(null);
         }

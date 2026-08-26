@@ -140,14 +140,6 @@ export function productNeedsAttention(group: ProductAttentionFields) {
   return triageMemberCount > 0;
 }
 
-export function productShouldStayInAttention(
-  group: ProductAttentionFields,
-  isActiveBatch: boolean,
-) {
-  return productNeedsAttention(group) ||
-    (isActiveBatch && (group.triage_member_count ?? 0) > 0);
-}
-
 export function reconcileProductAttentionOverview<
   T extends ProductAttentionGroup,
   O extends ProductAttentionOverview<T>,

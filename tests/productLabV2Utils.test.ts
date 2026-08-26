@@ -9,7 +9,6 @@ import {
   recentDecisionKind,
   recentDecisionTimestamp,
   sortRecentDecisions,
-  productShouldStayInAttention,
   recommendedBatchActionForSelection,
   reconcileProductAttentionOverview,
   takedownDecisionReasonRequiredForSelection,
@@ -141,15 +140,11 @@ describe("productNeedsAttention", () => {
     })).toBe(false);
   });
 
-  test("includes unconfirmed groups only when comparison evidence exists", () => {
-    expect(productNeedsAttention({
-      confirmation_status: "candidate",
-      triage_member_count: 2,
-    })).toBe(true);
+  test("includes candidate products with a single listing to review", () => {
     expect(productNeedsAttention({
       confirmation_status: "candidate",
       triage_member_count: 1,
-    })).toBe(false);
+    })).toBe(true);
   });
 
   test("treats a missing triage count as zero", () => {
@@ -157,22 +152,6 @@ describe("productNeedsAttention", () => {
       confirmation_status: "confirmed",
       triage_member_count: null,
     })).toBe(false);
-  });
-});
-
-describe("productShouldStayInAttention", () => {
-  test("keeps an active candidate batch visible until its final listing is processed", () => {
-    const activeCandidate = {
-      confirmation_status: "candidate",
-      triage_member_count: 1,
-    };
-
-    expect(productShouldStayInAttention(activeCandidate, true)).toBe(true);
-    expect(productShouldStayInAttention(activeCandidate, false)).toBe(false);
-    expect(productShouldStayInAttention({
-      ...activeCandidate,
-      triage_member_count: 0,
-    }, true)).toBe(false);
   });
 });
 
