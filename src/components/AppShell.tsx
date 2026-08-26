@@ -27,6 +27,7 @@ import BrandMark from "./BrandMark";
 import {
   getIpReviewsAttentionCount,
   getMonitoringFindingsCount,
+  getReturnedMonitoringSellersCount,
   getAccountNotificationUnreadCount,
   listTenants,
   tenantLabel,
@@ -55,6 +56,7 @@ const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
  *   Dashboard
  *   Monitoring
  *     ↳ Tasks        (badge = open monitoring findings)
+ *     ↳ Sellers      (badge = returned sellers with open listings)
  *     ↳ Settings     (manage which IPs + URLs to crawl)
  *   Clearance
  *     ↳ Tasks        (badge = clearance reviews needing attention)
@@ -102,6 +104,7 @@ function AppShellContent() {
   const { pathname } = useLocation();
   const [clearanceCount, setClearanceCount] = useState(0);
   const [monitoringCount, setMonitoringCount] = useState(0);
+  const [returnedSellerCount, setReturnedSellerCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
@@ -153,20 +156,23 @@ function AppShellContent() {
     if (!user) {
       setClearanceCount(0);
       setMonitoringCount(0);
+      setReturnedSellerCount(0);
       setNotificationCount(0);
       return;
     }
     if (adminPathActive) return;
     let alive = true;
     async function refresh() {
-      const [clearance, monitoring, notifications] = await Promise.allSettled([
+      const [clearance, monitoring, returnedSellers, notifications] = await Promise.allSettled([
         getIpReviewsAttentionCount(),
         getMonitoringFindingsCount(),
+        getReturnedMonitoringSellersCount(),
         getAccountNotificationUnreadCount(),
       ]);
       if (!alive) return;
       if (clearance.status === "fulfilled") setClearanceCount(clearance.value.count);
       if (monitoring.status === "fulfilled") setMonitoringCount(monitoring.value.count);
+      if (returnedSellers.status === "fulfilled") setReturnedSellerCount(returnedSellers.value.count);
       if (notifications.status === "fulfilled") setNotificationCount(notifications.value.count);
     }
     void refresh();
@@ -279,6 +285,7 @@ function AppShellContent() {
             icon={<Store size={18} />}
             label="Sellers"
             active={pathname === "/monitoring/sellers" || pathname.startsWith("/monitoring/sellers/")}
+            badge={returnedSellerCount}
             collapsed={collapsed}
           />
           <NavItem
