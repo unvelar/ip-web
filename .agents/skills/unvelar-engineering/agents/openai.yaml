@@ -1,0 +1,6 @@
+interface:
+  display_name: "Unvelar Engineering"
+  short_description: "Apply Unvelar engineering safeguards"
+  default_prompt: "Use $unvelar-engineering to handle this Unvelar change with bounded scope and direct proof."
+policy:
+  allow_implicit_invocation: true
