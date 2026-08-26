@@ -128,10 +128,6 @@ export function FindingActions({
 
   async function handleLicense() {
     if (licensing || !ipId) return;
-    const seller = f.seller_name?.trim() || f.seller_url?.trim() || "this seller";
-    if (!window.confirm(
-      `Mark ${seller} as licensed on ${f.domain}? This dismisses current matching tasks and suppresses future findings for this seller on this website.`,
-    )) return;
     setLicensing(true);
     try {
       const result = await addIpLicense(ipId, {
