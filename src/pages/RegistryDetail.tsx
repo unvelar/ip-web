@@ -18,8 +18,10 @@ import {
   type IpAllowedProductImage,
 } from "../api";
 import { useJobPoller } from "../hooks/useJobPoller";
+import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
 import ImageUploader from "../components/ImageUploader";
 import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
+import { IpOnboardingStatusCard } from "../components/monitoring/IpOnboardingStatusCard";
 import IpTakedownSigner from "../components/IpTakedownSigner";
 import { consumeCommittedKeywords, mergeKeywords } from "../lib/keywords";
 import { publicSummaryUrlForIp } from "../lib/publicSummary";
@@ -45,6 +47,12 @@ export default function RegistryDetail() {
   const keywordSaveSeq = useRef(0);
 
   const indexJob = useJobPoller(indexJobId);
+  const {
+    status: onboardingStatus,
+    loading: onboardingLoading,
+    error: onboardingError,
+    refresh: refreshOnboarding,
+  } = useIpOnboardingStatus(id);
 
   async function saveKeywords(next: string[]) {
     if (!ip) return;
@@ -53,7 +61,10 @@ export default function RegistryDetail() {
     setIp({ ...ip, keywords: next });
     try {
       const { trademark } = await updateTrademark(ip.id, { keywords: next });
-      if (seq === keywordSaveSeq.current) setIp(trademark);
+      if (seq === keywordSaveSeq.current) {
+        setIp(trademark);
+        void refreshOnboarding(true);
+      }
     } catch (e: unknown) {
       if (seq === keywordSaveSeq.current) setIp(previous);
       setError(errorMessage(e));
@@ -101,10 +112,11 @@ export default function RegistryDetail() {
 
   useEffect(() => {
     if (indexJob?.status === "completed" || indexJob?.status === "failed") {
-      load();
+      void load();
+      void refreshOnboarding(true);
       if (indexJob.status === "completed") setIndexJobId(null);
     }
-  }, [indexJob?.status, load]);
+  }, [indexJob?.status, load, refreshOnboarding]);
 
   async function handleUpload(files: File[]) {
     if (!id) return;
@@ -113,7 +125,8 @@ export default function RegistryDetail() {
     try {
       const { job_id } = await uploadTrademarkImages(id, files);
       setIndexJobId(job_id);
-      load();
+      void load();
+      void refreshOnboarding(true);
     } catch (e: unknown) {
       setError(errorMessage(e));
     } finally {
@@ -124,7 +137,8 @@ export default function RegistryDetail() {
   async function handleDeleteImage(imageId: string) {
     if (!id) return;
     await deleteTrademarkImage(id, imageId);
-    load();
+    void load();
+    void refreshOnboarding(true);
   }
 
   async function handleDelete() {
@@ -211,6 +225,12 @@ export default function RegistryDetail() {
           </button>
         </div>
       </div>
+
+      <IpOnboardingStatusCard
+        status={onboardingStatus}
+        loading={onboardingLoading}
+        error={onboardingError}
+      />
 
       {/* Description — inline editable */}
       <div className="border border-stone-200 rounded-xl bg-white p-4">

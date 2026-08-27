@@ -147,6 +147,52 @@ export interface TrademarkImage {
   created_at: string;
 }
 
+export type IpOnboardingState =
+  | "setup_required"
+  | "processing"
+  | "delayed"
+  | "active"
+  | "needs_attention";
+
+export type IpOnboardingCheckStatus =
+  | "complete"
+  | "processing"
+  | "waiting"
+  | "missing"
+  | "attention";
+
+export interface IpOnboardingStatus {
+  state: IpOnboardingState;
+  customer_action_required: boolean;
+  title: string;
+  message: string;
+  checks: Array<{
+    key: "reference_images" | "keywords" | "monitoring_sources" | "first_scan";
+    label: string;
+    status: IpOnboardingCheckStatus;
+    detail: string;
+  }>;
+  progress: {
+    reference_images: {
+      total: number;
+      indexed: number;
+      pending: number;
+      failed: number;
+    };
+    keywords: { total: number };
+    monitoring_sources: {
+      total: number;
+      ready: number;
+      pending: number;
+    };
+    first_scan: {
+      total: number;
+      completed: number;
+      pending: number;
+    };
+  };
+}
+
 export interface TrademarkSelector {
   id: string;
   name: string;
@@ -231,6 +277,10 @@ export function createTrademark(name: string) {
 
 export function getTrademark(id: string) {
   return request<{ trademark: Trademark; images: TrademarkImage[] }>(`/api/ip/${id}`);
+}
+
+export function getIpOnboardingStatus(id: string, signal?: AbortSignal) {
+  return request<{ status: IpOnboardingStatus }>(`/api/ip/${id}/onboarding-status`, { signal });
 }
 
 export function deleteTrademark(id: string) {
