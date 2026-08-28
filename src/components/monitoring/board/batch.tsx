@@ -64,9 +64,12 @@ export function BatchConfirmModal({
     const caseIds = eligible.flatMap((finding) => finding.case_id ? [finding.case_id] : []);
     if (caseIds.length === 0) return;
     let active = true;
-    setPreflight(null);
-    setPreflightError("");
-    setPreflightLoading(true);
+    queueMicrotask(() => {
+      if (!active) return;
+      setPreflight(null);
+      setPreflightError("");
+      setPreflightLoading(true);
+    });
     void preflightTakedownBatch(caseIds)
       .then((result) => {
         if (active) setPreflight(result);

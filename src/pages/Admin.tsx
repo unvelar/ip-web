@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Building2, Inbox } from "lucide-react";
+import { Building2, Clock3, Inbox, Server } from "lucide-react";
 import {
   ADMIN_SOURCES,
+  getComputeRuntimeSettings,
+  patchComputeRuntimeSettings,
   searchAdminIps,
   type AdminIpSummary,
+  type ComputeRuntimeSettingsRecord,
 } from "../api";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -22,10 +25,41 @@ export default function Admin() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [compute, setCompute] = useState<ComputeRuntimeSettingsRecord | null>(null);
+  const [computeLoading, setComputeLoading] = useState(true);
+  const [computeError, setComputeError] = useState("");
+  const [computeNotice, setComputeNotice] = useState("");
+  const [minimumPods, setMinimumPods] = useState(1);
+  const [savingWindow, setSavingWindow] = useState<number | "cancel" | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const [source, setSource] = useState<string>("");
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getComputeRuntimeSettings()
+      .then((record) => {
+        if (cancelled) return;
+        setCompute(record);
+        setMinimumPods(Math.max(1, record.settings.minimumPods ?? 1));
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setComputeError(e instanceof Error ? e.message : "Could not load RunPod settings");
+      })
+      .finally(() => {
+        if (!cancelled) setComputeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handle = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(handle);
+  }, []);
 
   useEffect(() => {
     // Debounce the text query so each keystroke doesn't hit the API.
@@ -49,6 +83,54 @@ export default function Admin() {
     }, 250);
     return () => clearTimeout(handle);
   }, [source, query, offset]);
+
+  const minimumUntil = compute?.settings.minimumPodsUntil ?? null;
+  const configuredMinimum = compute?.settings.minimumPods ?? 0;
+  const maximumPods = compute?.settings.maxPods ?? 0;
+  const minimumActive = configuredMinimum > 0
+    && minimumUntil !== null
+    && Date.parse(minimumUntil) > now;
+
+  async function saveMinimumWindow(durationHours: 4 | 8 | 24) {
+    if (!compute) return;
+    setSavingWindow(durationHours);
+    setComputeError("");
+    setComputeNotice("");
+    try {
+      const updated = await patchComputeRuntimeSettings(compute.version, {
+        minimumPods,
+      }, durationHours);
+      setCompute(updated);
+      setNow(Date.now());
+      setComputeNotice(
+        `${minimumPods} pod${minimumPods === 1 ? "" : "s"} requested for ${durationHours} hours.`,
+      );
+    } catch (e: unknown) {
+      setComputeError(e instanceof Error ? e.message : "Could not update RunPod capacity");
+    } finally {
+      setSavingWindow(null);
+    }
+  }
+
+  async function cancelMinimumWindow() {
+    if (!compute) return;
+    setSavingWindow("cancel");
+    setComputeError("");
+    setComputeNotice("");
+    try {
+      const updated = await patchComputeRuntimeSettings(compute.version, {
+        minimumPods: 0,
+        minimumPodsUntil: null,
+      });
+      setCompute(updated);
+      setNow(Date.now());
+      setComputeNotice("Minimum capacity ended; queue-driven scaling resumed.");
+    } catch (e: unknown) {
+      setComputeError(e instanceof Error ? e.message : "Could not end RunPod capacity window");
+    } finally {
+      setSavingWindow(null);
+    }
+  }
 
   // Reset to the first page whenever the filters change.
   useEffect(() => {
@@ -84,6 +166,92 @@ export default function Admin() {
           </Link>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm shadow-stone-100">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-stone-900 text-white">
+              <Server size={18} />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-bold text-stone-900">RunPod warm capacity</h2>
+                {minimumActive ? (
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                    Active
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                    Queue-driven
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 max-w-xl text-sm text-stone-500">
+                Keep a minimum number of GPU pods online for a fixed window. Autoscaling can still add more when the queue needs them.
+              </p>
+              {minimumActive && minimumUntil && (
+                <p
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Clock3 size={13} />
+                  At least {configuredMinimum} pod{configuredMinimum === 1 ? "" : "s"} until {formatCapacityDeadline(minimumUntil)}
+                  {` · ${formatRemaining(Date.parse(minimumUntil) - now)} remaining`}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <label className="grid gap-1 text-xs font-semibold text-stone-600">
+              Minimum pods
+              <select
+                value={minimumPods}
+                onChange={(event) => setMinimumPods(Number(event.target.value))}
+                disabled={computeLoading || !compute || maximumPods < 1 || savingWindow !== null}
+                className="h-11 min-w-28 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 disabled:opacity-50"
+              >
+                {maximumPods < 1
+                  ? <option value={1}>Unavailable</option>
+                  : Array.from({ length: maximumPods }, (_, index) => index + 1).map((count) => (
+                    <option key={count} value={count}>{count}</option>
+                  ))}
+              </select>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {([4, 8, 24] as const).map((hours) => (
+                <button
+                  key={hours}
+                  type="button"
+                  onClick={() => void saveMinimumWindow(hours)}
+                  aria-label={`Keep at least ${minimumPods} pod${minimumPods === 1 ? "" : "s"} warm for ${hours} hours`}
+                  disabled={computeLoading || !compute || maximumPods < 1 || savingWindow !== null}
+                  className="h-11 rounded-lg bg-stone-900 px-3 text-xs font-bold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingWindow === hours ? "Saving…" : `${hours}h`}
+                </button>
+              ))}
+              {minimumActive && (
+                <button
+                  type="button"
+                  onClick={() => void cancelMinimumWindow()}
+                  disabled={savingWindow !== null}
+                  className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-xs font-bold text-stone-600 hover:bg-stone-50 disabled:opacity-50"
+                >
+                  {savingWindow === "cancel" ? "Ending…" : "End early"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        {computeError && <p className="mt-3 text-xs font-medium text-red-700" role="alert">{computeError}</p>}
+        {computeNotice && (
+          <p className="mt-3 text-xs font-medium text-emerald-700" role="status" aria-live="polite">
+            {computeNotice}
+          </p>
+        )}
+      </section>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{error}</div>
@@ -186,6 +354,21 @@ export default function Admin() {
       )}
     </div>
   );
+}
+
+function formatCapacityDeadline(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatRemaining(milliseconds: number) {
+  const totalMinutes = Math.max(0, Math.ceil(milliseconds / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
 function StatusBadge({ ip }: { ip: AdminIpSummary }) {

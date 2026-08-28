@@ -277,14 +277,7 @@ export function ListingCarousel({
   ipId?: string;
   compact?: boolean;
 }) {
-  const items = useMemo(() => buildGalleryItems(f), [
-    f.screenshot_url,
-    f.archived_images,
-    f.archived_image_urls,
-    f.gallery_scores,
-    f.image_urls,
-    f.image_url,
-  ]);
+  const items = useMemo(() => buildGalleryItems(f), [f]);
 
   const [idx, setIdx] = useState(0);
   const [allowingUrl, setAllowingUrl] = useState<string | null>(null);

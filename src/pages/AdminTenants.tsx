@@ -15,13 +15,16 @@ import {
   tenantLabel,
   type Tenant,
 } from "../api";
+import { useAuth } from "../context/AuthContext";
 
 const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
 
 export default function AdminTenants() {
+  const { user, logout, actingTenantId, switchTenant } = useAuth();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [query, setQuery] = useState("");
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -49,6 +52,7 @@ export default function AdminTenants() {
   async function load() {
     setLoading(true);
     setError("");
+    setSuccess("");
     try {
       const res = await listTenants();
       setTenants(res.tenants);
@@ -65,6 +69,7 @@ export default function AdminTenants() {
     if (!tenantName || creating) return;
     setCreating(true);
     setError("");
+    setSuccess("");
     try {
       await createTenant(tenantName);
       setName("");
@@ -80,16 +85,35 @@ export default function AdminTenants() {
   async function handleRemove(tenant: Tenant) {
     if (deletingId) return;
     const label = tenantLabel(tenant);
+    const deletesHomeTenant = tenant.id === user?.tenant_id;
+    const deletesActingTenant = tenant.id === actingTenantId;
+    const sessionWarning = deletesHomeTenant
+      ? "\n\nThis tenant owns your current admin account. You will be signed out after deletion."
+      : deletesActingTenant
+        ? "\n\nYou are currently operating as this tenant. You will return to your home tenant after deletion."
+      : "";
     const confirmation = window.prompt(
-      `Delete ${label}? This will permanently remove this tenant and all related tenant data, including accounts, IPs, monitors, jobs, cases, and related records.\n\nType DELETE to continue.`,
+      `Delete ${label}? This will permanently remove this tenant and all related tenant data, including accounts, IPs, monitors, jobs, cases, and related records.${sessionWarning}\n\nType DELETE to continue.`,
     );
     if (confirmation !== "DELETE") return;
     setDeletingId(tenant.id);
     setError("");
+    setSuccess("");
     try {
       await deleteTenant(tenant.id);
-      await load();
+      // The DELETE response is authoritative. Remove the row immediately
+      // instead of reloading with a session that may have just been deleted.
+      setTenants((current) => current.filter((item) => item.id !== tenant.id));
+      if (deletesHomeTenant) {
+        await logout();
+        return;
+      }
+      if (deletesActingTenant && user) {
+        switchTenant(user.tenant_id, "/admin/tenants");
+        return;
+      }
       window.dispatchEvent(new Event(TENANTS_CHANGED_EVENT));
+      setSuccess(`Deleted ${label}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -122,6 +146,12 @@ export default function AdminTenants() {
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {success}
         </div>
       )}
 

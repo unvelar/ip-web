@@ -57,20 +57,29 @@ export function ActiveIpProvider({ children }: { children: ReactNode }) {
     : "";
 
   useEffect(() => {
+    let alive = true;
+
     if (!actingTenantId) {
-      setIps([]);
-      setActiveIpId(null);
-      setLoading(false);
-      return;
+      queueMicrotask(() => {
+        if (!alive) return;
+        setIps([]);
+        setActiveIpId(null);
+        setLoading(false);
+      });
+      return () => {
+        alive = false;
+      };
     }
 
-    let alive = true;
     const controller = new AbortController();
     const urlIpId = new URLSearchParams(window.location.search).get("ip_id");
     const storedIpId = readStoredIp(actingTenantId);
-    setActiveIpId(urlIpId ?? storedIpId);
-    setLoading(true);
-    setError(null);
+    queueMicrotask(() => {
+      if (!alive) return;
+      setActiveIpId(urlIpId ?? storedIpId);
+      setLoading(true);
+      setError(null);
+    });
 
     void listTrademarkSelectors(controller.signal)
       .then(({ ips: selectorIps }) => {
