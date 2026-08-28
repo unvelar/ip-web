@@ -135,6 +135,62 @@ type ProductRecommendationFields = {
     | null;
 };
 
+export type ProductCommercialSubgroupFields = {
+  key: string;
+  triage_member_count: number;
+  triage_case_ids: string[];
+};
+
+export type ProductCommercialReviewLane<T extends ProductCommercialSubgroupFields> = {
+  subgroup: T;
+  findingCount: number;
+};
+
+type ProductCommercialFindingFields = {
+  case_id: string | null;
+};
+
+export function productCommercialReviewLanes<
+  T extends ProductCommercialSubgroupFields,
+>(
+  subgroups: T[],
+  findings: ProductCommercialFindingFields[] | null,
+): ProductCommercialReviewLane<T>[] {
+  return subgroups.flatMap((subgroup) => {
+    let findingCount = subgroup.triage_member_count;
+    if (findings != null) {
+      const caseIds = new Set(subgroup.triage_case_ids);
+      findingCount = findings.reduce(
+        (count, finding) => count + Number(
+          finding.case_id != null && caseIds.has(finding.case_id),
+        ),
+        0,
+      );
+    }
+    return findingCount > 0 ? [{ subgroup, findingCount }] : [];
+  });
+}
+
+export function productCommercialSubgroupKeyForCaseId<
+  T extends ProductCommercialSubgroupFields,
+>(
+  lanes: ProductCommercialReviewLane<T>[],
+  caseId: string | null,
+): string | null {
+  if (!caseId) return null;
+  return lanes.find(({ subgroup }) => subgroup.triage_case_ids.includes(caseId))
+    ?.subgroup.key ?? null;
+}
+
+export function scopeFindingsToCommercialSubgroup<
+  T extends ProductCommercialFindingFields,
+  S extends ProductCommercialSubgroupFields,
+>(findings: T[] | null, subgroup: S | null): T[] | null {
+  if (!findings || !subgroup) return findings;
+  const caseIds = new Set(subgroup.triage_case_ids);
+  return findings.filter((finding) => finding.case_id != null && caseIds.has(finding.case_id));
+}
+
 export function productNeedsAttention(group: ProductAttentionFields) {
   const triageMemberCount = group.triage_member_count ?? 0;
   return triageMemberCount > 0;

@@ -147,6 +147,52 @@ export interface TrademarkImage {
   created_at: string;
 }
 
+export type IpOnboardingState =
+  | "setup_required"
+  | "processing"
+  | "delayed"
+  | "active"
+  | "needs_attention";
+
+export type IpOnboardingCheckStatus =
+  | "complete"
+  | "processing"
+  | "waiting"
+  | "missing"
+  | "attention";
+
+export interface IpOnboardingStatus {
+  state: IpOnboardingState;
+  customer_action_required: boolean;
+  title: string;
+  message: string;
+  checks: Array<{
+    key: "reference_images" | "keywords" | "monitoring_sources" | "first_scan";
+    label: string;
+    status: IpOnboardingCheckStatus;
+    detail: string;
+  }>;
+  progress: {
+    reference_images: {
+      total: number;
+      indexed: number;
+      pending: number;
+      failed: number;
+    };
+    keywords: { total: number };
+    monitoring_sources: {
+      total: number;
+      ready: number;
+      pending: number;
+    };
+    first_scan: {
+      total: number;
+      completed: number;
+      pending: number;
+    };
+  };
+}
+
 export interface TrademarkSelector {
   id: string;
   name: string;
@@ -231,6 +277,10 @@ export function createTrademark(name: string) {
 
 export function getTrademark(id: string) {
   return request<{ trademark: Trademark; images: TrademarkImage[] }>(`/api/ip/${id}`);
+}
+
+export function getIpOnboardingStatus(id: string, signal?: AbortSignal) {
+  return request<{ status: IpOnboardingStatus }>(`/api/ip/${id}/onboarding-status`, { signal });
 }
 
 export function deleteTrademark(id: string) {
@@ -1867,10 +1917,22 @@ export function listIpMonitoringPlatforms(ipId: string) {
 /** Add a platform by bare host or full URL — the backend normalises it.
  *  `country` (ISO-2) optionally routes scrapes through a residential proxy in
  *  that country; omit/empty for the default egress. */
-export function addIpMonitoringPlatform(ipId: string, domain: string, country?: string | null) {
+export function addIpMonitoringPlatform(
+  ipId: string,
+  domain: string,
+  country?: string | null,
+  searchUrlTemplate?: string,
+) {
   return request<{ platform: MonitoredDomain; jobs_enqueued: number }>(
     `/api/ip/${ipId}/monitoring/platforms`,
-    { method: "POST", body: JSON.stringify({ domain, country: country ?? null }) },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        domain,
+        country: country ?? null,
+        ...(searchUrlTemplate ? { search_url_template: searchUrlTemplate } : {}),
+      }),
+    },
   );
 }
 
@@ -2886,6 +2948,7 @@ export interface ProductVariantAttribute {
   normalized_unit: ProductVariantAttributeUnit;
   confidence: number;
   evidence_image_positions: number[];
+  text_evidence: string[];
 }
 
 export interface ProductSemanticCategory {
@@ -3366,6 +3429,12 @@ function normalizeProductVariantAttributes(value: unknown): ProductVariantAttrib
         .map((position) => Math.max(0, Math.trunc(position)))
         .slice(0, 16)
       : [];
+    const textEvidence = Array.isArray(attribute.text_evidence)
+      ? attribute.text_evidence
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .map((value) => value.trim())
+        .slice(0, 4)
+      : [];
     if (
       typeof attribute.key !== "string" ||
       typeof attribute.value !== "string" ||
@@ -3379,6 +3448,7 @@ function normalizeProductVariantAttributes(value: unknown): ProductVariantAttrib
       normalized_unit: attribute.normalized_unit,
       confidence: Math.max(0, Math.min(1, attribute.confidence)),
       evidence_image_positions: evidencePositions,
+      text_evidence: textEvidence,
     }];
   });
 }

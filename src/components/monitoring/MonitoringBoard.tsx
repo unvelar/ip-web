@@ -150,7 +150,7 @@ export function MonitoringBoard({
   loadingMore,
   onLoadMore,
   ipId,
-  runInProgress,
+  emptyStateMessage,
   onRefresh,
   onDismiss,
   showIpColumn,
@@ -170,8 +170,8 @@ export function MonitoringBoard({
    * `ip_id` (single-IP usage). On the global board each finding ships `ip_id`.
    */
   ipId?: string;
-  /** A monitor run is currently pending/executing — tweaks the empty state. */
-  runInProgress: boolean;
+  /** Truthful context for an empty queue, supplied by the onboarding owner. */
+  emptyStateMessage?: string;
   /** Re-fetch the first page (e.g. after a dismiss / license backfill). */
   onRefresh: (completedResultId?: string) => void;
   /** Optional post-dismiss notification with the dismissed result_id. */
@@ -1479,13 +1479,7 @@ export function MonitoringBoard({
         )}
         {displayFindings.length === 0 ? (
           <div className="px-5 py-8 text-sm text-stone-400 text-center">
-            {runInProgress
-              ? "Waiting for the first findings to arrive…"
-              : (
-                <>
-                  No findings match the current filters.
-                </>
-              )}
+            {emptyStateMessage ?? "No findings match the current filters."}
           </div>
         ) : viewMode === "grid" ? (
           <div className="p-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

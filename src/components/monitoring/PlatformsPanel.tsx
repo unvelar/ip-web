@@ -17,7 +17,7 @@ import {
   type OpenWebSearchConfig,
 } from "../../api";
 import { COUNTRIES, countryLabel } from "../../lib/countries";
-import { KNOWN_PLATFORMS } from "../../lib/platforms";
+import { KNOWN_PLATFORMS, monitoringPlatformOption } from "../../lib/platforms";
 
 const FREQUENCY_OPTIONS: { value: MonitoringFrequency; label: string }[] = [
   { value: "daily", label: "Daily" },
@@ -168,7 +168,12 @@ export function PlatformsPanel({
     setAdding(true);
     setErr("");
     try {
-      await addIpMonitoringPlatform(ipId, d, newCountry || null);
+      await addIpMonitoringPlatform(
+        ipId,
+        d,
+        newCountry || null,
+        monitoringPlatformOption(d)?.searchUrlTemplate,
+      );
       setNewDomain("");
       setNewCountry("");
       await loadPlatforms();

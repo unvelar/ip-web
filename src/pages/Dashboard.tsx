@@ -15,8 +15,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { getDashboardGroups, type DashboardGroups } from "../api";
+import {
+  getDashboardGroups,
+  type DashboardGroups,
+  type IpOnboardingStatus,
+} from "../api";
+import { IpOnboardingStatusCard } from "../components/monitoring/IpOnboardingStatusCard";
 import { useActiveIp } from "../context/ActiveIpContext";
+import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
+import { dashboardContentState } from "../lib/dashboardState";
 import { sellerProfilePath } from "../lib/sellers";
 
 type Days = 7 | 30 | 90;
@@ -57,7 +64,13 @@ export default function Dashboard() {
   const {
     activeIpId: selectedIpId,
     activeIp,
+    loading: activeIpLoading,
   } = useActiveIp();
+  const {
+    status: onboardingStatus,
+    loading: onboardingLoading,
+    error: onboardingError,
+  } = useIpOnboardingStatus(selectedIpId);
   const [data, setData] = useState<DashboardGroups | null>(null);
   const [err, setErr] = useState("");
 
@@ -89,7 +102,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!data) {
+  if (!data || activeIpLoading) {
     return (
       <div className="max-w-7xl mx-auto px-6 py-6">
         <DashboardSkeleton />
@@ -110,7 +123,13 @@ export default function Dashboard() {
   const scopedSellers = activeIpId
     ? (data.sellers ?? []).filter((s) => s.ip_id === activeIpId)
     : [];
-  const empty = !selectedIp;
+  const contentState = dashboardContentState({
+    hasActiveIp: Boolean(activeIp),
+    hasActivity: Boolean(selectedIp),
+  });
+  const showOnboardingStatus = Boolean(activeIpId) && (
+    contentState === "no_activity" || onboardingStatus?.state !== "active"
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
@@ -127,23 +146,34 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {empty ? (
+      {showOnboardingStatus && (
+        <IpOnboardingStatusCard
+          status={onboardingStatus}
+          loading={onboardingLoading}
+          error={onboardingError}
+        />
+      )}
+
+      {contentState === "no_ip" ? (
         <div className="rounded-2xl border border-stone-200 bg-white px-6 py-16 text-center">
-          <p className="text-base font-semibold text-stone-700">
-            {activeIp
-              ? `${activeIp.name} is not being monitored yet`
-              : "No IPs are registered yet"}
-          </p>
+          <p className="text-base font-semibold text-stone-700">No IPs are registered yet</p>
           <p className="mt-1 text-sm text-stone-500">
-            Start monitoring this intellectual property to gather findings.
+            Register an intellectual property before setting up monitoring.
           </p>
           <Link
-            to="/monitoring/new"
+            to="/ips/new"
             className="inline-flex items-center gap-2 mt-5 px-4 py-2 rounded-full bg-stone-900 text-white text-sm font-semibold hover:bg-stone-800 transition-colors"
           >
-            Monitor an IP →
+            Register an IP →
           </Link>
         </div>
+      ) : contentState === "no_activity" ? (
+        <DashboardNoActivity
+          days={days}
+          ipId={activeIpId!}
+          ipName={activeIp!.name}
+          status={onboardingStatus}
+        />
       ) : (
         <>
           <MonitoredMarketHero
@@ -177,6 +207,41 @@ export default function Dashboard() {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function DashboardNoActivity({
+  days,
+  ipId,
+  ipName,
+  status,
+}: {
+  days: Days;
+  ipId: string;
+  ipName: string;
+  status: IpOnboardingStatus | null;
+}) {
+  const message = status?.state === "active"
+    ? `Monitoring is active for ${ipName}. There are no qualifying findings to show right now.`
+    : status?.state === "setup_required"
+      ? "Finish the missing setup items above before monitoring can start."
+      : status
+        ? "Your monitoring setup is saved. Findings will appear here after scans complete and identify matches."
+        : `There are no qualifying findings to show for the last ${days} days.`;
+
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white px-6 py-12 text-center">
+      <p className="text-base font-semibold text-stone-700">No dashboard findings yet</p>
+      <p className="mt-1 text-sm text-stone-500">{message}</p>
+      {status?.state === "setup_required" && (
+        <Link
+          to={`/ips/${encodeURIComponent(ipId)}`}
+          className="inline-flex items-center gap-2 mt-5 px-4 py-2 rounded-full bg-stone-900 text-white text-sm font-semibold hover:bg-stone-800 transition-colors"
+        >
+          Review IP setup →
+        </Link>
       )}
     </div>
   );

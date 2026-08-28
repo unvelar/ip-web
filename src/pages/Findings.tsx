@@ -16,8 +16,10 @@ import {
   type MonitoringStatusFilter,
 } from "../api";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
+import { IpOnboardingStatusCard } from "../components/monitoring/IpOnboardingStatusCard";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
+import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
 
 /** Legacy route — redirects to the canonical Monitoring Tasks page. */
 export default function Findings() {
@@ -145,6 +147,11 @@ export function MonitoringInboxView() {
     activeIpId,
     loading: loadingActiveIp,
   } = useActiveIp();
+  const {
+    status: onboardingStatus,
+    loading: onboardingLoading,
+    error: onboardingError,
+  } = useIpOnboardingStatus(activeIpId);
   const urlFilters = parseFilters(params);
   const urlIpChanged =
     Boolean(urlFilters.ip_id) &&
@@ -467,6 +474,18 @@ export function MonitoringInboxView() {
     return out;
   }, [campaignBatchFindings, findings, linkedFinding]);
 
+  const showOnboardingStatus = Boolean(activeIpId) && (
+    onboardingStatus?.state !== "active" ||
+    (loaded && boardFindings.length === 0)
+  );
+  const emptyStateMessage = onboardingStatus?.state === "active"
+    ? "Monitoring is active. There is nothing to review in this view."
+    : onboardingStatus?.state === "setup_required"
+      ? "Finish the missing setup items above before findings can arrive."
+      : onboardingStatus
+        ? "No findings are available yet. See the setup status above."
+        : undefined;
+
   const queueSummary = useMemo(() => {
     if (!facets) return "Loading…";
     const count = filters.status === "takedown_pending"
@@ -536,6 +555,15 @@ export function MonitoringInboxView() {
         </div>
       )}
 
+      {showOnboardingStatus && (
+        <IpOnboardingStatusCard
+          status={onboardingStatus}
+          loading={onboardingLoading}
+          error={onboardingError}
+          compact
+        />
+      )}
+
       {!loadingActiveIp && !activeIpId ? (
         <div className="rounded-lg border border-dashed border-stone-300 bg-white px-6 py-12 text-center text-sm text-stone-500">
           Add an IP from the top bar to start reviewing monitoring tasks.
@@ -553,7 +581,7 @@ export function MonitoringInboxView() {
           nextCursor={nextCursor}
           loadingMore={loadingMore}
           onLoadMore={loadMore}
-          runInProgress={false}
+          emptyStateMessage={emptyStateMessage}
           onRefresh={refresh}
           showIpColumn
           showIpFilter={false}

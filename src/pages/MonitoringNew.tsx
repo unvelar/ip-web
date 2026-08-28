@@ -8,6 +8,7 @@ import {
 } from "../api";
 import { PlatformSelector } from "../components/monitoring/PlatformSelector";
 import { COUNTRIES, countryLabel } from "../lib/countries";
+import { monitoringPlatformOption } from "../lib/platforms";
 
 /**
  * Start monitoring a registered IP. Picks an IP not already watched and seeds
@@ -56,7 +57,12 @@ export default function MonitoringNew() {
         while (nextIndex < platforms.length) {
           const source = platforms[nextIndex++];
           try {
-            await addIpMonitoringPlatform(picked, source, pickedCountry || null);
+            await addIpMonitoringPlatform(
+              picked,
+              source,
+              pickedCountry || null,
+              monitoringPlatformOption(source)?.searchUrlTemplate,
+            );
           } catch (e) {
             failures.push({ source, error: e instanceof Error ? e.message : String(e) });
           } finally {
