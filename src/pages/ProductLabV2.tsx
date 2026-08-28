@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import {
   approveTakedownBatch,
+  allowIpFindingProductImage,
   dismissIpFinding,
   getMonitoringFinding,
   getPersistedProductGroups,
@@ -53,9 +54,10 @@ import { useAuth } from "../context/AuthContext";
 import { ProductGroupSettings } from "./ProductClusters";
 import {
   adjacentFinding,
+  preferredAllowedProductImage,
+  productNeedsAttention,
   productCommercialReviewLanes,
   productCommercialSubgroupKeyForCaseId,
-  productShouldStayInAttention,
   recentDecisionCanUndo,
   recommendedBatchActionForSelection,
   reconcileProductAttentionOverview,
@@ -65,6 +67,7 @@ import {
   resetOptimisticProductStateAfterUndo,
   scopeFindingsToCommercialSubgroup,
   sortRecentDecisions,
+  takedownDecisionReasonRequiredForSelection,
   type ProductCommercialReviewLane,
   type ProductLabBatchAction,
 } from "./productLabV2Utils";
@@ -468,6 +471,36 @@ export default function ProductLab() {
   const showGroupSettings = searchParams.get("panel") === "settings";
 
   useEffect(() => {
+    const closeCategoryMenusOutside = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      const target = event.target;
+
+      document
+        .querySelectorAll<HTMLDetailsElement>("details[data-category-overflow-menu][open]")
+        .forEach((menu) => {
+          if (!menu.contains(target)) menu.removeAttribute("open");
+        });
+    };
+    const closeCategoryMenusOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+
+      document
+        .querySelectorAll<HTMLDetailsElement>("details[data-category-overflow-menu][open]")
+        .forEach((menu) => {
+          menu.removeAttribute("open");
+          menu.querySelector<HTMLElement>("summary")?.focus();
+        });
+    };
+
+    document.addEventListener("pointerdown", closeCategoryMenusOutside);
+    document.addEventListener("keydown", closeCategoryMenusOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeCategoryMenusOutside);
+      document.removeEventListener("keydown", closeCategoryMenusOnEscape);
+    };
+  }, []);
+
+  useEffect(() => {
     if (view === "history") return;
     const timer = window.setTimeout(() => {
       setDebouncedProductQuery(query.trim());
@@ -634,14 +667,11 @@ export default function ProductLab() {
       .filter((group) => {
         if (
           view === "attention" &&
-          !productShouldStayInAttention(
-            group,
-            group.id === selectedGroupId || group.canonical_product_id === selectedGroupId,
-          )
+          !productNeedsAttention(group)
         ) return false;
         return true;
       });
-  }, [overview, selectedGroupId, view]);
+  }, [overview, view]);
 
   const pagedCategoryTrees = useMemo(
     () => Array.from(
@@ -867,10 +897,10 @@ export default function ProductLab() {
         if (
           view === "attention" &&
           selectedGroupConfirmationStatus &&
-          !productShouldStayInAttention({
+          !productNeedsAttention({
             confirmation_status: selectedGroupConfirmationStatus,
             triage_member_count: displayedFindings.length,
-          }, true)
+          })
         ) {
           selectGroup(null);
         }
@@ -1140,6 +1170,10 @@ export default function ProductLab() {
       if (action === "send") {
         if (!finding.case_id) skip("still preparing");
         else eligible.push(finding);
+      } else if (action === "allow_product") {
+        if (!findingIpId) skip("no associated IP");
+        else if (!preferredAllowedProductImage(finding)) skip("no eligible product image");
+        else eligible.push(finding);
       } else if (action === "review") {
         if (!finding.case_id) skip("still preparing");
         else if (!findingIpId) skip("no associated IP");
@@ -1196,6 +1230,10 @@ export default function ProductLab() {
             const findingIpId = (finding.ip_id ?? activeIpId) as string;
             if (action === "review") {
               await markIpFindingNeedsReview(findingIpId, finding.result_id);
+            } else if (action === "allow_product") {
+              await allowIpFindingProductImage(findingIpId, finding.result_id, {
+                image_url: preferredAllowedProductImage(finding),
+              });
             } else {
               await dismissIpFinding(
                 findingIpId,
@@ -1465,14 +1503,14 @@ export default function ProductLab() {
   }
 
   return (
-    <div className="min-h-[calc(100dvh-3rem)] bg-[#f7f6f3] text-stone-950 lg:h-[calc(100dvh-3rem)] lg:overflow-hidden">
-      <header className="border-b border-stone-200/80 bg-[#faf9f7] px-4 py-4 sm:px-6 lg:px-7">
-        <div className="flex min-h-9 items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="truncate text-[18px] font-semibold tracking-[-0.025em] text-stone-950">
+    <div className="min-h-[calc(100dvh-3rem)] bg-[#f7f6f3] text-stone-950 lg:h-[calc(100dvh-40px)] lg:overflow-hidden">
+      <header className="border-b border-stone-200/80 bg-[#faf9f7] px-4 py-[7px] sm:px-6 lg:px-5">
+        <div className="flex min-h-[28px] items-center justify-between gap-4">
+          <div className="flex min-w-0 items-baseline gap-2.5">
+            <h1 className="shrink-0 text-[16px] font-semibold tracking-[-0.025em] text-stone-950">
               Product Lab
             </h1>
-            <p className="mt-0.5 truncate text-[12px] text-stone-500">
+            <p className="hidden truncate text-[11px] text-stone-500 sm:block">
               {activeIp?.name ? `${activeIp.name} · ` : ""}Review what needs attention, then move on.
             </p>
           </div>
@@ -1481,7 +1519,7 @@ export default function ProductLab() {
               type="button"
               onClick={() => setRefreshToken((token) => token + 1)}
               disabled={loading || loadingHistory}
-              className="grid size-8 place-items-center rounded-md text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
+              className="grid size-[28px] place-items-center rounded-md text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
               aria-label="Refresh products"
               title="Refresh products"
             >
@@ -1491,9 +1529,9 @@ export default function ProductLab() {
         </div>
       </header>
 
-      <div className="lg:grid lg:h-[calc(100%-73px)] lg:grid-cols-[minmax(340px,0.82fr)_minmax(430px,1.18fr)]">
+      <div className="lg:grid lg:h-[calc(100%-43px)] lg:grid-cols-[minmax(340px,0.82fr)_minmax(430px,1.18fr)]">
         <section className={`${showMobileInspector ? "hidden lg:flex" : "flex"} min-h-0 flex-col border-stone-200/80 bg-[#faf9f7] lg:border-r`} aria-label="Products">
-          <div className="border-b border-stone-200/80 px-4 pt-3 sm:px-6 lg:px-5">
+          <div className="border-b border-stone-200/80 px-4 sm:px-6 lg:px-4">
             <div className="flex items-center gap-4 overflow-x-auto" role="tablist" aria-label="Product views">
               <ViewTab
                 active={view === "attention"}
@@ -1571,8 +1609,8 @@ export default function ProductLab() {
             </div>
           )}
 
-          <div className="border-b border-stone-200/80 p-3 sm:px-6 lg:px-4">
-            <label className="relative block">
+          <div className="flex items-center gap-3 border-b border-stone-200/80 px-4 py-[7px] sm:px-6 lg:px-4">
+            <label className="relative block min-w-0 flex-1">
               <Search
                 size={14}
                 className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"
@@ -1593,24 +1631,21 @@ export default function ProductLab() {
                     ? "Search all products to merge"
                     : view === "all"
                       ? "Search all products"
-                      : "Search products needing attention"}
-                className="h-8 w-full rounded-md border border-stone-200 bg-white pl-8 pr-3 text-[12px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/70"
+                      : "Search products"}
+                className="block h-[30px] w-full rounded-md border border-stone-200 bg-white pl-8 pr-3 text-[11px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/70"
               />
             </label>
             {view !== "history" && overview && (
               <div
-                className="mt-2 flex items-center justify-between gap-3 text-[10px] text-stone-500"
+                className="shrink-0 text-[10px] leading-[14px] tabular-nums text-stone-500"
                 role="status"
                 aria-live="polite"
               >
                 <span>
                   {loading
-                    ? "Updating products…"
-                    : `Showing ${visibleGroups.length} of ${paginatedProductCount} ${query.trim() ? "matching " : ""}products`}
+                    ? "Updating…"
+                    : `${visibleGroups.length} of ${paginatedProductCount}${query.trim() ? " matches" : ""}`}
                 </span>
-                {!loading && overview.next_cursor && (
-                  <span className="shrink-0">Load the next page when ready</span>
-                )}
               </div>
             )}
           </div>
@@ -1822,6 +1857,17 @@ export default function ProductLab() {
                 });
                 setBatchNotice(null);
               }}
+              onSetFindingsSelected={(resultIds, selected) => {
+                setSelectedResultIds((current) => {
+                  const next = new Set(current);
+                  for (const resultId of resultIds) {
+                    if (selected) next.add(resultId);
+                    else next.delete(resultId);
+                  }
+                  return next;
+                });
+                setBatchNotice(null);
+              }}
               onOpenFinding={openFinding}
               onBatchAction={setConfirmBatchAction}
               onMergeProduct={() => beginProductMergeSelection(selectedGroup)}
@@ -1866,8 +1912,8 @@ export default function ProductLab() {
           action={confirmBatchAction}
           scopeLabel={selectedGroup ? productName(selectedGroup) : undefined}
           {...partitionBatch(confirmBatchAction)}
-          decisionReasonRequired={partitionBatch(confirmBatchAction).eligible.some(
-            (finding) => finding.actionability?.key !== "send_takedown",
+          decisionReasonRequired={takedownDecisionReasonRequiredForSelection(
+            partitionBatch(confirmBatchAction).eligible,
           )}
           onCancel={() => setConfirmBatchAction(null)}
           onConfirm={(decisionReason, associationScopes) => {
@@ -1966,7 +2012,7 @@ function ViewTab({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`relative h-9 shrink-0 text-[12px] font-medium transition ${
+      className={`relative h-[34px] shrink-0 text-[11px] font-medium transition ${
         active ? "text-stone-950" : "text-stone-500 hover:text-stone-800"
       }`}
     >
@@ -1986,6 +2032,7 @@ function ViewTab({
 function ProductCategoryBranch({
   category,
   depth,
+  ancestors = [],
   collapsedPaths,
   forceExpanded,
   selectedGroupId,
@@ -1998,6 +2045,7 @@ function ProductCategoryBranch({
 }: {
   category: ProductCategoryNode;
   depth: number;
+  ancestors?: ProductCategoryNode[];
   collapsedPaths: Set<string>;
   forceExpanded: boolean;
   selectedGroupId: string | null;
@@ -2008,40 +2056,119 @@ function ProductCategoryBranch({
   onSelectGroup: (groupId: string) => void;
   onToggleMergeGroup: (groupId: string) => void;
 }) {
-  const collapsed = !forceExpanded && collapsedPaths.has(category.path);
+  const categoryChain = [category];
+  let terminalCategory = category;
+  while (terminalCategory.children.length === 1) {
+    terminalCategory = terminalCategory.children[0];
+    categoryChain.push(terminalCategory);
+  }
+  const breadcrumbChain = [...ancestors, ...categoryChain];
+  const collapsed = !forceExpanded && breadcrumbChain.some((item) => collapsedPaths.has(item.path));
+  const breadcrumb = breadcrumbChain.map((item) => item.label).join(" / ");
+  const rootCategory = breadcrumbChain[0];
+  const currentCategory = breadcrumbChain[breadcrumbChain.length - 1];
+  const hiddenCategories = breadcrumbChain.slice(1, -1);
+  const categoryGroups = categoryChain.flatMap((item) => item.groups);
   const headerTone = depth === 0
     ? "sticky top-0 z-10 bg-[#f0eeea]/95 font-semibold text-stone-700 backdrop-blur"
     : "bg-[#faf9f7] font-medium text-stone-600";
   const indent = 16 + Math.min(depth, 5) * 14;
 
+  if (categoryGroups.length === 0 && terminalCategory.children.length > 0) {
+    return (
+      <>
+        {terminalCategory.children.map((child) => (
+          <ProductCategoryBranch
+            key={child.key}
+            category={child}
+            depth={depth}
+            ancestors={breadcrumbChain}
+            collapsedPaths={collapsedPaths}
+            forceExpanded={forceExpanded}
+            selectedGroupId={selectedGroupId}
+            mergeSourceGroupId={mergeSourceGroupId}
+            mergeTargetGroupIds={mergeTargetGroupIds}
+            mergeDisabled={mergeDisabled}
+            onToggle={onToggle}
+            onSelectGroup={onSelectGroup}
+            onToggleMergeGroup={onToggleMergeGroup}
+          />
+        ))}
+      </>
+    );
+  }
+
   return (
-    <div role="group" aria-label={category.path}>
-      <button
-        type="button"
-        aria-expanded={!collapsed}
-        onClick={() => {
-          if (!forceExpanded) onToggle(category.path);
-        }}
+    <div role="group" aria-label={breadcrumb}>
+      <div
         className={`flex w-full items-center gap-2 border-b border-stone-200/80 py-2 pr-4 text-left text-[10px] transition hover:bg-stone-100 ${headerTone}`}
         style={{ paddingLeft: indent }}
-        title={category.path}
+        title={breadcrumb}
       >
-        {collapsed ? (
-          <ChevronRight size={12} className="shrink-0 text-stone-400" />
-        ) : (
-          <ChevronDown size={12} className="shrink-0 text-stone-400" />
-        )}
-        <span className={`min-w-0 flex-1 truncate ${depth === 0 ? "uppercase tracking-[0.07em]" : ""}`}>
-          {category.label}
-        </span>
+        <div className={`flex min-w-0 flex-1 items-center ${depth === 0 ? "uppercase tracking-[0.07em]" : ""}`}>
+          <CategoryPathToggle
+            category={rootCategory}
+            collapsed={!forceExpanded && collapsedPaths.has(rootCategory.path)}
+            forceExpanded={forceExpanded}
+            onToggle={onToggle}
+            className="max-w-[115px]"
+          />
+
+          {hiddenCategories.length > 0 && (
+            <>
+              <span className="mx-1 shrink-0 text-stone-300">/</span>
+              <details
+                data-category-overflow-menu
+                className="group/path relative shrink-0 normal-case tracking-normal"
+              >
+                <summary
+                  className="flex cursor-pointer list-none items-center gap-1 rounded-sm px-1 py-0.5 text-stone-500 transition hover:bg-stone-200/70 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 [&::-webkit-details-marker]:hidden"
+                  aria-label={`Show ${hiddenCategories.length} hidden category ${hiddenCategories.length === 1 ? "level" : "levels"}`}
+                  title={hiddenCategories.map((item) => item.label).join(" / ")}
+                >
+                  <span className="font-semibold">…</span>
+                  <span className="rounded bg-stone-200/80 px-1 text-[8px] tabular-nums text-stone-500">
+                    {hiddenCategories.length}
+                  </span>
+                </summary>
+                <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-[240px] overflow-hidden rounded-md border border-stone-200 bg-white py-1 shadow-lg">
+                  {hiddenCategories.map((item) => (
+                    <CategoryPathToggle
+                      key={item.path}
+                      category={item}
+                      collapsed={!forceExpanded && collapsedPaths.has(item.path)}
+                      forceExpanded={forceExpanded}
+                      onToggle={onToggle}
+                      closeMenuOnToggle
+                      className="w-full max-w-none px-2.5 py-1.5 text-left font-medium normal-case tracking-normal hover:bg-stone-50"
+                    />
+                  ))}
+                </div>
+              </details>
+            </>
+          )}
+
+          {breadcrumbChain.length > 1 && (
+            <>
+              <span className="mx-1 shrink-0 text-stone-300">/</span>
+              <CategoryPathToggle
+                category={currentCategory}
+                collapsed={!forceExpanded && collapsedPaths.has(currentCategory.path)}
+                forceExpanded={forceExpanded}
+                onToggle={onToggle}
+                className="min-w-0 flex-1 max-w-none font-semibold"
+              />
+            </>
+          )}
+        </div>
         <span className="shrink-0 rounded bg-stone-200/70 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
-          {category.groupCount}
+          {categoryGroups.length}
         </span>
-      </button>
+      </div>
 
       {!collapsed && (
         <>
-          {category.groups.map(({ group, index }) => (
+          {categoryGroups.map(({ group, index }) => (
             <ProductRow
               key={group.id}
               group={group}
@@ -2060,11 +2187,12 @@ function ProductCategoryBranch({
               onToggleMerge={() => onToggleMergeGroup(group.id)}
             />
           ))}
-          {category.children.map((child) => (
+          {terminalCategory.children.map((child) => (
             <ProductCategoryBranch
               key={child.key}
               category={child}
               depth={depth + 1}
+              ancestors={breadcrumbChain}
               collapsedPaths={collapsedPaths}
               forceExpanded={forceExpanded}
               selectedGroupId={selectedGroupId}
@@ -2079,6 +2207,44 @@ function ProductCategoryBranch({
         </>
       )}
     </div>
+  );
+}
+
+function CategoryPathToggle({
+  category,
+  collapsed,
+  forceExpanded,
+  onToggle,
+  closeMenuOnToggle = false,
+  className = "",
+}: {
+  category: ProductCategoryNode;
+  collapsed: boolean;
+  forceExpanded: boolean;
+  onToggle: (path: string) => void;
+  closeMenuOnToggle?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={!collapsed}
+      aria-label={`${collapsed ? "Expand" : "Collapse"} ${category.path}`}
+      disabled={forceExpanded}
+      onClick={(event) => {
+        onToggle(category.path);
+        if (closeMenuOnToggle) event.currentTarget.closest("details")?.removeAttribute("open");
+      }}
+      className={`inline-flex min-w-0 items-center gap-0.5 rounded-sm py-0.5 transition hover:text-stone-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 disabled:cursor-default ${className}`}
+      title={`${collapsed ? "Expand" : "Collapse"} ${category.path}`}
+    >
+      {collapsed ? (
+        <ChevronRight size={11} className="shrink-0 text-stone-400" />
+      ) : (
+        <ChevronDown size={11} className="shrink-0 text-stone-400" />
+      )}
+      <span className="truncate">{category.label}</span>
+    </button>
   );
 }
 
@@ -2436,6 +2602,7 @@ function BatchWorkspace({
   onFilterChange,
   onCommercialSubgroupChange,
   onToggleFinding,
+  onSetFindingsSelected,
   onOpenFinding,
   onBatchAction,
   onMergeProduct,
@@ -2457,6 +2624,7 @@ function BatchWorkspace({
   onFilterChange: (filter: ReviewBucket) => void;
   onCommercialSubgroupChange: (subgroupKey: string) => void;
   onToggleFinding: (resultId: string) => void;
+  onSetFindingsSelected: (resultIds: string[], selected: boolean) => void;
   onOpenFinding: (finding: IpReviewFinding) => void;
   onBatchAction: (action: ProductLabBatchAction) => void;
   onMergeProduct: () => void;
@@ -2474,6 +2642,10 @@ function BatchWorkspace({
   );
   const selectedFindings = (findings ?? []).filter((finding) =>
     selectedResultIds.has(finding.result_id)
+  );
+  const visibleResultIds = visibleFindings.map((finding) => finding.result_id);
+  const allVisibleSelected = visibleResultIds.length > 0 && visibleResultIds.every((resultId) =>
+    selectedResultIds.has(resultId)
   );
   const recommendedAction = recommendedBatchActionForSelection(selectedFindings);
 
@@ -2594,9 +2766,16 @@ function BatchWorkspace({
               </button>
             ))}
           </div>
-          <span className="shrink-0 text-[10px] text-stone-500">
-            Select reviewed cards individually
-          </span>
+          <button
+            type="button"
+            disabled={visibleResultIds.length === 0 || Boolean(batchProgress)}
+            aria-pressed={allVisibleSelected}
+            onClick={() => onSetFindingsSelected(visibleResultIds, !allVisibleSelected)}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2 text-[10px] font-medium text-stone-600 transition hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900 disabled:cursor-default disabled:opacity-50"
+          >
+            {allVisibleSelected ? <Check size={12} strokeWidth={3} /> : <Square size={12} />}
+            {allVisibleSelected ? "Deselect all" : "Select all"}
+          </button>
         </div>
       </div>
 
@@ -2644,11 +2823,12 @@ function BatchWorkspace({
       </div>
 
       {selectedFindings.length > 0 && (
-        <div className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-3 shadow-[0_-12px_28px_-24px_rgba(28,25,23,0.8)] backdrop-blur sm:px-7">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold text-stone-900">{selectedFindings.length} manually selected</p>
-              <p className="text-[9px] text-stone-400">Only cards you selected will be changed.</p>
+        <div className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-2.5 shadow-[0_-12px_28px_-24px_rgba(28,25,23,0.8)] backdrop-blur sm:px-7">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="shrink-0 border-r border-stone-200 pr-2">
+              <p className="whitespace-nowrap text-[10px] font-semibold text-stone-700">
+                {selectedFindings.length} selected
+              </p>
             </div>
             {batchProgress ? (
               <span className="inline-flex items-center gap-2 text-[11px] text-stone-500">
@@ -2656,12 +2836,15 @@ function BatchWorkspace({
                 Processing {batchProgress.done}/{batchProgress.total}
               </span>
             ) : (
-              <div className="flex flex-wrap items-center justify-end gap-1.5">
-                <BatchDecisionButton label="Takedown" primary={recommendedAction === "send"} onClick={() => onBatchAction("send")} />
-                <BatchDecisionButton label="Different product" primary={recommendedAction === "false_positive"} onClick={() => onBatchAction("false_positive")} />
-                <BatchDecisionButton label="Second hand" primary={recommendedAction === "second_hand"} onClick={() => onBatchAction("second_hand")} />
-                <BatchDecisionButton label="Mark as OK" onClick={() => onBatchAction("do_not_pursue")} />
-                <BatchDecisionButton label="Needs review" primary={recommendedAction === "review"} onClick={() => onBatchAction("review")} />
+              <div className="min-w-0 flex-1 overflow-x-auto pb-0.5">
+                <div className="flex min-w-max items-center gap-1">
+                  <BatchDecisionButton label="Takedown" primary={recommendedAction === "send"} onClick={() => onBatchAction("send")} />
+                  <BatchDecisionButton label="Different product" primary={recommendedAction === "false_positive"} onClick={() => onBatchAction("false_positive")} />
+                  <BatchDecisionButton label="Second hand" primary={recommendedAction === "second_hand"} onClick={() => onBatchAction("second_hand")} />
+                  <BatchDecisionButton label="Mark OK" onClick={() => onBatchAction("do_not_pursue")} />
+                  <BatchDecisionButton label="Allow product" onClick={() => onBatchAction("allow_product")} />
+                  <BatchDecisionButton label="Review" primary={recommendedAction === "review"} onClick={() => onBatchAction("review")} />
+                </div>
               </div>
             )}
           </div>
@@ -2771,16 +2954,14 @@ function BatchDecisionButton({
       onClick={onClick}
       aria-label={primary ? `Recommended action: ${label}` : undefined}
       data-recommended-action={primary ? "Recommended" : undefined}
-      className={`inline-flex h-8 items-center rounded-md px-2.5 text-[10px] font-semibold transition ${
+      className={`inline-flex h-8 items-center whitespace-nowrap rounded-md px-2 text-[10px] font-semibold transition ${
         primary
-          ? "bg-stone-950 text-white hover:bg-stone-800"
+          ? "gap-1.5 bg-stone-950 text-white hover:bg-stone-800"
           : "border border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:text-stone-900"
       }`}
     >
       {primary && (
-        <span className="mr-1 rounded bg-white/15 px-1 py-0.5 text-[8px] uppercase tracking-wide">
-          Recommended
-        </span>
+        <Sparkles size={11} aria-hidden="true" />
       )}
       {label}
     </button>

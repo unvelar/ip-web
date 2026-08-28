@@ -1,3 +1,5 @@
+import { computeRuntimeSettingsPatchBody } from "./computeRuntimeSettings";
+
 const API = import.meta.env.VITE_API_URL || "";
 
 let token: string | null = localStorage.getItem("auth_token");
@@ -944,6 +946,38 @@ export const ADMIN_SOURCES = [
   "anilist",
 ] as const;
 export type AdminSource = (typeof ADMIN_SOURCES)[number];
+
+export interface ComputeRuntimeSettings {
+  maxPods: number;
+  minimumPods?: number;
+  minimumPodsUntil?: string | null;
+}
+
+export interface ComputeRuntimeSettingsRecord {
+  pool: string;
+  version: number;
+  settings: ComputeRuntimeSettings;
+  updated_at: string;
+}
+
+export function getComputeRuntimeSettings() {
+  return request<ComputeRuntimeSettingsRecord>("/api/admin/compute/settings");
+}
+
+export function patchComputeRuntimeSettings(
+  expectedVersion: number,
+  settings: Pick<ComputeRuntimeSettings, "minimumPods" | "minimumPodsUntil">,
+  minimumPodsDurationHours?: 4 | 8 | 24,
+) {
+  return request<ComputeRuntimeSettingsRecord>("/api/admin/compute/settings", {
+    method: "PATCH",
+    body: JSON.stringify(computeRuntimeSettingsPatchBody(
+      expectedVersion,
+      settings,
+      minimumPodsDurationHours,
+    )),
+  });
+}
 
 export interface TenantUsageStats {
   accounts: number;

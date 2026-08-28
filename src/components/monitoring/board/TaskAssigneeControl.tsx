@@ -75,13 +75,16 @@ export function TaskAssigneeControl({
   }
 
   return (
-    <div className="mb-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex min-w-32 items-center gap-2 text-xs font-semibold text-stone-700">
-          <UserRound size={15} className="text-stone-400" aria-hidden="true" />
-          <label htmlFor={`task-assignee-${finding.result_id}`}>Assignee</label>
-        </div>
-        <div className="relative min-w-56 flex-1">
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-1.5" title="Assignee">
+        <label
+          htmlFor={`task-assignee-${finding.result_id}`}
+          className="inline-flex h-8 w-6 shrink-0 items-center justify-center text-stone-400"
+        >
+          <UserRound size={14} aria-hidden="true" />
+          <span className="sr-only">Assignee</span>
+        </label>
+        <div className="relative w-32 min-w-0 sm:w-40">
           <span className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2">
             <AssigneeAvatar
               accountId={assignment.assigned_to_account_id}
@@ -99,7 +102,7 @@ export function TaskAssigneeControl({
             disabled={disabled}
             title={disabledReason}
             aria-label="Assign task to a tenant member"
-            className="h-9 w-full appearance-none rounded-md border border-stone-300 bg-white pl-10 pr-8 text-xs font-medium text-stone-800 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
+            className="h-8 w-full appearance-none rounded-md border border-stone-200 bg-stone-50 pl-9 pr-7 text-[11px] font-semibold text-stone-700 hover:border-stone-300 hover:bg-white focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
           >
             <option value="">Unassigned</option>
             {selectedMemberMissing && assignment.assigned_to_account_id && (
@@ -118,14 +121,14 @@ export function TaskAssigneeControl({
           </select>
           <ChevronDown
             size={14}
-            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400"
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-stone-400"
             aria-hidden="true"
           />
         </div>
-        {saving && <span className="text-[11px] text-stone-400">Saving…</span>}
+        <span className="sr-only" aria-live="polite">{saving ? "Saving assignee…" : ""}</span>
       </div>
       {(error || membersError || !finding.case_id) && (
-        <p className={`mt-1.5 text-[11px] ${error ? "text-red-600" : "text-stone-500"}`}>
+        <p className={`mt-1 text-right text-[11px] ${error ? "text-red-600" : "text-stone-500"}`}>
           {error || membersError || disabledReason}
         </p>
       )}

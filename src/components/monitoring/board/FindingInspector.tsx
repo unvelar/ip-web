@@ -13,6 +13,7 @@ import type { FindingUpdateOptions } from "./FindingActions";
 import { RelatedItemsPanel } from "./RelatedItemsPanel";
 import { TaskAssigneeControl } from "./TaskAssigneeControl";
 import { compactListingTitle } from "./utils";
+import { APP_SHELL_OVERLAY_TOP } from "../../appShellLayout";
 
 export function FindingInspector({
   f,
@@ -34,6 +35,7 @@ export function FindingInspector({
   showRelatedItems = true,
   taskHref,
   navigation,
+  error,
 }: {
   f: IpReviewFinding;
   ipId?: string;
@@ -54,6 +56,7 @@ export function FindingInspector({
   showRelatedItems?: boolean;
   /** Optional escape hatch when the inspector is opened outside the Tasks page. */
   taskHref?: string;
+  error?: string | null;
   navigation?: {
     position: number;
     total: number;
@@ -113,7 +116,10 @@ export function FindingInspector({
   }, [navigation]);
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-12 z-40 pointer-events-none flex justify-end">
+    <div
+      className="fixed inset-x-0 bottom-0 z-40 pointer-events-none flex justify-end"
+      style={{ top: APP_SHELL_OVERLAY_TOP }}
+    >
       <aside
         ref={inspectorRef}
         data-finding-inspector
@@ -160,6 +166,7 @@ export function FindingInspector({
               </button>
             </div>
           )}
+          <TaskAssigneeControl finding={f} onUpdated={onUpdated} />
           {taskHref && (
             <Link
               to={taskHref}
@@ -179,7 +186,14 @@ export function FindingInspector({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
-          <TaskAssigneeControl finding={f} onUpdated={onUpdated} />
+          {error && (
+            <div
+              role="alert"
+              className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              {error}
+            </div>
+          )}
           <FindingComparison
             key={f.result_id}
             f={f}

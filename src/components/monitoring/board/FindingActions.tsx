@@ -128,10 +128,6 @@ export function FindingActions({
 
   async function handleLicense() {
     if (licensing || !ipId) return;
-    const seller = f.seller_name?.trim() || f.seller_url?.trim() || "this seller";
-    if (!window.confirm(
-      `Mark ${seller} as licensed on ${f.domain}? This dismisses current matching tasks and suppresses future findings for this seller on this website.`,
-    )) return;
     setLicensing(true);
     try {
       const result = await addIpLicense(ipId, {
@@ -175,7 +171,7 @@ export function FindingActions({
   const primaryCls =
     compact
       ? "h-8 px-2 rounded-md text-[11px] font-semibold leading-none disabled:opacity-50 transition-[background-color,border-color,color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
-      : "h-7 px-2.5 rounded-md text-xs font-medium leading-none whitespace-nowrap disabled:opacity-50 transition-[background-color,border-color,color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2";
+      : "h-7 px-2 rounded-md text-[11px] font-semibold leading-none whitespace-nowrap disabled:opacity-50 transition-[background-color,border-color,color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2";
   const recommendedPrimary = `${primaryCls} recommended-action bg-blue-600 text-white hover:bg-blue-500`;
   const emerald = `${primaryCls} bg-emerald-600 text-white hover:bg-emerald-500`;
   const ghostStone = `${primaryCls} border border-stone-200 text-stone-700 hover:bg-stone-50 bg-white`;
@@ -339,13 +335,13 @@ export function FindingActions({
           ? recommendedPrimary
           : compact
             ? "px-1.5 py-1 rounded text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-            : "h-7 px-2 rounded-md text-xs font-medium leading-none whitespace-nowrap text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+            : ghostStone
       }
       aria-label={actionAriaLabel("license", "Mark as licensed seller")}
       aria-keyshortcuts={recommendedAction === "license" ? "Enter" : undefined}
       data-recommended-action={recommendedAction === "license" ? "Recommended" : undefined}
     >
-      {licensing ? "Marking…" : "Mark as licensed seller"}
+      {licensing ? "Marking…" : compact ? "Mark as licensed seller" : "License seller"}
     </button>
   ) : null;
 
@@ -550,14 +546,10 @@ export function FindingActions({
           : "min-w-0"
       }
     >
-      <div className={compact ? "finding-action-buttons grid grid-cols-2 gap-1.5" : "finding-action-buttons flex min-w-0 max-w-full flex-wrap items-center gap-1.5"}>
+      <div className={compact ? "finding-action-buttons grid grid-cols-2 gap-1.5" : "finding-action-buttons flex min-w-0 max-w-full flex-wrap items-center gap-1"}>
         {stateNote}
         {buttons}
-        {!compact && utilityButtons && (
-          <div className="ml-1 flex min-w-0 flex-wrap items-center gap-1.5 border-l border-stone-200 pl-2">
-            {utilityButtons}
-          </div>
-        )}
+        {!compact && utilityButtons}
       </div>
       {compact && (utilityButtons || refreshBtn) && (
         <div

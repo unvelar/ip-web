@@ -25,8 +25,6 @@ import {
   type IpReviewFinding,
   type MonitoringCampaignDetail,
   type MonitoringCampaignMember,
-  type MonitoringDismissReasonCode,
-  type MonitoringReviewOutcome,
   type MonitoringCampaignSummary,
   type TakedownFeedbackAssociationScope,
 } from "../api";
@@ -42,7 +40,7 @@ import {
   summarizeBatch,
   summarizeTakedownBatch,
 } from "../components/monitoring/board/batchUtils";
-import { FindingInspector } from "../components/monitoring/board/FindingInspector";
+import { ManagedFindingInspector } from "../components/monitoring/board/ManagedFindingInspector";
 import { sellerProfilePath } from "../lib/sellers";
 import {
   compactListingTitle,
@@ -333,7 +331,6 @@ function CampaignDetailPanel({
   const [campaignBatchActive, setCampaignBatchActive] = useState(true);
   const [extraBatchFindings, setExtraBatchFindings] = useState<IpReviewFinding[]>([]);
   const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
-  const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set());
   const [dismissingCampaign, setDismissingCampaign] = useState(false);
   const [confirmAction, setConfirmAction] = useState<BatchAction | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
@@ -345,7 +342,6 @@ function CampaignDetailPanel({
       setCampaignBatchActive(true);
       setExtraBatchFindings([]);
       setActiveMemberId(null);
-      setDismissingIds(new Set());
       setBatchResult(null);
       setConfirmAction(null);
       previousCampaignId.current = campaign.id;
@@ -542,34 +538,6 @@ function CampaignDetailPanel({
     onReload();
   }
 
-  async function handleInspectorDismiss(
-    reason: MonitoringReviewOutcome,
-    reasonCode?: MonitoringDismissReasonCode,
-  ) {
-    if (!activeMember || !activeMember.ip_id) {
-      alert("Cannot update finding: finding has no associated IP.");
-      return;
-    }
-    setDismissingIds((prev) => new Set(prev).add(activeMember.result_id));
-    try {
-      await dismissIpFinding(activeMember.ip_id, activeMember.result_id, {
-        reason,
-        ...(reasonCode ? { reason_code: reasonCode } : {}),
-      });
-      setBatchResult(`${compactListingTitle(activeMember)} dismissed.`);
-      setActiveMemberId(null);
-      onReload();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to dismiss finding");
-    } finally {
-      setDismissingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(activeMember.result_id);
-        return next;
-      });
-    }
-  }
-
   function addRelatedToCampaignBatch(findings: IpReviewFinding[]) {
     const openFindings = findings.filter(isBatchSelectableFinding);
     if (openFindings.length === 0) {
@@ -614,11 +582,6 @@ function CampaignDetailPanel({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [batchProgress, campaignBatchMembers.length, campaignBatchPackagingOnly, confirmAction]);
-
-  function refreshAfterInspectorUpdate(opts?: { completed?: boolean }) {
-    if (opts?.completed) setActiveMemberId(null);
-    onReload();
-  }
 
   function updateMember(updated: MonitoringCampaignMember) {
     setCurrent((prev) => {
@@ -810,22 +773,30 @@ function CampaignDetailPanel({
         showPackagingOnly={campaignBatchPackagingOnly}
       />
       {activeMember && (
-        <FindingInspector
-          f={activeMember}
+        <ManagedFindingInspector
+          key={activeMember.result_id}
+          finding={activeMember}
           ipId={activeMember.ip_id}
           showIp
-          isDismissed={!!activeMember.dismissed_at || dismissingIds.has(activeMember.result_id)}
-          isDismissing={dismissingIds.has(activeMember.result_id) && !activeMember.dismissed_at}
           onClose={() => setActiveMemberId(null)}
-          onDismiss={(reason, reasonCode) => void handleInspectorDismiss(reason, reasonCode)}
-          onActionComplete={() => setActiveMemberId(null)}
-          onNeedsReview={() => setBatchResult(`${compactListingTitle(activeMember)} moved to review.`)}
-          onTakedownSent={() => setBatchResult(`Takedown sent for ${compactListingTitle(activeMember)}.`)}
-          onEnforced={() => setBatchResult(`${compactListingTitle(activeMember)} marked enforced.`)}
-          onLicensed={(dismissedCount) =>
-            setBatchResult(`Licensed seller. ${dismissedCount} finding${dismissedCount === 1 ? "" : "s"} dismissed.`)
-          }
-          onUpdated={refreshAfterInspectorUpdate}
+          onResolved={() => {
+            setActiveMemberId(null);
+            onReload();
+          }}
+          onDecision={(decision) => {
+            if (decision.type === "review") {
+              setBatchResult(`${compactListingTitle(activeMember)} moved to review.`);
+            } else if (decision.type === "takedown_sent") {
+              setBatchResult(`Takedown sent for ${compactListingTitle(activeMember)}.`);
+            } else if (decision.type === "enforced") {
+              setBatchResult(`${compactListingTitle(activeMember)} marked enforced.`);
+            } else if (decision.type === "licensed") {
+              setBatchResult(`Licensed seller. ${decision.dismissedCount} finding${decision.dismissedCount === 1 ? "" : "s"} dismissed.`);
+            } else if (decision.type === "dismissed") {
+              setBatchResult(`${compactListingTitle(activeMember)} dismissed.`);
+            }
+          }}
+          onFindingChange={() => onReload()}
           onAddRelatedToBatch={addRelatedToCampaignBatch}
           showRelatedItems={false}
         />

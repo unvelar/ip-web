@@ -152,17 +152,17 @@ export function MonitoringInboxView() {
     loading: onboardingLoading,
     error: onboardingError,
   } = useIpOnboardingStatus(activeIpId);
-  const urlFilters = parseFilters(params);
+  const urlFilters = useMemo(() => parseFilters(params), [params]);
   const urlIpChanged =
     Boolean(urlFilters.ip_id) &&
     Boolean(activeIpId) &&
     urlFilters.ip_id !== activeIpId;
-  const filters: InboxFilters = {
+  const filters: InboxFilters = useMemo(() => ({
     ...urlFilters,
     ip_id: activeIpId,
     product_group_id: urlIpChanged ? null : urlFilters.product_group_id,
     catalog_product_id: urlIpChanged ? null : urlFilters.catalog_product_id,
-  };
+  }), [activeIpId, urlFilters, urlIpChanged]);
   const campaignBatchId = params.get("campaign_batch");
   const [findings, setFindings] = useState<IpReviewFinding[]>([]);
   const [linkedFinding, setLinkedFinding] = useState<IpReviewFinding | null>(null);

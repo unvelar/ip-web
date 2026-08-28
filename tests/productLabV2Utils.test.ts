@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   adjacentFinding,
+  preferredAllowedProductImage,
   removeProcessedFindings,
   resetOptimisticProductStateAfterUndo,
   productNeedsAttention,
@@ -10,11 +11,44 @@ import {
   recentDecisionKind,
   recentDecisionTimestamp,
   sortRecentDecisions,
-  productShouldStayInAttention,
   recommendedBatchActionForSelection,
   reconcileProductAttentionOverview,
+  takedownDecisionReasonRequiredForSelection,
   scopeFindingsToCommercialSubgroup,
 } from "../src/pages/productLabV2Utils";
+
+describe("preferredAllowedProductImage", () => {
+  test("uses the strongest eligible gallery image", () => {
+    expect(preferredAllowedProductImage({
+      screenshot_url: "screenshot.jpg",
+      gallery_scores: [
+        { url: "weaker.jpg", similarity: 0.72 },
+        { url: "strongest.jpg", similarity: 0.94 },
+      ],
+      image_url: "fallback.jpg",
+    })).toBe("strongest.jpg");
+  });
+
+  test("skips screenshots and archived enrichment images", () => {
+    expect(preferredAllowedProductImage({
+      screenshot_url: "screenshot.jpg",
+      archived_image_urls: ["archived.jpg"],
+      gallery_scores: [
+        { url: "screenshot.jpg", similarity: 0.99 },
+        { url: "archived.jpg", similarity: 0.95 },
+      ],
+      image_urls: ["eligible.jpg"],
+    })).toBe("eligible.jpg");
+  });
+
+  test("returns null when no eligible product image exists", () => {
+    expect(preferredAllowedProductImage({
+      screenshot_url: "screenshot.jpg",
+      archived_image_urls: ["archived.jpg"],
+      image_urls: ["screenshot.jpg", "archived.jpg"],
+    })).toBeNull();
+  });
+});
 
 const decisionFinding = (overrides: Record<string, unknown> = {}) => ({
   dismissed_at: null,
@@ -147,15 +181,11 @@ describe("productNeedsAttention", () => {
     })).toBe(false);
   });
 
-  test("includes unconfirmed groups only when comparison evidence exists", () => {
-    expect(productNeedsAttention({
-      confirmation_status: "candidate",
-      triage_member_count: 2,
-    })).toBe(true);
+  test("includes candidate products with a single listing to review", () => {
     expect(productNeedsAttention({
       confirmation_status: "candidate",
       triage_member_count: 1,
-    })).toBe(false);
+    })).toBe(true);
   });
 
   test("treats a missing triage count as zero", () => {
@@ -163,22 +193,6 @@ describe("productNeedsAttention", () => {
       confirmation_status: "confirmed",
       triage_member_count: null,
     })).toBe(false);
-  });
-});
-
-describe("productShouldStayInAttention", () => {
-  test("keeps an active candidate batch visible until its final listing is processed", () => {
-    const activeCandidate = {
-      confirmation_status: "candidate",
-      triage_member_count: 1,
-    };
-
-    expect(productShouldStayInAttention(activeCandidate, true)).toBe(true);
-    expect(productShouldStayInAttention(activeCandidate, false)).toBe(false);
-    expect(productShouldStayInAttention({
-      ...activeCandidate,
-      triage_member_count: 0,
-    }, true)).toBe(false);
   });
 });
 
@@ -223,23 +237,55 @@ describe("reconcileProductAttentionOverview", () => {
 describe("recommendedBatchActionForSelection", () => {
   test("highlights second hand when the selected listing recommends resale", () => {
     expect(recommendedBatchActionForSelection([{
-      actionability: { key: "allowed_resale" },
+      suggested_review_outcome: "second_hand",
       offer_subject: "product",
     }])).toBe("second_hand");
   });
 
   test("does not highlight a misleading action for mixed recommendations", () => {
     expect(recommendedBatchActionForSelection([
-      { actionability: { key: "allowed_resale" }, offer_subject: "product" },
-      { actionability: { key: "needs_review" }, offer_subject: "product" },
+      { suggested_review_outcome: "second_hand", offer_subject: "product" },
+      { suggested_review_outcome: "none", offer_subject: "product" },
     ])).toBeNull();
   });
 
   test("does not map packaging-only resale to the second-hand action", () => {
     expect(recommendedBatchActionForSelection([{
-      actionability: { key: "allowed_resale" },
+      suggested_review_outcome: "second_hand",
       offer_subject: "packaging_only",
     }])).toBeNull();
+  });
+
+  test("uses the persisted suggestion when actionability disagrees", () => {
+    expect(recommendedBatchActionForSelection([{
+      actionability: { key: "send_takedown" },
+      suggested_review_outcome: "none",
+      offer_subject: "product",
+    }])).toBeNull();
+    expect(recommendedBatchActionForSelection([{
+      actionability: { key: "needs_review" },
+      suggested_review_outcome: "takedown",
+      offer_subject: "product",
+    }])).toBe("send");
+  });
+});
+
+describe("takedownDecisionReasonRequiredForSelection", () => {
+  test("does not require a reason when takedown matches every persisted suggestion", () => {
+    expect(takedownDecisionReasonRequiredForSelection([
+      { suggested_review_outcome: "takedown" },
+      { suggested_review_outcome: "takedown" },
+    ])).toBe(false);
+  });
+
+  test("requires a reason when any persisted suggestion differs from takedown", () => {
+    expect(takedownDecisionReasonRequiredForSelection([
+      { suggested_review_outcome: "takedown" },
+      {
+        actionability: { key: "send_takedown" },
+        suggested_review_outcome: "none",
+      },
+    ])).toBe(true);
   });
 });
 

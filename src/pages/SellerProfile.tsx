@@ -12,12 +12,9 @@ import {
   Store,
 } from "lucide-react";
 import {
-  dismissIpFinding,
   getMonitoringSellerProfile,
   isApiError,
   type IpReviewFinding,
-  type MonitoringDismissReasonCode,
-  type MonitoringReviewOutcome,
   type MonitoringSellerAvailability,
   type MonitoringSellerProfilePage,
   type MonitoringSellerSort,
@@ -30,7 +27,7 @@ import {
   formatMoney,
   tableImageUrls,
 } from "../components/monitoring/board/utils";
-import { FindingInspector } from "../components/monitoring/board/FindingInspector";
+import { ManagedFindingInspector } from "../components/monitoring/board/ManagedFindingInspector";
 import { monitoringPlatformLabel } from "../lib/platforms";
 
 const STATUS_OPTIONS: Array<{ value: MonitoringSellerStatus; label: string }> = [
@@ -70,7 +67,6 @@ export default function SellerProfile() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
-  const [dismissing, setDismissing] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const activeFindingId = params.get("finding");
   const activeFinding = profile?.findings.find((finding) => finding.result_id === activeFindingId) ?? null;
@@ -119,27 +115,6 @@ export default function SellerProfile() {
     if (resultId) next.set("finding", resultId);
     else next.delete("finding");
     setParams(next);
-  }
-
-  async function dismissFinding(
-    finding: IpReviewFinding,
-    reason: MonitoringReviewOutcome,
-    reasonCode?: MonitoringDismissReasonCode,
-  ) {
-    if (dismissing || !finding.ip_id) return;
-    setDismissing(true);
-    try {
-      await dismissIpFinding(finding.ip_id, finding.result_id, {
-        reason,
-        ...(reasonCode ? { reason_code: reasonCode } : {}),
-      });
-      setActiveFinding(null);
-      setReloadToken((current) => current + 1);
-    } catch (caught) {
-      window.alert(caught instanceof Error ? caught.message : "Unable to update this finding.");
-    } finally {
-      setDismissing(false);
-    }
   }
 
   async function loadMore() {
@@ -349,21 +324,17 @@ export default function SellerProfile() {
       </section>
 
       {activeFinding && (
-        <FindingInspector
-          f={activeFinding}
+        <ManagedFindingInspector
+          key={activeFinding.result_id}
+          finding={activeFinding}
           ipId={activeFinding.ip_id}
           showIp
-          isDismissed={!!activeFinding.dismissed_at}
-          isDismissing={dismissing}
           onClose={() => setActiveFinding(null)}
-          onDismiss={(reason, reasonCode) => void dismissFinding(activeFinding, reason, reasonCode)}
-          onActionComplete={() => setActiveFinding(null)}
-          onNeedsReview={() => undefined}
-          onTakedownSent={() => undefined}
-          onEnforced={() => undefined}
-          onLicensed={() => undefined}
-          onUpdated={() => setReloadToken((current) => current + 1)}
-          onAddRelatedToBatch={() => undefined}
+          onResolved={() => {
+            setActiveFinding(null);
+            setReloadToken((current) => current + 1);
+          }}
+          onFindingChange={() => setReloadToken((current) => current + 1)}
           showRelatedItems={false}
           taskHref={`/monitoring/tasks/${activeFinding.result_id}`}
         />

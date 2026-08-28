@@ -17,8 +17,37 @@ export type ProductLabBatchAction =
   | "send"
   | "false_positive"
   | "do_not_pursue"
+  | "allow_product"
   | "second_hand"
   | "review";
+
+type AllowProductImageFields = {
+  screenshot_url?: string | null;
+  archived_image_urls?: string[] | null;
+  gallery_scores?: Array<{ url: string; similarity: number }> | null;
+  image_urls?: string[] | null;
+  image_url?: string | null;
+};
+
+export function preferredAllowedProductImage(
+  finding: AllowProductImageFields,
+): string | null {
+  const blocked = new Set([
+    finding.screenshot_url,
+    ...(finding.archived_image_urls ?? []),
+  ].filter((url): url is string => Boolean(url)));
+  const scored = [...(finding.gallery_scores ?? [])]
+    .sort((left, right) => right.similarity - left.similarity)
+    .map((entry) => entry.url);
+  const candidates = [
+    ...scored,
+    ...(finding.image_urls ?? []),
+    finding.image_url,
+  ];
+  return candidates.find((url): url is string =>
+    typeof url === "string" && url.length > 0 && !blocked.has(url)
+  ) ?? null;
+}
 
 export type RecentDecisionKind =
   | "dismissed"
@@ -97,6 +126,13 @@ export function sortRecentDecisions<T extends RecentDecisionFields>(findings: T[
 type ProductRecommendationFields = {
   actionability?: { key: string } | null;
   offer_subject?: string | null;
+  suggested_review_outcome?:
+    | "false_positive"
+    | "do_not_pursue"
+    | "takedown"
+    | "second_hand"
+    | "none"
+    | null;
 };
 
 export type ProductCommercialSubgroupFields = {
@@ -160,14 +196,6 @@ export function productNeedsAttention(group: ProductAttentionFields) {
   return triageMemberCount > 0;
 }
 
-export function productShouldStayInAttention(
-  group: ProductAttentionFields,
-  isActiveBatch: boolean,
-) {
-  return productNeedsAttention(group) ||
-    (isActiveBatch && (group.triage_member_count ?? 0) > 0);
-}
-
 export function reconcileProductAttentionOverview<
   T extends ProductAttentionGroup,
   O extends ProductAttentionOverview<T>,
@@ -204,18 +232,24 @@ function recommendedBatchAction(
   finding: ProductRecommendationFields,
 ): ProductLabBatchAction | null {
   if (finding.offer_subject === "packaging_only") return null;
-  switch (finding.actionability?.key) {
-    case "send_takedown":
+  switch (finding.suggested_review_outcome) {
+    case "takedown":
       return "send";
-    case "allowed_resale":
+    case "second_hand":
       return "second_hand";
     case "false_positive":
       return "false_positive";
-    case "needs_review":
-      return "review";
+    case "do_not_pursue":
+      return "do_not_pursue";
     default:
       return null;
   }
+}
+
+export function takedownDecisionReasonRequiredForSelection(
+  findings: ProductRecommendationFields[],
+) {
+  return findings.some((finding) => finding.suggested_review_outcome !== "takedown");
 }
 
 export function recommendedBatchActionForSelection(

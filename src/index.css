@@ -137,12 +137,12 @@ body {
 .recommended-action::before {
   content: attr(data-recommended-action);
   position: absolute;
-  top: -10px;
+  top: -8px;
   left: 50%;
   display: inline-flex;
-  height: 13px;
+  height: 11px;
   align-items: center;
-  padding: 0 6px;
+  padding: 0 5px;
   transform: translateX(-50%);
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-bottom: 0;
@@ -150,7 +150,7 @@ body {
   background: #1d4ed8;
   color: #fff;
   box-shadow: 0 1px 2px rgba(30, 64, 175, 0.22);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1;
@@ -159,8 +159,12 @@ body {
 }
 
 .finding-action-buttons:has(.recommended-action) {
-  padding-top: 8px;
-  row-gap: 12px;
+  padding-top: 0;
+  row-gap: 4px;
+}
+
+.finding-action-buttons .recommended-action::before {
+  display: none;
 }
 
 .finding-action-utilities:has(.recommended-action) {
