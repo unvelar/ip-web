@@ -1917,10 +1917,22 @@ export function listIpMonitoringPlatforms(ipId: string) {
 /** Add a platform by bare host or full URL — the backend normalises it.
  *  `country` (ISO-2) optionally routes scrapes through a residential proxy in
  *  that country; omit/empty for the default egress. */
-export function addIpMonitoringPlatform(ipId: string, domain: string, country?: string | null) {
+export function addIpMonitoringPlatform(
+  ipId: string,
+  domain: string,
+  country?: string | null,
+  searchUrlTemplate?: string,
+) {
   return request<{ platform: MonitoredDomain; jobs_enqueued: number }>(
     `/api/ip/${ipId}/monitoring/platforms`,
-    { method: "POST", body: JSON.stringify({ domain, country: country ?? null }) },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        domain,
+        country: country ?? null,
+        ...(searchUrlTemplate ? { search_url_template: searchUrlTemplate } : {}),
+      }),
+    },
   );
 }
 

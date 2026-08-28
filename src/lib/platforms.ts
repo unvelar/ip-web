@@ -2,6 +2,7 @@ export interface MonitoringPlatformOption {
   value: string;
   label: string;
   popular?: boolean;
+  searchUrlTemplate?: string;
 }
 
 /**
@@ -17,7 +18,11 @@ export const MONITORING_PLATFORM_OPTIONS: MonitoringPlatformOption[] = [
   { value: "vinted.com", label: "Vinted", popular: true },
   { value: "alibaba.com", label: "Alibaba" },
   { value: "bol.com", label: "bol.com" },
-  { value: "google.com/shopping", label: "Google Shopping" },
+  {
+    value: "google.com/shopping",
+    label: "Google Shopping",
+    searchUrlTemplate: "https://www.google.com/search?tbm=shop&q={q}",
+  },
   { value: "marktplaats.nl", label: "Marktplaats" },
   { value: "subito.it", label: "Subito" },
   { value: "vinted.es", label: "Vinted Spain" },
@@ -27,6 +32,10 @@ export const MONITORING_PLATFORM_OPTIONS: MonitoringPlatformOption[] = [
 ];
 
 export const KNOWN_PLATFORMS = MONITORING_PLATFORM_OPTIONS.map((platform) => platform.value);
+
+export function monitoringPlatformOption(value: string): MonitoringPlatformOption | undefined {
+  return MONITORING_PLATFORM_OPTIONS.find((platform) => platform.value === value);
+}
 
 export function monitoringPlatformLabel(domain: string): string {
   return MONITORING_PLATFORM_OPTIONS.find((platform) => platform.value === domain)?.label ?? domain;
