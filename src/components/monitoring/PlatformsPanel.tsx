@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw, Search } from "lucide-react";
 import {
   listIpMonitoringPlatforms,
   addIpMonitoringPlatform,
@@ -18,6 +18,10 @@ import {
 } from "../../api";
 import { COUNTRIES, countryLabel } from "../../lib/countries";
 import { KNOWN_PLATFORMS, monitoringPlatformOption } from "../../lib/platforms";
+import {
+  sourceSetupPresentation,
+  type MonitoringSourceSetupStatus,
+} from "./platformSetupStatus";
 
 const FREQUENCY_OPTIONS: { value: MonitoringFrequency; label: string }[] = [
   { value: "daily", label: "Daily" },
@@ -367,8 +371,27 @@ export function PlatformsPanel({
         <div className="divide-y divide-stone-100 border border-stone-100 rounded-lg">
           {domainPlatforms.map((p) => {
             const label = platformLabel(p);
+            const setupStatus: MonitoringSourceSetupStatus = p.setup_status ?? (
+              p.recipe ? "ready" : "processing"
+            );
+            const setup = p.enabled ? sourceSetupPresentation(setupStatus) : null;
+            const setupBadgeClass = setup?.tone === "attention"
+              ? "border-rose-200 bg-rose-100 text-rose-700"
+              : setup?.tone === "processing"
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700";
+            const SetupIcon = setup?.tone === "attention"
+              ? AlertTriangle
+              : setup?.tone === "processing"
+                ? LoaderCircle
+                : CheckCircle2;
             return (
-              <div key={p.id} className="flex items-center gap-3 px-3 py-2 text-xs">
+              <div
+                key={p.id}
+                className={`flex items-center gap-3 px-3 py-2 text-xs ${
+                  setup?.tone === "attention" ? "bg-rose-50/60" : ""
+                }`}
+              >
                 <button
                   onClick={() => toggle(p)}
                   title={p.enabled ? "Enabled — click to pause" : "Paused — click to enable"}
@@ -378,9 +401,30 @@ export function PlatformsPanel({
                 >
                   {p.enabled ? "On" : "Off"}
                 </button>
-                <span className="font-mono text-stone-700 flex-1 min-w-0 truncate" title={label}>
-                  {label}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-stone-700 truncate" title={label}>
+                      {label}
+                    </span>
+                    {setup && (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0 ${setupBadgeClass}`}
+                        title={setup.detail}
+                      >
+                        <SetupIcon
+                          className={`size-3 ${setup.tone === "processing" ? "animate-spin" : ""}`}
+                          aria-hidden="true"
+                        />
+                        {setup.label}
+                      </span>
+                    )}
+                  </div>
+                  {setup && setup.tone !== "ready" && (
+                    <p className={setup.tone === "attention" ? "text-rose-600 mt-0.5" : "text-blue-600 mt-0.5"}>
+                      {setup.detail}
+                    </p>
+                  )}
+                </div>
                 <select
                   value={p.country ?? ""}
                   onChange={(e) => void changeCountry(p, e.target.value)}

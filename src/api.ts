@@ -163,6 +163,11 @@ export type IpOnboardingCheckStatus =
   | "missing"
   | "attention";
 
+export type MonitoringSourceSetupStatus =
+  | "ready"
+  | "processing"
+  | "retry_needed";
+
 export interface IpOnboardingStatus {
   state: IpOnboardingState;
   customer_action_required: boolean;
@@ -186,6 +191,12 @@ export interface IpOnboardingStatus {
       total: number;
       ready: number;
       pending: number;
+      processing: number;
+      retry_needed: number;
+      source_statuses: Array<{
+        source_id: string;
+        status: MonitoringSourceSetupStatus;
+      }>;
     };
     first_scan: {
       total: number;
@@ -1312,6 +1323,8 @@ export interface MonitoredDomain {
   ip_keywords: string[] | null;
   recipe: Record<string, unknown> | null;
   recipe_updated_at: string | null;
+  /** Customer-facing readiness for this source's scrape setup. */
+  setup_status?: MonitoringSourceSetupStatus;
   last_run_at: string | null;
   enabled: boolean;
   zero_yield_streak: number;
