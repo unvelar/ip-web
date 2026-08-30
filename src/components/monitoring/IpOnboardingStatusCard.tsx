@@ -1,12 +1,15 @@
 import {
   Check,
   CheckCircle2,
+  ChevronRight,
   CircleAlert,
   CircleDashed,
   Clock3,
   LoaderCircle,
   TriangleAlert,
 } from "lucide-react";
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import type {
   IpOnboardingCheckStatus,
   IpOnboardingState,
@@ -74,18 +77,63 @@ function CheckIcon({ status }: { status: IpOnboardingCheckStatus }) {
   return <CircleDashed className="mt-0.5 h-4 w-4 shrink-0 text-stone-400" aria-hidden="true" />;
 }
 
+function StatusSummaryLink({
+  href,
+  title,
+  icon,
+  containerClass,
+}: {
+  href: string;
+  title: string;
+  icon: ReactNode;
+  containerClass: string;
+}) {
+  return (
+    <Link
+      to={href}
+      className={`group flex min-h-14 items-center gap-3 rounded-xl border px-4 py-3 transition hover:-translate-y-px hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 ${containerClass}`}
+      aria-label={`${title}. View live monitoring.`}
+    >
+      <span className="shrink-0">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-500">
+          Monitoring status
+        </p>
+        <p className="truncate text-sm font-bold text-stone-900">{title}</p>
+      </div>
+      <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-stone-600 transition group-hover:text-stone-950">
+        View live scan
+        <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+      </span>
+    </Link>
+  );
+}
+
 export function IpOnboardingStatusCard({
   status,
   loading = false,
   error = "",
   compact = false,
+  summaryHref,
 }: {
   status: IpOnboardingStatus | null;
   loading?: boolean;
   error?: string;
   compact?: boolean;
+  /** Render a single clickable status row while preserving the full card elsewhere. */
+  summaryHref?: string;
 }) {
   if (!status && loading) {
+    if (summaryHref) {
+      return (
+        <StatusSummaryLink
+          href={summaryHref}
+          title="Checking monitoring status…"
+          icon={<LoaderCircle className="h-5 w-5 animate-spin text-stone-500" aria-hidden="true" />}
+          containerClass="border-stone-200 bg-white"
+        />
+      );
+    }
     return (
       <div className="rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-500 flex items-center gap-2">
         <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -96,6 +144,16 @@ export function IpOnboardingStatusCard({
 
   if (!status) {
     if (!error) return null;
+    if (summaryHref) {
+      return (
+        <StatusSummaryLink
+          href={summaryHref}
+          title="Monitoring status temporarily unavailable"
+          icon={<TriangleAlert className="h-5 w-5 text-rose-700" aria-hidden="true" />}
+          containerClass="border-rose-200 bg-rose-50/70"
+        />
+      );
+    }
     return (
       <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
         Setup status is temporarily unavailable. Refresh the page to try again.
@@ -109,6 +167,17 @@ export function IpOnboardingStatusCard({
     : status.state === "active"
       ? "Ready"
       : "No action needed";
+
+  if (summaryHref) {
+    return (
+      <StatusSummaryLink
+        href={summaryHref}
+        title={status.title}
+        icon={<StateIcon state={status.state} />}
+        containerClass={styles.container}
+      />
+    );
+  }
 
   return (
     <section

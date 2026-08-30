@@ -1,416 +1,196 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import {
-  createTrademark,
-  deleteTrademark,
-  deleteTrademarkImage,
-  getTrademark,
-  updateTrademark,
-  uploadTrademarkImages,
-  type Trademark,
-  type TrademarkImage,
-} from "../api";
-import { useJobPoller } from "../hooks/useJobPoller";
+import { Link } from "react-router-dom";
 import ImageUploader from "../components/ImageUploader";
-import { consumeCommittedKeywords, mergeKeywords } from "../lib/keywords";
+import { PlatformSelector } from "../components/monitoring/PlatformSelector";
+import { COUNTRIES, countryLabel } from "../lib/countries";
+import {
+  BrandConfirmationCard,
+  ImageGrid,
+  OnboardingProgress,
+  ProcessingStep,
+  StepPanel,
+} from "../features/onboarding/OnboardingUi";
+import { useRegistryWizard } from "../features/onboarding/useRegistryWizard";
 
-/**
- * Four-step IP-creation wizard at /ips/new.
- *
- * Step 1: Name → creates the IP, returns id.
- * Step 2: Upload assets → kicks an index job, waits for "indexed".
- * Step 3: Description (optional) + manual monitoring keywords → "Finish" saves
- *         and navigates to /ips/:id.
- *
- * Each card unlocks when the previous step is satisfied. Cancel deletes the
- * in-progress IP so we don't leave half-built rows in the registry.
- */
+/** Four focused tasks; the flow owns orchestration while reusable components own presentation. */
 export default function RegistryWizard() {
-  const navigate = useNavigate();
-  const [trademark, setTrademark] = useState<Trademark | null>(null);
-  const [images, setImages] = useState<TrademarkImage[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [indexJobId, setIndexJobId] = useState<string | null>(null);
-
-  const [name, setName] = useState("");
-  const [submittingName, setSubmittingName] = useState(false);
-
-  const [description, setDescription] = useState("");
-
-  const [keywords, setKeywords] = useState<string[]>([]);
-  const [keywordDraft, setKeywordDraft] = useState("");
-  const [finishing, setFinishing] = useState(false);
-
-  const [error, setError] = useState("");
-
-  const indexJob = useJobPoller(indexJobId);
-
-  // Refresh IP on index-job completion so image statuses flip to "indexed".
-  useEffect(() => {
-    if (!trademark) return;
-    if (indexJob?.status === "completed" || indexJob?.status === "failed") {
-      void refreshTrademark();
-      if (indexJob.status === "completed") setIndexJobId(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [indexJob?.status]);
-
-  async function refreshTrademark(): Promise<Trademark | null> {
-    if (!trademark) return null;
-    try {
-      const data = await getTrademark(trademark.id);
-      setTrademark(data.trademark);
-      setImages(data.images);
-      return data.trademark;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      return null;
-    }
-  }
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || trademark) return;
-    setSubmittingName(true);
-    setError("");
-    try {
-      const { trademark: tm } = await createTrademark(name.trim());
-      setTrademark(tm);
-      setImages([]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSubmittingName(false);
-    }
-  }
-
-  async function handleUpload(files: File[]) {
-    if (!trademark) return;
-    setUploading(true);
-    setError("");
-    try {
-      const { job_id } = await uploadTrademarkImages(trademark.id, files);
-      setIndexJobId(job_id);
-      await refreshTrademark();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function handleDeleteImage(imageId: string) {
-    if (!trademark) return;
-    try {
-      await deleteTrademarkImage(trademark.id, imageId);
-      await refreshTrademark();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  function addKeyword() {
-    const next = mergeKeywords(keywords, keywordDraft);
-    if (next.length === keywords.length) {
-      setKeywordDraft("");
-      return;
-    }
-    setKeywords(next);
-    setKeywordDraft("");
-  }
-
-  function handleKeywordDraftChange(value: string) {
-    const next = consumeCommittedKeywords(keywords, value);
-    setKeywords(next.keywords);
-    setKeywordDraft(next.draft);
-  }
-
-  function removeKeyword(idx: number) {
-    setKeywords(keywords.filter((_, i) => i !== idx));
-  }
-
-  async function handleFinish() {
-    if (!trademark) return;
-    setFinishing(true);
-    setError("");
-    try {
-      await updateTrademark(trademark.id, {
-        description: description.trim(),
-        keywords,
-      });
-      navigate(`/ips/${trademark.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setFinishing(false);
-    }
-  }
-
-  async function handleCancel() {
-    if (!trademark) {
-      navigate("/ips");
-      return;
-    }
-    if (!confirm("Cancel and delete the in-progress IP?")) return;
-    try {
-      await deleteTrademark(trademark.id);
-    } catch {
-      // ignore — user may have deleted manually
-    }
-    navigate("/ips");
-  }
-
-  const indexedCount = images.filter((i) => i.status === "indexed").length;
-  const indexing = indexJob?.status === "in_progress" || indexJob?.status === "pending";
-
-  const step1Done = trademark !== null;
-  const step2Done = step1Done && images.length > 0;
+  const flow = useRegistryWizard();
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12 space-y-6">
+    <div className="mx-auto min-h-[calc(100vh-5rem)] max-w-4xl px-6 py-8 sm:py-10">
       <div className="flex items-center justify-between">
         <div>
-          <Link to="/ips" className="text-xs text-stone-400 hover:text-stone-600">
-            ← Intellectual Properties
-          </Link>
-          <h1 className="text-2xl font-black text-stone-900 tracking-tight mt-1">
-            New IP
-          </h1>
-          <p className="mt-1 text-sm text-stone-500">
-            Three steps. Each one unlocks the next.
-          </p>
+          <Link to="/ips" className="text-xs text-stone-400 hover:text-stone-600">← Intellectual Properties</Link>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-stone-900">Set up brand monitoring</h1>
         </div>
-        <button
-          onClick={handleCancel}
-          className="text-sm text-stone-500 hover:text-red-600"
-        >
-          Cancel
-        </button>
+        <button type="button" onClick={() => void flow.handleCancel()} className="text-sm text-stone-500 hover:text-red-600">Cancel</button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-5 py-4">
-          {error}
-        </div>
+      <OnboardingProgress current={flow.currentStep} />
+
+      {flow.error && (
+        <div className="mt-6 rounded-xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-600">{flow.error}</div>
       )}
 
-      {/* --- Step 1: Name --- */}
-      <WizardCard step={1} title="Name your IP" done={step1Done} active={!step1Done}>
-        <form onSubmit={handleCreate} className="flex items-center gap-2">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Mickey Mouse"
-            disabled={step1Done}
-            className="flex-1 px-3 py-2 rounded-lg border border-stone-200 text-sm disabled:bg-stone-50"
-            autoFocus
+      <div className="mt-6">
+        {flow.transition ? (
+          <ProcessingStep
+            title={flow.transition.title}
+            detail={flow.transition.detail}
+            progress={flow.transition.kind === "monitoring" && flow.platforms.length > 0
+              ? `${flow.monitoringCompleted} of ${flow.platforms.length} websites connected`
+              : undefined}
           />
-          <button
-            type="submit"
-            disabled={step1Done || submittingName || !name.trim()}
-            className="px-4 py-2 rounded-lg bg-stone-900 text-white text-xs font-semibold disabled:opacity-50"
-          >
-            {submittingName ? "…" : step1Done ? "Created" : "Create"}
-          </button>
-        </form>
-      </WizardCard>
-
-      {/* --- Step 2: Upload assets --- */}
-      <WizardCard
-        step={2}
-        title="Upload reference assets"
-        done={step2Done}
-        active={step1Done && !step2Done}
-        disabled={!step1Done}
-      >
-        {!step1Done ? (
-          <p className="text-sm text-stone-400">Create the IP first.</p>
+        ) : flow.currentStep === 1 && flow.brandProfileLoading ? (
+          <ProcessingStep title="Getting to know your brand" detail={`Checking ${flow.onboardingDomain} for its official identity and product range.`} />
+        ) : flow.currentStep === 1 ? (
+          <BrandStep flow={flow} />
+        ) : flow.currentStep === 2 ? (
+          <ReferencesStep flow={flow} />
+        ) : flow.currentStep === 3 ? (
+          <SearchTermsStep flow={flow} />
         ) : (
-          <div className="space-y-3">
-            <ImageUploader onUpload={handleUpload} uploading={uploading} />
-            <ImageGrid images={images} onDelete={handleDeleteImage} />
-            <div className="text-xs text-stone-500">
-              {images.length === 0 && "Upload at least one image."}
-              {indexing && images.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-blue-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                  Indexing {images.length} image(s)…
-                </span>
-              )}
-              {!indexing && images.length > 0 && (
-                <span>
-                  {indexedCount}/{images.length} indexed.{" "}
-                  {indexedCount > 0 ? "Continue to the next step." : ""}
-                </span>
-              )}
-            </div>
-          </div>
+          <WebsitesStep flow={flow} />
         )}
-      </WizardCard>
-
-      {/* --- Step 3: Describe & add keywords (manual) --- */}
-      <WizardCard
-        step={3}
-        title="Describe & add monitoring keywords"
-        done={false}
-        active={step2Done}
-        disabled={!step2Done}
-      >
-        {!step2Done ? (
-          <p className="text-sm text-stone-400">Upload at least one image first.</p>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-stone-500 mb-1">
-                Description <span className="font-normal text-stone-400">(optional)</span>
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                placeholder="Free-text description — iconic traits, era, medium. Saved for reference."
-                className="w-full px-3 py-2 rounded-lg border border-stone-200 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-stone-500 mb-1">
-                Monitoring keywords
-              </label>
-              <p className="text-xs text-stone-400 mb-2">
-                Specific search terms used to find this IP on monitored sites
-                (e.g. “pikachu plush”, “mario hat”). Use precise terms — generic
-                words like “cartoon” surface noise.
-              </p>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {keywords.length === 0 && (
-                  <span className="text-xs text-stone-400">No keywords yet.</span>
-                )}
-                {keywords.map((k, idx) => (
-                  <span
-                    key={`${idx}-${k}`}
-                    className="inline-flex items-center gap-1 bg-stone-100 text-stone-800 px-3 py-1 rounded-full text-xs"
-                  >
-                    {k}
-                    <button
-                      onClick={() => removeKeyword(idx)}
-                      className="text-stone-400 hover:text-red-600 font-bold"
-                      title="Remove"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  value={keywordDraft}
-                  onChange={(e) => handleKeywordDraftChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addKeyword();
-                    }
-                  }}
-                  placeholder="pikachu plush, mario hat"
-                  className="flex-1 px-3 py-2 rounded-lg border border-stone-200 text-sm"
-                />
-                <button
-                  onClick={addKeyword}
-                  disabled={!keywordDraft.trim()}
-                  className="px-3 py-2 rounded-lg bg-stone-100 text-stone-700 text-xs font-semibold disabled:opacity-50"
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-            <button
-              onClick={handleFinish}
-              disabled={finishing || keywords.length === 0}
-              className="px-4 py-2 rounded-lg bg-stone-900 text-white text-sm font-semibold disabled:opacity-50"
-            >
-              {finishing ? "Saving…" : "Finish"}
-            </button>
-          </div>
-        )}
-      </WizardCard>
+      </div>
     </div>
   );
 }
 
-function WizardCard({
-  step,
-  title,
-  done,
-  active,
-  disabled,
-  children,
-}: {
-  step: number;
-  title: string;
-  done: boolean;
-  active: boolean;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
+type OnboardingFlow = ReturnType<typeof useRegistryWizard>;
+
+function BrandStep({ flow }: { flow: OnboardingFlow }) {
   return (
-    <section
-      className={`rounded-2xl border p-5 space-y-3 transition-colors ${
-        done
-          ? "border-emerald-200 bg-emerald-50/40"
-          : active
-            ? "border-stone-300 bg-white"
-            : "border-stone-200 bg-stone-50/60"
-      } ${disabled ? "opacity-60" : ""}`}
+    <StepPanel
+      step={1}
+      title={flow.brandProfile ? "Is this your brand?" : "What should we protect?"}
+      description={flow.brandProfile
+        ? "We used your work email to find a likely match."
+        : "Start with your main brand, logo, character, or product design."}
     >
-      <div className="flex items-center gap-3">
-        <span
-          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-            done
-              ? "bg-emerald-600 text-white"
-              : active
-                ? "bg-stone-900 text-white"
-                : "bg-stone-200 text-stone-500"
-          }`}
-        >
-          {done ? "✓" : step}
-        </span>
-        <h2 className="text-sm font-bold text-stone-900">{title}</h2>
-      </div>
-      {children}
-    </section>
+      {flow.brandProfile ? (
+        <BrandConfirmationCard
+          profile={flow.brandProfile}
+          logoFailed={flow.brandLogoFailed}
+          confirming={flow.submittingName}
+          onLogoError={() => flow.setBrandLogoFailed(true)}
+          onConfirm={() => void flow.handleConfirmBrand()}
+          onReject={() => {
+            flow.setBrandProfile(null);
+            flow.setName("");
+          }}
+        />
+      ) : (
+        <form onSubmit={flow.handleCreate} className="space-y-5">
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-stone-700">Brand or IP name</span>
+            <input
+              value={flow.name}
+              onChange={(event) => flow.setName(event.target.value)}
+              placeholder="Brand, product line, or registered design"
+              className="w-full rounded-xl border border-stone-200 px-4 py-3 text-sm outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-100"
+              autoFocus
+            />
+          </label>
+          <div className="flex justify-end">
+            <button type="submit" disabled={flow.submittingName || !flow.name.trim()} className="rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50">Continue</button>
+          </div>
+        </form>
+      )}
+    </StepPanel>
   );
 }
 
-function ImageGrid({
-  images,
-  onDelete,
-}: {
-  images: TrademarkImage[];
-  onDelete: (id: string) => void;
-}) {
-  if (images.length === 0) return null;
+function ReferencesStep({ flow }: { flow: OnboardingFlow }) {
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-      {images.map((img) => (
-        <div key={img.id} className="relative group">
-          <img
-            src={img.url}
-            alt=""
-            className="w-full aspect-square object-cover rounded-lg border border-stone-200"
-          />
-          <button
-            onClick={() => onDelete(img.id)}
-            className="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/90 text-stone-500 hover:text-red-600 hover:bg-white border border-stone-200 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Remove image"
-          >
-            ×
-          </button>
-          {img.status !== "indexed" && (
-            <span className="absolute bottom-1 left-1 text-[9px] font-semibold uppercase tracking-wider bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
-              {img.status}
-            </span>
-          )}
+    <StepPanel step={2} title="Add visual references" description="Add the logos, packaging, or product images that make your brand recognisable.">
+      <div className="space-y-4">
+        {flow.importingWebsiteReference && (
+          <div className="flex items-center gap-3 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-blue-500" />
+            We’re adding the official brand image in the background. You can upload more now.
+          </div>
+        )}
+        <ImageUploader onUpload={flow.handleUpload} uploading={flow.uploading} compact />
+        <ImageGrid images={flow.images} onDelete={(id) => void flow.handleDeleteImage(id)} />
+        <div className="flex flex-col gap-3 border-t border-stone-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-stone-500">
+            {flow.images.length === 0
+              ? "Add at least one reference to continue."
+              : `${flow.images.length} reference${flow.images.length === 1 ? "" : "s"} added. We’ll prepare ${flow.images.length === 1 ? "it" : "them"} in the background.`}
+          </p>
+          <button type="button" onClick={() => void flow.handleAssetsContinue()} disabled={flow.images.length === 0 || flow.uploading} className="shrink-0 rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50">Continue</button>
         </div>
-      ))}
+      </div>
+    </StepPanel>
+  );
+}
+
+function SearchTermsStep({ flow }: { flow: OnboardingFlow }) {
+  return (
+    <StepPanel step={3} title="Review what we’ll look for" description="We’ve drafted focused searches from your brand. Adjust anything that doesn’t feel right.">
+      <div className="space-y-4">
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-stone-700">Brand description <span className="font-normal text-stone-400">(optional)</span></label>
+          <textarea value={flow.description} onChange={(event) => flow.setDescription(event.target.value)} rows={2} placeholder="What makes this brand distinctive?" className="w-full rounded-xl border border-stone-200 px-4 py-3 text-sm outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-100" />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-semibold text-stone-700">Searches to run</label>
+          <p className="mb-3 text-xs leading-5 text-stone-500">Specific brand-and-product combinations work best. You can change these later.</p>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {flow.keywords.length === 0 && <span className="text-xs text-stone-400">No keywords yet.</span>}
+            {flow.keywords.map((keyword, index) => (
+              <span key={`${index}-${keyword}`} className="inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1.5 text-xs text-stone-800">
+                {keyword}
+                <button type="button" onClick={() => flow.removeKeyword(index)} className="font-bold text-stone-400 hover:text-red-600" title="Remove">×</button>
+              </span>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              value={flow.keywordDraft}
+              onChange={(event) => flow.handleKeywordDraftChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  flow.addKeyword();
+                }
+              }}
+              placeholder="PUMA running shoes, Mandarina Duck luggage"
+              className="min-w-0 flex-1 rounded-xl border border-stone-200 px-4 py-3 text-sm outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-100"
+            />
+            <button type="button" onClick={flow.addKeyword} disabled={!flow.keywordDraft.trim()} className="rounded-xl bg-stone-100 px-4 py-3 text-xs font-semibold text-stone-700 disabled:opacity-50">Add</button>
+          </div>
+        </div>
+        <StepActions onBack={() => flow.setCurrentStep(2)} onContinue={() => void flow.handleDetailsContinue()} continueLabel="Choose websites" disabled={flow.finishing || flow.keywords.length === 0} />
+      </div>
+    </StepPanel>
+  );
+}
+
+function WebsitesStep({ flow }: { flow: OnboardingFlow }) {
+  return (
+    <StepPanel step={4} title="Where should we look?" description={`Choose the websites where ${flow.trademark?.name ?? "your brand"} is most likely to appear.`}>
+      <div className="space-y-5">
+        <PlatformSelector value={flow.platforms} onChange={flow.setPlatforms} disabled={flow.startingMonitoring} />
+        <div className="space-y-1">
+          <label htmlFor="onboarding-monitor-country" className="block text-sm font-semibold text-stone-700">Target country <span className="font-normal text-stone-400">(optional)</span></label>
+          <select id="onboarding-monitor-country" value={flow.pickedCountry} onChange={(event) => flow.setPickedCountry(event.target.value)} disabled={flow.startingMonitoring} className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700 disabled:opacity-50">
+            <option value="">Anywhere</option>
+            {COUNTRIES.map((country) => <option key={country.code} value={country.code}>{countryLabel(country.code)}</option>)}
+          </select>
+          <p className="text-[11px] text-stone-400">Uses the selected country’s marketplace view when supported.</p>
+        </div>
+        <StepActions onBack={() => flow.setCurrentStep(3)} onContinue={() => void flow.handleStartMonitoring()} continueLabel="Start monitoring" disabled={flow.platforms.length === 0 || flow.startingMonitoring} />
+      </div>
+    </StepPanel>
+  );
+}
+
+function StepActions({ onBack, onContinue, continueLabel, disabled }: { onBack: () => void; onContinue: () => void; continueLabel: string; disabled: boolean }) {
+  return (
+    <div className="flex items-center justify-between border-t border-stone-100 pt-4">
+      <button type="button" onClick={onBack} className="rounded-lg px-2 py-2 text-sm font-semibold text-stone-500 hover:text-stone-800">Back</button>
+      <button type="button" onClick={onContinue} disabled={disabled} className="rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50">{continueLabel}</button>
     </div>
   );
 }
