@@ -2,8 +2,11 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from "
 import { useNavigate } from "react-router-dom";
 import {
   getMe,
+  isApiError,
+  devLogin,
   setToken,
   getToken,
+  setSimulatedLoginToken,
   workosLoginUrl,
   logout as apiLogout,
   getActingTenant,
@@ -14,7 +17,8 @@ import {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  signIn: () => void;
+  signIn: (options?: { localAdmin?: boolean }) => void;
+  devSignIn: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   /** Effective tenant the UI is operating on. Equals the home tenant unless an
    *  admin has switched. */
@@ -109,10 +113,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const urlParams = new URLSearchParams(window.location.search);
     const tokenFromUrl = urlParams.get("token");
     const nextFromUrl = urlParams.get("next");
+    const simulatedLogin = urlParams.get("simulated_login") === "1";
     let justSignedIn = false;
     let returnTo: string | null = null;
     if (tokenFromUrl) {
-      setToken(tokenFromUrl);
+      if (simulatedLogin) setSimulatedLoginToken(tokenFromUrl);
+      else setToken(tokenFromUrl);
       justSignedIn = true;
       // Prefer the URL param (travels with the OAuth round-trip and survives
       // any storage wipe). Fall back to sessionStorage for older clients or
@@ -121,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearStashedReturnTo();
       urlParams.delete("token");
       urlParams.delete("next");
+      urlParams.delete("simulated_login");
       const newSearch = urlParams.toString();
       const newUrl =
         window.location.pathname + (newSearch ? `?${newSearch}` : "") + window.location.hash;
@@ -144,6 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setToken(null);
           }
         })
+        .catch((error) => {
+          if (!isApiError(error, 401)) return;
+          setToken(null);
+          persistActingTenant(null);
+          setUser(null);
+        })
         .finally(() => setLoading(false));
     }
   }, [navigate]);
@@ -162,13 +175,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.assign(isSafePath(redirectTo) ? redirectTo : "/dashboard");
   }
 
-  function signIn() {
+  function signIn(options: { localAdmin?: boolean } = {}) {
     // Hand off the stashed return path so the backend can echo it through the
     // OAuth state and back to us as `?next=…`. Full-page navigation — WorkOS
     // hosted UI takes over from here.
     const returnTo = readStashedReturnTo() ?? undefined;
     const forceReauth = consumeForceReauthForNextSignIn();
-    window.location.href = workosLoginUrl(returnTo, { forceReauth });
+    window.location.href = workosLoginUrl(returnTo, {
+      forceReauth,
+      localAdmin: options.localAdmin === true,
+    });
+  }
+
+  async function devSignIn(email: string) {
+    const returnTo = readStashedReturnTo();
+    const result = await devLogin(email, { admin: true });
+    setToken(result.token);
+    clearStashedReturnTo();
+    window.location.assign(returnTo ?? "/admin/tenants");
   }
 
   async function logout() {
@@ -190,6 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         signIn,
+        devSignIn,
         logout,
         actingTenantId,
         isActingAsOther,

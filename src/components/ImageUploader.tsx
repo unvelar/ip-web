@@ -6,9 +6,10 @@ interface Props {
   accept?: string;
   multiple?: boolean;
   label?: string;
+  compact?: boolean;
 }
 
-export default function ImageUploader({ onUpload, uploading, accept = "image/*", multiple = true, label = "Drop images here or click to browse" }: Props) {
+export default function ImageUploader({ onUpload, uploading, accept = "image/*", multiple = true, label = "Drop images here or click to browse", compact = false }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -31,7 +32,7 @@ export default function ImageUploader({ onUpload, uploading, accept = "image/*",
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
-      className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${
+      className={`border-2 border-dashed rounded-2xl ${compact ? "p-5" : "p-10"} text-center cursor-pointer transition-all ${
         dragOver ? "border-red-400 bg-red-50/50" : "border-stone-200 hover:border-stone-300 hover:bg-stone-50/50"
       } ${uploading ? "opacity-50 pointer-events-none" : ""}`}
     >

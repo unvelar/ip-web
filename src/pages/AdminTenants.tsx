@@ -16,6 +16,7 @@ import {
   type Tenant,
 } from "../api";
 import { useAuth } from "../context/AuthContext";
+import { SimulatedLoginPanel } from "../features/auth/SimulatedLoginPanel";
 
 const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
 
@@ -176,6 +177,14 @@ export default function AdminTenants() {
           </button>
         </form>
       </section>
+
+      <SimulatedLoginPanel
+        onError={setError}
+        onStarted={async () => {
+          await load();
+          window.dispatchEvent(new Event(TENANTS_CHANGED_EVENT));
+        }}
+      />
 
       <section className="rounded-lg border border-stone-200 bg-white overflow-hidden">
         <div className="border-b border-stone-200 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

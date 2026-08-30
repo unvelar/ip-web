@@ -14,6 +14,7 @@ import ClearanceTasks from "./pages/ClearanceTasks";
 import IpReviewDetail from "./pages/IpReviewDetail";
 import Findings from "./pages/Findings";
 import MonitoringTasks from "./pages/MonitoringTasks";
+import MonitoringFirstScan from "./pages/MonitoringFirstScan";
 import MonitoringCampaigns from "./pages/MonitoringCampaigns";
 import ProductLab from "./pages/ProductLabV2";
 import MonitoringNew from "./pages/MonitoringNew";
@@ -155,6 +156,7 @@ export default function App() {
           {/* Canonical task/admin entrypoints for each pipeline. */}
           <Route path="/monitoring/tasks" element={<MonitoringTasks />} />
           <Route path="/monitoring/tasks/:taskId" element={<MonitoringTasks />} />
+          <Route path="/monitoring/first-scan" element={<MonitoringFirstScan />} />
           <Route path="/monitoring/campaigns" element={<MonitoringCampaigns />} />
           <Route path="/monitoring/campaigns/:campaignId" element={<MonitoringCampaigns />} />
           <Route path="/monitoring/sellers" element={<Sellers />} />

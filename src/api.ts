@@ -1,8 +1,7 @@
 import { computeRuntimeSettingsPatchBody } from "./computeRuntimeSettings";
+import { browserAuthSession } from "./features/auth/authSession";
 
 const API = import.meta.env.VITE_API_URL || "";
-
-let token: string | null = localStorage.getItem("auth_token");
 
 export class ApiError extends Error {
   status: number;
@@ -21,33 +20,35 @@ export function isApiError(error: unknown, status?: number): error is ApiError {
 }
 
 export function getToken() {
-  return token;
+  return browserAuthSession.getToken();
 }
 
 export function setToken(t: string | null) {
-  token = t;
-  if (t) localStorage.setItem("auth_token", t);
-  else localStorage.removeItem("auth_token");
+  browserAuthSession.setToken(t);
+}
+
+/** Keep an admin-launched simulated identity isolated to its new browser tab.
+ * Unlike normal auth, this never replaces the admin's shared localStorage token. */
+export function setSimulatedLoginToken(t: string) {
+  browserAuthSession.enableSimulation(t);
 }
 
 // --- Acting tenant (admin "operate as any tenant") ---
 // When an admin selects a tenant in the switcher we persist its id and send it
 // as `X-Acting-Tenant` on every request. The API honors it only for admins and
 // scopes the whole request to that tenant. Non-admins never set this.
-let actingTenant: string | null = localStorage.getItem("acting_tenant");
-
 export function getActingTenant() {
-  return actingTenant;
+  return browserAuthSession.getActingTenant();
 }
 
 export function setActingTenant(t: string | null) {
-  actingTenant = t;
-  if (t) localStorage.setItem("acting_tenant", t);
-  else localStorage.removeItem("acting_tenant");
+  browserAuthSession.setActingTenant(t);
 }
 
 /** Attach the Bearer token and (when set) the acting-tenant override. */
 function authHeaders(headers: Record<string, string>) {
+  const token = browserAuthSession.getToken();
+  const actingTenant = browserAuthSession.getActingTenant();
   if (token) headers["Authorization"] = `Bearer ${token}`;
   if (actingTenant) headers["X-Acting-Tenant"] = actingTenant;
 }
@@ -86,18 +87,50 @@ export interface TenantMember {
 /** URL the browser navigates to in order to start a WorkOS AuthKit sign-in.
  *  Optional `returnTo` is a same-origin path the backend will echo back to
  *  the SPA as `?next=…` after the OAuth round-trip succeeds. */
-export function workosLoginUrl(returnTo?: string, options: { forceReauth?: boolean } = {}): string {
+export function workosLoginUrl(
+  returnTo?: string,
+  options: { forceReauth?: boolean; localAdmin?: boolean } = {},
+): string {
   // Include the deployed base path so authentication returns to the same app
   // build instead of dropping PR previews back onto the production root.
   const frontendUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
   const params = new URLSearchParams({ origin: frontendUrl });
   if (returnTo) params.set("return_to", returnTo);
   if (options.forceReauth) params.set("prompt", "login");
+  if (options.localAdmin) params.set("local_admin", "1");
   return `${API}/api/auth/workos/start?${params.toString()}`;
 }
 
 export function getMe() {
   return request<{ user: AuthUser | null }>("/api/auth/me");
+}
+
+export interface OnboardingBrandProfile {
+  domain: string;
+  name: string;
+  logo_url: string | null;
+  summary: string;
+  categories: string[];
+  monitoring_keywords?: string[];
+  suggestion_source?: "deterministic" | "azure_model" | "local_model";
+  suggestion_model?: string | null;
+  has_online_store: boolean;
+  store_url: string;
+  reference_image_url: string | null;
+  confidence: "high" | "medium";
+}
+
+export function getOnboardingBrandProfile() {
+  return request<{ profile: OnboardingBrandProfile | null }>(
+    "/api/tenant/onboarding-profile",
+  );
+}
+
+export function devLogin(email: string, options: { admin?: boolean } = {}) {
+  return request<{ token: string; user: AuthUser }>("/api/auth/dev", {
+    method: "POST",
+    body: JSON.stringify({ email, admin: options.admin === true }),
+  });
 }
 
 export function listTenantMembers() {
@@ -342,6 +375,13 @@ export async function uploadTrademarkImages(trademarkId: string, files: File[]) 
 
 export function deleteTrademarkImage(trademarkId: string, imageId: string) {
   return request<{ ok: boolean }>(`/api/ip/${trademarkId}/images/${imageId}`, { method: "DELETE" });
+}
+
+export function importOnboardingWebsiteReference(trademarkId: string) {
+  return request<{ imported: boolean; job_id: string | null }>(
+    `/api/ip/${trademarkId}/onboarding-reference`,
+    { method: "POST" },
+  );
 }
 
 // --- Detection ---
@@ -1041,6 +1081,18 @@ export function createTenant(name: string) {
   return request<{ tenant: Tenant }>(`/api/admin/tenants`, {
     method: "POST",
     body: JSON.stringify({ name }),
+  });
+}
+
+export function simulateSuccessfulLogin(email: string) {
+  return request<{
+    tenant: Tenant;
+    user: { id: string; email: string; tenant_id: string };
+    token: string;
+    start_path: string;
+  }>(`/api/admin/tenants/simulate-login`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
   });
 }
 
@@ -1890,6 +1942,66 @@ export interface MonitorAuditRun {
 
 export async function getIpMonitoringAudit(ipId: string) {
   return request<{ runs: MonitorAuditRun[] }>(`/api/ip/${ipId}/monitoring/audit`);
+}
+
+export type IpFirstScanResultStage =
+  | "discovered"
+  | "matching"
+  | "qualifying"
+  | "enriching"
+  | "ready"
+  | "filtered"
+  | "failed";
+
+/** A stable listing row that gains metadata as the monitoring pipeline runs. */
+export interface IpFirstScanResult {
+  candidate_id: string;
+  run_id: string;
+  source_id: string;
+  source_domain: string;
+  source_name: string | null;
+  keyword: string | null;
+  run_status: string;
+  run_error: string | null;
+  score_job_status: string | null;
+  score_job_error: string | null;
+  page_url: string;
+  image_url: string | null;
+  candidate_title: string | null;
+  source_method: string | null;
+  discovered_at: string;
+  candidate_page_kind: string | null;
+  candidate_actionability: string | null;
+  qualification_confidence: number | null;
+  qualification_classifier: string | null;
+  qualified_at: string | null;
+  result_id: string | null;
+  lifecycle_state: string | null;
+  similarity_score: number | null;
+  match_method: string | null;
+  vlm_verdict: string | null;
+  vlm_confidence: number | null;
+  vlm_reasoning: string | null;
+  case_id: string | null;
+  listing_title: string | null;
+  seller_name: string | null;
+  seller_url: string | null;
+  price: string | null;
+  location: string | null;
+  description_summary: string | null;
+  image_urls: string[] | null;
+  enrichment_error: string | null;
+  ready_for_review: boolean;
+  review_status: string | null;
+  updated_at: string;
+  stage: IpFirstScanResultStage;
+}
+
+export function getIpFirstScanResults(ipId: string, signal?: AbortSignal) {
+  return request<{ results: IpFirstScanResult[] }>(
+    `/api/ip/${ipId}/monitoring/first-scan-results?limit=500`,
+    { signal },
+  );
 }
 
 export interface IpLicense {

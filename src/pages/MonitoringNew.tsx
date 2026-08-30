@@ -9,6 +9,7 @@ import {
 import { PlatformSelector } from "../components/monitoring/PlatformSelector";
 import { COUNTRIES, countryLabel } from "../lib/countries";
 import { monitoringPlatformOption } from "../lib/platforms";
+import { startMonitoringSources } from "../lib/startMonitoringSources";
 
 /**
  * Start monitoring a registered IP. Picks an IP not already watched and seeds
@@ -49,29 +50,16 @@ export default function MonitoringNew() {
     setCompleted(0);
     setErr("");
 
-    const failures: { source: string; error: string }[] = [];
-    let nextIndex = 0;
-    const workers = Array.from(
-      { length: Math.min(4, platforms.length) },
-      async () => {
-        while (nextIndex < platforms.length) {
-          const source = platforms[nextIndex++];
-          try {
-            await addIpMonitoringPlatform(
-              picked,
-              source,
-              pickedCountry || null,
-              monitoringPlatformOption(source)?.searchUrlTemplate,
-            );
-          } catch (e) {
-            failures.push({ source, error: e instanceof Error ? e.message : String(e) });
-          } finally {
-            setCompleted((current) => current + 1);
-          }
-        }
-      },
+    const { started, failures } = await startMonitoringSources(
+      platforms,
+      (source) => addIpMonitoringPlatform(
+        picked,
+        source,
+        pickedCountry || null,
+        monitoringPlatformOption(source)?.searchUrlTemplate,
+      ),
+      (nextCompleted) => setCompleted(nextCompleted),
     );
-    await Promise.all(workers);
 
     if (failures.length === 0) {
       navigate("/monitoring/settings");
@@ -79,7 +67,7 @@ export default function MonitoringNew() {
     }
 
     const failedSources = failures.map((failure) => failure.source);
-    const addedCount = platforms.length - failedSources.length;
+    const addedCount = started.length;
     setPlatforms(failedSources);
     setErr(
       `${addedCount > 0 ? `Added ${addedCount} source${addedCount === 1 ? "" : "s"}. ` : ""}` +
