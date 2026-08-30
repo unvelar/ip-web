@@ -301,7 +301,7 @@ export default function RegistryDetail() {
           </label>
           <p className="text-xs text-stone-500 mt-0.5">
             Used by monitoring to scrape linked sites. Add precise search terms
-            (e.g. “pikachu plush”) — generic words like “cartoon” surface noise.
+            (e.g. “PUMA running shoes”) — precise product terms reduce irrelevant results.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -337,7 +337,7 @@ export default function RegistryDetail() {
                 void addKeyword();
               }
             }}
-            placeholder="pikachu plush, mario hat"
+            placeholder="PUMA running shoes, Mandarina Duck luggage"
             className="flex-1 px-3 py-1.5 rounded-lg border border-stone-200 text-xs"
           />
           <button

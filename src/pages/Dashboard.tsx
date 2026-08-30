@@ -127,9 +127,9 @@ export default function Dashboard() {
     hasActiveIp: Boolean(activeIp),
     hasActivity: Boolean(selectedIp),
   });
-  const showOnboardingStatus = Boolean(activeIpId) && (
-    contentState === "no_activity" || onboardingStatus?.state !== "active"
-  );
+  // Keep the live-scan entry point available after onboarding and after the
+  // first findings arrive. Users should never need browser history to return.
+  const showMonitoringStatus = Boolean(activeIpId);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
@@ -146,11 +146,12 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {showOnboardingStatus && (
+      {showMonitoringStatus && (
         <IpOnboardingStatusCard
           status={onboardingStatus}
           loading={onboardingLoading}
           error={onboardingError}
+          summaryHref={`/monitoring/first-scan?ip_id=${encodeURIComponent(activeIpId!)}`}
         />
       )}
 
