@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Building2,
+  ExternalLink,
+  LogIn,
   Loader2,
   Plus,
   RefreshCw,
@@ -11,7 +13,9 @@ import {
 import {
   createTenant,
   deleteTenant,
+  isApiError,
   listTenants,
+  simulateSuccessfulLogin,
   tenantLabel,
   type Tenant,
 } from "../api";
@@ -29,6 +33,8 @@ export default function AdminTenants() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [simulatedEmail, setSimulatedEmail] = useState("");
+  const [simulatingLogin, setSimulatingLogin] = useState(false);
 
   useEffect(() => {
     void load();
@@ -121,6 +127,53 @@ export default function AdminTenants() {
     }
   }
 
+  async function handleSimulatedLogin(event: React.FormEvent) {
+    event.preventDefault();
+    const email = simulatedEmail.trim();
+    if (!email || simulatingLogin) return;
+
+    const simulatedWindow = window.open("about:blank", "_blank");
+    if (!simulatedWindow) {
+      setError("Allow pop-ups for Unvelar to open the simulated login tab.");
+      return;
+    }
+    simulatedWindow.opener = null;
+    renderSimulatedLoginWindow(simulatedWindow, {
+      title: "Preparing onboarding",
+      message: `Signing in as ${email} and setting up the onboarding flow.`,
+    });
+    setSimulatingLogin(true);
+    setError("");
+    try {
+      const result = await simulateSuccessfulLogin(email);
+      const launchUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
+      launchUrl.searchParams.set("simulated_login", "1");
+      launchUrl.searchParams.set("token", result.token);
+      launchUrl.searchParams.set("next", result.start_path);
+      simulatedWindow.location.replace(launchUrl.toString());
+      setSimulatedEmail(result.user.email);
+      await load();
+      window.dispatchEvent(new Event(TENANTS_CHANGED_EVENT));
+    } catch (err) {
+      const sessionExpired = isApiError(err, 401);
+      const message = sessionExpired
+        ? "Your admin session is no longer valid. Sign in again in the admin tab, then retry."
+        : "The simulated login could not be started. Return to the admin tab to review the error and retry.";
+      renderSimulatedLoginWindow(simulatedWindow, {
+        title: "Simulation could not start",
+        message,
+        error: true,
+      });
+      setError(
+        sessionExpired
+          ? "Your admin session expired. Reload this page and sign in again, then retry the simulation."
+          : err instanceof Error ? err.message : String(err),
+      );
+    } finally {
+      setSimulatingLogin(false);
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-6 py-10 space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -175,6 +228,37 @@ export default function AdminTenants() {
             Create
           </button>
         </form>
+      </section>
+
+      <section className="rounded-lg border border-red-200 bg-red-50/40 p-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 h-9 w-9 shrink-0 rounded-md bg-white text-red-700 border border-red-100 inline-flex items-center justify-center">
+            <LogIn size={17} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-black text-stone-900">Simulate successful login</h2>
+            <p className="mt-1 text-xs leading-5 text-stone-600">
+              Enter the email WorkOS would return after login. Unvelar applies the same email-domain tenant routing and opens onboarding signed in as that user. Your admin session stays active in this tab.
+            </p>
+            <form onSubmit={(event) => void handleSimulatedLogin(event)} className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="email"
+                value={simulatedEmail}
+                onChange={(event) => setSimulatedEmail(event.target.value)}
+                placeholder="demo@nike.com"
+                className="h-10 min-w-0 flex-1 rounded-md border border-stone-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
+              />
+              <button
+                type="submit"
+                disabled={!simulatedEmail.trim() || simulatingLogin}
+                className="h-10 px-4 rounded-md bg-red-700 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 hover:bg-red-800 disabled:opacity-45"
+              >
+                {simulatingLogin ? <Loader2 size={16} className="animate-spin" /> : <ExternalLink size={16} />}
+                Simulate login
+              </button>
+            </form>
+          </div>
+        </div>
       </section>
 
       <section className="rounded-lg border border-stone-200 bg-white overflow-hidden">
@@ -241,6 +325,75 @@ export default function AdminTenants() {
       </section>
     </div>
   );
+}
+
+function renderSimulatedLoginWindow(
+  target: Window,
+  state: { title: string; message: string; error?: boolean },
+) {
+  if (target.closed) return;
+  try {
+    const document = target.document;
+    document.title = state.title;
+    document.documentElement.style.background = "#faf8f5";
+    document.body.replaceChildren();
+    Object.assign(document.body.style, {
+      margin: "0",
+      minHeight: "100vh",
+      display: "grid",
+      placeItems: "center",
+      color: "#1c1917",
+      fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+    });
+
+    const card = document.createElement("main");
+    Object.assign(card.style, {
+      width: "min(440px, calc(100vw - 48px))",
+      padding: "32px",
+      border: `1px solid ${state.error ? "#fecaca" : "#e7e5e4"}`,
+      borderRadius: "20px",
+      background: "#ffffff",
+      boxShadow: "0 16px 48px rgba(28, 25, 23, 0.08)",
+      textAlign: "center",
+    });
+
+    const mark = document.createElement("div");
+    mark.textContent = state.error ? "!" : "U";
+    Object.assign(mark.style, {
+      width: "48px",
+      height: "48px",
+      margin: "0 auto 20px",
+      display: "grid",
+      placeItems: "center",
+      borderRadius: "14px",
+      background: state.error ? "#fef2f2" : "#dc2626",
+      color: state.error ? "#b91c1c" : "#ffffff",
+      fontSize: "22px",
+      fontWeight: "800",
+    });
+
+    const heading = document.createElement("h1");
+    heading.textContent = state.title;
+    Object.assign(heading.style, {
+      margin: "0",
+      fontSize: "24px",
+      lineHeight: "1.2",
+    });
+
+    const copy = document.createElement("p");
+    copy.textContent = state.message;
+    Object.assign(copy.style, {
+      margin: "12px 0 0",
+      color: "#78716c",
+      fontSize: "14px",
+      lineHeight: "1.6",
+    });
+
+    card.append(mark, heading, copy);
+    document.body.append(card);
+  } catch {
+    // The tab may have navigated or been closed while the request completed.
+  }
 }
 
 function formatDate(value: string) {
