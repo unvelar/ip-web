@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   adjacentFinding,
-  preferredAllowedProductImage,
   removeProcessedFindings,
   resetOptimisticProductStateAfterUndo,
   productNeedsAttention,
@@ -16,6 +15,7 @@ import {
   takedownDecisionReasonRequiredForSelection,
   scopeFindingsToCommercialSubgroup,
 } from "../src/pages/productLabV2Utils";
+import { preferredAllowedProductImage } from "../src/components/monitoring/board/allowedProduct";
 
 describe("preferredAllowedProductImage", () => {
   test("uses the strongest eligible gallery image", () => {
@@ -47,6 +47,10 @@ describe("preferredAllowedProductImage", () => {
       archived_image_urls: ["archived.jpg"],
       image_urls: ["screenshot.jpg", "archived.jpg"],
     })).toBeNull();
+  });
+
+  test("uses the legacy primary image as the final fallback", () => {
+    expect(preferredAllowedProductImage({ image_url: "legacy.jpg" })).toBe("legacy.jpg");
   });
 });
 

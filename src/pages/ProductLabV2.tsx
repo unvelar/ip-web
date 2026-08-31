@@ -45,6 +45,7 @@ import {
 } from "../components/monitoring/board/batchUtils";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
 import { AssigneeAvatar } from "../components/monitoring/board/AssigneeAvatar";
+import { preferredAllowedProductImage } from "../components/monitoring/board/allowedProduct";
 import {
   findingPlatformLabel,
   formatMoney,
@@ -54,7 +55,6 @@ import { useAuth } from "../context/AuthContext";
 import { ProductGroupSettings } from "./ProductClusters";
 import {
   adjacentFinding,
-  preferredAllowedProductImage,
   productNeedsAttention,
   productCommercialReviewLanes,
   productCommercialSubgroupKeyForCaseId,
