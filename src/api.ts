@@ -1002,11 +1002,16 @@ export interface ComputeRuntimeSettings {
   maxPods: number;
   minimumPods?: number;
   minimumPodsUntil?: string | null;
+  executionClass: string;
+  runtimeMode: "vllm" | "product_cuda";
+  minimumGpuMemoryGb: number;
+  gpuTypeIds: string[];
 }
 
 export interface ComputeRuntimeSettingsRecord {
   pool: string;
   version: number;
+  profile_revision: number;
   settings: ComputeRuntimeSettings;
   updated_at: string;
 }
@@ -1028,6 +1033,69 @@ export function patchComputeRuntimeSettings(
       minimumPodsDurationHours,
     )),
   });
+}
+
+export interface ComputeJobRoute {
+  job_type: string;
+  execution_class: string;
+  capacity_units: number;
+  version: number;
+  updated_at: string;
+}
+
+export interface ComputeProfileRecord extends ComputeRuntimeSettingsRecord {
+  job_types: string[];
+  status: {
+    pending_jobs: number;
+    in_progress_jobs: number;
+    desired_instances: number;
+    ready_instances: number;
+    last_decision: string | null;
+    last_reason: string | null;
+    last_error: string | null;
+  } | null;
+  workers: Array<{
+    id: string;
+    status: string;
+    execution_class: string | null;
+    runtime_mode: string | null;
+    profile_revision: number | null;
+    image_sha: string | null;
+    metadata: Record<string, unknown>;
+  }>;
+}
+
+export function getComputeProfiles() {
+  return request<{ profiles: ComputeProfileRecord[]; routes: ComputeJobRoute[] }>(
+    "/api/admin/compute/profiles",
+  );
+}
+
+export function patchComputeProfileSettings(
+  pool: string,
+  expectedVersion: number,
+  settings: Pick<ComputeRuntimeSettings, "gpuTypeIds" | "minimumGpuMemoryGb">,
+) {
+  return request<ComputeRuntimeSettingsRecord>("/api/admin/compute/settings", {
+    method: "PATCH",
+    body: JSON.stringify(
+      computeRuntimeSettingsPatchBody(expectedVersion, settings, undefined, pool),
+    ),
+  });
+}
+
+export function patchComputeJobRoute(
+  jobType: string,
+  executionClass: string,
+  expectedVersion: number,
+) {
+  return request<{ route: ComputeJobRoute }>(
+    `/api/admin/compute/routes/${encodeURIComponent(jobType)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ executionClass, expectedVersion }),
+    },
+  );
 }
 
 export interface TenantUsageStats {

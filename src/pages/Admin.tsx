@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Building2, Clock3, Inbox, Server } from "lucide-react";
+import { Building2, Clock3, Cpu, GitBranch, Inbox, Server } from "lucide-react";
 import {
   ADMIN_SOURCES,
+  getComputeProfiles,
   getComputeRuntimeSettings,
+  patchComputeJobRoute,
+  patchComputeProfileSettings,
   patchComputeRuntimeSettings,
   searchAdminIps,
   type AdminIpSummary,
+  type ComputeJobRoute,
+  type ComputeProfileRecord,
   type ComputeRuntimeSettingsRecord,
 } from "../api";
 
@@ -31,6 +36,18 @@ export default function Admin() {
   const [computeNotice, setComputeNotice] = useState("");
   const [minimumPods, setMinimumPods] = useState(1);
   const [savingWindow, setSavingWindow] = useState<number | "cancel" | null>(null);
+  const [profiles, setProfiles] = useState<ComputeProfileRecord[]>([]);
+  const [routes, setRoutes] = useState<ComputeJobRoute[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [profilesError, setProfilesError] = useState("");
+  const [profileNotice, setProfileNotice] = useState("");
+  const [profileDrafts, setProfileDrafts] = useState<Record<string, {
+    gpuTypeIds: string;
+    minimumGpuMemoryGb: string;
+  }>>({});
+  const [routeDrafts, setRouteDrafts] = useState<Record<string, string>>({});
+  const [savingProfile, setSavingProfile] = useState<string | null>(null);
+  const [savingRoute, setSavingRoute] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   const [source, setSource] = useState<string>("");
@@ -54,6 +71,34 @@ export default function Admin() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  async function loadComputeProfiles() {
+    try {
+      const response = await getComputeProfiles();
+      setProfiles(response.profiles);
+      setRoutes(response.routes);
+      setProfileDrafts(Object.fromEntries(response.profiles.map((profile) => [
+        profile.pool,
+        {
+          gpuTypeIds: profile.settings.gpuTypeIds.join(", "),
+          minimumGpuMemoryGb: String(profile.settings.minimumGpuMemoryGb),
+        },
+      ])));
+      setRouteDrafts(Object.fromEntries(response.routes.map((route) => [
+        route.job_type,
+        route.execution_class,
+      ])));
+      setProfilesError("");
+    } catch (e: unknown) {
+      setProfilesError(e instanceof Error ? e.message : "Could not load compute profiles");
+    } finally {
+      setProfilesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadComputeProfiles();
   }, []);
 
   useEffect(() => {
@@ -129,6 +174,59 @@ export default function Admin() {
       setComputeError(e instanceof Error ? e.message : "Could not end RunPod capacity window");
     } finally {
       setSavingWindow(null);
+    }
+  }
+
+  async function saveProfileHardware(profile: ComputeProfileRecord) {
+    const draft = profileDrafts[profile.pool];
+    if (!draft) return;
+    const gpuTypeIds = Array.from(new Set(
+      draft.gpuTypeIds.split(",").map((value) => value.trim()).filter(Boolean),
+    ));
+    const minimumGpuMemoryGb = Number(draft.minimumGpuMemoryGb);
+    if (gpuTypeIds.length === 0) {
+      setProfilesError(`${profile.pool} needs at least one RunPod GPU type ID.`);
+      return;
+    }
+    if (!Number.isFinite(minimumGpuMemoryGb)
+      || minimumGpuMemoryGb < 1
+      || minimumGpuMemoryGb > 200) {
+      setProfilesError("Minimum GPU memory must be between 1 and 200 GiB.");
+      return;
+    }
+    setSavingProfile(profile.pool);
+    setProfilesError("");
+    setProfileNotice("");
+    try {
+      await patchComputeProfileSettings(profile.pool, profile.version, {
+        gpuTypeIds,
+        minimumGpuMemoryGb,
+      });
+      await loadComputeProfiles();
+      setProfileNotice(`${profile.pool} hardware profile saved. Existing pods will drain.`);
+    } catch (e: unknown) {
+      setProfilesError(e instanceof Error ? e.message : "Could not update compute profile");
+    } finally {
+      setSavingProfile(null);
+    }
+  }
+
+  async function saveJobRoute(route: ComputeJobRoute) {
+    const executionClass = routeDrafts[route.job_type];
+    if (!executionClass || executionClass === route.execution_class) return;
+    setSavingRoute(route.job_type);
+    setProfilesError("");
+    setProfileNotice("");
+    try {
+      await patchComputeJobRoute(route.job_type, executionClass, route.version);
+      await loadComputeProfiles();
+      setProfileNotice(
+        `${formatJobType(route.job_type)} will use ${executionClass} for newly queued jobs.`,
+      );
+    } catch (e: unknown) {
+      setProfilesError(e instanceof Error ? e.message : "Could not update job route");
+    } finally {
+      setSavingRoute(null);
     }
   }
 
@@ -253,6 +351,196 @@ export default function Admin() {
         )}
       </section>
 
+      <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm shadow-stone-100">
+        <div className="border-b border-stone-100 px-5 py-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-700">
+              <GitBranch size={18} />
+            </div>
+            <div>
+              <h2 className="font-bold text-stone-900">GPU execution profiles</h2>
+              <p className="mt-1 max-w-2xl text-sm text-stone-500">
+                Route each managed job to a compatible worker runtime, then choose the RunPod GPU types allowed for that profile.
+              </p>
+              <p className="mt-2 text-xs font-medium text-amber-700">
+                Route edits affect newly queued jobs. Existing queued jobs keep the execution class they received when created.
+              </p>
+            </div>
+          </div>
+          {profilesError && <p className="mt-3 text-xs font-medium text-red-700" role="alert">{profilesError}</p>}
+          {profileNotice && (
+            <p className="mt-3 text-xs font-medium text-emerald-700" role="status" aria-live="polite">
+              {profileNotice}
+            </p>
+          )}
+        </div>
+
+        {profilesLoading ? (
+          <div className="flex items-center justify-center gap-2 px-5 py-12 text-sm text-stone-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-stone-300 border-t-stone-700" />
+            Loading profiles
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 border-b border-stone-100 p-5 lg:grid-cols-2">
+              {profiles.map((profile) => {
+                const draft = profileDrafts[profile.pool];
+                const status = profile.status;
+                const hasHardwareChanges = Boolean(draft) && (
+                  draft.gpuTypeIds !== profile.settings.gpuTypeIds.join(", ")
+                  || Number(draft.minimumGpuMemoryGb) !== profile.settings.minimumGpuMemoryGb
+                );
+                return (
+                  <article key={profile.pool} className="rounded-xl border border-stone-200 bg-stone-50/50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-700">
+                          <Cpu size={17} />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-stone-900">{profile.pool}</h3>
+                          <p className="text-[11px] text-stone-500">
+                            {profile.settings.executionClass} · revision {profile.profile_revision}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                        status?.last_error
+                          ? "bg-red-50 text-red-700"
+                          : status?.ready_instances
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-stone-100 text-stone-500"
+                      }`}>
+                        {status?.last_error ? "Error" : status?.ready_instances ? "Ready" : "Idle"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-3 gap-2">
+                      <ProfileMetric label="Runtime" value={profile.settings.runtimeMode === "product_cuda" ? "Product CUDA" : "vLLM"} />
+                      <ProfileMetric label="Queue" value={String(status?.pending_jobs ?? 0)} />
+                      <ProfileMetric label="Ready pods" value={String(status?.ready_instances ?? 0)} />
+                    </div>
+
+                    <div className="mt-4 grid gap-3">
+                      <label className="grid gap-1.5 text-xs font-semibold text-stone-600">
+                        Allowed RunPod GPU type IDs
+                        <textarea
+                          rows={2}
+                          value={draft?.gpuTypeIds ?? ""}
+                          onChange={(event) => setProfileDrafts((current) => ({
+                            ...current,
+                            [profile.pool]: {
+                              gpuTypeIds: event.target.value,
+                              minimumGpuMemoryGb: current[profile.pool]?.minimumGpuMemoryGb ?? "",
+                            },
+                          }))}
+                          className="resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium leading-5 text-stone-800 focus:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/10"
+                        />
+                      </label>
+                      <div className="flex items-end gap-2">
+                        <label className="grid flex-1 gap-1.5 text-xs font-semibold text-stone-600">
+                          Minimum observed VRAM
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min={1}
+                              max={200}
+                              step={1}
+                              value={draft?.minimumGpuMemoryGb ?? ""}
+                              onChange={(event) => setProfileDrafts((current) => ({
+                                ...current,
+                                [profile.pool]: {
+                                  gpuTypeIds: current[profile.pool]?.gpuTypeIds ?? "",
+                                  minimumGpuMemoryGb: event.target.value,
+                                },
+                              }))}
+                              className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 pr-12 text-sm font-semibold text-stone-900 focus:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/10"
+                            />
+                            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-stone-400">GiB</span>
+                          </div>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => void saveProfileHardware(profile)}
+                          disabled={!hasHardwareChanges || savingProfile !== null}
+                          className="h-10 rounded-lg bg-stone-900 px-3 text-xs font-bold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {savingProfile === profile.pool ? "Saving…" : "Save profile"}
+                        </button>
+                      </div>
+                    </div>
+                    {status?.last_error && <p className="mt-3 text-xs text-red-700">{status.last_error}</p>}
+                  </article>
+                );
+              })}
+            </div>
+
+            <div className="p-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-stone-900">Job routing</h3>
+                  <p className="mt-0.5 text-xs text-stone-500">Only profiles whose runtime supports the job are selectable.</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-stone-200">
+                <table className="min-w-full divide-y divide-stone-200 text-left">
+                  <thead className="bg-stone-50 text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                    <tr>
+                      <th className="px-3 py-2.5">Job</th>
+                      <th className="px-3 py-2.5">Execution class</th>
+                      <th className="px-3 py-2.5 text-right">Apply</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100 bg-white">
+                    {routes.map((route) => {
+                      const compatibleProfiles = profiles.filter((profile) => (
+                        profile.settings.runtimeMode === "product_cuda"
+                          ? route.job_type === "product_profile"
+                          : route.job_type !== "product_profile"
+                      ));
+                      const selected = routeDrafts[route.job_type] ?? route.execution_class;
+                      return (
+                        <tr key={route.job_type}>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-stone-800">
+                            {formatJobType(route.job_type)}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <select
+                              value={selected}
+                              onChange={(event) => setRouteDrafts((current) => ({
+                                ...current,
+                                [route.job_type]: event.target.value,
+                              }))}
+                              className="h-9 min-w-56 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-800 focus:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/10"
+                            >
+                              {compatibleProfiles.map((profile) => (
+                                <option key={profile.settings.executionClass} value={profile.settings.executionClass}>
+                                  {profile.pool} · {profile.settings.executionClass}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => void saveJobRoute(route)}
+                              disabled={selected === route.execution_class || savingRoute !== null}
+                              className="h-9 rounded-lg border border-stone-200 bg-white px-3 text-xs font-bold text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {savingRoute === route.job_type ? "Applying…" : "Apply"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{error}</div>
       )}
@@ -369,6 +657,22 @@ function formatRemaining(milliseconds: number) {
   const minutes = totalMinutes % 60;
   if (hours === 0) return `${minutes}m`;
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+}
+
+function formatJobType(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function ProfileMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white px-2.5 py-2">
+      <p className="text-[9px] font-bold uppercase tracking-wide text-stone-400">{label}</p>
+      <p className="mt-0.5 truncate text-xs font-bold text-stone-800" title={value}>{value}</p>
+    </div>
+  );
 }
 
 function StatusBadge({ ip }: { ip: AdminIpSummary }) {
