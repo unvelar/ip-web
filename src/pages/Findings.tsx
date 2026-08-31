@@ -474,10 +474,9 @@ export function MonitoringInboxView() {
     return out;
   }, [campaignBatchFindings, findings, linkedFinding]);
 
-  const showOnboardingStatus = Boolean(activeIpId) && (
-    onboardingStatus?.state !== "active" ||
-    (loaded && boardFindings.length === 0)
-  );
+  // Keep the live-scan entry point available after onboarding and after the
+  // first findings arrive. Match Dashboard's permanent one-line status link.
+  const showMonitoringStatus = Boolean(activeIpId);
   const emptyStateMessage = onboardingStatus?.state === "active"
     ? "Monitoring is active. There is nothing to review in this view."
     : onboardingStatus?.state === "setup_required"
@@ -555,12 +554,12 @@ export function MonitoringInboxView() {
         </div>
       )}
 
-      {showOnboardingStatus && (
+      {showMonitoringStatus && (
         <IpOnboardingStatusCard
           status={onboardingStatus}
           loading={onboardingLoading}
           error={onboardingError}
-          compact
+          summaryHref={`/monitoring/first-scan?ip_id=${encodeURIComponent(activeIpId!)}`}
         />
       )}
 
