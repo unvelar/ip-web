@@ -239,6 +239,64 @@ export interface IpOnboardingStatus {
   };
 }
 
+export interface KeywordLearningCandidate {
+  keyword: string;
+  normalized_keyword: string;
+  score: number;
+  confidence: "emerging" | "medium" | "high";
+  evidence: {
+    finding_count: number;
+    seller_count: number;
+    source_count: number;
+    first_observed_at: string;
+    last_observed_at: string;
+    sample_titles: string[];
+  };
+}
+
+export interface KeywordLearningPerformance {
+  decision_id: string;
+  keyword: string;
+  normalized_keyword: string;
+  activated_at: string | null;
+  monitoring_runs: number;
+  findings_found: number;
+  reviewed_findings: number;
+  actionable_findings: number;
+  dismissed_findings: number;
+  last_run_at: string | null;
+}
+
+export interface KeywordLearningReport {
+  state:
+    | "collecting_evidence"
+    | "suggestions_ready"
+    | "testing_keywords"
+    | "producing_results"
+    | "no_results_yet";
+  generated_at: string;
+  evidence: {
+    findings_analyzed: number;
+    seller_count: number;
+    source_count: number;
+    lookback_days: number;
+  };
+  metrics: {
+    new_suggestions: number;
+    approved_keywords: number;
+    rejected_keywords: number;
+    monitoring_runs: number;
+    findings_from_learned_keywords: number;
+    reviewed_findings: number;
+    actionable_findings: number;
+    dismissed_findings: number;
+    productive_keywords: number;
+  };
+  suggestions: KeywordLearningCandidate[];
+  approved_keywords: KeywordLearningPerformance[];
+  rejected_keywords: Array<{ keyword: string; reviewed_at: string }>;
+}
+
 export interface TrademarkSelector {
   id: string;
   name: string;
@@ -327,6 +385,26 @@ export function getTrademark(id: string) {
 
 export function getIpOnboardingStatus(id: string, signal?: AbortSignal) {
   return request<{ status: IpOnboardingStatus }>(`/api/ip/${id}/onboarding-status`, { signal });
+}
+
+export async function getKeywordLearningReport(id: string, signal?: AbortSignal) {
+  const response = await request<{ report?: KeywordLearningReport }>(
+    `/api/ip/${id}/keyword-learning`,
+    { signal },
+  );
+  if (!response.report) throw new Error("Keyword learning report is unavailable.");
+  return { report: response.report };
+}
+
+export function reviewKeywordLearningSuggestion(
+  id: string,
+  keyword: string,
+  action: "approve" | "reject",
+) {
+  return request<{ report: KeywordLearningReport; keywords: string[] }>(
+    `/api/ip/${id}/keyword-learning/review`,
+    { method: "POST", body: JSON.stringify({ keyword, action }) },
+  );
 }
 
 export function deleteTrademark(id: string) {
