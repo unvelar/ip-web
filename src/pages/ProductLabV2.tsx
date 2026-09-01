@@ -67,7 +67,6 @@ import {
   resetOptimisticProductStateAfterUndo,
   scopeFindingsToCommercialSubgroup,
   sortRecentDecisions,
-  takedownDecisionReasonRequiredForSelection,
   type ProductCommercialReviewLane,
   type ProductLabBatchAction,
 } from "./productLabV2Utils";
@@ -1503,7 +1502,7 @@ export default function ProductLab() {
   }
 
   return (
-    <div className="min-h-[calc(100dvh-3rem)] bg-[#f7f6f3] text-stone-950 lg:h-[calc(100dvh-40px)] lg:overflow-hidden">
+    <div className="min-h-[calc(100dvh_-_var(--app-shell-topbar-height)_-_var(--app-shell-banner-height))] bg-[#f7f6f3] text-stone-950 lg:h-[calc(100dvh_-_var(--app-shell-topbar-height)_-_var(--app-shell-banner-height))] lg:overflow-hidden">
       <header className="border-b border-stone-200/80 bg-[#faf9f7] px-4 py-[7px] sm:px-6 lg:px-5">
         <div className="flex min-h-[28px] items-center justify-between gap-4">
           <div className="flex min-w-0 items-baseline gap-2.5">
@@ -1912,9 +1911,6 @@ export default function ProductLab() {
           action={confirmBatchAction}
           scopeLabel={selectedGroup ? productName(selectedGroup) : undefined}
           {...partitionBatch(confirmBatchAction)}
-          decisionReasonRequired={takedownDecisionReasonRequiredForSelection(
-            partitionBatch(confirmBatchAction).eligible,
-          )}
           onCancel={() => setConfirmBatchAction(null)}
           onConfirm={(decisionReason, associationScopes) => {
             const action = confirmBatchAction;

@@ -218,12 +218,6 @@ function recommendedBatchAction(
   }
 }
 
-export function takedownDecisionReasonRequiredForSelection(
-  findings: ProductRecommendationFields[],
-) {
-  return findings.some((finding) => finding.suggested_review_outcome !== "takedown");
-}
-
 export function recommendedBatchActionForSelection(
   findings: ProductRecommendationFields[],
 ): ProductLabBatchAction | null {

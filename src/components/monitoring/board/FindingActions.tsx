@@ -605,7 +605,6 @@ export function FindingActions({
           platform={f.domain}
           sending={directSending}
           error={sendErr}
-          decisionReasonRequired={f.actionability?.key !== "send_takedown"}
           onSend={sendDirect}
           onEdit={(decisionReason, associationScopes) => {
             setComposeDecisionReason(decisionReason);

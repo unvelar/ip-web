@@ -13,7 +13,6 @@ export function BatchConfirmModal({
   scopeLabel,
   eligible,
   skipped,
-  decisionReasonRequired = true,
   onConfirm,
   onCancel,
 }: {
@@ -21,7 +20,6 @@ export function BatchConfirmModal({
   scopeLabel?: string;
   eligible: IpReviewFinding[];
   skipped: Record<string, number>;
-  decisionReasonRequired?: boolean;
   onConfirm: (
     decisionReason?: string,
     associationScopes?: TakedownFeedbackAssociationScope[],
@@ -37,10 +35,9 @@ export function BatchConfirmModal({
   const [preflightError, setPreflightError] = useState("");
   const meta = BATCH_META[action];
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
-  const reasonValid =
-    action !== "send" || !decisionReasonRequired || (
-      decisionReason.trim().length >= 3 && associationScopes.length > 0
-    );
+  const reasonValid = action !== "send" || (
+    decisionReason.trim().length >= 3 && associationScopes.length > 0
+  );
   const canConfirm = eligible.length > 0 && reasonValid;
   const platformCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -98,7 +95,7 @@ export function BatchConfirmModal({
       event.preventDefault();
       onConfirm(
         action === "send" ? decisionReason.trim() : undefined,
-        action === "send" && decisionReasonRequired ? associationScopes : undefined,
+        action === "send" ? associationScopes : undefined,
       );
     }
   }
@@ -208,7 +205,7 @@ export function BatchConfirmModal({
               )}
             </div>
           )}
-          {action === "send" && eligible.length > 0 && decisionReasonRequired && (
+          {action === "send" && eligible.length > 0 && (
             <div className="space-y-1.5">
               <label
                 htmlFor="batch-takedown-decision-reason"
@@ -249,7 +246,7 @@ export function BatchConfirmModal({
             type="button"
             onClick={() => onConfirm(
               action === "send" ? decisionReason.trim() : undefined,
-              action === "send" && decisionReasonRequired ? associationScopes : undefined,
+              action === "send" ? associationScopes : undefined,
             )}
             disabled={!canConfirm}
             className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"

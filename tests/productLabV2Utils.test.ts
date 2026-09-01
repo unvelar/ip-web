@@ -12,7 +12,6 @@ import {
   sortRecentDecisions,
   recommendedBatchActionForSelection,
   reconcileProductAttentionOverview,
-  takedownDecisionReasonRequiredForSelection,
   scopeFindingsToCommercialSubgroup,
 } from "../src/pages/productLabV2Utils";
 import { preferredAllowedProductImage } from "../src/components/monitoring/board/allowedProduct";
@@ -271,25 +270,6 @@ describe("recommendedBatchActionForSelection", () => {
       suggested_review_outcome: "takedown",
       offer_subject: "product",
     }])).toBe("send");
-  });
-});
-
-describe("takedownDecisionReasonRequiredForSelection", () => {
-  test("does not require a reason when takedown matches every persisted suggestion", () => {
-    expect(takedownDecisionReasonRequiredForSelection([
-      { suggested_review_outcome: "takedown" },
-      { suggested_review_outcome: "takedown" },
-    ])).toBe(false);
-  });
-
-  test("requires a reason when any persisted suggestion differs from takedown", () => {
-    expect(takedownDecisionReasonRequiredForSelection([
-      { suggested_review_outcome: "takedown" },
-      {
-        actionability: { key: "send_takedown" },
-        suggested_review_outcome: "none",
-      },
-    ])).toBe(true);
   });
 });
 
