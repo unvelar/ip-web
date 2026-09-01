@@ -208,6 +208,26 @@ describe("first scan progress", () => {
     expect(progress.state).toBe("connecting");
   });
 
+  test("surfaces a terminal source setup retry instead of generic connecting", () => {
+    const progress = summarizeFirstScanSource(
+      { ...source, recipe: null, setup_status: "retry_needed" },
+      [],
+      findingsPage({}),
+    );
+
+    expect(progress.state).toBe("retry_needed");
+  });
+
+  test("surfaces active source setup instead of generic connecting", () => {
+    const progress = summarizeFirstScanSource(
+      { ...source, recipe: null, setup_status: "processing" },
+      [],
+      findingsPage({}),
+    );
+
+    expect(progress.state).toBe("setup_processing");
+  });
+
   test("shows waiting after connection and before the first run", () => {
     const progress = summarizeFirstScanSource(source, [], findingsPage({}));
 

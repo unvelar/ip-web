@@ -8,9 +8,11 @@ import type {
 
 export type FirstScanSourceState =
   | "connecting"
+  | "setup_processing"
   | "scanning"
   | "preparing"
   | "ready"
+  | "retry_needed"
   | "failed"
   | "waiting";
 
@@ -131,7 +133,11 @@ export function summarizeFirstScanSource(
   const sourceConnected = source.source_type === "web_search" || Boolean(source.recipe);
 
   let state: FirstScanSourceState;
-  if (!sourceConnected) {
+  if (source.setup_status === "retry_needed") {
+    state = "retry_needed";
+  } else if (source.setup_status === "processing") {
+    state = "setup_processing";
+  } else if (!sourceConnected) {
     state = "connecting";
   } else if (running && results.length === 0) {
     state = "scanning";
@@ -161,9 +167,11 @@ export function summarizeFirstScanSource(
     filtered,
     state,
     error:
-      results.find((result) => result.stage === "failed")?.qualification_job_error ??
-      results.find((result) => result.stage === "failed")?.score_job_error ??
-      failures.find((run) => run.error)?.error ??
-      null,
+      source.setup_status === "retry_needed"
+        ? "Website setup needs a system retry"
+        : results.find((result) => result.stage === "failed")?.qualification_job_error ??
+          results.find((result) => result.stage === "failed")?.score_job_error ??
+          failures.find((run) => run.error)?.error ??
+          null,
   };
 }

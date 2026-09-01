@@ -3,10 +3,12 @@ import type { FirstScanSourceState } from "../../lib/firstScanProgress";
 
 export const SOURCE_STATE_COPY: Record<FirstScanSourceState, { label: string; detail: string }> = {
   connecting: { label: "Connecting", detail: "Preparing this website" },
+  setup_processing: { label: "Preparing", detail: "Website setup is still running" },
   waiting: { label: "Queued", detail: "Waiting for its first search" },
   scanning: { label: "Scanning", detail: "Looking for listings now" },
   preparing: { label: "Processing", detail: "Filling listing metadata" },
   ready: { label: "Ready", detail: "Latest results processed" },
+  retry_needed: { label: "Retry needed", detail: "Website setup could not finish" },
   failed: { label: "Needs attention", detail: "A real job error was reported" },
 };
 

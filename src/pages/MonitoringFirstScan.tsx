@@ -15,6 +15,7 @@ import {
   PageMessage,
   SummaryMetric,
 } from "../features/firstScan/FirstScanResults";
+import { FirstScanSetupNotice } from "../features/firstScan/FirstScanSetupNotice";
 import { formatUpdateTime } from "../features/firstScan/presentation";
 import { useFirstScanFeed } from "../features/firstScan/useFirstScanFeed";
 
@@ -38,6 +39,10 @@ export default function MonitoringFirstScan() {
   }
 
   const { snapshot, totals, ipId } = feed;
+  const retrySourceCount = snapshot.sources.filter((source) => source.state === "retry_needed").length;
+  const preparingSourceCount = snapshot.sources.filter(
+    (source) => source.state === "setup_processing" || source.state === "connecting",
+  ).length;
   return (
     <div className="mx-auto max-w-[1500px] px-4 py-4 sm:px-6">
       <header className="flex flex-col gap-3 border-b border-stone-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
@@ -69,8 +74,25 @@ export default function MonitoringFirstScan() {
         </div>
       )}
 
+      <FirstScanSetupNotice
+        onboarding={snapshot.onboarding}
+        sources={snapshot.sources}
+        ipId={ipId}
+      />
+
       <section className="mt-4 grid overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:grid-cols-4">
-        <SummaryMetric label="Websites" value={`${totals.connected}/${totals.websites}`} detail="connected" icon={<Globe2 className="h-4 w-4" />} />
+        <SummaryMetric
+          label="Websites"
+          value={`${totals.connected}/${totals.websites}`}
+          detail={retrySourceCount > 0
+            ? `${retrySourceCount} needs retry`
+            : preparingSourceCount > 0
+              ? `${preparingSourceCount} preparing`
+              : "connected"}
+          icon={<Globe2 className="h-4 w-4" />}
+          attention={retrySourceCount > 0}
+          warning={retrySourceCount === 0 && preparingSourceCount > 0}
+        />
         <SummaryMetric label="Listings found" value={totals.discovered} detail="stable rows" icon={<Search className="h-4 w-4" />} />
         <SummaryMetric label="Processing" value={totals.processing} detail="metadata filling" icon={<LoaderCircle className="h-4 w-4" />} />
         <SummaryMetric label="Ready for triage" value={totals.ready} detail={`${totals.filtered} screened out`} icon={<Check className="h-4 w-4" />} accent={totals.ready > 0} />

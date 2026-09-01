@@ -166,6 +166,16 @@ export function PlatformsPanel({
     void loadPlatforms();
   }, [loadPlatforms]);
 
+  useEffect(() => {
+    if (platforms.length === 0) return;
+    const targetId = window.location.hash.slice(1);
+    if (!targetId.startsWith("monitoring-source-")) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [platforms]);
+
   async function add() {
     const d = newDomain.trim();
     if (!d || adding) return;
@@ -388,7 +398,8 @@ export function PlatformsPanel({
             return (
               <div
                 key={p.id}
-                className={`flex items-center gap-3 px-3 py-2 text-xs ${
+                id={`monitoring-source-${p.id}`}
+                className={`flex scroll-mt-24 items-center gap-3 px-3 py-2 text-xs target:ring-2 target:ring-inset target:ring-amber-400 ${
                   setup?.tone === "attention" ? "bg-rose-50/60" : ""
                 }`}
               >

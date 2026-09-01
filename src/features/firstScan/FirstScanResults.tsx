@@ -222,11 +222,15 @@ function MetadataValue({ value, icon, pending, strong = false }: { value: string
 }
 
 function SourceFilterButton({ active, onClick, name, count, state }: { active: boolean; onClick: () => void; name: string; count: number; state?: FirstScanSourceState }) {
+  const needsRetry = state === "retry_needed";
+  const setupProcessing = state === "setup_processing";
   return (
-    <button type="button" onClick={onClick} className={`flex shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${active ? "border-stone-300 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"}`}>
-      {state && <span className={`h-1.5 w-1.5 rounded-full ${state === "failed" ? "bg-red-500" : state === "ready" ? "bg-emerald-500" : "bg-blue-500"}`} />}
+    <button type="button" onClick={onClick} className={`flex shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${active ? "border-stone-300 bg-stone-900 text-white" : needsRetry ? "border-rose-200 bg-rose-50 text-rose-800 hover:border-rose-300" : setupProcessing ? "border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"}`}>
+      {state && <span className={`h-1.5 w-1.5 rounded-full ${state === "failed" || needsRetry ? "bg-red-500" : setupProcessing ? "bg-amber-500" : state === "ready" ? "bg-emerald-500" : "bg-blue-500"}`} />}
       <span className="font-semibold">{name}</span>
-      <span className={`rounded px-1.5 py-0.5 text-[10px] tabular-nums ${active ? "bg-white/15 text-white" : "bg-stone-100 text-stone-500"}`}>{count}</span>
+      <span className={`rounded px-1.5 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : needsRetry ? "bg-rose-100 font-semibold text-rose-700" : setupProcessing ? "bg-amber-100 font-semibold text-amber-800" : "bg-stone-100 tabular-nums text-stone-500"}`}>
+        {needsRetry ? "Retry needed" : setupProcessing ? "Preparing" : count}
+      </span>
     </button>
   );
 }
@@ -257,11 +261,11 @@ function ResultEmptyState({ hasAnyResults, sources }: { hasAnyResults: boolean; 
   );
 }
 
-export function SummaryMetric({ label, value, detail, icon, accent = false }: { label: string; value: number | string; detail: string; icon: ReactNode; accent?: boolean }) {
+export function SummaryMetric({ label, value, detail, icon, accent = false, attention = false, warning = false }: { label: string; value: number | string; detail: string; icon: ReactNode; accent?: boolean; attention?: boolean; warning?: boolean }) {
   return (
-    <div className={`border-b border-stone-100 px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 ${accent ? "bg-emerald-50/50" : ""}`}>
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-500"><span className={accent ? "text-emerald-600" : "text-stone-400"}>{icon}</span>{label}</div>
-      <div className="mt-0.5 flex items-baseline gap-2"><span className={`text-xl font-black tabular-nums ${accent ? "text-emerald-700" : "text-stone-950"}`}>{value}</span><span className="text-[10px] text-stone-400">{detail}</span></div>
+    <div className={`border-b border-stone-100 px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 ${accent ? "bg-emerald-50/50" : attention ? "bg-rose-50/70" : warning ? "bg-amber-50/70" : ""}`}>
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-500"><span className={accent ? "text-emerald-600" : attention ? "text-rose-600" : warning ? "text-amber-600" : "text-stone-400"}>{icon}</span>{label}</div>
+      <div className="mt-0.5 flex items-baseline gap-2"><span className={`text-xl font-black tabular-nums ${accent ? "text-emerald-700" : attention ? "text-rose-800" : warning ? "text-amber-900" : "text-stone-950"}`}>{value}</span><span className={`text-[10px] ${attention ? "font-semibold text-rose-600" : warning ? "font-semibold text-amber-700" : "text-stone-400"}`}>{detail}</span></div>
     </div>
   );
 }

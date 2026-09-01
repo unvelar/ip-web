@@ -357,12 +357,14 @@ export default function RegistryDetail() {
       <AllowedProductImagesSection ipId={ip.id} />
 
       {/* Monitoring — watched platforms + findings board */}
-      <MonitoringSection
-        ip={ip}
-        onFrequencyChanged={(monitoring_frequency) =>
-          setIp((current) => (current ? { ...current, monitoring_frequency } : current))
-        }
-      />
+      <div id="monitoring" className="scroll-mt-20">
+        <MonitoringSection
+          ip={ip}
+          onFrequencyChanged={(monitoring_frequency) =>
+            setIp((current) => (current ? { ...current, monitoring_frequency } : current))
+          }
+        />
+      </div>
 
       {/* Takedown signer — per-IP rights-holder + signatory details */}
       <IpTakedownSigner ipId={ip.id} />
