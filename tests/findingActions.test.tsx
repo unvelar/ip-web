@@ -133,6 +133,17 @@ afterEach(() => {
 });
 
 describe("FindingActions allow product", () => {
+  test("requires a reviewer reason even when takedown matches the recommendation", () => {
+    const { container } = renderActions({
+      item: finding({ actionability: { key: "send_takedown", reason: "Recommended" } }),
+    });
+
+    act(() => button(container, "TTakedown").click());
+
+    expect(container.querySelector("#takedown-decision-reason")).not.toBeNull();
+    expect(button(container, "Takedown").disabled).toBe(true);
+  });
+
   test("submits the strongest eligible image and locks competing decisions", async () => {
     let resolveRequest!: (value: { ok: boolean; queued: boolean; job_id: string }) => void;
     allowProductImage.mockImplementationOnce(() => new Promise((resolve) => {
