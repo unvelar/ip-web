@@ -3,6 +3,7 @@ import { ComposeModal, ConfirmSendModal } from "../../TakedownPanel";
 import {
   addIpLicense,
   approveTakedown,
+  allowIpFindingProductImage,
   DEFAULT_TAKEDOWN_FEEDBACK_SCOPES,
   markIpFindingNeedsReview,
   markIpFindingEnforced,
@@ -17,6 +18,7 @@ import {
   type TakedownFeedbackAssociationScope,
 } from "../../../api";
 import { ButtonWithShortcut } from "./ButtonWithShortcut";
+import { preferredAllowedProductImage } from "./allowedProduct";
 import { legalQueueReasonLabel } from "./utils";
 
 export type FindingUpdateOptions = {
@@ -72,6 +74,7 @@ export function FindingActions({
   const [directSending, setDirectSending] = useState(false);
   const [sendErr, setSendErr] = useState("");
   const sellerLicensed = !!f.licensed_seller || f.dismissal_reason === "licensed";
+  const actionPending = isDismissing || busy !== null || licensing || directSending;
 
   // Resolve the reviewer decision through the automatic/manual routing API.
   // Automatic routes submit immediately; everything else enters the legal queue.
@@ -79,7 +82,7 @@ export function FindingActions({
     decisionReason: string,
     associationScopes: TakedownFeedbackAssociationScope[],
   ) {
-    if (!f.case_id) return;
+    if (!f.case_id || actionPending) return;
     setDirectSending(true);
     setSendErr("");
     try {
@@ -102,6 +105,7 @@ export function FindingActions({
   }
 
   function beginTakedown() {
+    if (actionPending) return;
     setSendErr("");
     setComposeDecisionReason("");
     setComposeAssociationScopes([...DEFAULT_TAKEDOWN_FEEDBACK_SCOPES]);
@@ -113,7 +117,7 @@ export function FindingActions({
     fn: () => Promise<unknown>,
     opts: { completeCurrent?: boolean } = {},
   ) {
-    if (busy) return;
+    if (actionPending) return;
     setBusy(label);
     try {
       await fn();
@@ -127,7 +131,7 @@ export function FindingActions({
   }
 
   async function handleLicense() {
-    if (licensing || !ipId) return;
+    if (actionPending || !ipId) return;
     setLicensing(true);
     try {
       const result = await addIpLicense(ipId, {
@@ -208,7 +212,7 @@ export function FindingActions({
       key={key}
       type="button"
       onClick={() => onDismiss(reason, reasonCode)}
-      disabled={isDismissing}
+      disabled={actionPending}
       title={actionTitle(action, title)}
       className={actionClass(action)}
       aria-label={actionAriaLabel(action, label)}
@@ -253,6 +257,33 @@ export function FindingActions({
     "Shortcut 2: a likely genuine used or second-hand item",
     "2",
   );
+  const allowedProductImage = preferredAllowedProductImage(f);
+  const allowProductBtn = (
+    <button
+      key="allow-product"
+      type="button"
+      disabled={!ipId || !allowedProductImage || actionPending}
+      title={
+        !ipId
+          ? "Cannot allow product: finding has no associated IP"
+          : !allowedProductImage
+            ? "No eligible product image is available"
+            : "Save the strongest product image and ignore future visually similar findings for this IP"
+      }
+      onClick={() =>
+        ipId && allowedProductImage && run(
+          "allow-product",
+          () => allowIpFindingProductImage(ipId, f.result_id, {
+            image_url: allowedProductImage,
+          }),
+          { completeCurrent: true },
+        )
+      }
+      className={ghostStone}
+    >
+      {busy === "allow-product" ? "Allowing…" : "Allow product"}
+    </button>
+  );
   const packagingOnlyBtn = outcomeButton(
     "packaging-only",
     "packaging_only",
@@ -266,7 +297,7 @@ export function FindingActions({
     <button
       key="review"
       type="button"
-      disabled={!ipId || !f.case_id || busy === "review"}
+      disabled={!ipId || !f.case_id || actionPending}
       title={actionTitle(
         "review",
         !f.case_id
@@ -309,7 +340,7 @@ export function FindingActions({
     <button
       key="refresh"
       type="button"
-      disabled={busy === "refresh"}
+      disabled={actionPending}
       title="Re-scrape the listing and re-run enrichment + bbox localization"
       onClick={() =>
         run("refresh", () => reenrichIpFinding(ipId, f.result_id))
@@ -325,7 +356,7 @@ export function FindingActions({
       key="license"
       type="button"
       onClick={handleLicense}
-      disabled={licensing}
+      disabled={actionPending}
       title={actionTitle(
         "license",
         "Mark this seller as licensed on this domain — dismisses this and future findings from them",
@@ -350,7 +381,7 @@ export function FindingActions({
       <button
         key="reopen"
         type="button"
-        disabled={!ipId || busy === "reopen"}
+        disabled={!ipId || actionPending}
         onClick={() =>
           ipId &&
           run("reopen", () => reopenIpFinding(ipId, f.result_id))
@@ -388,10 +419,11 @@ export function FindingActions({
         {secondHandBtn}
         {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
+        {allowProductBtn}
         {needsReviewBtn}
         <button
           type="button"
-          disabled={!f.case_id || directSending}
+          disabled={!f.case_id || actionPending}
           title={actionTitle(
             "send_takedown",
             !f.case_id
@@ -420,9 +452,10 @@ export function FindingActions({
         {secondHandBtn}
         {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
+        {allowProductBtn}
         <button
           type="button"
-          disabled={!f.case_id || directSending}
+          disabled={!f.case_id || actionPending}
           title={actionTitle(
             "send_takedown",
             !f.case_id
@@ -456,9 +489,10 @@ export function FindingActions({
         {secondHandBtn}
         {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
+        {allowProductBtn}
         <button
           type="button"
-          disabled={!f.case_id || busy === "submit"}
+          disabled={!f.case_id || actionPending}
           onClick={() => {
             if (
               !f.case_id ||
@@ -487,7 +521,7 @@ export function FindingActions({
         {ipId && (
           <button
             type="button"
-            disabled={busy === "packet"}
+            disabled={actionPending}
             onClick={() => run("packet", () => openIpFindingTakedownPacket(ipId, f.result_id))}
             className={ghostStone}
           >
@@ -511,7 +545,7 @@ export function FindingActions({
         {dontPursueBtn}
         <button
           type="button"
-          disabled={!ipId || busy === "enforce"}
+          disabled={!ipId || actionPending}
           onClick={() =>
             ipId && window.confirm(
               "Mark this task as enforced? Use this only after the listing has been removed or enforcement is confirmed.",
