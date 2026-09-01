@@ -1,4 +1,6 @@
 export interface MinimumCapacitySettingsPatch {
+  maxPods?: number;
+  jobsPerPodTarget?: number;
   minimumPods?: number;
   minimumPodsUntil?: string | null;
   gpuTypeIds?: string[];

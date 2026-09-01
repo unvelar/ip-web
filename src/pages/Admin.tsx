@@ -35,7 +35,10 @@ export default function Admin() {
   const [computeError, setComputeError] = useState("");
   const [computeNotice, setComputeNotice] = useState("");
   const [minimumPods, setMinimumPods] = useState(1);
+  const [maxPodsDraft, setMaxPodsDraft] = useState("");
+  const [jobsPerPodTargetDraft, setJobsPerPodTargetDraft] = useState("");
   const [savingWindow, setSavingWindow] = useState<number | "cancel" | null>(null);
+  const [savingAutoscaling, setSavingAutoscaling] = useState(false);
   const [profiles, setProfiles] = useState<ComputeProfileRecord[]>([]);
   const [routes, setRoutes] = useState<ComputeJobRoute[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
@@ -61,6 +64,8 @@ export default function Admin() {
         if (cancelled) return;
         setCompute(record);
         setMinimumPods(Math.max(1, record.settings.minimumPods ?? 1));
+        setMaxPodsDraft(String(record.settings.maxPods));
+        setJobsPerPodTargetDraft(String(record.settings.jobsPerPodTarget));
       })
       .catch((e: unknown) => {
         if (!cancelled) setComputeError(e instanceof Error ? e.message : "Could not load RunPod settings");
@@ -132,9 +137,51 @@ export default function Admin() {
   const minimumUntil = compute?.settings.minimumPodsUntil ?? null;
   const configuredMinimum = compute?.settings.minimumPods ?? 0;
   const maximumPods = compute?.settings.maxPods ?? 0;
+  const scalingDirty = compute !== null
+    && (Number(maxPodsDraft) !== compute.settings.maxPods
+      || Number(jobsPerPodTargetDraft) !== compute.settings.jobsPerPodTarget);
   const minimumActive = configuredMinimum > 0
     && minimumUntil !== null
     && Date.parse(minimumUntil) > now;
+
+  async function saveAutoscalingLimits() {
+    if (!compute) return;
+    const maxPods = Number(maxPodsDraft);
+    const jobsPerPodTarget = Number(jobsPerPodTargetDraft);
+    if (!Number.isInteger(maxPods) || maxPods < 0 || maxPods > 20) {
+      setComputeError("Maximum pods must be a whole number between 0 and 20.");
+      return;
+    }
+    if (!Number.isInteger(jobsPerPodTarget)
+      || jobsPerPodTarget < 1
+      || jobsPerPodTarget > 1_000_000) {
+      setComputeError("Additional pod target must be a whole number between 1 and 1,000,000.");
+      return;
+    }
+    if ((compute.settings.minimumPods ?? 0) > maxPods) {
+      setComputeError("Maximum pods cannot be lower than the active minimum-pod setting.");
+      return;
+    }
+    setSavingAutoscaling(true);
+    setComputeError("");
+    setComputeNotice("");
+    try {
+      const updated = await patchComputeRuntimeSettings(compute.version, {
+        maxPods,
+        jobsPerPodTarget,
+      });
+      setCompute(updated);
+      setMaxPodsDraft(String(updated.settings.maxPods));
+      setJobsPerPodTargetDraft(String(updated.settings.jobsPerPodTarget));
+      setComputeNotice(
+        `Autoscaling saved: maximum ${maxPods} pods, one additional pod per ${jobsPerPodTarget} queued capacity units.`,
+      );
+    } catch (e: unknown) {
+      setComputeError(e instanceof Error ? e.message : "Could not update RunPod autoscaling");
+    } finally {
+      setSavingAutoscaling(false);
+    }
+  }
 
   async function saveMinimumWindow(durationHours: 4 | 8 | 24) {
     if (!compute) return;
@@ -307,7 +354,7 @@ export default function Admin() {
               <select
                 value={minimumPods}
                 onChange={(event) => setMinimumPods(Number(event.target.value))}
-                disabled={computeLoading || !compute || maximumPods < 1 || savingWindow !== null}
+                disabled={computeLoading || !compute || maximumPods < 1 || savingWindow !== null || savingAutoscaling}
                 className="h-11 min-w-28 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 disabled:opacity-50"
               >
                 {maximumPods < 1
@@ -324,7 +371,7 @@ export default function Admin() {
                   type="button"
                   onClick={() => void saveMinimumWindow(hours)}
                   aria-label={`Keep at least ${minimumPods} pod${minimumPods === 1 ? "" : "s"} warm for ${hours} hours`}
-                  disabled={computeLoading || !compute || maximumPods < 1 || savingWindow !== null}
+                  disabled={computeLoading || !compute || maximumPods < 1 || savingWindow !== null || savingAutoscaling}
                   className="h-11 rounded-lg bg-stone-900 px-3 text-xs font-bold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {savingWindow === hours ? "Saving…" : `${hours}h`}
@@ -334,12 +381,64 @@ export default function Admin() {
                 <button
                   type="button"
                   onClick={() => void cancelMinimumWindow()}
-                  disabled={savingWindow !== null}
+                  disabled={savingWindow !== null || savingAutoscaling}
                   className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-xs font-bold text-stone-600 hover:bg-stone-50 disabled:opacity-50"
                 >
                   {savingWindow === "cancel" ? "Ending…" : "End early"}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 border-t border-stone-100 pt-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-stone-900">Queue scaling</h3>
+              <p className="mt-1 max-w-xl text-xs text-stone-500">
+                Cap the fleet, then add one pod for each target-sized band above the first-pod threshold.
+              </p>
+              {compute && (
+                <p className="mt-2 text-xs font-medium text-stone-600">
+                  First pod threshold: more than {compute.settings.firstPodQueueThreshold.toLocaleString()} queued capacity units.
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className="grid gap-1 text-xs font-semibold text-stone-600">
+                Maximum pods
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={1}
+                  value={maxPodsDraft}
+                  onChange={(event) => setMaxPodsDraft(event.target.value)}
+                  disabled={computeLoading || !compute || savingAutoscaling || savingWindow !== null}
+                  className="h-11 w-32 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 disabled:opacity-50"
+                />
+              </label>
+              <label className="grid gap-1 text-xs font-semibold text-stone-600">
+                Additional pod target
+                <input
+                  type="number"
+                  min={1}
+                  max={1_000_000}
+                  step={1}
+                  value={jobsPerPodTargetDraft}
+                  onChange={(event) => setJobsPerPodTargetDraft(event.target.value)}
+                  disabled={computeLoading || !compute || savingAutoscaling || savingWindow !== null}
+                  className="h-11 w-44 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 disabled:opacity-50"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void saveAutoscalingLimits()}
+                disabled={computeLoading || !compute || !scalingDirty || savingAutoscaling || savingWindow !== null}
+                className="h-11 rounded-lg bg-stone-900 px-4 text-xs font-bold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingAutoscaling ? "Saving…" : "Save scaling"}
+              </button>
             </div>
           </div>
         </div>

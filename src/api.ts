@@ -1000,6 +1000,8 @@ export type AdminSource = (typeof ADMIN_SOURCES)[number];
 
 export interface ComputeRuntimeSettings {
   maxPods: number;
+  jobsPerPodTarget: number;
+  firstPodQueueThreshold: number;
   minimumPods?: number;
   minimumPodsUntil?: string | null;
   executionClass: string;
@@ -1022,7 +1024,10 @@ export function getComputeRuntimeSettings() {
 
 export function patchComputeRuntimeSettings(
   expectedVersion: number,
-  settings: Pick<ComputeRuntimeSettings, "minimumPods" | "minimumPodsUntil">,
+  settings: Partial<Pick<
+    ComputeRuntimeSettings,
+    "maxPods" | "jobsPerPodTarget" | "minimumPods" | "minimumPodsUntil"
+  >>,
   minimumPodsDurationHours?: 4 | 8 | 24,
 ) {
   return request<ComputeRuntimeSettingsRecord>("/api/admin/compute/settings", {
