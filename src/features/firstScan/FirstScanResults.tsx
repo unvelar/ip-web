@@ -22,6 +22,7 @@ import {
 } from "../../lib/firstScanProgress";
 import type { ResultFilter } from "./useFirstScanFeed";
 import {
+  ACCESS_BLOCKED_RESULT_COPY,
   RESULT_STATE_COPY,
   SOURCE_STATE_COPY,
   compactUrl,
@@ -126,7 +127,8 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
   const image = firstScanResultImage(result);
   const title = result.listing_title || result.candidate_title || readableListingUrl(result.page_url);
   const progress = firstScanResultMetadata(result);
-  const stageCopy = RESULT_STATE_COPY[result.stage];
+  const accessBlocked = result.qualification_access_blocked;
+  const stageCopy = accessBlocked ? ACCESS_BLOCKED_RESULT_COPY : RESULT_STATE_COPY[result.stage];
   const active = FIRST_SCAN_ACTIVE_RESULT_STAGES.has(result.stage);
   const target = result.ready_for_review && result.result_id
     ? `/monitoring/tasks/${encodeURIComponent(result.result_id)}?ip_id=${encodeURIComponent(ipId)}`
@@ -167,15 +169,15 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
           <span className="truncate text-[10px] font-medium uppercase tracking-wide text-stone-400">{readableMethod(result.match_method) || "Waiting"}</span>
         </div>
         <p className="mt-1.5 truncate text-[11px] text-stone-500" title={result.vlm_reasoning ?? undefined}>
-          {result.vlm_verdict ? `${readableMethod(result.vlm_verdict)}${result.vlm_confidence !== null ? ` · ${Math.round(result.vlm_confidence * 100)}%` : ""}` : active ? "Automated checks pending" : "No match evidence"}
+          {result.vlm_verdict ? `${readableMethod(result.vlm_verdict)}${result.vlm_confidence !== null ? ` · ${Math.round(result.vlm_confidence * 100)}%` : ""}` : accessBlocked ? "Match found; page check blocked" : active ? "Automated checks pending" : "No match evidence"}
         </p>
       </td>
       <td className="px-3 py-2.5">
-        <ResultStageBadge stage={result.stage} />
+        <ResultStageBadge stage={result.stage} accessBlocked={accessBlocked} />
         <p className="mt-1.5 truncate text-[10px] text-stone-400" title={stageCopy.detail}>{stageCopy.detail}</p>
         <div className="mt-1.5 flex items-center gap-2">
           <div className="flex h-1 flex-1 overflow-hidden rounded-full bg-stone-100">
-            <span className={`block rounded-full ${result.stage === "ready" ? "bg-emerald-500" : result.stage === "failed" ? "bg-red-400" : "bg-blue-500"}`} style={{ width: `${Math.max(8, (progress.complete / progress.total) * 100)}%` }} />
+            <span className={`block rounded-full ${result.stage === "ready" ? "bg-emerald-500" : accessBlocked ? "bg-amber-500" : result.stage === "failed" ? "bg-red-400" : "bg-blue-500"}`} style={{ width: `${Math.max(8, (progress.complete / progress.total) * 100)}%` }} />
           </div>
           <span className="text-[9px] tabular-nums text-stone-400">{progress.complete}/{progress.total}</span>
         </div>
@@ -191,18 +193,20 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
   );
 }
 
-function ResultStageBadge({ stage }: { stage: IpFirstScanResultStage }) {
-  const copy = RESULT_STATE_COPY[stage];
-  const classes = stage === "ready"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : stage === "filtered"
-      ? "border-stone-200 bg-stone-50 text-stone-500"
-      : stage === "failed"
-        ? "border-red-200 bg-red-50 text-red-700"
-        : "border-blue-200 bg-blue-50 text-blue-700";
+function ResultStageBadge({ stage, accessBlocked }: { stage: IpFirstScanResultStage; accessBlocked: boolean }) {
+  const copy = accessBlocked ? ACCESS_BLOCKED_RESULT_COPY : RESULT_STATE_COPY[stage];
+  const classes = accessBlocked
+    ? "border-amber-200 bg-amber-50 text-amber-800"
+    : stage === "ready"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : stage === "filtered"
+        ? "border-stone-200 bg-stone-50 text-stone-500"
+        : stage === "failed"
+          ? "border-red-200 bg-red-50 text-red-700"
+          : "border-blue-200 bg-blue-50 text-blue-700";
   return (
     <span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${classes}`}>
-      {stage === "ready" ? <Check className="h-3 w-3" /> : stage === "failed" ? <AlertCircle className="h-3 w-3" /> : stage === "filtered" ? <CircleDashed className="h-3 w-3" /> : <LoaderCircle className="h-3 w-3 animate-spin" />}
+      {stage === "ready" ? <Check className="h-3 w-3" /> : accessBlocked || stage === "failed" ? <AlertCircle className="h-3 w-3" /> : stage === "filtered" ? <CircleDashed className="h-3 w-3" /> : <LoaderCircle className="h-3 w-3 animate-spin" />}
       <span className="truncate">{copy.label}</span>
     </span>
   );

@@ -161,6 +161,7 @@ export function summarizeFirstScanSource(
     filtered,
     state,
     error:
+      results.find((result) => result.stage === "failed")?.qualification_job_error ??
       results.find((result) => result.stage === "failed")?.score_job_error ??
       failures.find((run) => run.error)?.error ??
       null,

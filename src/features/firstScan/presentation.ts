@@ -20,6 +20,11 @@ export const RESULT_STATE_COPY: Record<IpFirstScanResultStage, { label: string; 
   failed: { label: "Needs retry", detail: "Processing stopped with an error" },
 };
 
+export const ACCESS_BLOCKED_RESULT_COPY = {
+  label: "Page check blocked",
+  detail: "The marketplace prevented us from verifying this listing",
+};
+
 export function readableDomain(domain: string): string {
   return domain
     .replace(/^www\./, "")
