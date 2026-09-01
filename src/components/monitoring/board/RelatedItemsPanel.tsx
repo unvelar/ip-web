@@ -59,7 +59,7 @@ function outcomeLabel(key: string) {
     case "false_positive":
       return "false positive";
     case "do_not_pursue":
-      return "marked OK";
+      return "not pursued";
     case "second_hand":
       return "second hand";
     case "allowed_product":

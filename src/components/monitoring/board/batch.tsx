@@ -131,7 +131,7 @@ export function BatchConfirmModal({
                 : action === "submit"
                   ? ". Confirm that the takedown was submitted through the marketplace's manual route."
                   : action === "allow_product"
-                    ? ". The strongest eligible product image from each listing will be saved, and future visually similar findings for this IP will be ignored."
+                    ? ". These findings will be marked OK now, the strongest eligible product image from each listing will be saved, and future visually similar findings for this IP will be ignored."
                   : "."}
             </p>
           ) : (

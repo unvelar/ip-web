@@ -19,7 +19,7 @@ export const BATCH_META: Record<
   send: { label: "Takedown", verb: "Processed", gerund: "Process takedown for" },
   submit: { label: "Mark submitted", verb: "Marked submitted", gerund: "Mark submitted" },
   false_positive: { label: "Different product", verb: "Cleared", gerund: "Mark as a different product for" },
-  do_not_pursue: { label: "Mark as OK", verb: "Marked OK", gerund: "Mark as OK for" },
+  do_not_pursue: { label: "Do not pursue", verb: "Not pursued", gerund: "Do not pursue" },
   allow_product: { label: "Allow product", verb: "Allowed product", gerund: "Allow product images for" },
   second_hand: { label: "Second hand", verb: "Marked second hand", gerund: "Mark second hand for" },
   packaging_only: { label: "Packaging only", verb: "Marked packaging only", gerund: "Mark packaging only for" },

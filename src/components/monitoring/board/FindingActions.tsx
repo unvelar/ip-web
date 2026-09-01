@@ -242,7 +242,7 @@ export function FindingActions({
   const dontPursueBtn = outcomeButton(
     "do-not-pursue",
     "do_not_pursue",
-    "Mark as OK",
+    "Do not pursue",
     "do_not_pursue",
     undefined,
     "Shortcut 3: valid detection, intentionally tolerated or not worth enforcement",
@@ -268,7 +268,7 @@ export function FindingActions({
           ? "Cannot allow product: finding has no associated IP"
           : !allowedProductImage
             ? "No eligible product image is available"
-            : "Save the strongest product image and ignore future visually similar findings for this IP"
+            : "Mark this finding OK, save the strongest product image, and ignore future visually similar findings for this IP"
       }
       onClick={() =>
         ipId && allowedProductImage && run(

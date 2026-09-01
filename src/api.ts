@@ -2298,6 +2298,7 @@ export function allowIpFindingProductImage(
     ok: boolean;
     queued: boolean;
     job_id: string;
+    dismissed: number;
   }>(
     `/api/ip/${ipId}/monitoring/findings/${resultId}/allow-product-image`,
     { method: "POST", body: JSON.stringify(opts) },

@@ -8,6 +8,7 @@ const allowProductImage = mock(async () => ({
   ok: true,
   queued: true,
   job_id: "job-1",
+  dismissed: 1,
 }));
 const dismiss = mock(() => undefined);
 
@@ -127,6 +128,7 @@ afterEach(() => {
     ok: true,
     queued: true,
     job_id: "job-1",
+    dismissed: 1,
   }));
   dismiss.mockClear();
   mock.restore();
@@ -145,7 +147,7 @@ describe("FindingActions allow product", () => {
   });
 
   test("submits the strongest eligible image and locks competing decisions", async () => {
-    let resolveRequest!: (value: { ok: boolean; queued: boolean; job_id: string }) => void;
+    let resolveRequest!: (value: { ok: boolean; queued: boolean; job_id: string; dismissed: number }) => void;
     allowProductImage.mockImplementationOnce(() => new Promise((resolve) => {
       resolveRequest = resolve;
     }));
@@ -162,7 +164,7 @@ describe("FindingActions allow product", () => {
     for (const label of [
       "1Different product",
       "2Second hand",
-      "3Mark as OK",
+      "3Do not pursue",
       "RReview",
       "TTakedown",
       "License seller",
@@ -175,7 +177,7 @@ describe("FindingActions allow product", () => {
     expect(dismiss).not.toHaveBeenCalled();
 
     await act(async () => {
-      resolveRequest({ ok: true, queued: true, job_id: "job-1" });
+      resolveRequest({ ok: true, queued: true, job_id: "job-1", dismissed: 1 });
       await Promise.resolve();
     });
 

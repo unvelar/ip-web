@@ -28,12 +28,12 @@ describe("findingPlatformLabel", () => {
   });
 });
 
-describe("mark as OK language", () => {
-  test("uses an action label before the decision and a completed label afterward", () => {
-    expect(suggestionMeta("do_not_pursue")?.label).toBe("Mark as OK");
-    expect(BATCH_META.do_not_pursue.label).toBe("Mark as OK");
-    expect(CANDIDATE_OUTCOME_LABELS.do_not_pursue).toBe("Mark as OK");
-    expect(dismissalBadge("do_not_pursue").label).toBe("marked OK");
-    expect(DISMISSAL_REASON_LABELS.do_not_pursue).toBe("Marked OK");
+describe("do not pursue language", () => {
+  test("does not describe a tolerated but potentially illegal product as OK", () => {
+    expect(suggestionMeta("do_not_pursue")?.label).toBe("Do not pursue");
+    expect(BATCH_META.do_not_pursue.label).toBe("Do not pursue");
+    expect(CANDIDATE_OUTCOME_LABELS.do_not_pursue).toBe("Do not pursue");
+    expect(dismissalBadge("do_not_pursue").label).toBe("not pursued");
+    expect(DISMISSAL_REASON_LABELS.do_not_pursue).toBe("Not pursued");
   });
 });

@@ -2355,7 +2355,7 @@ function recentDecisionPresentation(finding: IpReviewFinding) {
   if (kind === "dismissed") {
     const labels: Record<string, string> = {
       false_positive: "Different product",
-      do_not_pursue: "Marked OK",
+      do_not_pursue: "Not pursued",
       second_hand: "Second hand",
       resale: "Second hand",
       licensed: "Licensed seller",
@@ -2837,7 +2837,7 @@ function BatchWorkspace({
                   <BatchDecisionButton label="Takedown" primary={recommendedAction === "send"} onClick={() => onBatchAction("send")} />
                   <BatchDecisionButton label="Different product" primary={recommendedAction === "false_positive"} onClick={() => onBatchAction("false_positive")} />
                   <BatchDecisionButton label="Second hand" primary={recommendedAction === "second_hand"} onClick={() => onBatchAction("second_hand")} />
-                  <BatchDecisionButton label="Mark OK" onClick={() => onBatchAction("do_not_pursue")} />
+                  <BatchDecisionButton label="Do not pursue" onClick={() => onBatchAction("do_not_pursue")} />
                   <BatchDecisionButton label="Allow product" onClick={() => onBatchAction("allow_product")} />
                   <BatchDecisionButton label="Review" primary={recommendedAction === "review"} onClick={() => onBatchAction("review")} />
                 </div>

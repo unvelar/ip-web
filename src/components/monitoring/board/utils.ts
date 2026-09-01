@@ -164,7 +164,7 @@ export function dismissalBadge(reason: string | null) {
     case "false_positive":
       return { label: "false positive", cls: "bg-stone-200 text-stone-600" };
     case "do_not_pursue":
-      return { label: "marked OK", cls: "bg-sky-100 text-sky-700" };
+      return { label: "not pursued", cls: "bg-sky-100 text-sky-700" };
     case "second_hand":
     case "resale":
       return { label: "resale", cls: "bg-purple-100 text-purple-700" };
@@ -395,7 +395,7 @@ export function suggestionMeta(outcome: IpReviewFinding["suggested_review_outcom
     case "false_positive":
       return { label: "Different product", shortcut: "0", cls: "bg-stone-800 text-white" };
     case "do_not_pursue":
-      return { label: "Mark as OK", shortcut: "1", cls: "bg-sky-700 text-white" };
+      return { label: "Do not pursue", shortcut: "1", cls: "bg-sky-700 text-white" };
     case "takedown":
       return { label: "Takedown", shortcut: "2", cls: "bg-blue-700 text-white" };
     case "second_hand":
