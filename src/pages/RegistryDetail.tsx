@@ -22,6 +22,7 @@ import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
 import ImageUploader from "../components/ImageUploader";
 import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
 import { IpOnboardingStatusCard } from "../components/monitoring/IpOnboardingStatusCard";
+import { KeywordLearningPanel } from "../components/monitoring/KeywordLearningPanel";
 import IpTakedownSigner from "../components/IpTakedownSigner";
 import { consumeCommittedKeywords, mergeKeywords } from "../lib/keywords";
 import { publicSummaryUrlForIp } from "../lib/publicSummary";
@@ -349,6 +350,14 @@ export default function RegistryDetail() {
           </button>
         </div>
       </div>
+
+      <KeywordLearningPanel
+        ipId={ip.id}
+        onKeywordsChanged={(keywords) => {
+          setIp((current) => (current ? { ...current, keywords } : current));
+          void refreshOnboarding(true);
+        }}
+      />
 
       {/* Licenses — authorised sellers per domain */}
       <LicensesSection ipId={ip.id} />
