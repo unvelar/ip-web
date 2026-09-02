@@ -36,7 +36,12 @@ export function readableDomain(domain: string): string {
 }
 
 export function readableMethod(value: string | null): string {
-  return value ? value.replace(/[_-]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()) : "";
+  if (!value) return "";
+  if (value.endsWith("_api")) {
+    const provider = value.slice(0, -4).replace(/[_-]+/g, " ");
+    return `${provider.replace(/\b\w/g, (character) => character.toUpperCase())} API snapshot`;
+  }
+  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 export function readableListingUrl(value: string): string {

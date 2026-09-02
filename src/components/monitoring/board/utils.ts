@@ -194,6 +194,12 @@ export function methodChip(method: string): { label: string; cls: string } {
     case "scrapfly_direct":
       return { label: "scrapfly", cls: "bg-orange-100 text-orange-700" };
     default:
+      if (method.endsWith("_api")) {
+        return {
+          label: method.replace(/_api$/, " API snapshot").replace(/_/g, " "),
+          cls: "bg-sky-100 text-sky-700",
+        };
+      }
       return { label: method, cls: "bg-stone-100 text-stone-600" };
   }
 }

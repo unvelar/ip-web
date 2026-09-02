@@ -130,7 +130,12 @@ export function summarizeFirstScanSource(
   const findingsTotal = resultRowsAreAuthoritative ? results.length - filtered : findingsPage.facets.total;
   const running = runs.some((run) => isActiveMonitoringRun(run.status));
   const failures = runs.filter((run) => FAILED_RUN_STATUSES.has(run.status.trim().toLowerCase()));
-  const sourceConnected = source.source_type === "web_search" || Boolean(source.recipe);
+  const sourceConnected = source.source_type === "web_search"
+    || Boolean(source.recipe)
+    || (
+      source.api_route?.execution_route === "marketplace_api"
+      && source.api_route.configured
+    );
 
   let state: FirstScanSourceState;
   if (source.setup_status === "retry_needed") {

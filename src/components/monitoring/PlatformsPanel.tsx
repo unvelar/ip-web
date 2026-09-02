@@ -70,6 +70,12 @@ function uniqueScopes(scopes: string[]) {
   return out;
 }
 
+function providerLabel(provider: string) {
+  return provider
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 function openWebConfig(source?: MonitoredDomain | null): OpenWebSearchConfig {
   const raw = source?.source_config ?? {};
   const storedScopes = Array.isArray(raw.search_scopes)
@@ -372,7 +378,7 @@ export function PlatformsPanel({
         <div className="flex items-center justify-between gap-2 mb-2">
           <div>
             <h3 className="text-xs font-semibold text-stone-700">Specific platforms</h3>
-            <p className="text-[11px] text-stone-400">Direct scans on known domains with per-domain scrape plans.</p>
+            <p className="text-[11px] text-stone-400">Direct monitoring on known marketplaces and domains.</p>
           </div>
         </div>
       {domainPlatforms.length === 0 ? (
@@ -381,6 +387,7 @@ export function PlatformsPanel({
         <div className="divide-y divide-stone-100 border border-stone-100 rounded-lg">
           {domainPlatforms.map((p) => {
             const label = platformLabel(p);
+            const apiProvider = p.api_route ? providerLabel(p.api_route.provider) : null;
             const setupStatus: MonitoringSourceSetupStatus = p.setup_status ?? (
               p.recipe ? "ready" : "processing"
             );
@@ -433,6 +440,18 @@ export function PlatformsPanel({
                   {setup && setup.tone !== "ready" && (
                     <p className={setup.tone === "attention" ? "text-rose-600 mt-0.5" : "text-blue-600 mt-0.5"}>
                       {setup.detail}
+                    </p>
+                  )}
+                  {p.api_route?.mode === "required" && (
+                    <p className={`mt-0.5 text-[11px] ${p.api_route.configured ? "text-sky-700" : "text-rose-600"}`}>
+                      {p.api_route.configured
+                        ? `${apiProvider} API is the primary source`
+                        : `${apiProvider} API configuration is incomplete`}
+                    </p>
+                  )}
+                  {p.api_route?.mode === "shadow" && p.api_route.configured && (
+                    <p className="mt-0.5 text-[11px] text-stone-500">
+                      Browser scan with {apiProvider} API comparison
                     </p>
                   )}
                 </div>

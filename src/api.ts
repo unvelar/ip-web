@@ -1448,6 +1448,16 @@ export interface MonitoredDomain {
   ip_keywords: string[] | null;
   recipe: Record<string, unknown> | null;
   recipe_updated_at: string | null;
+  api_route?: {
+    provider: string;
+    mode: "disabled" | "shadow" | "required";
+    configured: boolean;
+    execution_route: "browser" | "marketplace_api";
+    browser_fallback_allowed: boolean;
+    capabilities: string[];
+    configuration_error: string | null;
+    snapshot_retention_hours: number | null;
+  } | null;
   /** Customer-facing readiness for this source's scrape setup. */
   setup_status?: MonitoringSourceSetupStatus;
   last_run_at: string | null;
