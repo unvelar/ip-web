@@ -1026,7 +1026,7 @@ export function patchComputeRuntimeSettings(
   expectedVersion: number,
   settings: Partial<Pick<
     ComputeRuntimeSettings,
-    "maxPods" | "jobsPerPodTarget" | "minimumPods" | "minimumPodsUntil"
+    "maxPods" | "firstPodQueueThreshold" | "jobsPerPodTarget" | "minimumPods" | "minimumPodsUntil"
   >>,
   minimumPodsDurationHours?: 4 | 8 | 24,
 ) {

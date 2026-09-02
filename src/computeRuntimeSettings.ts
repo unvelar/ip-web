@@ -1,5 +1,6 @@
 export interface MinimumCapacitySettingsPatch {
   maxPods?: number;
+  firstPodQueueThreshold?: number;
   jobsPerPodTarget?: number;
   minimumPods?: number;
   minimumPodsUntil?: string | null;

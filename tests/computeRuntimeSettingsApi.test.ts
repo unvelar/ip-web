@@ -5,10 +5,11 @@ describe("RunPod minimum-capacity API contract", () => {
   test("sends autoscaling limits through the versioned settings patch", () => {
     expect(computeRuntimeSettingsPatchBody(30, {
       maxPods: 3,
+      firstPodQueueThreshold: 100,
       jobsPerPodTarget: 100,
     })).toEqual({
       expectedVersion: 30,
-      settings: { maxPods: 3, jobsPerPodTarget: 100 },
+      settings: { maxPods: 3, firstPodQueueThreshold: 100, jobsPerPodTarget: 100 },
     });
   });
 

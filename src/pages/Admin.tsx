@@ -36,6 +36,7 @@ export default function Admin() {
   const [computeNotice, setComputeNotice] = useState("");
   const [minimumPods, setMinimumPods] = useState(1);
   const [maxPodsDraft, setMaxPodsDraft] = useState("");
+  const [firstPodQueueThresholdDraft, setFirstPodQueueThresholdDraft] = useState("");
   const [jobsPerPodTargetDraft, setJobsPerPodTargetDraft] = useState("");
   const [savingWindow, setSavingWindow] = useState<number | "cancel" | null>(null);
   const [savingAutoscaling, setSavingAutoscaling] = useState(false);
@@ -65,6 +66,7 @@ export default function Admin() {
         setCompute(record);
         setMinimumPods(Math.max(1, record.settings.minimumPods ?? 1));
         setMaxPodsDraft(String(record.settings.maxPods));
+        setFirstPodQueueThresholdDraft(String(record.settings.firstPodQueueThreshold));
         setJobsPerPodTargetDraft(String(record.settings.jobsPerPodTarget));
       })
       .catch((e: unknown) => {
@@ -139,6 +141,7 @@ export default function Admin() {
   const maximumPods = compute?.settings.maxPods ?? 0;
   const scalingDirty = compute !== null
     && (Number(maxPodsDraft) !== compute.settings.maxPods
+      || Number(firstPodQueueThresholdDraft) !== compute.settings.firstPodQueueThreshold
       || Number(jobsPerPodTargetDraft) !== compute.settings.jobsPerPodTarget);
   const minimumActive = configuredMinimum > 0
     && minimumUntil !== null
@@ -147,9 +150,16 @@ export default function Admin() {
   async function saveAutoscalingLimits() {
     if (!compute) return;
     const maxPods = Number(maxPodsDraft);
+    const firstPodQueueThreshold = Number(firstPodQueueThresholdDraft);
     const jobsPerPodTarget = Number(jobsPerPodTargetDraft);
     if (!Number.isInteger(maxPods) || maxPods < 0 || maxPods > 20) {
       setComputeError("Maximum pods must be a whole number between 0 and 20.");
+      return;
+    }
+    if (!Number.isInteger(firstPodQueueThreshold)
+      || firstPodQueueThreshold < 0
+      || firstPodQueueThreshold > 1_000_000) {
+      setComputeError("First pod threshold must be a whole number between 0 and 1,000,000.");
       return;
     }
     if (!Number.isInteger(jobsPerPodTarget)
@@ -168,13 +178,15 @@ export default function Admin() {
     try {
       const updated = await patchComputeRuntimeSettings(compute.version, {
         maxPods,
+        firstPodQueueThreshold,
         jobsPerPodTarget,
       });
       setCompute(updated);
       setMaxPodsDraft(String(updated.settings.maxPods));
+      setFirstPodQueueThresholdDraft(String(updated.settings.firstPodQueueThreshold));
       setJobsPerPodTargetDraft(String(updated.settings.jobsPerPodTarget));
       setComputeNotice(
-        `Autoscaling saved: maximum ${maxPods} pods, one additional pod per ${jobsPerPodTarget} queued capacity units.`,
+        `Shared autoscaling saved: maximum ${maxPods} pods, first pod above ${firstPodQueueThreshold}, then one additional pod per ${jobsPerPodTarget} queued jobs.`,
       );
     } catch (e: unknown) {
       setComputeError(e instanceof Error ? e.message : "Could not update RunPod autoscaling");
@@ -396,13 +408,8 @@ export default function Admin() {
             <div>
               <h3 className="text-sm font-bold text-stone-900">Queue scaling</h3>
               <p className="mt-1 max-w-xl text-xs text-stone-500">
-                Cap the fleet, then add one pod for each target-sized band above the first-pod threshold.
+                Shared by all managed GPU job pools. Cap the fleet, start above the threshold, then add one pod for each target-sized queue band.
               </p>
-              {compute && (
-                <p className="mt-2 text-xs font-medium text-stone-600">
-                  First pod threshold: more than {compute.settings.firstPodQueueThreshold.toLocaleString()} queued capacity units.
-                </p>
-              )}
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <label className="grid gap-1 text-xs font-semibold text-stone-600">
@@ -419,7 +426,20 @@ export default function Admin() {
                 />
               </label>
               <label className="grid gap-1 text-xs font-semibold text-stone-600">
-                Additional pod target
+                First pod threshold
+                <input
+                  type="number"
+                  min={0}
+                  max={1_000_000}
+                  step={1}
+                  value={firstPodQueueThresholdDraft}
+                  onChange={(event) => setFirstPodQueueThresholdDraft(event.target.value)}
+                  disabled={computeLoading || !compute || savingAutoscaling || savingWindow !== null}
+                  className="h-11 w-44 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 disabled:opacity-50"
+                />
+              </label>
+              <label className="grid gap-1 text-xs font-semibold text-stone-600">
+                Jobs per additional pod
                 <input
                   type="number"
                   min={1}
