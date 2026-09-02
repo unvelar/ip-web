@@ -70,15 +70,17 @@ export default function MonitoringFirstScan() {
 
       {feed.error && (
         <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <AlertCircle className="h-4 w-4 shrink-0" /> The latest refresh failed. Showing the last known progress: {feed.error}
+          <AlertCircle className="h-4 w-4 shrink-0" /> Some live progress is temporarily unavailable. {feed.error}
         </div>
       )}
 
-      <FirstScanSetupNotice
-        onboarding={snapshot.onboarding}
-        sources={snapshot.sources}
-        ipId={ipId}
-      />
+      {snapshot.onboarding && (
+        <FirstScanSetupNotice
+          onboarding={snapshot.onboarding}
+          sources={snapshot.sources}
+          ipId={ipId}
+        />
+      )}
 
       <section className="mt-4 grid overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:grid-cols-4">
         <SummaryMetric
@@ -112,7 +114,7 @@ export default function MonitoringFirstScan() {
         onSourceFilterChange={feed.setSourceFilter}
       />
 
-      {snapshot.onboarding.customer_action_required && (
+      {snapshot.onboarding?.customer_action_required && (
         <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <div><span className="font-semibold">{snapshot.onboarding.title}.</span> {snapshot.onboarding.message}</div>

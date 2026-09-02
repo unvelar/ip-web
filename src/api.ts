@@ -379,8 +379,8 @@ export function createTrademark(name: string) {
   });
 }
 
-export function getTrademark(id: string) {
-  return request<{ trademark: Trademark; images: TrademarkImage[] }>(`/api/ip/${id}`);
+export function getTrademark(id: string, signal?: AbortSignal) {
+  return request<{ trademark: Trademark; images: TrademarkImage[] }>(`/api/ip/${id}`, { signal });
 }
 
 export function getIpOnboardingStatus(id: string, signal?: AbortSignal) {
@@ -1568,8 +1568,8 @@ export interface MonitoringSettings {
   monitoring_enabled: boolean;
 }
 
-export function listMonitoredDomains() {
-  return request<{ domains: MonitoredDomain[] }>("/api/monitoring/domains");
+export function listMonitoredDomains(signal?: AbortSignal) {
+  return request<{ domains: MonitoredDomain[] }>("/api/monitoring/domains", { signal });
 }
 
 export function createMonitoredDomain(domain: string, ip_catalog_id: string) {
@@ -1599,13 +1599,14 @@ export function deleteMonitoredDomain(id: string) {
   });
 }
 
-export function listMonitoringRuns(opts: { domain_id?: string; limit?: number } = {}) {
+export function listMonitoringRuns(opts: { domain_id?: string; limit?: number } = {}, signal?: AbortSignal) {
   const params = new URLSearchParams();
   if (opts.domain_id) params.set("domain_id", opts.domain_id);
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
   const qs = params.toString();
   return request<{ runs: ReverseSearchRun[] }>(
     `/api/monitoring/runs${qs ? `?${qs}` : ""}`,
+    { signal },
   );
 }
 
@@ -2231,9 +2232,10 @@ export async function openIpReviewReport(id: string): Promise<void> {
 // --- IP-scoped monitoring (platforms + findings live under the IP) ---
 
 /** Platforms (monitored domains) wired to a single IP. */
-export function listIpMonitoringPlatforms(ipId: string) {
+export function listIpMonitoringPlatforms(ipId: string, signal?: AbortSignal) {
   return request<{ platforms: MonitoredDomain[] }>(
     `/api/ip/${ipId}/monitoring/platforms`,
+    { signal },
   );
 }
 
