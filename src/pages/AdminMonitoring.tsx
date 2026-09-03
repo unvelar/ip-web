@@ -27,6 +27,7 @@ import type {
   AdminMonitoringWorker,
 } from "../api";
 import { AdminMonitoringRunDetailPanel } from "../features/adminMonitoring/AdminMonitoringRunDetail";
+import { monitoringRunStageStatus } from "../features/adminMonitoring/runStageStatus";
 import {
   useAdminMonitoringFeed,
   useAdminMonitoringRunDetail,
@@ -309,7 +310,9 @@ function RunRow({ run, open, onToggle, detail }: {
           </div>
 
           <div className="grid grid-cols-4 gap-1.5">
-            {JOB_TYPES.map((type) => <RunStage key={type} type={type} stage={stages.get(type)} />)}
+            {JOB_TYPES.map((type) => (
+              <RunStage key={type} type={type} stage={stages.get(type)} operationState={run.operation.state} />
+            ))}
           </div>
 
           <div className="flex flex-wrap gap-1.5">
@@ -644,22 +647,32 @@ function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueue
   );
 }
 
-function RunStage({ type, stage }: { type: string; stage: AdminMonitoringRunActivity["jobs"][number] | undefined }) {
-  const status = stageStatus(stage);
+function RunStage({ type, stage, operationState }: {
+  type: string;
+  stage: AdminMonitoringRunActivity["jobs"][number] | undefined;
+  operationState: AdminMonitoringRunActivity["operation"]["state"];
+}) {
+  const status = monitoringRunStageStatus(stage, operationState);
   const color = status === "failed" ? "bg-red-100 text-red-700"
     : status === "running" ? "bg-blue-100 text-blue-700"
       : status === "queued" ? "bg-amber-100 text-amber-700"
         : status === "done" ? "bg-emerald-100 text-emerald-700"
           : "bg-stone-100 text-stone-400";
+  const title = stage?.latest_error
+    || (status === "not_needed" ? "The run completed without needing this stage."
+      : status === "not_reached" ? "The run failed before reaching this stage."
+        : JOB_COPY[type]?.detail);
   return (
-    <div className={`min-w-0 rounded-md px-2 py-1.5 ${color}`} title={stage?.latest_error || JOB_COPY[type]?.detail}>
+    <div className={`min-w-0 rounded-md px-2 py-1.5 ${color}`} title={title}>
       <p className="truncate text-[9px] font-bold">{JOB_COPY[type]?.label}</p>
       <p className="mt-0.5 truncate text-[9px] opacity-75">
         {status === "running" ? `${stage?.in_progress_jobs} running`
           : status === "queued" ? `${(stage?.pending_jobs ?? 0) + (stage?.deferred_jobs ?? 0)} queued`
             : status === "failed" ? `${stage?.failed_jobs} failed`
               : status === "done" ? "done"
-                : "waiting"}
+                : status === "not_needed" ? "not needed"
+                  : status === "not_reached" ? "not reached"
+                    : "waiting"}
       </p>
     </div>
   );
@@ -707,15 +720,6 @@ function CountPill({ value, label, tone = "stone" }: { value: number; label: str
       : tone === "amber" ? "bg-amber-50 text-amber-800"
         : "bg-stone-100 text-stone-500";
   return <span className={`rounded px-1.5 py-1 text-[9px] font-semibold ${style}`}>{value.toLocaleString()} {label}</span>;
-}
-
-function stageStatus(stage: AdminMonitoringRunActivity["jobs"][number] | undefined) {
-  if (!stage) return "waiting";
-  if (stage.failed_jobs > 0) return "failed";
-  if (stage.in_progress_jobs > 0) return "running";
-  if (stage.pending_jobs + stage.deferred_jobs > 0) return "queued";
-  if (stage.completed_jobs > 0) return "done";
-  return "waiting";
 }
 
 function AdminMonitoringSkeleton() {
