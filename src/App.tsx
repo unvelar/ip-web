@@ -31,6 +31,7 @@ import Admin from "./pages/Admin";
 import AdminIntakes from "./pages/AdminIntakes";
 import AdminIpDetail from "./pages/AdminIpDetail";
 import AdminTenants from "./pages/AdminTenants";
+import AdminMonitoring from "./pages/AdminMonitoring";
 import Settings from "./pages/Settings";
 import Notifications from "./pages/Notifications";
 
@@ -189,6 +190,7 @@ export default function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/admin/intakes" element={<AdminIntakes />} />
           <Route path="/admin/tenants" element={<AdminTenants />} />
+          <Route path="/admin/monitoring" element={<AdminMonitoring />} />
           <Route path="/admin/ips/:id" element={<AdminIpDetail />} />
         </Route>
 

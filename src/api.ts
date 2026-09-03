@@ -1189,6 +1189,354 @@ export function patchComputeJobRoute(
   );
 }
 
+export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "failed";
+export type AdminMonitoringOperationState = "queued" | "processing" | "completed" | "failed" | "stalled";
+
+export interface AdminMonitoringQueueStage {
+  type: string;
+  pending_jobs: number;
+  deferred_jobs: number;
+  in_progress_jobs: number;
+  pending_units: number;
+  in_progress_units: number;
+  oldest_queued_at: string | null;
+}
+
+export interface AdminMonitoringRunJobStage {
+  type: string;
+  pending_jobs: number;
+  deferred_jobs: number;
+  in_progress_jobs: number;
+  completed_jobs: number;
+  failed_jobs: number;
+  pending_units: number;
+  in_progress_units: number;
+  oldest_queued_at: string | null;
+  latest_error: string | null;
+}
+
+export interface AdminMonitoringRunActivity {
+  run_id: string;
+  tenant_id: string;
+  tenant_name: string | null;
+  ip_catalog_id: string | null;
+  ip_name: string | null;
+  domain_id: string | null;
+  source_domain: string | null;
+  source_name: string | null;
+  source_type: string | null;
+  keyword: string | null;
+  source_kind: string | null;
+  status: string;
+  error: string | null;
+  images_searched: number;
+  results_found: number;
+  results_after_filter: number;
+  cases_created: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  candidate_count: number;
+  finding_count: number;
+  page_event_count: number;
+  decision_event_count: number;
+  confirmed_check_count: number;
+  rejected_check_count: number;
+  screened_out_check_count: number;
+  suppressed_check_count: number;
+  not_evaluated_check_count: number;
+  evidence_conflict_count: number;
+  jobs: AdminMonitoringRunJobStage[];
+  operation: {
+    state: AdminMonitoringOperationState;
+    label: string;
+    detail: string;
+  };
+}
+
+export interface AdminMonitoringWorker {
+  id: string;
+  pool: string;
+  provider: string;
+  provider_instance_id: string | null;
+  status: string;
+  effective_status: string;
+  job_types: string[];
+  capabilities: { browser: boolean; gpu: boolean };
+  execution_class: string | null;
+  runtime_mode: string | null;
+  profile_revision: number | null;
+  image_sha: string | null;
+  current_job_id: string | null;
+  current_job_type: string | null;
+  current_job_started_at: string | null;
+  current_work: AdminMonitoringActiveWorkItem | null;
+  drain_requested_at: string | null;
+  last_busy_at: string | null;
+  registered_at: string;
+  last_heartbeat_at: string | null;
+  heartbeat_age_seconds: number | null;
+  hardware: {
+    pod_name: string | null;
+    hostname: string | null;
+    gpu_name: string | null;
+    gpu_total_memory_gib: number | null;
+  };
+}
+
+export interface AdminMonitoringOverview {
+  generated_at: string;
+  window_hours: number;
+  summary: {
+    active_runs: number;
+    completed_runs: number;
+    failed_runs: number;
+    candidates: number;
+    findings: number;
+    not_evaluated_checks: number;
+    evidence_conflicts: number;
+    queued_jobs: number;
+    deferred_jobs: number;
+    queued_units: number;
+    running_jobs: number;
+    workers: { busy: number; idle: number; starting: number; offline: number };
+  };
+  queue: AdminMonitoringQueueStage[];
+  workers: AdminMonitoringWorker[];
+  runpod: {
+    coordinators: AdminMonitoringRunpodCoordinator[];
+    instances: AdminMonitoringRunpodInstance[];
+  };
+  active_work: AdminMonitoringActiveWorkItem[];
+  runs: AdminMonitoringRunActivity[];
+}
+
+export interface AdminMonitoringJob {
+  id: string;
+  type: string;
+  status: string;
+  error: string | null;
+  attempts: number;
+  max_attempts: number;
+  capacity_units: number;
+  execution_class: string | null;
+  queued_at: string;
+  available_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  worker_instance_id: string | null;
+  worker_status: string | null;
+  worker_image_sha: string | null;
+  worker_last_heartbeat_at: string | null;
+  batch_index: number | null;
+  batch_count: number | null;
+}
+
+export interface AdminMonitoringActiveWorkItem extends AdminMonitoringJob {
+  run_id: string | null;
+  tenant_id: string | null;
+  tenant_name: string | null;
+  monitor_candidate_id: string | null;
+  candidate_title: string | null;
+  candidate_page_url: string | null;
+  candidate_image_url: string | null;
+  ip_catalog_id: string | null;
+  ip_name: string | null;
+  domain_id: string | null;
+  source_domain: string | null;
+  source_name: string | null;
+  keyword: string | null;
+  scope_count: number;
+  deferred: boolean;
+}
+
+export interface AdminMonitoringRunpodCoordinator {
+  pool: string;
+  enabled: boolean;
+  dry_run: boolean;
+  pending_jobs: number;
+  in_progress_jobs: number;
+  oldest_queued_at: string | null;
+  desired_instances: number;
+  active_instances: number;
+  provisioning_instances: number;
+  on_instances: number;
+  ready_instances: number;
+  busy_workers: number;
+  idle_workers: number;
+  last_decision: string | null;
+  last_reason: string | null;
+  last_error: string | null;
+  last_reconciled_at: string | null;
+}
+
+export interface AdminMonitoringRunpodInstance {
+  id: string;
+  pool: string;
+  provider: string;
+  provider_instance_id: string;
+  worker_instance_id: string | null;
+  name: string;
+  status: string;
+  requested_at: string;
+  started_at: string | null;
+  stopped_at: string | null;
+  last_observed_at: string;
+}
+
+export interface AdminMonitoringAuditEvidence {
+  id: string;
+  disposition: string | null;
+  top_ip: string | null;
+  similarity_score: number | null;
+  inliers: number | null;
+  match_method: string | null;
+  vlm_verdict: string | null;
+  vlm_confidence: number | null;
+  vlm_reasoning: string | null;
+  ip_catalog_id: string | null;
+  reference_image_id: string | null;
+  created_at: string;
+}
+
+export interface AdminMonitoringCandidate {
+  id: string;
+  run_id: string;
+  tenant_id: string;
+  page_url: string;
+  page_url_key: string | null;
+  image_url: string | null;
+  title: string | null;
+  domain: string;
+  source_method: string | null;
+  marketplace_snapshot_id: string | null;
+  source_provider: string | null;
+  source_transport: string | null;
+  page_kind: string | null;
+  actionability: string | null;
+  qualification_confidence: number | null;
+  qualification_classifier: string | null;
+  qualification_evidence: unknown;
+  qualification_policy_version: string | null;
+  capture_ref: Record<string, unknown> | null;
+  qualified_at: string | null;
+  created_at: string;
+  debug: {
+    pipeline: {
+      state: string;
+      label: string;
+      detail: string;
+    };
+    decision: {
+      state: "pending" | "confirmed" | "rejected" | "screened_out" | "suppressed" | "not_evaluated" | "failed";
+      label: string;
+      code: string | null;
+      phase: "pipeline" | "matching" | "visual" | "qualification";
+      explanation: string;
+      integrity: "consistent" | "missing" | "conflict";
+      audit_id: string | null;
+      vlm_verdict: string | null;
+      vlm_confidence: number | null;
+      vlm_reasoning: string | null;
+      similarity_score: number | null;
+      inliers: number | null;
+      match_method: string | null;
+      ip_catalog_id: string | null;
+      reference_image_id: string | null;
+    };
+  };
+  audits: AdminMonitoringAuditEvidence[];
+  results: Array<{
+    id: string;
+    run_id: string;
+    monitor_candidate_id: string | null;
+    source_image_id: string;
+    lifecycle_state: string;
+    current_disposition: string | null;
+    current_reason_code: string | null;
+    similarity_score: number | null;
+    match_method: string | null;
+    vlm_verdict: string | null;
+    vlm_confidence: number | null;
+    vlm_reasoning: string | null;
+    case_id: string | null;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+  references: Array<{
+    id: string;
+    ip_catalog_id: string;
+    status: string;
+    url: string | null;
+  }>;
+  jobs: {
+    score: AdminMonitoringJob[];
+    visual: Array<AdminMonitoringJob & {
+      task: {
+        candidate_id: string;
+        ip_catalog_id: string;
+        reference_image_id: string;
+        top_ip: string | null;
+        similarity_score: number | null;
+        match_method: string | null;
+        check_kind: string | null;
+      };
+    }>;
+    qualification: AdminMonitoringJob[];
+  };
+}
+
+export interface AdminMonitoringRunDetail {
+  generated_at: string;
+  run: Omit<AdminMonitoringRunActivity, "jobs" | "operation">;
+  jobs: AdminMonitoringJob[];
+  pages: Array<{
+    id: string;
+    source_method: string | null;
+    url: string | null;
+    http_status: number | null;
+    blocked: boolean | null;
+    harvested_count: number | null;
+    disposition: string | null;
+    screenshot_url: string | null;
+    created_at: string;
+  }>;
+  candidates: AdminMonitoringCandidate[];
+  unmatched_candidate_audits: Array<{
+    id: string;
+    url: string | null;
+    disposition: string | null;
+    vlm_verdict: string | null;
+    created_at: string;
+  }>;
+}
+
+export function getAdminMonitoringOverview(opts: {
+  windowHours?: 1 | 6 | 24 | 72 | 168;
+  status?: AdminMonitoringRunFilter;
+  query?: string;
+  limit?: number;
+  signal?: AbortSignal;
+} = {}) {
+  const qs = new URLSearchParams();
+  if (opts.windowHours) qs.set("window_hours", String(opts.windowHours));
+  if (opts.status) qs.set("status", opts.status);
+  if (opts.query) qs.set("q", opts.query);
+  if (opts.limit) qs.set("limit", String(opts.limit));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return request<AdminMonitoringOverview>(`/api/admin/monitoring/overview${suffix}`, {
+    signal: opts.signal,
+  });
+}
+
+export function getAdminMonitoringRun(runId: string, signal?: AbortSignal) {
+  return request<AdminMonitoringRunDetail>(
+    `/api/admin/monitoring/runs/${encodeURIComponent(runId)}`,
+    { signal },
+  );
+}
+
 export interface TenantUsageStats {
   accounts: number;
   ips: number;

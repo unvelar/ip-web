@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Building2, Clock3, Cpu, GitBranch, Inbox, Server } from "lucide-react";
+import { Activity, Building2, Clock3, Cpu, GitBranch, Inbox, Server } from "lucide-react";
 import {
   ADMIN_SOURCES,
   getComputeProfiles,
@@ -307,6 +307,13 @@ export default function Admin() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link
+            to="/admin/monitoring"
+            className="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md bg-red-700 text-white text-xs font-semibold hover:bg-red-800"
+          >
+            <Activity size={15} />
+            Monitoring operations
+          </Link>
           <Link
             to="/admin/tenants"
             className="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md bg-stone-900 text-white text-xs font-semibold hover:bg-stone-800"
