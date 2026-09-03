@@ -390,9 +390,13 @@ function WorkerFleet({ overview, onOpenRun }: {
               const coordinator = overview.runpod.coordinators.find((row) => row.pool === pool);
               const workers = runpodWorkers.filter((worker) => worker.pool === pool);
               const instances = overview.runpod.instances.filter((instance) => instance.pool === pool);
-              const providerStarting = instances.filter((instance) => (
-                instance.status === "requested" || instance.status === "provisioning"
-              )).length;
+              const providerStarting = instances.filter((instance) => {
+                if (instance.status === "requested" || instance.status === "provisioning") return true;
+                if (instance.status !== "running") return false;
+                const attachedWorker = workers.find((worker) => worker.id === instance.worker_instance_id);
+                return !attachedWorker
+                  || !["idle", "busy"].includes(attachedWorker.effective_status);
+              }).length;
               const hasError = Boolean(coordinator?.last_error)
                 || instances.some((instance) => instance.status === "error");
               return (
