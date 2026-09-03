@@ -19,7 +19,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { useJobPoller } from "../../hooks/useJobPoller";
 import { consumeCommittedKeywords, mergeKeywords } from "../../lib/keywords";
-import { suggestOnboardingIp } from "../../lib/onboarding";
+import { buildMonitoringKeywords, suggestOnboardingIp } from "../../lib/onboarding";
 import { startMonitoringSources } from "../../lib/startMonitoringSources";
 
 export type OnboardingStep = 1 | 2 | 3 | 4;
@@ -47,10 +47,14 @@ export function useRegistryWizard() {
   const [images, setImages] = useState<TrademarkImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const [importingWebsiteReference, setImportingWebsiteReference] = useState(false);
+  const [websiteReferenceImportError, setWebsiteReferenceImportError] = useState("");
   const [indexJobId, setIndexJobId] = useState<string | null>(null);
   const [name, setName] = useState(() => onboardingSuggestion?.name ?? "");
   const [submittingName, setSubmittingName] = useState(false);
   const [description, setDescription] = useState("");
+  const [brandNames, setBrandNames] = useState<string[]>([]);
+  const [brandNameDraft, setBrandNameDraft] = useState("");
+  const [productTerms, setProductTerms] = useState<string[]>([]);
   const [brandProfile, setBrandProfile] = useState<OnboardingBrandProfile | null>(null);
   const [brandProfileLoading, setBrandProfileLoading] = useState(Boolean(onboardingDomain));
   const [brandLogoFailed, setBrandLogoFailed] = useState(false);
@@ -77,6 +81,8 @@ export function useRegistryWizard() {
         if (!active || !profile) return;
         setBrandProfile(profile);
         setBrandLogoFailed(false);
+        setBrandNames(profile.brand_names?.length ? profile.brand_names : [profile.name]);
+        setProductTerms(profile.product_terms ?? []);
         setName((current) => current === onboardingSuggestion?.name ? profile.name : current);
       })
       .finally(() => {
@@ -117,17 +123,31 @@ export function useRegistryWizard() {
     if (currentImages.length > 0 || !onboardingSuggestion || !brandProfile?.reference_image_url) return;
 
     setImportingWebsiteReference(true);
+    setWebsiteReferenceImportError("");
     try {
       const imported = await importOnboardingWebsiteReference(ip.id);
-      if (imported.job_id) setIndexJobId(imported.job_id);
-      if (imported.imported) {
-        const data = await getTrademark(ip.id);
-        setTrademark(data.trademark);
-        setImages(data.images);
+      if (!imported.imported) {
+        setWebsiteReferenceImportError(
+          imported.reason === "image_unavailable"
+            ? "We found the official image, but it was not suitable to add automatically."
+            : "We couldn’t add the official image automatically.",
+        );
+        return;
       }
+      if (imported.job_id) setIndexJobId(imported.job_id);
+      const data = await getTrademark(ip.id);
+      setTrademark(data.trademark);
+      setImages(data.images);
+    } catch {
+      setWebsiteReferenceImportError("We couldn’t add the official image automatically.");
     } finally {
       setImportingWebsiteReference(false);
     }
+  }
+
+  async function handleRetryWebsiteReference() {
+    if (!trademark || importingWebsiteReference) return;
+    await importWebsiteReferenceIfAvailable(trademark, images);
   }
 
   async function createIp(
@@ -163,9 +183,18 @@ export function useRegistryWizard() {
     if (brandProfile) {
       setDescription(brandProfile.summary);
       setKeywords(brandProfile.monitoring_keywords?.length ? brandProfile.monitoring_keywords : [ipName]);
-    } else if (onboardingSuggestion && keywords.length === 0) {
-      setKeywords([ipName]);
+    } else {
+      setBrandNames([ipName]);
+      if (keywords.length === 0) setKeywords([ipName]);
     }
+  }
+
+  function handleRejectBrand() {
+    setBrandProfile(null);
+    setName("");
+    setBrandNames([]);
+    setProductTerms([]);
+    setKeywords([]);
   }
 
   async function loadExistingIp(ipName: string): Promise<Trademark | null> {
@@ -180,6 +209,9 @@ export function useRegistryWizard() {
       setCreatedInThisFlow(false);
       setImages(data.images);
       setDescription(data.trademark.description?.trim() || brandProfile?.summary || "");
+      setBrandNames(
+        brandProfile?.brand_names?.length ? brandProfile.brand_names : [data.trademark.name],
+      );
       setKeywords(
         data.trademark.keywords.length > 0
           ? data.trademark.keywords
@@ -224,6 +256,7 @@ export function useRegistryWizard() {
       const { job_id } = await uploadTrademarkImages(trademark.id, files);
       setIndexJobId(job_id);
       await refreshTrademark();
+      setWebsiteReferenceImportError("");
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -255,6 +288,26 @@ export function useRegistryWizard() {
 
   function removeKeyword(index: number) {
     setKeywords(keywords.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function addBrandName() {
+    const candidate = brandNameDraft.replace(/\s+/g, " ").trim();
+    if (!candidate) return;
+    if (brandNames.some((brandName) => brandName.toLocaleLowerCase() === candidate.toLocaleLowerCase())) {
+      setBrandNameDraft("");
+      return;
+    }
+    const next = [...brandNames, candidate].slice(0, 5);
+    setBrandNames(next);
+    setBrandNameDraft("");
+    if (productTerms.length > 0) setKeywords(buildMonitoringKeywords(next, productTerms));
+  }
+
+  function removeBrandName(index: number) {
+    if (index === 0) return;
+    const next = brandNames.filter((_, itemIndex) => itemIndex !== index);
+    setBrandNames(next);
+    if (productTerms.length > 0) setKeywords(buildMonitoringKeywords(next, productTerms));
   }
 
   async function handleDetailsContinue() {
@@ -342,13 +395,17 @@ export function useRegistryWizard() {
     images,
     uploading,
     importingWebsiteReference,
+    websiteReferenceImportError,
     name,
     setName,
     submittingName,
     description,
     setDescription,
+    brandNames,
+    brandNameDraft,
+    setBrandNameDraft,
+    canEditBrandNames: productTerms.length > 0,
     brandProfile,
-    setBrandProfile,
     brandProfileLoading,
     brandLogoFailed,
     setBrandLogoFailed,
@@ -368,11 +425,15 @@ export function useRegistryWizard() {
     onboardingDomain,
     handleCreate,
     handleConfirmBrand,
+    handleRejectBrand,
     handleUpload,
+    handleRetryWebsiteReference,
     handleDeleteImage,
     addKeyword,
     handleKeywordDraftChange,
     removeKeyword,
+    addBrandName,
+    removeBrandName,
     handleDetailsContinue,
     handleAssetsContinue,
     handleStartMonitoring,

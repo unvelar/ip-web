@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { suggestOnboardingIp } from "../src/lib/onboarding";
+import { buildMonitoringKeywords, suggestOnboardingIp } from "../src/lib/onboarding";
 
 describe("suggestOnboardingIp", () => {
   test("suggests an editable IP name from a corporate email domain", () => {
@@ -17,5 +17,21 @@ describe("suggestOnboardingIp", () => {
   test("does not suggest consumer email providers or malformed addresses", () => {
     expect(suggestOnboardingIp("owner@gmail.com")).toBeNull();
     expect(suggestOnboardingIp("not-an-email")).toBeNull();
+  });
+});
+
+describe("buildMonitoringKeywords", () => {
+  test("pairs each validated name with product context", () => {
+    expect(buildMonitoringKeywords(
+      ["Liverpool FC", "Liverpool", "LFC"],
+      ["jerseys", "football kits"],
+    )).toEqual([
+      "Liverpool FC jerseys",
+      "Liverpool FC football kits",
+      "Liverpool jerseys",
+      "Liverpool football kits",
+      "LFC jerseys",
+      "LFC football kits",
+    ]);
   });
 });

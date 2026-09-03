@@ -3,6 +3,7 @@ import ImageUploader from "../components/ImageUploader";
 import { PlatformSelector } from "../components/monitoring/PlatformSelector";
 import { COUNTRIES, countryLabel } from "../lib/countries";
 import {
+  BrandNameVariants,
   BrandConfirmationCard,
   ImageGrid,
   OnboardingProgress,
@@ -74,10 +75,7 @@ function BrandStep({ flow }: { flow: OnboardingFlow }) {
           confirming={flow.submittingName}
           onLogoError={() => flow.setBrandLogoFailed(true)}
           onConfirm={() => void flow.handleConfirmBrand()}
-          onReject={() => {
-            flow.setBrandProfile(null);
-            flow.setName("");
-          }}
+          onReject={flow.handleRejectBrand}
         />
       ) : (
         <form onSubmit={flow.handleCreate} className="space-y-5">
@@ -110,6 +108,18 @@ function ReferencesStep({ flow }: { flow: OnboardingFlow }) {
             We’re adding the official brand image in the background. You can upload more now.
           </div>
         )}
+        {flow.websiteReferenceImportError && flow.images.length === 0 && !flow.importingWebsiteReference && (
+          <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+            <span>{flow.websiteReferenceImportError} You can retry or upload another reference.</span>
+            <button
+              type="button"
+              onClick={() => void flow.handleRetryWebsiteReference()}
+              className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+            >
+              Try again
+            </button>
+          </div>
+        )}
         <ImageUploader onUpload={flow.handleUpload} uploading={flow.uploading} compact />
         <ImageGrid images={flow.images} onDelete={(id) => void flow.handleDeleteImage(id)} />
         <div className="flex flex-col gap-3 border-t border-stone-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -129,6 +139,14 @@ function SearchTermsStep({ flow }: { flow: OnboardingFlow }) {
   return (
     <StepPanel step={3} title="Review what we’ll look for" description="We’ve drafted focused searches from your brand. Adjust anything that doesn’t feel right.">
       <div className="space-y-4">
+        <BrandNameVariants
+          names={flow.brandNames}
+          draft={flow.brandNameDraft}
+          editable={flow.canEditBrandNames}
+          onDraftChange={flow.setBrandNameDraft}
+          onAdd={flow.addBrandName}
+          onRemove={flow.removeBrandName}
+        />
         <div>
           <label className="mb-2 block text-sm font-semibold text-stone-700">Brand description <span className="font-normal text-stone-400">(optional)</span></label>
           <textarea value={flow.description} onChange={(event) => flow.setDescription(event.target.value)} rows={2} placeholder="What makes this brand distinctive?" className="w-full rounded-xl border border-stone-200 px-4 py-3 text-sm outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-100" />

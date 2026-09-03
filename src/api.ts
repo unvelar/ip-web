@@ -108,6 +108,10 @@ export function getMe() {
 export interface OnboardingBrandProfile {
   domain: string;
   name: string;
+  /** Canonical name first, followed by validated AI-generated aliases. */
+  brand_names?: string[];
+  /** Validated goods/context terms used to compose monitoring searches. */
+  product_terms?: string[];
   logo_url: string | null;
   summary: string;
   categories: string[];
@@ -456,7 +460,11 @@ export function deleteTrademarkImage(trademarkId: string, imageId: string) {
 }
 
 export function importOnboardingWebsiteReference(trademarkId: string) {
-  return request<{ imported: boolean; job_id: string | null }>(
+  return request<{
+    imported: boolean;
+    job_id: string | null;
+    reason?: "not_applicable" | "image_unavailable" | "fetch_failed";
+  }>(
     `/api/ip/${trademarkId}/onboarding-reference`,
     { method: "POST" },
   );

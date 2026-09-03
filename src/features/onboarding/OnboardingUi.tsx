@@ -70,6 +70,77 @@ export function ProcessingStep({
   );
 }
 
+export function BrandNameVariants({
+  names,
+  draft,
+  editable = false,
+  onDraftChange,
+  onAdd,
+  onRemove,
+}: {
+  names: string[];
+  draft?: string;
+  editable?: boolean;
+  onDraftChange?: (value: string) => void;
+  onAdd?: () => void;
+  onRemove?: (index: number) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-sm font-semibold text-stone-700">Brand names we found</p>
+      <p className="mb-3 text-xs leading-5 text-stone-500">
+        We combine each name with a product term, so short names never become broad searches by themselves.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {names.map((brandName, index) => (
+          <span
+            key={`${index}-${brandName}`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-800"
+          >
+            {brandName}
+            {editable && index > 0 && onRemove && (
+              <button
+                type="button"
+                onClick={() => onRemove(index)}
+                className="font-bold text-blue-400 hover:text-red-600"
+                title={`Remove ${brandName}`}
+                aria-label={`Remove ${brandName}`}
+              >
+                ×
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+      {editable && onDraftChange && onAdd && names.length < 5 && (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            value={draft ?? ""}
+            onChange={(event) => onDraftChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onAdd();
+              }
+            }}
+            placeholder="Add another name or acronym"
+            aria-label="Another brand name or acronym"
+            className="min-w-0 flex-1 rounded-xl border border-stone-200 px-4 py-3 text-sm outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-100"
+          />
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={!draft?.trim()}
+            className="rounded-xl bg-stone-100 px-4 py-3 text-xs font-semibold text-stone-700 disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BrandConfirmationCard({
   profile,
   logoFailed,
