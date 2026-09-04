@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { ScrapeMethodBadge } from "./ScrapeMethodBadge";
+import { JobScrapeMethodBadge } from "./ScrapeMethodBadge";
+import { supportsScrapeMethod } from "./scrapeMethods";
 import {
   AlertCircle,
   Check,
@@ -136,11 +137,12 @@ export function AdminMonitoringRunDetailPanel({
         <RunFact label="Live detail" value={refreshing ? "Refreshing now" : `Updated ${formatRelative(detail.generated_at)}`} live />
       </div>
 
-      {detail.jobs.some((job) => job.type === "monitor_scrape") && (
+      {detail.jobs.some((job) => supportsScrapeMethod(job.type)) && (
         <section className="border-b border-stone-200 px-4 py-4">
-          <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-stone-500">Scrape execution</h3>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {detail.jobs.filter((job) => job.type === "monitor_scrape").map((job) => (
+          <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-stone-500">Fetch executions</h3>
+          <p className="mt-0.5 text-xs text-stone-400">Discovery and page verification, with each job's own methods.</p>
+          <div className="mt-3 grid max-h-80 gap-3 overflow-y-auto sm:grid-cols-2">
+            {[...new Map(detail.jobs.filter((job) => supportsScrapeMethod(job.type)).map((job) => [job.id, job])).values()].map((job) => (
               <JobTimelineRow key={job.id} job={job} />
             ))}
           </div>
@@ -320,6 +322,7 @@ function CandidateRows({ candidate, open, onToggle }: {
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700">
                 <JobStatusDot status={activeJob.status} /> {JOB_LABELS[activeJob.type] ?? humanize(activeJob.type)}
               </div>
+              <JobScrapeMethodBadge job={activeJob} />
               <p className="mt-1 text-[10px] text-stone-400">
                 {activeJob.status === "pending" ? `Queued ${formatRelative(activeJob.queued_at)}` : humanize(activeJob.status)}
                 {activeJob.batch_index && `, batch ${activeJob.batch_index}/${activeJob.batch_count}`}
@@ -469,7 +472,7 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
           <p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p>
           <p className="text-[10px] text-stone-400">{humanize(job.status)}</p>
         </div>
-        {job.type === "monitor_scrape" && <div className="mt-1"><ScrapeMethodBadge scrape={job.scrape} status={job.status} /></div>}
+        <JobScrapeMethodBadge job={job} />
         <p className="mt-0.5 text-[10px] text-stone-400">
           attempt {job.attempts}/{job.max_attempts}
           {job.batch_index && `, batch ${job.batch_index}/${job.batch_count}`}

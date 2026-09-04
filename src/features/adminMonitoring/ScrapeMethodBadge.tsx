@@ -1,5 +1,6 @@
 import { ArrowRight } from "lucide-react";
-import type { AdminMonitoringScrapeEvidence } from "../../api";
+import type { AdminMonitoringJob, AdminMonitoringScrapeEvidence } from "../../api";
+import { supportsScrapeMethod } from "./scrapeMethods";
 
 const METHOD_COPY = {
   marketplace_specific: { label: "Marketplace specific", style: "bg-sky-50 text-sky-700 border-sky-100" },
@@ -7,6 +8,11 @@ const METHOD_COPY = {
   scrapfly: { label: "Scrapfly", style: "bg-orange-50 text-orange-700 border-orange-100" },
   web_search: { label: "Web search", style: "bg-blue-50 text-blue-700 border-blue-100" },
 };
+
+export function JobScrapeMethodBadge({ job }: { job: Pick<AdminMonitoringJob, "type" | "scrape" | "status"> }) {
+  if (!supportsScrapeMethod(job.type)) return null;
+  return <div className="mt-1"><ScrapeMethodBadge scrape={job.scrape} status={job.status} /></div>;
+}
 
 export function ScrapeMethodBadge({ scrape, status }: {
   scrape?: AdminMonitoringScrapeEvidence | null;
@@ -20,13 +26,20 @@ export function ScrapeMethodBadge({ scrape, status }: {
   }
   return (
     <span className="inline-flex flex-wrap items-center gap-1" aria-label={`Scrape method: ${scrape.steps.map((step) => METHOD_COPY[step.method].label).join(", ")}`}>
+      {status === "pending" && <span className="text-[9px] text-stone-500">Previous attempt:</span>}
       {scrape.steps.map((step, index) => {
         const copy = METHOD_COPY[step.method];
         const suffix = step.role === "shadow" ? " shadow" : step.role === "reused" ? " reused" : "";
+        const outcome = step.outcome === "started"
+          ? status === "in_progress" || status === "running" ? "running" : "attempted"
+          : step.outcome === "ready" ? "captured"
+            : step.outcome === "unavailable" ? "listing unavailable" : step.outcome;
         const title = [
           copy.label,
           step.provider ? `Provider: ${step.provider.replace(/_/g, " ")}` : null,
           scrape.source === "worker" ? `${step.role} method recorded by the worker` : "Observed in stored results; the full attempt sequence was not recorded",
+          outcome,
+          step.reason,
           step.recorded_at ? new Date(step.recorded_at).toLocaleString() : null,
         ].filter(Boolean).join(". ");
         return (
@@ -35,7 +48,7 @@ export function ScrapeMethodBadge({ scrape, status }: {
               ? <ArrowRight className="h-2.5 w-2.5 text-stone-400" aria-hidden="true" />
               : <span className="text-[9px] text-stone-400">+</span>)}
             <span className={`rounded border px-1.5 py-0.5 text-[9px] font-semibold ${copy.style}`} title={title}>
-              {copy.label}{suffix}
+              {copy.label}{suffix}{outcome && <span className="font-normal"> · {outcome}</span>}
             </span>
           </span>
         );

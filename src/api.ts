@@ -1216,12 +1216,14 @@ export interface AdminMonitoringRunJobStage {
 }
 
 export interface AdminMonitoringScrapeEvidence {
-  source: "worker" | "candidates" | "job_result" | "not_recorded";
+  source: "worker" | "candidates" | "job_result" | "page_capture" | "not_recorded";
   steps: Array<{
     method: "marketplace_specific" | "nodriver" | "scrapfly" | "web_search";
     role: "primary" | "fallback" | "shadow" | "reused";
     provider: string | null;
     recorded_at: string | null;
+    outcome?: "started" | "ready" | "unavailable" | "failed" | "blocked" | "skipped" | null;
+    reason?: string | null;
   }>;
 }
 
