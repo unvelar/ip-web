@@ -372,6 +372,9 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
             <div>
               <h4 className="text-xs font-bold text-stone-900">Why this decision</h4>
               <p className="mt-1 text-sm leading-6 text-stone-700">{decision.explanation}</p>
+              {decision.integrity === "conflict" && (
+                <p className="mt-2 text-xs leading-5 text-amber-800">An audit record contains conflicting evidence. It has not been used to override a saved finding.</p>
+              )}
               {decision.vlm_reasoning && decision.vlm_reasoning !== decision.explanation && (
                 <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-stone-400">VLM reasoning</p>
@@ -382,10 +385,32 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
           </div>
         </div>
 
+        {!!candidate.comparisons?.length && (
+          <div className="rounded-xl border border-stone-200 bg-white p-4">
+            <h4 className="text-xs font-bold text-stone-900">Comparisons by protected IP</h4>
+            <div className="mt-3 divide-y divide-stone-100">
+              {candidate.comparisons.map((comparison, index) => {
+                const reference = candidate.references.find((row) => row.id === comparison.reference_image_id);
+                return (
+                  <div key={`${comparison.reference_image_id ?? comparison.top_ip}-${index}`} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                    {reference?.url && <DebugImage src={reference.url} className="h-14 w-14 shrink-0 rounded-lg border border-stone-200 bg-stone-50 object-contain" />}
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-stone-900">{comparison.top_ip || "Unidentified IP"}</p>
+                      <p className={`mt-0.5 text-xs font-medium ${comparison.decision.state === "confirmed" ? "text-emerald-700" : "text-stone-600"}`}>{comparison.decision.label}</p>
+                      <p className="mt-1 text-[11px] leading-4 text-stone-500">{comparison.decision.explanation}</p>
+                      {!comparison.reference_image_id && <p className="mt-1 text-[10px] text-stone-400">Historical reference not retained</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-2">
           <EvidenceImage label="Candidate" url={candidate.image_url} />
           <div className="rounded-xl border border-stone-200 bg-white p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-stone-400">Reference used</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-stone-400">Comparison references</p>
             {candidate.references.length > 0 ? (
               <div className="mt-2 flex gap-2 overflow-x-auto">
                 {candidate.references.map((reference) => (
@@ -421,6 +446,14 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
                       {audit.top_ip && <span className="text-stone-500">target {audit.top_ip}</span>}
                     </div>
                     {audit.vlm_reasoning && <p className="mt-1 leading-4 text-stone-500">{audit.vlm_reasoning}</p>}
+                    {audit.repair && (
+                      <details className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-900">
+                        <summary className="cursor-pointer font-semibold">Corrected audit record</summary>
+                        <p className="mt-1 leading-4">{audit.repair.reason}</p>
+                        <p className="mt-1 text-[10px]">Corrected {formatTimestamp(audit.repair.created_at)}. Original evidence retained below.</p>
+                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[10px]">{JSON.stringify(audit.repair.original_row, null, 2)}</pre>
+                      </details>
+                    )}
                   </div>
                 </div>
               ))}

@@ -162,7 +162,7 @@ export default function AdminMonitoring() {
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
               <div>
                 <p className="text-xs font-bold text-red-900">{overview.summary.evidence_conflicts} stored labels conflict with their VLM verdict</p>
-                <p className="mt-0.5 text-[11px] leading-4 text-red-800">The drill-down treats the verdict as evidence and marks the mismatch for investigation.</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-red-800">These audit records need investigation. Conflicting evidence does not override a saved finding.</p>
               </div>
             </div>
           )}

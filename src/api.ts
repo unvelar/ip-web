@@ -1411,6 +1411,7 @@ export interface AdminMonitoringAuditEvidence {
   ip_catalog_id: string | null;
   reference_image_id: string | null;
   created_at: string;
+  repair?: { reason: string; created_at: string; original_row: Record<string, unknown> } | null;
 }
 
 export interface AdminMonitoringCandidate {
@@ -1460,6 +1461,12 @@ export interface AdminMonitoringCandidate {
     };
   };
   audits: AdminMonitoringAuditEvidence[];
+  comparisons?: Array<{
+    ip_catalog_id: string | null;
+    top_ip: string | null;
+    reference_image_id: string | null;
+    decision: AdminMonitoringCandidate["debug"]["decision"];
+  }>;
   results: Array<{
     id: string;
     run_id: string;
