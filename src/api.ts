@@ -1775,7 +1775,7 @@ export function patchAdminIp(
 }
 
 export function deleteAdminIp(id: string) {
-  return request<{ ok: boolean; deleted_uploads: number }>(
+  return request<{ ok: boolean; cleanup_queued: number }>(
     `/api/admin/ips/${encodeURIComponent(id)}`,
     { method: "DELETE" }
   );
