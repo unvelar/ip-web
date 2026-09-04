@@ -1140,10 +1140,15 @@ export interface ComputeProfileRecord extends ComputeRuntimeSettingsRecord {
     pending_jobs: number;
     in_progress_jobs: number;
     desired_instances: number;
+    on_instances: number;
+    provisioning_instances: number;
     ready_instances: number;
+    busy_workers: number;
+    idle_workers: number;
     last_decision: string | null;
     last_reason: string | null;
     last_error: string | null;
+    metadata: Record<string, unknown>;
   } | null;
   workers: Array<{
     id: string;
@@ -1296,6 +1301,11 @@ export interface AdminMonitoringWorker {
     gpu_name: string | null;
     gpu_total_memory_gib: number | null;
   };
+  startup: {
+    phase: string | null;
+    phase_started_at: string | null;
+    error: string | null;
+  };
 }
 
 export interface AdminMonitoringOverview {
@@ -1379,6 +1389,8 @@ export interface AdminMonitoringRunpodCoordinator {
   provisioning_instances: number;
   on_instances: number;
   ready_instances: number;
+  preparing_instances: number;
+  draining_instances: number;
   busy_workers: number;
   idle_workers: number;
   last_decision: string | null;

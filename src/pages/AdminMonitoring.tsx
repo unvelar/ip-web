@@ -407,13 +407,20 @@ function WorkerFleet({ overview, onOpenRun }: {
               const coordinator = overview.runpod.coordinators.find((row) => row.pool === pool);
               const workers = runpodWorkers.filter((worker) => worker.pool === pool);
               const instances = overview.runpod.instances.filter((instance) => instance.pool === pool);
-              const providerStarting = instances.filter((instance) => {
+              const inferredPreparing = instances.filter((instance) => {
                 if (instance.status === "requested" || instance.status === "provisioning") return true;
                 if (instance.status !== "running") return false;
                 const attachedWorker = workers.find((worker) => worker.id === instance.worker_instance_id);
                 return !attachedWorker
                   || !["idle", "busy"].includes(attachedWorker.effective_status);
               }).length;
+              const preparing = coordinator?.preparing_instances ?? inferredPreparing;
+              const draining = coordinator?.draining_instances
+                ?? workers.filter((worker) => worker.drain_requested_at !== null).length;
+              const busy = coordinator?.busy_workers
+                ?? workers.filter((worker) => worker.effective_status === "busy").length;
+              const on = coordinator?.on_instances
+                ?? instances.filter((instance) => ["requested", "provisioning", "running"].includes(instance.status)).length;
               const hasError = Boolean(coordinator?.last_error)
                 || instances.some((instance) => instance.status === "error");
               return (
@@ -425,21 +432,24 @@ function WorkerFleet({ overview, onOpenRun }: {
                     </div>
                     <span className={`rounded-md px-2 py-1 text-[9px] font-bold uppercase tracking-wide ${
                       hasError ? "bg-red-50 text-red-700"
-                        : providerStarting > 0 ? "bg-amber-50 text-amber-700"
-                          : (coordinator?.ready_instances ?? 0) > 0 ? "bg-emerald-50 text-emerald-700"
-                            : "bg-stone-100 text-stone-500"
+                        : draining > 0 ? "bg-orange-50 text-orange-700"
+                          : busy > 0 ? "bg-blue-50 text-blue-700"
+                            : preparing > 0 ? "bg-amber-50 text-amber-700"
+                              : (coordinator?.ready_instances ?? 0) > 0 ? "bg-emerald-50 text-emerald-700"
+                                : "bg-stone-100 text-stone-500"
                     }`}>
-                      {hasError ? "Error" : providerStarting > 0 ? "Starting" : (coordinator?.ready_instances ?? 0) > 0 ? "Ready" : "Scaled down"}
+                      {hasError ? "Error" : draining > 0 ? "Draining" : busy > 0 ? "Busy" : preparing > 0 ? "Preparing" : (coordinator?.ready_instances ?? 0) > 0 ? "Ready" : "Scaled down"}
                     </span>
                   </div>
                   <div className="mt-3 grid gap-4 @sm:grid-cols-2">
                     <div className="min-w-0">
                       <h5 className="mb-2 text-[10px] font-semibold text-stone-500">Capacity</h5>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        <FleetMetric label="Wanted" value={coordinator?.desired_instances ?? 0} />
+                      <div className="grid grid-cols-5 gap-1.5">
+                        <FleetMetric label="On" value={on} />
+                        <FleetMetric label="Preparing" value={preparing} />
                         <FleetMetric label="Ready" value={coordinator?.ready_instances ?? 0} />
-                        <FleetMetric label="Starting" value={providerStarting} />
-                        <FleetMetric label="Busy" value={coordinator?.busy_workers ?? workers.filter((worker) => worker.effective_status === "busy").length} />
+                        <FleetMetric label="Busy" value={busy} />
+                        <FleetMetric label="Draining" value={draining} />
                       </div>
                       <div className="mt-3 rounded-lg bg-stone-50 px-3 py-2">
                         <p className="text-[10px] font-semibold text-stone-700">
@@ -485,10 +495,12 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
   onOpenRun: (runId: string) => void;
   compact?: boolean;
 }) {
-  const statusStyle = worker.effective_status === "busy" ? "bg-blue-50 text-blue-700"
-    : worker.effective_status === "idle" ? "bg-emerald-50 text-emerald-700"
-      : worker.effective_status === "provisioning" || worker.effective_status === "registered" ? "bg-amber-50 text-amber-700"
-        : worker.effective_status === "error" ? "bg-red-50 text-red-700"
+  const displayStatus = worker.drain_requested_at ? "draining" : worker.effective_status;
+  const statusStyle = displayStatus === "draining" ? "bg-orange-50 text-orange-700"
+    : displayStatus === "busy" ? "bg-blue-50 text-blue-700"
+      : displayStatus === "idle" ? "bg-emerald-50 text-emerald-700"
+        : displayStatus === "provisioning" || displayStatus === "registered" ? "bg-amber-50 text-amber-700"
+          : displayStatus === "error" ? "bg-red-50 text-red-700"
           : "bg-stone-100 text-stone-500";
   const name = worker.hardware.pod_name || worker.hardware.hostname || worker.id;
   const work = worker.current_work;
@@ -496,10 +508,10 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
     <div className={`rounded-lg border border-stone-200 bg-white ${compact ? "px-2.5 py-2" : "p-3"}`}>
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className={`h-2 w-2 shrink-0 rounded-full ${worker.effective_status === "busy" ? "bg-blue-500" : worker.effective_status === "idle" ? "bg-emerald-500" : worker.effective_status === "error" ? "bg-red-500" : "bg-amber-400"}`} />
+          <span className={`h-2 w-2 shrink-0 rounded-full ${displayStatus === "draining" ? "bg-orange-500" : displayStatus === "busy" ? "bg-blue-500" : displayStatus === "idle" ? "bg-emerald-500" : displayStatus === "error" ? "bg-red-500" : "bg-amber-400"}`} />
           <span className="truncate font-mono text-[10px] font-semibold text-stone-700" title={worker.id}>{name}</span>
         </div>
-        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${statusStyle}`}>{humanize(worker.effective_status)}</span>
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${statusStyle}`}>{humanize(displayStatus)}</span>
       </div>
       <div className="mt-1.5 flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -514,9 +526,12 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
             </>
           ) : (
             <p className="text-[10px] text-stone-400">
-              {worker.effective_status === "provisioning" ? "Provider is starting this worker" : "No job assigned"}
+              {worker.effective_status === "provisioning"
+                ? worker.startup.phase ? `Preparing: ${humanize(worker.startup.phase)}` : "Provider is starting this worker"
+                : "No job assigned"}
             </p>
           )}
+          {worker.startup.error && <p className="mt-1 text-[9px] font-semibold text-red-600">{worker.startup.error}</p>}
           {!compact && (
             <p className="mt-1 text-[9px] text-stone-400">
               {worker.hardware.gpu_name || (worker.capabilities.browser ? "Browser runtime" : worker.runtime_mode || worker.pool)}
