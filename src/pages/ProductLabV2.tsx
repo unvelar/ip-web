@@ -198,10 +198,6 @@ function representativeImage(group: PersistedProductGroup) {
   return (group.members[0] ?? group.triage_members[0] ?? null)?.image_url ?? null;
 }
 
-function offerCount(group: PersistedProductGroup) {
-  return group.commercial_subgroups.filter((subgroup) => subgroup.member_count > 0).length;
-}
-
 function commercialReviewLaneLabel(subgroup: ProductGroupCommercialSubgroup) {
   if (subgroup.price_band === "unusually_low") {
     return `${subgroup.variant_label} · unusually low`;
@@ -1774,6 +1770,7 @@ export default function ProductLab() {
                         depth={0}
                         collapsedPaths={collapsedCategoryPaths}
                         forceExpanded={Boolean(query.trim())}
+                        showAllListings={view === "all" || Boolean(mergeSourceGroup)}
                         selectedGroupId={selectedGroup?.id ?? null}
                         mergeSourceGroupId={mergeSourceGroup?.id ?? null}
                         mergeTargetGroupIds={mergeTargetGroupIds}
@@ -2031,6 +2028,7 @@ function ProductCategoryBranch({
   ancestors = [],
   collapsedPaths,
   forceExpanded,
+  showAllListings,
   selectedGroupId,
   mergeSourceGroupId,
   mergeTargetGroupIds,
@@ -2044,6 +2042,7 @@ function ProductCategoryBranch({
   ancestors?: ProductCategoryNode[];
   collapsedPaths: Set<string>;
   forceExpanded: boolean;
+  showAllListings: boolean;
   selectedGroupId: string | null;
   mergeSourceGroupId: string | null;
   mergeTargetGroupIds: Set<string>;
@@ -2081,6 +2080,7 @@ function ProductCategoryBranch({
             ancestors={breadcrumbChain}
             collapsedPaths={collapsedPaths}
             forceExpanded={forceExpanded}
+            showAllListings={showAllListings}
             selectedGroupId={selectedGroupId}
             mergeSourceGroupId={mergeSourceGroupId}
             mergeTargetGroupIds={mergeTargetGroupIds}
@@ -2169,6 +2169,9 @@ function ProductCategoryBranch({
               key={group.id}
               group={group}
               index={index}
+              listingCount={showAllListings
+                ? group.member_count
+                : group.triage_member_count ?? group.member_count}
               depth={depth + 1}
               selected={selectedGroupId === group.id}
               mergeState={mergeSourceGroupId
@@ -2191,6 +2194,7 @@ function ProductCategoryBranch({
               ancestors={breadcrumbChain}
               collapsedPaths={collapsedPaths}
               forceExpanded={forceExpanded}
+              showAllListings={showAllListings}
               selectedGroupId={selectedGroupId}
               mergeSourceGroupId={mergeSourceGroupId}
               mergeTargetGroupIds={mergeTargetGroupIds}
@@ -2247,6 +2251,7 @@ function CategoryPathToggle({
 function ProductRow({
   group,
   index,
+  listingCount,
   depth = 0,
   selected,
   mergeState,
@@ -2256,6 +2261,7 @@ function ProductRow({
 }: {
   group: PersistedProductGroup;
   index: number;
+  listingCount: number;
   depth?: number;
   selected: boolean;
   mergeState: "source" | "selected" | "available" | null;
@@ -2265,7 +2271,6 @@ function ProductRow({
 }) {
   const image = representativeImage(group);
   const status = productStatus(group);
-  const offers = offerCount(group);
   const prices = priceRange(group);
   const mergeSelected = mergeState === "source" || mergeState === "selected";
   const rowSelected = mergeState ? mergeSelected : selected;
@@ -2337,7 +2342,7 @@ function ProductRow({
             <span className="truncate">{status.label}</span>
           </span>
           <span className="text-stone-300">·</span>
-          <span className="truncate">{offers} {offers === 1 ? "offer" : "offers"}</span>
+          <span className="truncate">{listingCount} {listingCount === 1 ? "listing" : "listings"}</span>
           {prices && (
             <span className="hidden items-center gap-2 sm:inline-flex">
               <span className="text-stone-300">·</span>
@@ -2628,6 +2633,7 @@ function BatchWorkspace({
   onDismissNotice: () => void;
 }) {
   const status = productStatus(group);
+  const listingCount = findings?.length ?? group.triage_member_count ?? 0;
   const counts = new Map<ReviewBucket, number>([["all", findings?.length ?? 0]]);
   for (const finding of findings ?? []) {
     const bucket = reviewBucket(finding);
@@ -2675,7 +2681,7 @@ function BatchWorkspace({
               {productName(group)}
             </h2>
             <p className="mt-1 text-[10px] text-stone-500">
-              {findings?.length ?? group.triage_member_count ?? 0} listings in this batch
+              {listingCount} {listingCount === 1 ? "listing" : "listings"} in this batch
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
