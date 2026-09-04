@@ -13,7 +13,6 @@ import {
   Menu,
   X,
   Building2,
-  GitBranch,
   Network,
   PanelLeftClose,
   PanelLeftOpen,
@@ -59,10 +58,10 @@ const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
  *
  * Sidebar layout (top → bottom):
  *   Dashboard
- *   Monitoring
+ *   Marketplaces
  *     ↳ Tasks        (badge = open monitoring findings)
  *     ↳ Sellers      (badge = returned sellers with open listings)
- *     ↳ Settings     (manage which IPs + URLs to crawl)
+ *     ↳ Product lab
  *   Clearance
  *     ↳ Tasks        (badge = clearance reviews needing attention)
  *     ↳ New          (launch the clearance wizard)
@@ -264,7 +263,7 @@ function AppShellContent() {
         />
 
         <NavGroup
-          label="Monitoring"
+          label="Marketplaces"
           icon={<Radar size={14} />}
           open={monOpen}
           onToggle={() => setMonOpen((v) => !v)}
@@ -276,13 +275,6 @@ function AppShellContent() {
             label="Tasks"
             active={isActive("/monitoring/tasks") || pathname === "/findings" || pathname.startsWith("/findings/")}
             badge={monitoringCount}
-            collapsed={collapsed}
-          />
-          <NavItem
-            to="/monitoring/campaigns"
-            icon={<GitBranch size={18} />}
-            label="Campaigns"
-            active={isActive("/monitoring/campaigns")}
             collapsed={collapsed}
           />
           <NavItem
@@ -298,20 +290,6 @@ function AppShellContent() {
             icon={<Network size={18} />}
             label="Product lab"
             active={pathname === "/monitoring/products" || pathname.startsWith("/monitoring/products/")}
-            collapsed={collapsed}
-          />
-          <NavItem
-            to="/monitoring/new"
-            icon={<Plus size={18} />}
-            label="New"
-            active={isActive("/monitoring/new")}
-            collapsed={collapsed}
-          />
-          <NavItem
-            to="/monitoring/settings"
-            icon={<SettingsIcon size={18} />}
-            label="Settings"
-            active={isActive("/monitoring/settings") || isActive("/monitors")}
             collapsed={collapsed}
           />
         </NavGroup>
