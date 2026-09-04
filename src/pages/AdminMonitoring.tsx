@@ -121,7 +121,7 @@ export default function AdminMonitoring() {
             Follow searches, queues, workers, and candidate decisions live. Open a run to see the exact evidence behind every outcome.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
           <div className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-500" aria-live="polite">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
@@ -221,7 +221,7 @@ export default function AdminMonitoring() {
                   feed.status === value ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
                 }`}
               >
-                {label} <span className={feed.status === value ? "text-white/60" : "text-stone-400"}>{count}</span>
+                {label} {value !== "all" && <span className={feed.status === value ? "text-white/60" : "text-stone-400"}>{count}</span>}
               </button>
             ))}
           </div>
