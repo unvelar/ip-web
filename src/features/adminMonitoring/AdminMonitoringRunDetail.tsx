@@ -123,6 +123,11 @@ export function AdminMonitoringRunDetailPanel({
 
   return (
     <div className="border-t border-stone-200 bg-stone-50/70">
+      {detail.run.ip_retired_at && (
+        <div className="m-4 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
+          This IP was removed from monitoring on {formatTimestamp(detail.run.ip_retired_at)}. The outcomes below are historical. No retry is needed for this removed IP.
+        </div>
+      )}
       {error && (
         <div className="m-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -190,7 +195,7 @@ export function AdminMonitoringRunDetailPanel({
               ["confirmed", "Confirmed"],
               ["rejected", "Rejected"],
               ["screened_out", "Screened"],
-              ["attention", "Investigate"],
+              ["attention", detail.run.ip_retired_at ? "Historical issues" : "Needs attention"],
             ] as Array<[CandidateFilter, string]>).map(([value, label]) => (
               <button
                 key={value}
@@ -421,6 +426,7 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
                         : <div className="flex h-full items-center justify-center text-stone-300"><ImageIcon className="h-5 w-5" /></div>}
                     </div>
                     <p className="mt-1 truncate font-mono text-[9px] text-stone-400" title={reference.id}>{shortId(reference.id)}</p>
+                    {reference.status === "removed" && <p className="mt-0.5 text-[10px] text-stone-500">Reference removed</p>}
                   </div>
                 ))}
               </div>

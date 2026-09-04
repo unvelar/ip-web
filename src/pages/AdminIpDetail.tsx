@@ -90,7 +90,7 @@ export default function AdminIpDetailPage() {
 
   async function handleDeleteIp() {
     if (!id || !data) return;
-    if (!confirm(`Delete IP "${data.name ?? id}"? This cannot be undone.`)) return;
+    if (!confirm(`Remove IP "${data.name ?? id}" from monitoring? Owned reference images will be deleted. Existing cases and findings will be kept.`)) return;
     setDeletingAll(true);
     setError("");
     try {

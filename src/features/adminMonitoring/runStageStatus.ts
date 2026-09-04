@@ -16,6 +16,6 @@ export function monitoringRunStageStatus(
     if (stage.completed_jobs > 0) return "done";
   }
   if (operationState === "completed") return "not_needed";
-  if (operationState === "failed") return "not_reached";
+  if (operationState === "failed" || operationState === "removed") return "not_reached";
   return "waiting";
 }

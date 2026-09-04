@@ -143,9 +143,13 @@ export default function RegistryDetail() {
   }
 
   async function handleDelete() {
-    if (!id || !confirm("Delete this IP and all its images?")) return;
-    await deleteTrademark(id);
-    navigate("/ips");
+    if (!id || !confirm("Remove this IP from monitoring and delete its reference images? Existing cases and findings will be kept.")) return;
+    try {
+      await deleteTrademark(id);
+      navigate("/ips");
+    } catch (e: unknown) {
+      setError(errorMessage(e));
+    }
   }
 
   async function copyPublicSummaryLink(url: string) {

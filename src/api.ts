@@ -1189,8 +1189,8 @@ export function patchComputeJobRoute(
   );
 }
 
-export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "failed";
-export type AdminMonitoringOperationState = "queued" | "processing" | "completed" | "failed" | "stalled";
+export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "failed" | "attention";
+export type AdminMonitoringOperationState = "queued" | "processing" | "completed" | "failed" | "stalled" | "removed";
 
 export interface AdminMonitoringQueueStage {
   type: string;
@@ -1234,6 +1234,7 @@ export interface AdminMonitoringRunActivity {
   tenant_name: string | null;
   ip_catalog_id: string | null;
   ip_name: string | null;
+  ip_retired_at: string | null;
   domain_id: string | null;
   source_domain: string | null;
   source_name: string | null;
@@ -1301,6 +1302,8 @@ export interface AdminMonitoringOverview {
   generated_at: string;
   window_hours: number;
   summary: {
+    attention_runs: number;
+    failed_work_runs: number;
     active_runs: number;
     completed_runs: number;
     failed_runs: number;

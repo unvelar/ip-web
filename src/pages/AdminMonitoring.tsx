@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
+  ArrowRight,
   AlertCircle,
   Check,
   ChevronDown,
@@ -50,6 +51,7 @@ const OPERATION_STYLES: Record<string, string> = {
   completed: "border-emerald-200 bg-emerald-50 text-emerald-700",
   failed: "border-red-200 bg-red-50 text-red-700",
   stalled: "border-amber-200 bg-amber-50 text-amber-800",
+  removed: "border-stone-200 bg-stone-100 text-stone-500",
 };
 
 type WorkFilter = "all" | "in_progress" | "queued";
@@ -85,9 +87,18 @@ export default function AdminMonitoring() {
   const { overview } = feed;
   const visualQueue = queueByType.get("monitor_visual_check");
   const qualificationQueue = queueByType.get("finding_qualify");
-  const attentionTotal = overview.summary.failed_runs
-    + overview.summary.not_evaluated_checks
-    + overview.summary.evidence_conflicts;
+  const attentionTotal = overview.summary.attention_runs ?? overview.summary.failed_runs;
+  const attentionReasons = [
+    (overview.summary.failed_work_runs ?? overview.summary.failed_runs) > 0 ? `${overview.summary.failed_work_runs ?? overview.summary.failed_runs} with failed work` : null,
+    overview.summary.not_evaluated_checks > 0 ? `${overview.summary.not_evaluated_checks} missing verdicts` : null,
+    overview.summary.evidence_conflicts > 0 ? `${overview.summary.evidence_conflicts} conflicts` : null,
+  ].filter(Boolean).join(" · ") || "No unresolved run issues";
+  const showAttention = () => {
+    feed.setQuery("");
+    feed.setStatus("attention");
+    setSelectedRunId(null);
+    document.getElementById("monitoring-runs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const visibleWork = overview.active_work.filter((work) => (
     workFilter === "all"
     || (workFilter === "in_progress" && work.status === "in_progress")
@@ -143,7 +154,7 @@ export default function AdminMonitoring() {
         <Metric label="Visual queue" value={visualQueue?.pending_units ?? 0} detail={`${visualQueue?.pending_jobs ?? 0} batches`} icon={<Eye className="h-4 w-4" />} warning={(visualQueue?.pending_units ?? 0) > 0} />
         <Metric label="Page checks" value={qualificationQueue?.pending_jobs ?? 0} detail={`${qualificationQueue?.in_progress_jobs ?? 0} running`} icon={<Check className="h-4 w-4" />} />
         <Metric label="Findings" value={overview.summary.findings} detail={`last ${windowLabel(overview.window_hours)}`} icon={<Radar className="h-4 w-4" />} />
-        <Metric label="Investigate" value={attentionTotal} detail={`${overview.summary.evidence_conflicts} conflicts`} icon={<ShieldAlert className="h-4 w-4" />} attention={attentionTotal > 0} />
+        <Metric label="Needs attention" value={attentionTotal} detail={attentionReasons} icon={<ShieldAlert className="h-4 w-4" />} attention={attentionTotal > 0} onClick={showAttention} selected={feed.status === "attention"} />
       </section>
 
       {(overview.summary.not_evaluated_checks > 0 || overview.summary.evidence_conflicts > 0) && (
@@ -192,11 +203,12 @@ export default function AdminMonitoring() {
         onOpenRun={openRun}
       />
 
-      <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+      <section id="monitoring-runs" className="mt-3 scroll-mt-4 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-1 overflow-x-auto">
             {([
               ["all", "All", overview.runs.length],
+              ["attention", "Needs attention", attentionTotal],
               ["active", "Active", overview.summary.active_runs],
               ["completed", "Completed", overview.summary.completed_runs],
               ["failed", "Failed", overview.summary.failed_runs],
@@ -257,8 +269,8 @@ export default function AdminMonitoring() {
         ) : (
           <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center">
             <Search className="h-5 w-5 text-stone-300" />
-            <p className="mt-3 text-sm font-semibold text-stone-700">No monitoring runs match these filters</p>
-            <p className="mt-1 text-xs text-stone-400">Try a longer activity window or clear the search.</p>
+            <p className="mt-3 text-sm font-semibold text-stone-700">{feed.status === "attention" && !feed.query ? "No runs need attention in this window" : "No monitoring runs match these filters"}</p>
+            <p className="mt-1 text-xs text-stone-400">{feed.status === "attention" && !feed.query ? "Removed IPs remain available in All and Failed as history." : "Try a longer activity window or clear the search."}</p>
           </div>
         )}
 
@@ -702,7 +714,7 @@ function WorkerSummary({ overview }: { overview: NonNullable<ReturnType<typeof u
   );
 }
 
-function Metric({ label, value, detail, icon, accent = false, warning = false, attention = false }: {
+function Metric({ label, value, detail, icon, accent = false, warning = false, attention = false, onClick, selected }: {
   label: string;
   value: number;
   detail: string;
@@ -710,19 +722,22 @@ function Metric({ label, value, detail, icon, accent = false, warning = false, a
   accent?: boolean;
   warning?: boolean;
   attention?: boolean;
+  onClick?: () => void;
+  selected?: boolean;
 }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={`border-b border-stone-100 px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r xl:last:border-r-0 ${
+    <Tag type={onClick ? "button" : undefined} onClick={onClick} aria-pressed={onClick ? selected : undefined} className={`min-w-0 border-b border-stone-100 px-4 py-3 text-left last:border-b-0 sm:border-b-0 sm:border-r xl:last:border-r-0 ${onClick ? "group transition hover:bg-rose-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-rose-600" : ""} ${
       attention ? "bg-rose-50/60" : warning ? "bg-amber-50/50" : accent ? "bg-blue-50/50" : ""
     }`}>
       <div className={`flex items-center gap-1.5 text-[10px] font-semibold ${attention ? "text-rose-700" : warning ? "text-amber-700" : accent ? "text-blue-700" : "text-stone-500"}`}>
-        {icon}{label}
+        {icon}{label}{onClick && <ArrowRight className="ml-auto h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />}
       </div>
       <div className="mt-0.5 flex items-baseline gap-2">
         <span className={`text-xl font-black tabular-nums ${attention ? "text-rose-900" : warning ? "text-amber-900" : accent ? "text-blue-900" : "text-stone-950"}`}>{value.toLocaleString()}</span>
-        <span className="text-[10px] text-stone-400">{detail}</span>
+        <span className="text-[10px] text-stone-500">{detail}</span>
       </div>
-    </div>
+    </Tag>
   );
 }
 
