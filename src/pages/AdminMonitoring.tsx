@@ -28,6 +28,7 @@ import type {
 } from "../api";
 import { AdminMonitoringRunDetailPanel } from "../features/adminMonitoring/AdminMonitoringRunDetail";
 import { monitoringRunStageStatus } from "../features/adminMonitoring/runStageStatus";
+import { ScrapeMethodBadge } from "../features/adminMonitoring/ScrapeMethodBadge";
 import {
   useAdminMonitoringFeed,
   useAdminMonitoringRunDetail,
@@ -299,6 +300,7 @@ function RunRow({ run, open, onToggle, detail }: {
             <p className="mt-1 truncate text-[11px] text-stone-400">
               {run.source_name || run.source_domain || "Unknown source"}{run.keyword ? `, “${run.keyword}”` : ", default search"}
             </p>
+            <div className="mt-1.5"><ScrapeMethodBadge scrape={run.scrape} status={run.status} /></div>
             <p className="mt-1 font-mono text-[9px] text-stone-300">{shortId(run.run_id)} · {formatRelative(run.created_at)}</p>
           </div>
 
@@ -484,6 +486,7 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
           {worker.current_job_type ? (
             <>
               <p className="truncate text-[10px] font-semibold text-stone-700">{JOB_COPY[worker.current_job_type]?.label || humanize(worker.current_job_type)}</p>
+              {work?.type === "monitor_scrape" && <div className="mt-1"><ScrapeMethodBadge scrape={work.scrape} status={work.status} /></div>}
               <p className="mt-0.5 truncate text-[9px] text-stone-400">
                 {work ? workContext(work) : "Current job is outside the monitoring pipeline"}
                 {worker.current_job_started_at ? `, started ${formatRelative(worker.current_job_started_at)}` : ""}
@@ -571,6 +574,7 @@ function LiveWorkFeed({ work, allWork, filter, onFilter, onOpenRun }: {
               </div>
               <div className="min-w-0">
                 <p className="truncate text-xs font-bold text-stone-800">{JOB_COPY[item.type]?.label || humanize(item.type)}</p>
+                {item.type === "monitor_scrape" && <div className="mt-1"><ScrapeMethodBadge scrape={item.scrape} status={item.status} /></div>}
                 <p className="mt-0.5 truncate text-[10px] text-stone-400">{workScope(item)}</p>
               </div>
               <div className="min-w-0">

@@ -1215,7 +1215,18 @@ export interface AdminMonitoringRunJobStage {
   latest_error: string | null;
 }
 
+export interface AdminMonitoringScrapeEvidence {
+  source: "worker" | "candidates" | "job_result" | "not_recorded";
+  steps: Array<{
+    method: "marketplace_specific" | "nodriver" | "scrapfly" | "web_search";
+    role: "primary" | "fallback" | "shadow" | "reused";
+    provider: string | null;
+    recorded_at: string | null;
+  }>;
+}
+
 export interface AdminMonitoringRunActivity {
+  scrape?: AdminMonitoringScrapeEvidence;
   run_id: string;
   tenant_id: string;
   tenant_name: string | null;
@@ -1312,6 +1323,7 @@ export interface AdminMonitoringOverview {
 }
 
 export interface AdminMonitoringJob {
+  scrape?: AdminMonitoringScrapeEvidence | null;
   id: string;
   type: string;
   status: string;

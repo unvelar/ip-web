@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ScrapeMethodBadge } from "./ScrapeMethodBadge";
 import {
   AlertCircle,
   Check,
@@ -457,6 +458,7 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
           <p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p>
           <p className="text-[10px] text-stone-400">{humanize(job.status)}</p>
         </div>
+        {job.type === "monitor_scrape" && <div className="mt-1"><ScrapeMethodBadge scrape={job.scrape} status={job.status} /></div>}
         <p className="mt-0.5 text-[10px] text-stone-400">
           attempt {job.attempts}/{job.max_attempts}
           {job.batch_index && `, batch ${job.batch_index}/${job.batch_count}`}
