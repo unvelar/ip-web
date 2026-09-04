@@ -203,7 +203,7 @@ export default function AdminMonitoring() {
         onOpenRun={openRun}
       />
 
-      <section id="monitoring-runs" className="mt-3 scroll-mt-4 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+      <section id="monitoring-runs" className="mt-3 scroll-mt-28 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-1 overflow-x-auto">
             {([
@@ -251,7 +251,7 @@ export default function AdminMonitoring() {
         </div>
 
         <div className="border-b border-stone-100 bg-stone-50/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">
-          Showing {overview.runs.length} newest runs in the selected window
+          Showing {overview.runs.length} matching runs · Recent runs and any older unfinished runs
         </div>
 
         {overview.runs.length > 0 ? (
