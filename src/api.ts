@@ -1091,7 +1091,7 @@ export interface ComputeRuntimeSettings {
   minimumPods?: number;
   minimumPodsUntil?: string | null;
   executionClass: string;
-  runtimeMode: "vllm" | "product_cuda";
+  runtimeMode: "vllm";
   minimumGpuMemoryGb: number;
   gpuTypeIds: string[];
 }
