@@ -32,21 +32,6 @@ body {
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 }
 
-/* Subtle grid backdrop for hero */
-.bg-grid {
-  background-image:
-    linear-gradient(to right, rgba(28, 25, 23, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(28, 25, 23, 0.04) 1px, transparent 1px);
-  background-size: 48px 48px;
-}
-
-.bg-grid-dark {
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 56px 56px;
-}
-
 /* Radial fade mask — lets a pattern fade at the edges */
 .mask-radial {
   -webkit-mask-image: radial-gradient(ellipse at center, #000 40%, transparent 75%);
@@ -126,6 +111,27 @@ body {
 .animate-float-slow-reverse { animation: float-slow-reverse 18s ease-in-out infinite; }
 .animate-pulse-dot          { animation: pulse-dot 2s ease-in-out infinite; }
 .animate-fade-up            { animation: fade-up 0.7s ease-out both; }
+
+/* Scroll-triggered section reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
 
 .recommended-action {
   position: relative;
