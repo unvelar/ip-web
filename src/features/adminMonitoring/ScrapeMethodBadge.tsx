@@ -19,7 +19,7 @@ export function ScrapeMethodBadge({ scrape, status }: {
     return <span className="inline-flex rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 text-[9px] text-stone-500" title="No historical scraper-method evidence is available. The current website recipe is not used to infer past executions.">{label}</span>;
   }
   return (
-    <span className="inline-flex flex-wrap items-center gap-1" aria-label="Scrape method">
+    <span className="inline-flex flex-wrap items-center gap-1" aria-label={`Scrape method: ${scrape.steps.map((step) => METHOD_COPY[step.method].label).join(", ")}`}>
       {scrape.steps.map((step, index) => {
         const copy = METHOD_COPY[step.method];
         const suffix = step.role === "shadow" ? " shadow" : step.role === "reused" ? " reused" : "";

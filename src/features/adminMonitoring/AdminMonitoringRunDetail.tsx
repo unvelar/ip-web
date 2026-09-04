@@ -136,6 +136,17 @@ export function AdminMonitoringRunDetailPanel({
         <RunFact label="Live detail" value={refreshing ? "Refreshing now" : `Updated ${formatRelative(detail.generated_at)}`} live />
       </div>
 
+      {detail.jobs.some((job) => job.type === "monitor_scrape") && (
+        <section className="border-b border-stone-200 px-4 py-4">
+          <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-stone-500">Scrape execution</h3>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {detail.jobs.filter((job) => job.type === "monitor_scrape").map((job) => (
+              <JobTimelineRow key={job.id} job={job} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {detail.pages.length > 0 && (
         <section className="border-b border-stone-200 px-4 py-4">
           <div className="mb-2 flex items-center justify-between gap-3">
