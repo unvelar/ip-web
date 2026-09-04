@@ -365,7 +365,7 @@ function WorkerFleet({ overview, onOpenRun }: {
       </div>
 
       <div className="grid gap-px bg-stone-200 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.6fr)]">
-        <div className="bg-white p-4">
+        <div className="min-w-0 bg-white p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Globe2 className="h-4 w-4 text-blue-700" />
@@ -382,7 +382,7 @@ function WorkerFleet({ overview, onOpenRun }: {
           </div>
         </div>
 
-        <div className="bg-stone-50/60 p-4">
+        <div className="min-w-0 bg-stone-50/60 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <HardDrive className="h-4 w-4 text-violet-700" />
@@ -390,7 +390,7 @@ function WorkerFleet({ overview, onOpenRun }: {
             </div>
             <span className="text-[10px] font-semibold text-stone-400">{runpodWorkers.length} recent workers</span>
           </div>
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid gap-3">
             {pools.length > 0 ? pools.map((pool) => {
               const coordinator = overview.runpod.coordinators.find((row) => row.pool === pool);
               const workers = runpodWorkers.filter((worker) => worker.pool === pool);
@@ -405,10 +405,10 @@ function WorkerFleet({ overview, onOpenRun }: {
               const hasError = Boolean(coordinator?.last_error)
                 || instances.some((instance) => instance.status === "error");
               return (
-                <article key={pool} className="rounded-xl border border-stone-200 bg-white p-3.5">
+                <article key={pool} aria-label={`${pool} GPU pool`} className="@container min-w-0 rounded-xl border border-stone-200 bg-white p-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold text-stone-900">{pool}</p>
+                      <h4 className="text-xs font-bold text-stone-900">{pool}</h4>
                       <p className="mt-0.5 text-[10px] text-stone-400">{poolRuntimeLabel(workers)}</p>
                     </div>
                     <span className={`rounded-md px-2 py-1 text-[9px] font-bold uppercase tracking-wide ${
@@ -420,35 +420,43 @@ function WorkerFleet({ overview, onOpenRun }: {
                       {hasError ? "Error" : providerStarting > 0 ? "Starting" : (coordinator?.ready_instances ?? 0) > 0 ? "Ready" : "Scaled down"}
                     </span>
                   </div>
-                  <div className="mt-3 grid grid-cols-4 gap-1.5">
-                    <FleetMetric label="Wanted" value={coordinator?.desired_instances ?? 0} />
-                    <FleetMetric label="Ready" value={coordinator?.ready_instances ?? 0} />
-                    <FleetMetric label="Starting" value={providerStarting} />
-                    <FleetMetric label="Busy" value={coordinator?.busy_workers ?? workers.filter((worker) => worker.effective_status === "busy").length} />
-                  </div>
-                  <div className="mt-3 rounded-lg bg-stone-50 px-3 py-2">
-                    <p className="text-[10px] font-semibold text-stone-700">
-                      {coordinator?.pending_jobs ?? 0} queued, {coordinator?.in_progress_jobs ?? 0} running
-                    </p>
-                    <p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-stone-500">
-                      {coordinator?.last_error || coordinator?.last_reason || "Waiting for the coordinator's first observation."}
-                    </p>
-                    {coordinator?.last_reconciled_at && (
-                      <p className="mt-1 text-[9px] text-stone-400">Coordinator checked {formatRelative(coordinator.last_reconciled_at)}</p>
-                    )}
-                  </div>
-                  <div className="mt-2 space-y-1.5">
-                    {workers.length > 0
-                      ? workers.map((worker) => (
-                        <WorkerRow key={worker.id} worker={worker} onOpenRun={onOpenRun} compact />
-                      ))
-                      : instances.slice(0, 4).map((instance) => (
-                        <div key={instance.id} className="flex items-center justify-between rounded-lg border border-stone-100 px-2.5 py-2 text-[10px]">
-                          <span className="truncate font-mono text-stone-500">{instance.name || shortId(instance.provider_instance_id)}</span>
-                          <span className="font-semibold text-amber-700">{humanize(instance.status)}</span>
-                        </div>
-                      ))}
-                    {workers.length === 0 && instances.length === 0 && <EmptyFleet label="No pod is active for this pool." />}
+                  <div className="mt-3 grid gap-4 @sm:grid-cols-2">
+                    <div className="min-w-0">
+                      <h5 className="mb-2 text-[10px] font-semibold text-stone-500">Capacity</h5>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        <FleetMetric label="Wanted" value={coordinator?.desired_instances ?? 0} />
+                        <FleetMetric label="Ready" value={coordinator?.ready_instances ?? 0} />
+                        <FleetMetric label="Starting" value={providerStarting} />
+                        <FleetMetric label="Busy" value={coordinator?.busy_workers ?? workers.filter((worker) => worker.effective_status === "busy").length} />
+                      </div>
+                      <div className="mt-3 rounded-lg bg-stone-50 px-3 py-2">
+                        <p className="text-[10px] font-semibold text-stone-700">
+                          {coordinator?.pending_jobs ?? 0} queued, {coordinator?.in_progress_jobs ?? 0} running
+                        </p>
+                        <p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-stone-500">
+                          {coordinator?.last_error || coordinator?.last_reason || "Waiting for the coordinator's first observation."}
+                        </p>
+                        {coordinator?.last_reconciled_at && (
+                          <p className="mt-1 text-[9px] text-stone-400">Coordinator checked {formatRelative(coordinator.last_reconciled_at)}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="min-w-0 border-t border-stone-100 pt-3 @sm:border-t-0 @sm:border-l @sm:pt-0 @sm:pl-4">
+                      <h5 className="mb-2 text-[10px] font-semibold text-stone-500">Workers</h5>
+                      <div className="space-y-1.5">
+                        {workers.length > 0
+                          ? workers.map((worker) => (
+                            <WorkerRow key={worker.id} worker={worker} onOpenRun={onOpenRun} compact />
+                          ))
+                          : instances.slice(0, 4).map((instance) => (
+                            <div key={instance.id} className="flex items-center justify-between rounded-lg border border-stone-100 px-2.5 py-2 text-[10px]">
+                              <span className="truncate font-mono text-stone-500">{instance.name || shortId(instance.provider_instance_id)}</span>
+                              <span className="font-semibold text-amber-700">{humanize(instance.status)}</span>
+                            </div>
+                          ))}
+                        {workers.length === 0 && instances.length === 0 && <EmptyFleet label="No pod is active for this pool." />}
+                      </div>
+                    </div>
                   </div>
                 </article>
               );
