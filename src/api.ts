@@ -3385,6 +3385,49 @@ export function getMonitoringFindingRelated(resultId: string) {
   );
 }
 
+export interface SharedListingImage {
+  url: string | null;
+  content_hash: string;
+  source_url: string | null;
+  width: number;
+  height: number;
+}
+
+export interface MonitoringSharedImages {
+  status: "not_analyzed" | "partial" | "ready";
+  source_captured_at: string | null;
+  coverage: {
+    source_images: number;
+    source_images_checked: number;
+    source_copy_fingerprints: number;
+    candidate_images: number;
+    candidate_images_checked: number;
+    candidate_copy_fingerprints: number;
+  };
+  has_more: boolean;
+  matches: Array<{
+    result_id: string;
+    case_id: string;
+    page_url: string;
+    domain: string;
+    listing_title: string | null;
+    seller_name: string | null;
+    seller_key: string | null;
+    captured_at: string;
+    evidence: Array<{
+      kind: "exact_image" | "possible_copy";
+      source: SharedListingImage;
+      target: SharedListingImage;
+    }>;
+  }>;
+}
+
+export function getMonitoringFindingSharedImages(resultId: string, signal?: AbortSignal) {
+  return request<{ shared_images: MonitoringSharedImages }>(
+    `/api/monitoring/findings/${encodeURIComponent(resultId)}/shared-images`, { signal },
+  );
+}
+
 export function createMonitoringCampaign(input: {
   source_result_id: string;
   title: string;
