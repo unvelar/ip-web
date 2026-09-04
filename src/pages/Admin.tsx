@@ -542,7 +542,7 @@ export default function Admin() {
                     </div>
 
                     <div className="mt-4 grid grid-cols-3 gap-2">
-                      <ProfileMetric label="Runtime" value={profile.settings.runtimeMode === "product_cuda" ? "Product CUDA" : "vLLM"} />
+                      <ProfileMetric label="Runtime" value="vLLM" />
                       <ProfileMetric label="Queue" value={String(status?.pending_jobs ?? 0)} />
                       <ProfileMetric label="Ready pods" value={String(status?.ready_instances ?? 0)} />
                     </div>
@@ -605,7 +605,7 @@ export default function Admin() {
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-bold text-stone-900">Job routing</h3>
-                  <p className="mt-0.5 text-xs text-stone-500">Only profiles whose runtime supports the job are selectable.</p>
+                  <p className="mt-0.5 text-xs text-stone-500">Managed jobs use the shared vLLM runtime.</p>
                 </div>
               </div>
               <div className="overflow-x-auto rounded-xl border border-stone-200">
@@ -619,11 +619,6 @@ export default function Admin() {
                   </thead>
                   <tbody className="divide-y divide-stone-100 bg-white">
                     {routes.map((route) => {
-                      const compatibleProfiles = profiles.filter((profile) => (
-                        profile.settings.runtimeMode === "product_cuda"
-                          ? route.job_type === "product_profile"
-                          : route.job_type !== "product_profile"
-                      ));
                       const selected = routeDrafts[route.job_type] ?? route.execution_class;
                       return (
                         <tr key={route.job_type}>
@@ -639,7 +634,7 @@ export default function Admin() {
                               }))}
                               className="h-9 min-w-56 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-800 focus:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/10"
                             >
-                              {compatibleProfiles.map((profile) => (
+                              {profiles.map((profile) => (
                                 <option key={profile.settings.executionClass} value={profile.settings.executionClass}>
                                   {profile.pool} · {profile.settings.executionClass}
                                 </option>
