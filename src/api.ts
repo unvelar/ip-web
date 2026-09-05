@@ -1345,6 +1345,9 @@ export interface AdminMonitoringJob {
   error: string | null;
   attempts: number;
   max_attempts: number;
+  deferral_count?: number;
+  access_wait_only?: boolean;
+  access_cooling_down?: boolean;
   capacity_units: number;
   execution_class: string | null;
   queued_at: string;

@@ -503,17 +503,20 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
 }
 
 function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
+  const recoveringAccess = job.status === "pending" && ((job.deferral_count ?? 0) > 0 || job.access_wait_only === true);
+  const coolingDown = recoveringAccess && job.access_cooling_down === true;
   return (
     <div className="flex items-start gap-2.5">
       <JobStatusDot status={job.status} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p>
-          <p className="text-[10px] text-stone-400">{humanize(job.status)}</p>
+          <p className="text-[10px] text-stone-400">{coolingDown ? "Cooling down" : humanize(job.status)}</p>
         </div>
         <JobScrapeMethodBadge job={job} />
         <p className="mt-0.5 text-[10px] text-stone-400">
           attempt {job.attempts}/{job.max_attempts}
+          {(job.deferral_count ?? 0) > 0 && `, ${job.deferral_count} access retries`}
           {job.batch_index && `, batch ${job.batch_index}/${job.batch_count}`}
           {job.capacity_units > 1 && `, ${job.capacity_units} comparisons`}
         </p>
@@ -522,7 +525,14 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
             {job.worker_instance_id}{job.worker_image_sha ? `, image ${shortId(job.worker_image_sha)}` : ""}
           </p>
         )}
-        {job.error && <p className="mt-1 rounded bg-red-50 px-2 py-1 text-[10px] leading-4 text-red-700">{job.error}</p>}
+        {recoveringAccess ? (
+          <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-[10px] leading-4 text-amber-800" title={job.error ?? undefined}>
+            {coolingDown
+              ? `Waiting for access cooldown. Next check after ${formatTimestamp(job.available_at)}.`
+              : "Access cooldown finished. Queued for a page check."}
+            {job.access_wait_only && " No capture request was made in the last claim."}
+          </p>
+        ) : job.error && <p className="mt-1 rounded bg-red-50 px-2 py-1 text-[10px] leading-4 text-red-700">{job.error}</p>}
       </div>
     </div>
   );
