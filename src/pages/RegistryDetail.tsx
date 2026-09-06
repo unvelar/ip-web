@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import MonitoringIdentitySettings from "../components/MonitoringIdentitySettings";
 import { useParams, useNavigate } from "react-router-dom";
 import { Check, Copy, ExternalLink, Trash2 } from "lucide-react";
 import {
@@ -354,6 +355,8 @@ export default function RegistryDetail() {
           </button>
         </div>
       </div>
+
+      <MonitoringIdentitySettings key={ip.id} ip={ip} onSaved={(updated) => setIp((current) => current ? { ...current, ...updated } : current)} />
 
       <KeywordLearningPanel
         ipId={ip.id}

@@ -159,12 +159,19 @@ export interface BaselineConfig {
 
 export type MonitoringFrequency = "daily" | "weekly" | "monthly";
 
+export interface MonitoringIdentity {
+  aliases: string[];
+  brands: string[];
+  categories: string[];
+}
+
 export interface Trademark {
   id: string;
   name: string;
   public_slug: string | null;
   tenant_public_slug: string | null;
   description: string | null;
+  monitoring_identity?: MonitoringIdentity;
   /** Monitoring keywords proposed by the wizard's VLM step + user edits. */
   keywords: string[];
   monitoring_frequency: MonitoringFrequency;
@@ -424,6 +431,7 @@ export function updateTrademark(
     baseline_config?: BaselineConfig | null;
     keywords?: string[];
     monitoring_frequency?: MonitoringFrequency;
+    monitoring_identity?: MonitoringIdentity;
   }
 ) {
   return request<{ trademark: Trademark }>(`/api/ip/${id}`, {
@@ -2495,6 +2503,19 @@ export interface MonitorAuditRun {
   completed_at: string | null;
   pages: MonitorAuditPage[];
   candidates: MonitorAuditCandidate[];
+  identity_screening?: {
+    harvested: number;
+    admitted: number;
+    rejected: number;
+    inspected: number;
+    items: Array<{
+      page_url: string | null;
+      title: string;
+      outcome: "admit" | "reject";
+      reason: string;
+      matched_name: string | null;
+    }>;
+  } | null;
 }
 
 export async function getIpMonitoringAudit(ipId: string) {
