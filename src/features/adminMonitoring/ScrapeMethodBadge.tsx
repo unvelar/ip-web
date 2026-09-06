@@ -1,6 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import type { AdminMonitoringJob, AdminMonitoringScrapeEvidence } from "../../api";
-import { supportsScrapeMethod } from "./scrapeMethods";
+import { supportsScrapeMethod } from "./monitoringJobs";
 
 const METHOD_COPY = {
   marketplace_specific: { label: "Marketplace specific", style: "bg-sky-50 text-sky-700 border-sky-100" },

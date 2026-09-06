@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { JobScrapeMethodBadge } from "./ScrapeMethodBadge";
-import { supportsScrapeMethod } from "./scrapeMethods";
+import { MONITORING_JOB_COPY, supportsScrapeMethod, type MonitoringJobType } from "./monitoringJobs";
 import {
   AlertCircle,
   Check,
@@ -42,12 +42,9 @@ const PIPELINE_STYLES: Record<string, string> = {
   failed: "text-red-700",
 };
 
-const JOB_LABELS: Record<string, string> = {
-  monitor_scrape: "Discovery",
-  monitor_score: "Matching",
-  monitor_visual_check: "Visual check",
-  finding_qualify: "Page check",
-};
+const JOB_LABELS: Record<string, string> = Object.fromEntries(
+  (Object.keys(MONITORING_JOB_COPY) as MonitoringJobType[]).map((type) => [type, MONITORING_JOB_COPY[type].label]),
+);
 
 export function AdminMonitoringRunDetailPanel({
   detail,
@@ -145,7 +142,7 @@ export function AdminMonitoringRunDetailPanel({
       {detail.jobs.some((job) => supportsScrapeMethod(job.type)) && (
         <section className="border-b border-stone-200 px-4 py-4">
           <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-stone-500">Fetch executions</h3>
-          <p className="mt-0.5 text-xs text-stone-400">Discovery and page verification, with each job's own methods.</p>
+          <p className="mt-0.5 text-xs text-stone-400">Methods and outcomes recorded for each fetch job.</p>
           <div className="mt-3 grid max-h-80 gap-3 overflow-y-auto sm:grid-cols-2">
             {[...new Map(detail.jobs.filter((job) => supportsScrapeMethod(job.type)).map((job) => [job.id, job])).values()].map((job) => (
               <JobTimelineRow key={job.id} job={job} />

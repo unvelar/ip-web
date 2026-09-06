@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AdminMonitoringRunJobStage } from "../src/api";
 import { monitoringRunStageStatus } from "../src/features/adminMonitoring/runStageStatus";
+import { monitoringRunJobTypes } from "../src/features/adminMonitoring/monitoringJobs";
 
 const completedStage: AdminMonitoringRunJobStage = {
   type: "monitor_scrape",
@@ -32,5 +33,13 @@ describe("monitoringRunStageStatus", () => {
 
   test("uses recorded job state before the overall run state", () => {
     expect(monitoringRunStageStatus(completedStage, "completed")).toBe("done");
+  });
+
+  test("seller expansion uses its completed fetch stage instead of absent keyword discovery", () => {
+    const sellerStage = { ...completedStage, type: "monitor_seller_expand" };
+    const types = monitoringRunJobTypes("seller_expansion");
+    expect(types).toEqual(["monitor_seller_expand", "monitor_score", "monitor_visual_check", "finding_qualify"]);
+    expect(monitoringRunStageStatus([sellerStage].find((stage) => stage.type === types[0]), "completed")).toBe("done");
+    expect(monitoringRunJobTypes(null)[0]).toBe("monitor_scrape");
   });
 });

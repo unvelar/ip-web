@@ -21,9 +21,9 @@ test("does not invent a method for legacy rows or jobs that have not started", (
   expect(renderToStaticMarkup(<ScrapeMethodBadge status="pending" />)).toContain("Method selected on start");
 });
 
-test("page verification uses the shared job badge in every job state", () => {
+test.each(["finding_qualify", "monitor_seller_expand"])("%s uses the shared job badge in every job state", (type) => {
   for (const status of ["pending", "in_progress", "completed", "failed"]) {
-    const html = renderToStaticMarkup(<JobScrapeMethodBadge job={{ type: "finding_qualify", status, scrape: {
+    const html = renderToStaticMarkup(<JobScrapeMethodBadge job={{ type, status, scrape: {
       source: "worker", steps: [
         { method: "nodriver", role: "primary", provider: null, recorded_at: null, outcome: "skipped", reason: "local cooldown" },
         { method: "scrapfly", role: "fallback", provider: null, recorded_at: null, outcome: "started" },
@@ -36,6 +36,6 @@ test("page verification uses the shared job badge in every job state", () => {
     expect(html).toContain(status === "in_progress" ? "running" : "attempted");
     if (status === "pending") expect(html).toContain("Previous attempt:");
   }
-  expect(renderToStaticMarkup(<JobScrapeMethodBadge job={{ type: "finding_qualify", status: "failed" }} />)).toContain("Method not recorded");
+  expect(renderToStaticMarkup(<JobScrapeMethodBadge job={{ type, status: "failed" }} />)).toContain("Method not recorded");
   expect(renderToStaticMarkup(<JobScrapeMethodBadge job={{ type: "monitor_score", status: "in_progress" }} />)).toBe("");
 });

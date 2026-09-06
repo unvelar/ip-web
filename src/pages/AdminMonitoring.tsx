@@ -36,14 +36,9 @@ import {
   type AdminMonitoringWindow,
 } from "../features/adminMonitoring/useAdminMonitoringFeed";
 
-const JOB_TYPES = ["monitor_scrape", "monitor_score", "monitor_visual_check", "finding_qualify"] as const;
+import { MONITORING_JOB_COPY, MONITORING_JOB_TYPES, monitoringRunJobTypes } from "../features/adminMonitoring/monitoringJobs";
 
-const JOB_COPY: Record<string, { label: string; detail: string }> = {
-  monitor_scrape: { label: "Discovery", detail: "Search and page harvesting" },
-  monitor_score: { label: "Matching", detail: "Embedding and structure checks" },
-  monitor_visual_check: { label: "Visual checks", detail: "Batched GPU comparisons" },
-  finding_qualify: { label: "Page verification", detail: "Offer and seller evidence" },
-};
+const JOB_COPY: Record<string, { label: string; detail: string }> = MONITORING_JOB_COPY;
 
 const OPERATION_STYLES: Record<string, string> = {
   queued: "border-blue-200 bg-blue-50 text-blue-700",
@@ -190,8 +185,8 @@ export default function AdminMonitoring() {
           </div>
           <WorkerSummary overview={overview} />
         </div>
-        <div className="grid gap-px bg-stone-200 sm:grid-cols-2 xl:grid-cols-4">
-          {JOB_TYPES.map((type) => <QueueStage key={type} type={type} stage={queueByType.get(type)} />)}
+        <div className="grid gap-px bg-stone-200 sm:grid-cols-2 xl:grid-cols-5">
+          {MONITORING_JOB_TYPES.map((type) => <QueueStage key={type} type={type} stage={queueByType.get(type)} />)}
         </div>
       </section>
 
@@ -293,6 +288,7 @@ function RunRow({ run, open, onToggle, detail }: {
   detail: ReturnType<typeof useAdminMonitoringRunDetail> | null;
 }) {
   const stages = new Map(run.jobs.map((stage) => [stage.type, stage]));
+  const jobTypes = monitoringRunJobTypes(run.source_kind);
   const attention = run.not_evaluated_check_count + run.evidence_conflict_count;
   return (
     <article id={`monitoring-run-${run.run_id}`} className={open ? "bg-stone-50/40" : "bg-white"}>
@@ -312,7 +308,7 @@ function RunRow({ run, open, onToggle, detail }: {
             <p className="mt-1 truncate text-[11px] text-stone-400">
               {run.source_name || run.source_domain || "Unknown source"}{run.keyword ? `, “${run.keyword}”` : ", default search"}
             </p>
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><span className="text-[9px] text-stone-400">Discovery</span><ScrapeMethodBadge scrape={run.scrape} status={run.status} /></div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><span className="text-[9px] text-stone-400">{JOB_COPY[jobTypes[0]].label}</span><ScrapeMethodBadge scrape={run.scrape} status={run.status} /></div>
             <p className="mt-1 font-mono text-[9px] text-stone-300">{shortId(run.run_id)} · {formatRelative(run.created_at)}</p>
           </div>
 
@@ -324,7 +320,7 @@ function RunRow({ run, open, onToggle, detail }: {
           </div>
 
           <div className="grid grid-cols-4 gap-1.5">
-            {JOB_TYPES.map((type) => (
+            {jobTypes.map((type) => (
               <RunStage key={type} type={type} stage={stages.get(type)} operationState={run.operation.state} />
             ))}
           </div>
@@ -815,6 +811,7 @@ function workScope(work: AdminMonitoringActiveWorkItem) {
   }
   if (work.type === "finding_qualify") return "One listing-page decision";
   if (work.type === "monitor_scrape") return work.keyword ? `Search “${work.keyword}”` : "Marketplace discovery";
+  if (work.type === "monitor_seller_expand") return "Seller inventory and related listings";
   return work.scope_count > 0 ? `${work.scope_count.toLocaleString()} item${work.scope_count === 1 ? "" : "s"}` : "Monitoring work";
 }
 
