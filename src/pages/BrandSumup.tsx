@@ -520,19 +520,11 @@ function confirmedUsd(values: BrandSumupValueFields): number {
 }
 
 function potentialUsd(values: BrandSumupValueFields): number {
-  const confirmed = confirmedUsd(values);
-  // Temporary demo adjustment: discount only the awaiting-confirmation value.
-  return confirmed + (rawPotentialUsd(values) - confirmed) / 5;
+  return Math.max(confirmedUsd(values), values.potential_value_usd ?? confirmedUsd(values));
 }
 
 function monitoredUsd(values: BrandSumupValueFields): number {
-  const rawPotential = rawPotentialUsd(values);
-  const otherMonitored = Math.max((values.monitored_value_usd ?? rawPotential) - rawPotential, 0);
-  return potentialUsd(values) + otherMonitored;
-}
-
-function rawPotentialUsd(values: BrandSumupValueFields): number {
-  return Math.max(confirmedUsd(values), values.potential_value_usd ?? confirmedUsd(values));
+  return Math.max(potentialUsd(values), values.monitored_value_usd ?? potentialUsd(values));
 }
 
 function potentialCount(values: BrandSumupValueFields): number {
