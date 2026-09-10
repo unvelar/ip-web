@@ -562,14 +562,18 @@ function LiveWorkFeed({ work, summary, filter, onFilter, onOpenRun }: {
   };
   return (
     <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3">
         <div>
           <div className="flex items-center gap-2">
             <Play className="h-3.5 w-3.5 text-blue-700" />
             <h2 className="text-sm font-bold text-stone-900">Live work feed</h2>
           </div>
           <p className="mt-0.5 text-xs text-stone-400">
-            Showing {work.length} of {counts[filter].toLocaleString()} jobs. All running jobs are included; waiting jobs are sampled across queues and states.
+            Showing {work.length} of {counts[filter].toLocaleString()} jobs. {filter === "running"
+              ? "Every running job is shown."
+              : filter === "all"
+                ? "All running jobs are shown; waiting jobs are sampled across queues and states."
+                : "Jobs in this state are sampled across queues."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1" aria-label="Filter live work">
@@ -604,7 +608,7 @@ function LiveWorkFeed({ work, summary, filter, onFilter, onOpenRun }: {
                       ? "Awaiting explicit release"
                       : item.queue_state === "scheduled"
                         ? formatAvailability(item.available_at)
-                        : `Waiting ${formatRelative(item.queued_at)}`}
+                        : `Queued ${formatRelative(item.queued_at)}`}
                 </p>
               </div>
               <div className="min-w-0">
@@ -672,11 +676,11 @@ function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueue
   return (
     <div className="bg-white px-4 py-3.5">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-bold text-stone-800">{copy?.label || humanize(type)}</p>
-          <p className="mt-0.5 text-[10px] text-stone-400">{copy?.detail}</p>
+          <p className="mt-0.5 min-h-7 text-[10px] text-stone-400">{copy?.detail}</p>
         </div>
-        <span className={`mt-0.5 h-2 w-2 rounded-full ${running > 0 ? "bg-blue-500" : waiting > 0 ? "bg-amber-400" : paused > 0 ? "bg-stone-400" : scheduled > 0 ? "bg-violet-400" : "bg-emerald-500"}`} />
+        <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${running > 0 ? "bg-blue-500" : waiting > 0 ? "bg-amber-400" : paused > 0 ? "bg-stone-400" : scheduled > 0 ? "bg-violet-400" : "bg-emerald-500"}`} />
       </div>
       <div className="mt-3 flex items-baseline gap-3">
         <span className="text-lg font-black tabular-nums text-stone-900">{waiting}</span>
@@ -759,7 +763,7 @@ function Metric({ label, value, detail, icon, accent = false, warning = false, a
     <Tag type={onClick ? "button" : undefined} onClick={onClick} aria-pressed={onClick ? selected : undefined} className={`min-w-0 border-b border-stone-100 px-4 py-3 text-left last:border-b-0 sm:border-b-0 sm:border-r xl:last:border-r-0 ${onClick ? "group transition hover:bg-rose-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-rose-600" : ""} ${
       attention ? "bg-rose-50/60" : warning ? "bg-amber-50/50" : accent ? "bg-blue-50/50" : ""
     }`}>
-      <div className={`flex items-center gap-1.5 text-[10px] font-semibold ${attention ? "text-rose-700" : warning ? "text-amber-700" : accent ? "text-blue-700" : "text-stone-500"}`}>
+      <div className={`flex min-h-8 items-center gap-1.5 text-[10px] font-semibold [&_svg]:shrink-0 ${attention ? "text-rose-700" : warning ? "text-amber-700" : accent ? "text-blue-700" : "text-stone-500"}`}>
         {icon}{label}{onClick && <ArrowRight className="ml-auto h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />}
       </div>
       <div className="mt-1">
