@@ -756,8 +756,10 @@ function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueue
     <div className="bg-white px-4 py-3.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-bold text-stone-800">{copy?.label || humanize(type)}</p>
-          {stage && <div className="mt-1"><WorkerTypeBadge kind={stage.worker_kind} /></div>}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-xs font-bold text-stone-800">{copy?.label || humanize(type)}</p>
+            {stage && <WorkerTypeBadge kind={stage.worker_kind} compact />}
+          </div>
           <p className="mt-0.5 min-h-7 text-[10px] text-stone-400">{copy?.detail}</p>
         </div>
         <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${running > 0 ? "bg-blue-500" : waiting > 0 ? "bg-amber-400" : paused > 0 ? "bg-stone-400" : scheduled > 0 ? "bg-violet-400" : "bg-emerald-500"}`} />
