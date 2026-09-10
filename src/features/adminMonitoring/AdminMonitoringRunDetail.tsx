@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { JobScrapeMethodBadge } from "./ScrapeMethodBadge";
+import { workPauseReason, workStateLabel, WORK_STATE_COPY } from "./workState";
 import { MONITORING_JOB_COPY, supportsScrapeMethod, type MonitoringJobType } from "./monitoringJobs";
 import {
   AlertCircle,
@@ -32,6 +33,8 @@ const DECISION_STYLES: Record<AdminMonitoringCandidate["debug"]["decision"]["sta
 
 const PIPELINE_STYLES: Record<string, string> = {
   waiting: "text-stone-600",
+  paused: "text-stone-600",
+  scheduled: "text-violet-700",
   score_queued: "text-blue-700",
   scoring: "text-blue-700",
   visual_queued: "text-violet-700",
@@ -311,7 +314,7 @@ function CandidateRows({ candidate, open, onToggle }: {
         </td>
         <td className="px-3 py-2.5">
           <div className={`flex items-center gap-1.5 text-xs font-bold ${PIPELINE_STYLES[pipeline.state] ?? "text-stone-700"}`}>
-            {pipelineInProgress || pipelineQueued
+            {pipelineInProgress || pipelineQueued || pipeline.state === "paused" || pipeline.state === "scheduled"
               ? <LoaderCircle className={`h-3.5 w-3.5 ${pipelineInProgress ? "animate-spin" : ""}`} />
               : <Check className="h-3.5 w-3.5" />}
             {pipeline.label}
@@ -322,11 +325,11 @@ function CandidateRows({ candidate, open, onToggle }: {
           {activeJob ? (
             <>
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700">
-                <JobStatusDot status={activeJob.status} /> {JOB_LABELS[activeJob.type] ?? humanize(activeJob.type)}
+                <JobStatusDot status={activeJob.queue_state ?? activeJob.status} /> {JOB_LABELS[activeJob.type] ?? humanize(activeJob.type)}
               </div>
               <JobScrapeMethodBadge job={activeJob} />
               <p className="mt-1 text-[10px] text-stone-400">
-                {activeJob.status === "pending" ? `Queued ${formatRelative(activeJob.queued_at)}` : humanize(activeJob.status)}
+                {workStateLabel(activeJob)}{activeJob.queue_state === "paused" ? ` · ${workPauseReason(activeJob.hold_reason)}` : activeJob.queue_state === "scheduled" ? ` · After ${formatTimestamp(activeJob.available_at)}` : ""}
                 {activeJob.batch_index && `, batch ${activeJob.batch_index}/${activeJob.batch_count}`}
               </p>
               {activeJob.worker_instance_id && <p className="mt-1 truncate font-mono text-[9px] text-stone-400">{activeJob.worker_instance_id}</p>}
@@ -500,15 +503,15 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
 }
 
 function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
-  const recoveringAccess = job.status === "pending" && ((job.deferral_count ?? 0) > 0 || job.access_wait_only === true);
+  const recoveringAccess = job.status === "pending" && job.queue_state !== "paused" && ((job.deferral_count ?? 0) > 0 || job.access_wait_only === true);
   const coolingDown = recoveringAccess && job.access_cooling_down === true;
   return (
     <div className="flex items-start gap-2.5">
-      <JobStatusDot status={job.status} />
+      <JobStatusDot status={job.queue_state ?? job.status} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p>
-          <p className="text-[10px] text-stone-400">{coolingDown ? "Cooling down" : humanize(job.status)}</p>
+          <p className="text-[10px] text-stone-400">{workStateLabel(job)}</p>
         </div>
         <JobScrapeMethodBadge job={job} />
         <p className="mt-0.5 text-[10px] text-stone-400">
@@ -522,6 +525,8 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
             {job.worker_instance_id}{job.worker_image_sha ? `, image ${shortId(job.worker_image_sha)}` : ""}
           </p>
         )}
+        {job.queue_state === "paused" && <p className="mt-1 rounded bg-stone-100 px-2 py-1 text-[10px] text-stone-600">{workPauseReason(job.hold_reason)}. Requires an explicit release.</p>}
+        {job.queue_state === "scheduled" && !recoveringAccess && <p className="mt-1 text-[10px] text-violet-700">Scheduled after {formatTimestamp(job.available_at)}.</p>}
         {recoveringAccess ? (
           <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-[10px] leading-4 text-amber-800" title={job.error ?? undefined}>
             {coolingDown
@@ -606,7 +611,7 @@ function ExternalUrl({ href, label, className = "" }: { href: string; label: str
 }
 
 function JobStatusDot({ status }: { status: string }) {
-  const color = status === "completed" ? "bg-emerald-500"
+  const color = status in WORK_STATE_COPY ? WORK_STATE_COPY[status as keyof typeof WORK_STATE_COPY].dot : status === "completed" ? "bg-emerald-500"
     : status === "in_progress" ? "bg-blue-500"
       : status === "failed" ? "bg-red-500"
         : "bg-amber-400";

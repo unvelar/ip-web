@@ -3,12 +3,11 @@ import {
   Activity,
   ArrowRight,
   AlertCircle,
-  Check,
   ChevronDown,
   ChevronUp,
   Clock3,
   Cpu,
-  Eye,
+  Pause,
   Globe2,
   HardDrive,
   LoaderCircle,
@@ -20,6 +19,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import type {
+  AdminJobQueueState,
   AdminMonitoringActiveWorkItem,
   AdminMonitoringOverview,
   AdminMonitoringQueueStage,
@@ -36,12 +36,16 @@ import {
   type AdminMonitoringWindow,
 } from "../features/adminMonitoring/useAdminMonitoringFeed";
 
-import { MONITORING_JOB_COPY, MONITORING_JOB_TYPES, monitoringRunJobTypes } from "../features/adminMonitoring/monitoringJobs";
+import { ADMIN_JOB_COPY, monitoringRunJobTypes } from "../features/adminMonitoring/monitoringJobs";
 
-const JOB_COPY: Record<string, { label: string; detail: string }> = MONITORING_JOB_COPY;
+import { WORK_STATE_COPY, workPauseReason, workStateLabel } from "../features/adminMonitoring/workState";
+
+const JOB_COPY = ADMIN_JOB_COPY;
 
 const OPERATION_STYLES: Record<string, string> = {
   queued: "border-blue-200 bg-blue-50 text-blue-700",
+  paused: "border-stone-200 bg-stone-100 text-stone-600",
+  scheduled: "border-violet-200 bg-violet-50 text-violet-700",
   processing: "border-violet-200 bg-violet-50 text-violet-700",
   completed: "border-emerald-200 bg-emerald-50 text-emerald-700",
   failed: "border-red-200 bg-red-50 text-red-700",
@@ -49,7 +53,7 @@ const OPERATION_STYLES: Record<string, string> = {
   removed: "border-stone-200 bg-stone-100 text-stone-500",
 };
 
-type WorkFilter = "all" | "in_progress" | "queued";
+type WorkFilter = "all" | AdminJobQueueState;
 
 export default function AdminMonitoring() {
   const feed = useAdminMonitoringFeed();
@@ -80,8 +84,6 @@ export default function AdminMonitoring() {
   }
 
   const { overview } = feed;
-  const visualQueue = queueByType.get("monitor_visual_check");
-  const qualificationQueue = queueByType.get("finding_qualify");
   const attentionTotal = overview.summary.attention_runs ?? overview.summary.failed_runs;
   const attentionReasons = [
     (overview.summary.failed_work_runs ?? overview.summary.failed_runs) > 0 ? `${overview.summary.failed_work_runs ?? overview.summary.failed_runs} with failed work` : null,
@@ -96,8 +98,7 @@ export default function AdminMonitoring() {
   };
   const visibleWork = overview.active_work.filter((work) => (
     workFilter === "all"
-    || (workFilter === "in_progress" && work.status === "in_progress")
-    || (workFilter === "queued" && work.status === "pending")
+    || work.queue_state === workFilter
   ));
   const openRun = (runId: string) => {
     if (!overview.runs.some((run) => run.run_id === runId)) feed.setQuery(runId);
@@ -113,7 +114,7 @@ export default function AdminMonitoring() {
           </div>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-stone-950">Monitoring across every tenant</h1>
           <p className="mt-0.5 max-w-3xl text-sm text-stone-500">
-            Follow searches, queues, workers, and candidate decisions live. Open a run to see the exact evidence behind every outcome.
+            See all worker jobs across every tenant, including searches, case analysis, product processing, and background work.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
@@ -144,12 +145,12 @@ export default function AdminMonitoring() {
       )}
 
       <section className="mt-4 grid overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:grid-cols-2 xl:grid-cols-6">
-        <Metric label="Active runs" value={overview.summary.active_runs} detail="across tenants" icon={<Activity className="h-4 w-4" />} accent={overview.summary.active_runs > 0} />
-        <Metric label="Queued work" value={overview.summary.queued_units} detail={`${overview.summary.queued_jobs} ready, ${overview.summary.deferred_jobs} retrying`} icon={<Clock3 className="h-4 w-4" />} warning={overview.summary.queued_units > 0} />
-        <Metric label="Visual queue" value={visualQueue?.pending_units ?? 0} detail={`${visualQueue?.pending_jobs ?? 0} batches`} icon={<Eye className="h-4 w-4" />} warning={(visualQueue?.pending_units ?? 0) > 0} />
-        <Metric label="Page checks" value={qualificationQueue?.pending_jobs ?? 0} detail={`${qualificationQueue?.in_progress_jobs ?? 0} running`} icon={<Check className="h-4 w-4" />} />
-        <Metric label="Findings" value={overview.summary.findings} detail={`last ${windowLabel(overview.window_hours)}`} icon={<Radar className="h-4 w-4" />} />
-        <Metric label="Needs attention" value={attentionTotal} detail={attentionReasons} icon={<ShieldAlert className="h-4 w-4" />} attention={attentionTotal > 0} onClick={showAttention} selected={feed.status === "attention"} />
+        <Metric label="Running now" value={overview.summary.running_jobs} detail="jobs across all queues" icon={<Play className="h-4 w-4" />} accent={overview.summary.running_jobs > 0} />
+        <Metric label="Ready to start" value={overview.summary.queued_jobs} detail="jobs awaiting a worker" icon={<Clock3 className="h-4 w-4" />} warning={overview.summary.queued_jobs > 0} />
+        <Metric label="Paused" value={overview.summary.paused_jobs} detail="requires an explicit release" icon={<Pause className="h-4 w-4" />} />
+        <Metric label="Scheduled" value={overview.summary.scheduled_jobs} detail="future starts and retries" icon={<RefreshCw className="h-4 w-4" />} />
+        <Metric label="Unfinished searches" value={overview.summary.active_runs} detail="includes waiting and paused searches" icon={<Activity className="h-4 w-4" />} />
+        <Metric label="Searches to review" value={attentionTotal} detail={attentionReasons} icon={<ShieldAlert className="h-4 w-4" />} attention={attentionTotal > 0} onClick={showAttention} selected={feed.status === "attention"} />
       </section>
 
       {(overview.summary.not_evaluated_checks > 0 || overview.summary.evidence_conflicts > 0) && (
@@ -180,19 +181,19 @@ export default function AdminMonitoring() {
       <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-sm font-bold text-stone-900">Pipeline and worker capacity</h2>
-            <p className="mt-0.5 text-xs text-stone-400">Counts are queue facts, not estimates from run labels.</p>
+            <h2 className="text-sm font-bold text-stone-900">Work by queue</h2>
+            <p className="mt-0.5 text-xs text-stone-400">All job types across all tenants, including browser and GPU work.</p>
           </div>
           <WorkerSummary overview={overview} />
         </div>
-        <div className="grid gap-px bg-stone-200 sm:grid-cols-2 xl:grid-cols-5">
-          {MONITORING_JOB_TYPES.map((type) => <QueueStage key={type} type={type} stage={queueByType.get(type)} />)}
+        <div className="grid gap-px bg-stone-200 sm:grid-cols-2 xl:grid-cols-4">
+          {overview.queue.map((stage) => <QueueStage key={stage.type} type={stage.type} stage={queueByType.get(stage.type)} />)}
         </div>
       </section>
 
       <LiveWorkFeed
         work={visibleWork}
-        allWork={overview.active_work}
+        summary={overview.summary}
         filter={workFilter}
         onFilter={setWorkFilter}
         onOpenRun={openRun}
@@ -204,7 +205,7 @@ export default function AdminMonitoring() {
             {([
               ["all", "All", overview.runs.length],
               ["attention", "Needs attention", attentionTotal],
-              ["active", "Active", overview.summary.active_runs],
+              ["active", "Unfinished", overview.summary.active_runs],
               ["completed", "Completed", overview.summary.completed_runs],
               ["failed", "Failed", overview.summary.failed_runs],
             ] as Array<[AdminMonitoringRunFilter, string, number]>).map(([value, label, count]) => (
@@ -246,7 +247,7 @@ export default function AdminMonitoring() {
         </div>
 
         <div className="border-b border-stone-100 bg-stone-50/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">
-          Showing {overview.runs.length} matching runs · Recent runs and any older unfinished runs
+          Showing {overview.runs.length} matching searches · Includes older unfinished searches · {overview.summary.findings.toLocaleString()} findings in the last {windowLabel(overview.window_hours)}
         </div>
 
         {overview.runs.length > 0 ? (
@@ -298,7 +299,7 @@ function RunRow({ run, open, onToggle, detail }: {
         aria-expanded={open}
         className="w-full px-4 py-3.5 text-left transition hover:bg-stone-50"
       >
-        <div className="grid items-center gap-3 xl:grid-cols-[minmax(260px,1.25fr)_minmax(220px,0.9fr)_minmax(440px,1.7fr)_minmax(180px,0.7fr)_2rem]">
+        <div className="grid items-center gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)_minmax(0,1.7fr)_minmax(0,0.7fr)_2rem]">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="truncate text-[13px] font-bold text-stone-900">{run.tenant_name || "Unnamed tenant"}</span>
@@ -449,7 +450,7 @@ function WorkerFleet({ overview, onOpenRun }: {
                       </div>
                       <div className="mt-3 rounded-lg bg-stone-50 px-3 py-2">
                         <p className="text-[10px] font-semibold text-stone-700">
-                          {coordinator?.pending_jobs ?? 0} queued, {coordinator?.in_progress_jobs ?? 0} running
+                          {coordinator?.pending_jobs ?? 0} GPU jobs ready, {coordinator?.in_progress_jobs ?? 0} running
                         </p>
                         <p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-stone-500">
                           {coordinator?.last_error || coordinator?.last_reason || "Waiting for the coordinator's first observation."}
@@ -516,7 +517,7 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
               <p className="truncate text-[10px] font-semibold text-stone-700">{JOB_COPY[worker.current_job_type]?.label || humanize(worker.current_job_type)}</p>
               {work && <JobScrapeMethodBadge job={work} />}
               <p className="mt-0.5 truncate text-[9px] text-stone-400">
-                {work ? workContext(work) : "Current job is outside the monitoring pipeline"}
+                {work ? workContext(work) : "Loading job context"}
                 {worker.current_job_started_at ? `, started ${formatRelative(worker.current_job_started_at)}` : ""}
               </p>
             </>
@@ -545,16 +546,20 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
   );
 }
 
-function LiveWorkFeed({ work, allWork, filter, onFilter, onOpenRun }: {
+function LiveWorkFeed({ work, summary, filter, onFilter, onOpenRun }: {
   work: AdminMonitoringActiveWorkItem[];
-  allWork: AdminMonitoringActiveWorkItem[];
+  summary: AdminMonitoringOverview["summary"];
   filter: WorkFilter;
   onFilter: (filter: WorkFilter) => void;
   onOpenRun: (runId: string) => void;
 }) {
-  const running = allWork.filter((item) => item.status === "in_progress").length;
-  const queued = allWork.filter((item) => item.status === "pending" && !item.deferred).length;
-  const deferred = allWork.filter((item) => item.deferred).length;
+  const counts: Record<WorkFilter, number> = {
+    all: summary.running_jobs + summary.queued_jobs + summary.paused_jobs + summary.scheduled_jobs,
+    running: summary.running_jobs,
+    ready: summary.queued_jobs,
+    paused: summary.paused_jobs,
+    scheduled: summary.scheduled_jobs,
+  };
   return (
     <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
@@ -564,56 +569,55 @@ function LiveWorkFeed({ work, allWork, filter, onFilter, onOpenRun }: {
             <h2 className="text-sm font-bold text-stone-900">Live work feed</h2>
           </div>
           <p className="mt-0.5 text-xs text-stone-400">
-            Running jobs first, followed by a balanced live sample from each queue.
+            Showing {work.length} of {counts[filter].toLocaleString()} jobs. All running jobs are included; waiting jobs are sampled across queues and states.
           </p>
         </div>
-        <div className="flex items-center gap-1">
-          {([
-            ["all", "All", allWork.length],
-            ["in_progress", "Running", running],
-            ["queued", "Queued", queued + deferred],
-          ] as Array<[WorkFilter, string, number]>).map(([value, label, count]) => (
-            <button key={value} type="button" onClick={() => onFilter(value)} className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold ${filter === value ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`}>
-              {label} <span className={filter === value ? "text-white/60" : "text-stone-400"}>{count}</span>
+        <div className="flex flex-wrap items-center gap-1" aria-label="Filter live work">
+          {(["all", "running", "ready", "paused", "scheduled"] as WorkFilter[]).map((value) => (
+            <button key={value} type="button" onClick={() => onFilter(value)} aria-pressed={filter === value} className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold ${filter === value ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`}>
+              {value === "all" ? "All" : WORK_STATE_COPY[value].label} <span className={filter === value ? "text-white/60" : "text-stone-400"}>{counts[value].toLocaleString()}</span>
             </button>
           ))}
         </div>
       </div>
-      {deferred > 0 && (
-        <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-[10px] font-medium text-amber-800">
-          {deferred} job{deferred === 1 ? " is" : "s are"} waiting for a scheduled retry. They are retained, not dropped.
+      {summary.paused_jobs > 0 && (filter === "all" || filter === "paused") && (
+        <div className="flex items-center gap-2 border-b border-stone-200 bg-stone-50 px-4 py-2 text-[11px] text-stone-600">
+          <Pause className="h-3.5 w-3.5 shrink-0" />
+          {summary.paused_jobs} jobs are deliberately paused. They require an explicit release before a worker can start them.
         </div>
       )}
       {work.length > 0 ? (
         <div className="max-h-[36rem] divide-y divide-stone-100 overflow-y-auto">
           {work.map((item) => (
-            <article key={item.id} className="grid gap-3 px-4 py-3 hover:bg-stone-50 lg:grid-cols-[9rem_minmax(220px,0.9fr)_minmax(280px,1.3fr)_minmax(170px,0.7fr)_6rem] lg:items-center">
+            <article key={item.id} className="grid gap-3 px-4 py-3 hover:bg-stone-50 xl:grid-cols-[7rem_minmax(0,0.9fr)_minmax(0,1.3fr)_minmax(0,0.7fr)_5rem] xl:items-center">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full ${item.status === "in_progress" ? "bg-blue-500" : item.deferred ? "bg-violet-400" : "bg-amber-400"}`} />
-                  <span className={`text-[10px] font-bold ${item.status === "in_progress" ? "text-blue-700" : item.deferred ? "text-violet-700" : "text-amber-700"}`}>
-                    {item.status === "in_progress" ? "Running" : item.deferred ? "Retry scheduled" : "Queued"}
+                  <span className={`h-2 w-2 rounded-full ${WORK_STATE_COPY[item.queue_state].dot}`} />
+                  <span className={`text-[10px] font-bold ${WORK_STATE_COPY[item.queue_state].text}`}>
+                    {workStateLabel(item)}
                   </span>
                 </div>
                 <p className="mt-1 text-[9px] text-stone-400">
                   {item.status === "in_progress" && item.started_at
                     ? `Started ${formatRelative(item.started_at)}`
-                    : item.deferred
-                      ? formatAvailability(item.available_at)
-                      : `Queued ${formatRelative(item.queued_at)}`}
+                    : item.queue_state === "paused"
+                      ? "Awaiting explicit release"
+                      : item.queue_state === "scheduled"
+                        ? formatAvailability(item.available_at)
+                        : `Waiting ${formatRelative(item.queued_at)}`}
                 </p>
               </div>
               <div className="min-w-0">
                 <p className="truncate text-xs font-bold text-stone-800">{JOB_COPY[item.type]?.label || humanize(item.type)}</p>
                 <JobScrapeMethodBadge job={item} />
-                <p className="mt-0.5 truncate text-[10px] text-stone-400">{workScope(item)}</p>
+                <p className="mt-0.5 text-[10px] text-stone-500">{item.queue_state === "paused" ? workPauseReason(item.hold_reason) : workScope(item)}</p>
               </div>
               <div className="min-w-0">
                 <p className="truncate text-[11px] font-semibold text-stone-700">{workContext(item)}</p>
-                <p className="mt-0.5 truncate text-[10px] text-stone-400">{item.candidate_title || item.keyword || item.candidate_page_url || "Waiting for run context"}</p>
+                <p className="mt-0.5 truncate text-[10px] text-stone-400">{item.candidate_title || item.keyword || item.candidate_page_url || JOB_COPY[item.type]?.detail || "Background work"}</p>
               </div>
               <div className="min-w-0">
-                {item.worker_instance_id ? (
+                {item.queue_state === "running" && item.worker_instance_id ? (
                   <>
                     <p className="truncate font-mono text-[9px] font-semibold text-stone-600" title={item.worker_instance_id}>{shortId(item.worker_instance_id)}</p>
                     <p className="mt-0.5 text-[9px] text-stone-400">worker {humanize(item.worker_status || "assigned")}</p>
@@ -625,14 +629,20 @@ function LiveWorkFeed({ work, allWork, filter, onFilter, onOpenRun }: {
                   <button type="button" onClick={() => onOpenRun(item.run_id!)} className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-[9px] font-bold text-stone-600 hover:border-blue-200 hover:text-blue-700">
                     Inspect
                   </button>
-                ) : <span className="text-[9px] text-stone-300">Run pending</span>}
+                ) : (
+                  <details className="text-[10px] text-stone-500">
+                    <summary className="cursor-pointer font-semibold">Job details</summary>
+                    <p className="mt-1 break-all font-mono text-[9px]">{item.id}</p>
+                    <p className="mt-1">{item.attempts} of {item.max_attempts} attempts used</p>
+                  </details>
+                )}
               </div>
             </article>
           ))}
         </div>
       ) : (
         <div className="flex min-h-28 items-center justify-center px-6 text-center text-xs text-stone-400">
-          No work matches this view.
+          No jobs in this live sample match the selected state.
         </div>
       )}
     </section>
@@ -655,7 +665,8 @@ function EmptyFleet({ label }: { label: string }) {
 function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueueStage | undefined }) {
   const copy = JOB_COPY[type];
   const waiting = stage?.pending_jobs ?? 0;
-  const deferred = stage?.deferred_jobs ?? 0;
+  const paused = stage?.paused_jobs ?? 0;
+  const scheduled = stage?.scheduled_jobs ?? 0;
   const running = stage?.in_progress_jobs ?? 0;
   const units = stage?.pending_units ?? 0;
   return (
@@ -665,17 +676,20 @@ function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueue
           <p className="text-xs font-bold text-stone-800">{copy?.label || humanize(type)}</p>
           <p className="mt-0.5 text-[10px] text-stone-400">{copy?.detail}</p>
         </div>
-        <span className={`mt-0.5 h-2 w-2 rounded-full ${running > 0 ? "bg-blue-500" : waiting > 0 ? "bg-amber-400" : "bg-emerald-500"}`} />
+        <span className={`mt-0.5 h-2 w-2 rounded-full ${running > 0 ? "bg-blue-500" : waiting > 0 ? "bg-amber-400" : paused > 0 ? "bg-stone-400" : scheduled > 0 ? "bg-violet-400" : "bg-emerald-500"}`} />
       </div>
       <div className="mt-3 flex items-baseline gap-3">
         <span className="text-lg font-black tabular-nums text-stone-900">{waiting}</span>
-        <span className="text-[10px] text-stone-400">queued</span>
+        <span className="text-[10px] text-stone-400">ready</span>
         <span className="text-sm font-bold tabular-nums text-blue-700">{running}</span>
         <span className="text-[10px] text-stone-400">running</span>
       </div>
       <p className="mt-1 text-[10px] text-stone-400">
-        {type === "monitor_visual_check" ? `${units} comparisons waiting` : `${units} capacity units waiting`}
-        {deferred > 0 ? `, ${deferred} scheduled retries` : ""}
+        {paused > 0 ? `${paused} paused` : ""}
+        {paused > 0 && scheduled > 0 ? " · " : ""}
+        {scheduled > 0 ? `${scheduled} scheduled` : ""}
+        {paused === 0 && scheduled === 0 ? "No paused or scheduled jobs" : ""}
+        {type === "monitor_visual_check" && units > 0 ? ` · ${units} comparisons ready` : ""}
         {stage?.oldest_queued_at ? `, oldest ${formatRelative(stage.oldest_queued_at)}` : ""}
       </p>
     </div>
@@ -690,9 +704,11 @@ function RunStage({ type, stage, operationState }: {
   const status = monitoringRunStageStatus(stage, operationState);
   const color = status === "failed" ? "bg-red-100 text-red-700"
     : status === "running" ? "bg-blue-100 text-blue-700"
-      : status === "queued" ? "bg-amber-100 text-amber-700"
-        : status === "done" ? "bg-emerald-100 text-emerald-700"
-          : "bg-stone-100 text-stone-400";
+      : status === "scheduled" ? "bg-violet-100 text-violet-700"
+        : status === "paused" ? "bg-stone-100 text-stone-600"
+          : status === "queued" ? "bg-amber-100 text-amber-700"
+            : status === "done" ? "bg-emerald-100 text-emerald-700"
+              : "bg-stone-100 text-stone-400";
   const title = stage?.latest_error
     || (status === "not_needed" ? "The run completed without needing this stage."
       : status === "not_reached" ? "The run failed before reaching this stage."
@@ -702,12 +718,14 @@ function RunStage({ type, stage, operationState }: {
       <p className="truncate text-[9px] font-bold">{JOB_COPY[type]?.label}</p>
       <p className="mt-0.5 truncate text-[9px] opacity-75">
         {status === "running" ? `${stage?.in_progress_jobs} running`
-          : status === "queued" ? `${(stage?.pending_jobs ?? 0) + (stage?.deferred_jobs ?? 0)} queued`
-            : status === "failed" ? `${stage?.failed_jobs} failed`
-              : status === "done" ? "done"
-                : status === "not_needed" ? "not needed"
-                  : status === "not_reached" ? "not reached"
-                    : "waiting"}
+          : status === "queued" ? `${stage?.pending_jobs ?? 0} ready`
+            : status === "paused" ? `${stage?.paused_jobs ?? 0} paused`
+              : status === "scheduled" ? `${stage?.scheduled_jobs ?? 0} scheduled`
+                : status === "failed" ? `${stage?.failed_jobs} failed`
+                  : status === "done" ? "done"
+                    : status === "not_needed" ? "not needed"
+                      : status === "not_reached" ? "not reached"
+                        : "waiting"}
       </p>
     </div>
   );
@@ -744,9 +762,9 @@ function Metric({ label, value, detail, icon, accent = false, warning = false, a
       <div className={`flex items-center gap-1.5 text-[10px] font-semibold ${attention ? "text-rose-700" : warning ? "text-amber-700" : accent ? "text-blue-700" : "text-stone-500"}`}>
         {icon}{label}{onClick && <ArrowRight className="ml-auto h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />}
       </div>
-      <div className="mt-0.5 flex items-baseline gap-2">
+      <div className="mt-1">
         <span className={`text-xl font-black tabular-nums ${attention ? "text-rose-900" : warning ? "text-amber-900" : accent ? "text-blue-900" : "text-stone-950"}`}>{value.toLocaleString()}</span>
-        <span className="text-[10px] text-stone-500">{detail}</span>
+        <p className="mt-0.5 text-[10px] leading-4 text-stone-500">{detail}</p>
       </div>
     </Tag>
   );
@@ -797,9 +815,8 @@ function windowLabel(hours: number) {
 
 function workContext(work: AdminMonitoringActiveWorkItem) {
   const tenant = work.tenant_name || "Unknown tenant";
-  const ip = work.ip_name || "Unknown IP";
   const source = work.source_name || work.source_domain;
-  return `${tenant} / ${ip}${source ? ` / ${source}` : ""}`;
+  return [tenant, work.ip_name, source].filter(Boolean).join(" / ");
 }
 
 function workScope(work: AdminMonitoringActiveWorkItem) {
@@ -812,7 +829,7 @@ function workScope(work: AdminMonitoringActiveWorkItem) {
   if (work.type === "finding_qualify") return "One listing-page decision";
   if (work.type === "monitor_scrape") return work.keyword ? `Search “${work.keyword}”` : "Marketplace discovery";
   if (work.type === "monitor_seller_expand") return "Seller inventory and related listings";
-  return work.scope_count > 0 ? `${work.scope_count.toLocaleString()} item${work.scope_count === 1 ? "" : "s"}` : "Monitoring work";
+  return work.scope_count > 0 ? `${work.scope_count.toLocaleString()} item${work.scope_count === 1 ? "" : "s"}` : JOB_COPY[work.type]?.detail || "Background work";
 }
 
 function poolRuntimeLabel(workers: AdminMonitoringWorker[]) {

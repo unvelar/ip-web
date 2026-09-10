@@ -1203,12 +1203,14 @@ export function patchComputeJobRoute(
 }
 
 export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "failed" | "attention";
-export type AdminMonitoringOperationState = "queued" | "processing" | "completed" | "failed" | "stalled" | "removed";
+export type AdminMonitoringOperationState = "queued" | "processing" | "paused" | "scheduled" | "completed" | "failed" | "stalled" | "removed";
 
 export interface AdminMonitoringQueueStage {
   type: string;
   pending_jobs: number;
   deferred_jobs: number;
+  paused_jobs: number;
+  scheduled_jobs: number;
   in_progress_jobs: number;
   pending_units: number;
   in_progress_units: number;
@@ -1219,6 +1221,8 @@ export interface AdminMonitoringRunJobStage {
   type: string;
   pending_jobs: number;
   deferred_jobs: number;
+  paused_jobs: number;
+  scheduled_jobs: number;
   in_progress_jobs: number;
   completed_jobs: number;
   failed_jobs: number;
@@ -1331,6 +1335,8 @@ export interface AdminMonitoringOverview {
     evidence_conflicts: number;
     queued_jobs: number;
     deferred_jobs: number;
+    paused_jobs: number;
+    scheduled_jobs: number;
     queued_units: number;
     running_jobs: number;
     workers: { busy: number; idle: number; starting: number; offline: number };
@@ -1345,11 +1351,16 @@ export interface AdminMonitoringOverview {
   runs: AdminMonitoringRunActivity[];
 }
 
+export type AdminJobQueueState = "running" | "ready" | "paused" | "scheduled";
+
 export interface AdminMonitoringJob {
   scrape?: AdminMonitoringScrapeEvidence | null;
   id: string;
   type: string;
   status: string;
+  queue_state: AdminJobQueueState | null;
+  hold_reason: string | null;
+  held_at: string | null;
   error: string | null;
   attempts: number;
   max_attempts: number;
@@ -1371,6 +1382,8 @@ export interface AdminMonitoringJob {
 }
 
 export interface AdminMonitoringActiveWorkItem extends AdminMonitoringJob {
+  queue_state: AdminJobQueueState;
+  case_id: string | null;
   run_id: string | null;
   tenant_id: string | null;
   tenant_name: string | null;
@@ -1559,7 +1572,7 @@ export interface AdminMonitoringRunDetail {
   }>;
 }
 
-export function getAdminMonitoringOverview(opts: {
+export async function getAdminMonitoringOverview(opts: {
   windowHours?: 1 | 6 | 24 | 72 | 168;
   status?: AdminMonitoringRunFilter;
   query?: string;
@@ -1572,9 +1585,15 @@ export function getAdminMonitoringOverview(opts: {
   if (opts.query) qs.set("q", opts.query);
   if (opts.limit) qs.set("limit", String(opts.limit));
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return request<AdminMonitoringOverview>(`/api/admin/monitoring/overview${suffix}`, {
+  const overview = await request<AdminMonitoringOverview>(`/api/admin/monitoring/overview${suffix}`, {
     signal: opts.signal,
   });
+  if (!Number.isFinite(overview.summary.paused_jobs)
+    || !Number.isFinite(overview.summary.scheduled_jobs)
+    || overview.active_work.some(job => !["running", "ready", "paused", "scheduled"].includes(job.queue_state))) {
+    throw new Error("The server has not provided complete queue status yet. This page will retry automatically.");
+  }
+  return overview;
 }
 
 export function getAdminMonitoringRun(runId: string, signal?: AbortSignal) {

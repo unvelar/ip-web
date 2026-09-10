@@ -7,6 +7,8 @@ const completedStage: AdminMonitoringRunJobStage = {
   type: "monitor_scrape",
   pending_jobs: 0,
   deferred_jobs: 0,
+  paused_jobs: 0,
+  scheduled_jobs: 0,
   in_progress_jobs: 0,
   completed_jobs: 1,
   failed_jobs: 0,
@@ -17,6 +19,13 @@ const completedStage: AdminMonitoringRunJobStage = {
 };
 
 describe("monitoringRunStageStatus", () => {
+  test("keeps deliberate pauses distinct from ready work and scheduled retries", () => {
+    const paused = { ...completedStage, completed_jobs: 0, deferred_jobs: 1, paused_jobs: 1 };
+    expect(monitoringRunStageStatus(paused, "paused")).toBe("paused");
+    expect(monitoringRunStageStatus({ ...paused, paused_jobs: 0, scheduled_jobs: 1 }, "scheduled")).toBe("scheduled");
+    expect(monitoringRunStageStatus({ ...paused, pending_jobs: 1 }, "queued")).toBe("queued");
+    expect(monitoringRunStageStatus({ ...paused, in_progress_jobs: 1 }, "processing")).toBe("running");
+  });
   test("marks absent downstream stages as not needed after a successful run", () => {
     expect(monitoringRunStageStatus(undefined, "completed")).toBe("not_needed");
   });
