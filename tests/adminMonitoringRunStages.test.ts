@@ -4,6 +4,7 @@ import { monitoringRunStageStatus } from "../src/features/adminMonitoring/runSta
 import { monitoringRunJobTypes } from "../src/features/adminMonitoring/monitoringJobs";
 
 const completedStage: AdminMonitoringRunJobStage = {
+  worker_kind: "browser",
   type: "monitor_scrape",
   pending_jobs: 0,
   deferred_jobs: 0,

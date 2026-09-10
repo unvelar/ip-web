@@ -1204,9 +1204,27 @@ export function patchComputeJobRoute(
 
 export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "failed" | "attention";
 export type AdminMonitoringOperationState = "queued" | "processing" | "paused" | "scheduled" | "completed" | "failed" | "stalled" | "removed";
+export type AdminMonitoringWorkerKind = "ml" | "browser" | "hybrid" | "unknown";
+
+export interface AdminMonitoringWorkerCapacity {
+  busy_workers: number;
+  idle_workers: number;
+  unserved_ready_jobs: number;
+}
+
+export interface AdminMonitoringWorkerDemand extends AdminMonitoringWorkerCapacity {
+  kind: AdminMonitoringWorkerKind;
+  ready_jobs: number;
+  running_jobs: number;
+  paused_jobs: number;
+  scheduled_jobs: number;
+  oldest_queued_at: string | null;
+}
 
 export interface AdminMonitoringQueueStage {
   type: string;
+  worker_kind: AdminMonitoringWorkerKind;
+  worker_capacity: AdminMonitoringWorkerCapacity;
   pending_jobs: number;
   deferred_jobs: number;
   paused_jobs: number;
@@ -1219,6 +1237,7 @@ export interface AdminMonitoringQueueStage {
 
 export interface AdminMonitoringRunJobStage {
   type: string;
+  worker_kind: AdminMonitoringWorkerKind;
   pending_jobs: number;
   deferred_jobs: number;
   paused_jobs: number;
@@ -1293,7 +1312,7 @@ export interface AdminMonitoringWorker {
   status: string;
   effective_status: string;
   job_types: string[];
-  capabilities: { browser: boolean; gpu: boolean };
+  capabilities: { browser: boolean; gpu: boolean; ml: boolean };
   execution_class: string | null;
   runtime_mode: string | null;
   profile_revision: number | null;
@@ -1342,6 +1361,7 @@ export interface AdminMonitoringOverview {
     workers: { busy: number; idle: number; starting: number; offline: number };
   };
   queue: AdminMonitoringQueueStage[];
+  worker_demand: AdminMonitoringWorkerDemand[];
   workers: AdminMonitoringWorker[];
   runpod: {
     coordinators: AdminMonitoringRunpodCoordinator[];
@@ -1357,6 +1377,7 @@ export interface AdminMonitoringJob {
   scrape?: AdminMonitoringScrapeEvidence | null;
   id: string;
   type: string;
+  worker_kind: AdminMonitoringWorkerKind;
   status: string;
   queue_state: AdminJobQueueState | null;
   hold_reason: string | null;
@@ -1590,17 +1611,30 @@ export async function getAdminMonitoringOverview(opts: {
   });
   if (!Number.isFinite(overview.summary.paused_jobs)
     || !Number.isFinite(overview.summary.scheduled_jobs)
-    || overview.active_work.some(job => !["running", "ready", "paused", "scheduled"].includes(job.queue_state))) {
-    throw new Error("The server has not provided complete queue status yet. This page will retry automatically.");
+    || !Array.isArray(overview.worker_demand)
+    || overview.worker_demand.some(row => !isAdminMonitoringWorkerKind(row.kind))
+    || overview.queue.some(queue => !isAdminMonitoringWorkerKind(queue.worker_kind) || !queue.worker_capacity)
+    || overview.active_work.some(job => !isAdminMonitoringWorkerKind(job.worker_kind)
+      || !["running", "ready", "paused", "scheduled"].includes(job.queue_state))) {
+    throw new Error("The server has not provided complete worker and queue status yet. This page will retry automatically.");
   }
   return overview;
 }
 
-export function getAdminMonitoringRun(runId: string, signal?: AbortSignal) {
-  return request<AdminMonitoringRunDetail>(
+function isAdminMonitoringWorkerKind(kind: unknown): kind is AdminMonitoringWorkerKind {
+  return typeof kind === "string" && ["ml", "browser", "hybrid", "unknown"].includes(kind);
+}
+
+export async function getAdminMonitoringRun(runId: string, signal?: AbortSignal) {
+  const detail = await request<AdminMonitoringRunDetail>(
     `/api/admin/monitoring/runs/${encodeURIComponent(runId)}`,
     { signal },
   );
+  if (detail.jobs.some(job => !isAdminMonitoringWorkerKind(job.worker_kind))
+    || detail.candidates.some(candidate => Object.values(candidate.jobs).flat().some(job => !isAdminMonitoringWorkerKind(job.worker_kind)))) {
+    throw new Error("Worker details are still updating. This page will retry automatically.");
+  }
+  return detail;
 }
 
 export interface TenantUsageStats {

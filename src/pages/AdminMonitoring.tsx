@@ -26,6 +26,8 @@ import type {
   AdminMonitoringRunActivity,
   AdminMonitoringRunFilter,
   AdminMonitoringWorker,
+  AdminMonitoringWorkerKind,
+  AdminMonitoringWorkerDemand,
 } from "../api";
 import { AdminMonitoringRunDetailPanel } from "../features/adminMonitoring/AdminMonitoringRunDetail";
 import { monitoringRunStageStatus } from "../features/adminMonitoring/runStageStatus";
@@ -39,6 +41,8 @@ import {
 import { ADMIN_JOB_COPY, monitoringRunJobTypes } from "../features/adminMonitoring/monitoringJobs";
 
 import { WORK_STATE_COPY, workPauseReason, workStateLabel } from "../features/adminMonitoring/workState";
+import { WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
+import { WORKER_KIND_COPY } from "../features/adminMonitoring/workerKinds";
 
 const JOB_COPY = ADMIN_JOB_COPY;
 
@@ -54,11 +58,13 @@ const OPERATION_STYLES: Record<string, string> = {
 };
 
 type WorkFilter = "all" | AdminJobQueueState;
+type WorkerKindFilter = "all" | AdminMonitoringWorkerKind;
 
 export default function AdminMonitoring() {
   const feed = useAdminMonitoringFeed();
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [workFilter, setWorkFilter] = useState<WorkFilter>("all");
+  const [workerKindFilter, setWorkerKindFilter] = useState<WorkerKindFilter>("all");
   const visibleSelectedRunId = selectedRunId && (
     !feed.overview || feed.overview.runs.some((run) => run.run_id === selectedRunId)
   ) ? selectedRunId : null;
@@ -96,9 +102,9 @@ export default function AdminMonitoring() {
     setSelectedRunId(null);
     document.getElementById("monitoring-runs")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-  const visibleWork = overview.active_work.filter((work) => (
-    workFilter === "all"
-    || work.queue_state === workFilter
+  const visibleWork = overview.active_work.filter(work => (
+    (workFilter === "all" || work.queue_state === workFilter)
+    && (workerKindFilter === "all" || work.worker_kind === workerKindFilter)
   ));
   const openRun = (runId: string) => {
     if (!overview.runs.some((run) => run.run_id === runId)) feed.setQuery(runId);
@@ -176,6 +182,12 @@ export default function AdminMonitoring() {
         </section>
       )}
 
+      <WorkerDemand demand={overview.worker_demand} onViewReady={kind => {
+        setWorkerKindFilter(kind);
+        setWorkFilter("ready");
+        document.getElementById("monitoring-live-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }} />
+
       <WorkerFleet overview={overview} onOpenRun={openRun} />
 
       <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
@@ -194,6 +206,9 @@ export default function AdminMonitoring() {
       <LiveWorkFeed
         work={visibleWork}
         summary={overview.summary}
+        demand={overview.worker_demand}
+        workerKindFilter={workerKindFilter}
+        onWorkerKindFilter={setWorkerKindFilter}
         filter={workFilter}
         onFilter={setWorkFilter}
         onOpenRun={openRun}
@@ -351,12 +366,55 @@ function RunRow({ run, open, onToggle, detail }: {
   );
 }
 
+function WorkerDemand({ demand, onViewReady }: {
+  demand: AdminMonitoringWorkerDemand[];
+  onViewReady: (kind: AdminMonitoringWorkerKind) => void;
+}) {
+  return (
+    <section aria-label="Worker demand" className="mt-4">
+      <h2 className="text-sm font-bold text-stone-900">Where work is waiting</h2>
+      <p className="mt-0.5 text-xs text-stone-500">Ready jobs and the online workers configured to process them.</p>
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        {demand.map(row => {
+          const copy = WORKER_KIND_COPY[row.kind];
+          const Icon = copy.icon;
+          const pressure = row.unserved_ready_jobs > 0 ? "Missing worker capacity"
+            : row.ready_jobs === 0 ? "No ready backlog"
+              : row.idle_workers === 0 ? "Workers busy" : "Capacity available";
+          return (
+            <article key={row.kind} aria-label={copy.title} className="flex flex-col rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="flex items-center gap-2 text-sm font-bold text-stone-900"><Icon className="h-4 w-4" />{copy.title}</h3>
+                <span className={`rounded-md px-2 py-1 text-[10px] font-semibold ${row.unserved_ready_jobs > 0 ? "bg-rose-50 text-rose-700" : row.ready_jobs > 0 && row.idle_workers === 0 ? "bg-amber-50 text-amber-800" : "bg-stone-100 text-stone-600"}`}>{pressure}</span>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-4">
+                <div><p className="text-2xl font-black tabular-nums text-stone-950">{row.ready_jobs.toLocaleString()}</p><p className="text-[11px] text-stone-500">jobs ready</p></div>
+                <div><p className="text-2xl font-black tabular-nums text-blue-700">{row.busy_workers}</p><p className="text-[11px] text-stone-500">workers busy</p></div>
+                <div><p className="text-2xl font-black tabular-nums text-emerald-700">{row.idle_workers}</p><p className="text-[11px] text-stone-500">workers idle</p></div>
+              </div>
+              <div className="mb-3 mt-3">
+                <p className="text-[11px] text-stone-500">{row.running_jobs} {row.running_jobs === 1 ? "job" : "jobs"} running · {row.paused_jobs} paused · {row.scheduled_jobs} scheduled</p>
+                {row.unserved_ready_jobs > 0 && <p className="mt-2 text-[11px] font-semibold text-rose-700">{row.unserved_ready_jobs} ready {row.unserved_ready_jobs === 1 ? "job has" : "jobs have"} no matching worker online.</p>}
+              </div>
+              <div className="mt-auto flex items-center justify-between gap-3 border-t border-stone-100 pt-3">
+                <p className="text-[11px] text-stone-500">{row.oldest_queued_at ? `Oldest ready job queued ${formatRelative(row.oldest_queued_at)}` : "No jobs waiting to start"}</p>
+                <button type="button" onClick={() => onViewReady(row.kind)} className="shrink-0 text-[11px] font-bold text-blue-700 hover:text-blue-900" aria-label={`View ${copy.label} ready jobs`}>View ready jobs <ArrowRight className="ml-1 inline h-3 w-3" /></button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function WorkerFleet({ overview, onOpenRun }: {
   overview: AdminMonitoringOverview;
   onOpenRun: (runId: string) => void;
 }) {
   const browserWorkers = overview.workers.filter((worker) => worker.capabilities.browser);
   const runpodWorkers = overview.workers.filter((worker) => worker.provider === "runpod");
+  const otherMlWorkers = overview.workers.filter(worker => worker.provider !== "runpod" && worker.capabilities.ml && !worker.capabilities.browser);
   const pools = Array.from(new Set([
     ...overview.runpod.coordinators.map((coordinator) => coordinator.pool),
     ...runpodWorkers.map((worker) => worker.pool),
@@ -480,6 +538,10 @@ function WorkerFleet({ overview, onOpenRun }: {
                 </article>
               );
             }) : <EmptyFleet label="RunPod has no configured or recently active pools." />}
+            {otherMlWorkers.length > 0 && <div>
+              <h4 className="mb-2 text-xs font-bold text-stone-900">Other ML workers</h4>
+              <div className="space-y-2">{otherMlWorkers.map(worker => <WorkerRow key={worker.id} worker={worker} onOpenRun={onOpenRun} />)}</div>
+            </div>}
           </div>
         </div>
       </div>
@@ -514,7 +576,7 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
         <div className="min-w-0">
           {worker.current_job_type ? (
             <>
-              <p className="truncate text-[10px] font-semibold text-stone-700">{JOB_COPY[worker.current_job_type]?.label || humanize(worker.current_job_type)}</p>
+              <div className="flex flex-wrap items-center gap-1.5"><p className="truncate text-[10px] font-semibold text-stone-700">{JOB_COPY[worker.current_job_type]?.label || humanize(worker.current_job_type)}</p>{work && <WorkerTypeBadge kind={work.worker_kind} />}</div>
               {work && <JobScrapeMethodBadge job={work} />}
               <p className="mt-0.5 truncate text-[9px] text-stone-400">
                 {work ? workContext(work) : "Loading job context"}
@@ -546,22 +608,31 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
   );
 }
 
-function LiveWorkFeed({ work, summary, filter, onFilter, onOpenRun }: {
+function LiveWorkFeed({ work, summary, demand, filter, onFilter, workerKindFilter, onWorkerKindFilter, onOpenRun }: {
   work: AdminMonitoringActiveWorkItem[];
   summary: AdminMonitoringOverview["summary"];
+  demand: AdminMonitoringWorkerDemand[];
   filter: WorkFilter;
   onFilter: (filter: WorkFilter) => void;
+  workerKindFilter: WorkerKindFilter;
+  onWorkerKindFilter: (kind: WorkerKindFilter) => void;
   onOpenRun: (runId: string) => void;
 }) {
+  const selectedDemand = workerKindFilter === "all" ? null : demand.find(row => row.kind === workerKindFilter) ?? {
+    running_jobs: 0, ready_jobs: 0, paused_jobs: 0, scheduled_jobs: 0,
+  };
+  const workerKinds = [...new Set<WorkerKindFilter>(["all", ...demand.map(row => row.kind), workerKindFilter])];
   const counts: Record<WorkFilter, number> = {
-    all: summary.running_jobs + summary.queued_jobs + summary.paused_jobs + summary.scheduled_jobs,
-    running: summary.running_jobs,
-    ready: summary.queued_jobs,
-    paused: summary.paused_jobs,
-    scheduled: summary.scheduled_jobs,
+    all: selectedDemand
+      ? selectedDemand.running_jobs + selectedDemand.ready_jobs + selectedDemand.paused_jobs + selectedDemand.scheduled_jobs
+      : summary.running_jobs + summary.queued_jobs + summary.paused_jobs + summary.scheduled_jobs,
+    running: selectedDemand?.running_jobs ?? summary.running_jobs,
+    ready: selectedDemand?.ready_jobs ?? summary.queued_jobs,
+    paused: selectedDemand?.paused_jobs ?? summary.paused_jobs,
+    scheduled: selectedDemand?.scheduled_jobs ?? summary.scheduled_jobs,
   };
   return (
-    <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+    <section id="monitoring-live-work" className="mt-3 scroll-mt-20 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3">
         <div>
           <div className="flex items-center gap-2">
@@ -569,12 +640,20 @@ function LiveWorkFeed({ work, summary, filter, onFilter, onOpenRun }: {
             <h2 className="text-sm font-bold text-stone-900">Live work feed</h2>
           </div>
           <p className="mt-0.5 text-xs text-stone-400">
-            Showing {work.length} of {counts[filter].toLocaleString()} jobs. {filter === "running"
-              ? "Every running job is shown."
+            Showing {work.length} of {counts[filter].toLocaleString()} {workerKindFilter !== "all" ? `${WORKER_KIND_COPY[workerKindFilter].label} ` : ""}jobs. {filter === "running"
+              ? workerKindFilter === "all" ? "Every running job is shown." : "Every running job for this worker type is shown."
               : filter === "all"
-                ? "All running jobs are shown; waiting jobs are sampled across queues and states."
+                ? "Running jobs are shown in full; waiting jobs are sampled across queues and states."
                 : "Jobs in this state are sampled across queues."}
           </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1" aria-label="Filter by worker type">
+          <span className="mr-2 text-[10px] font-semibold text-stone-400">Worker type</span>
+          {workerKinds.map(kind => (
+            <button key={kind} type="button" onClick={() => onWorkerKindFilter(kind)} aria-pressed={workerKindFilter === kind} className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold ${workerKindFilter === kind ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`}>
+              {kind === "all" ? "All workers" : WORKER_KIND_COPY[kind].label}
+            </button>
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-1" aria-label="Filter live work">
           {(["all", "running", "ready", "paused", "scheduled"] as WorkFilter[]).map((value) => (
@@ -584,10 +663,10 @@ function LiveWorkFeed({ work, summary, filter, onFilter, onOpenRun }: {
           ))}
         </div>
       </div>
-      {summary.paused_jobs > 0 && (filter === "all" || filter === "paused") && (
+      {counts.paused > 0 && (filter === "all" || filter === "paused") && (
         <div className="flex items-center gap-2 border-b border-stone-200 bg-stone-50 px-4 py-2 text-[11px] text-stone-600">
           <Pause className="h-3.5 w-3.5 shrink-0" />
-          {summary.paused_jobs} jobs are deliberately paused. They require an explicit release before a worker can start them.
+          {counts.paused} jobs are deliberately paused. They require an explicit release before a worker can start them.
         </div>
       )}
       {work.length > 0 ? (
@@ -612,7 +691,7 @@ function LiveWorkFeed({ work, summary, filter, onFilter, onOpenRun }: {
                 </p>
               </div>
               <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-stone-800">{JOB_COPY[item.type]?.label || humanize(item.type)}</p>
+                <div className="flex flex-wrap items-center gap-1.5"><p className="truncate text-xs font-bold text-stone-800">{JOB_COPY[item.type]?.label || humanize(item.type)}</p><WorkerTypeBadge kind={item.worker_kind} /></div>
                 <JobScrapeMethodBadge job={item} />
                 <p className="mt-0.5 text-[10px] text-stone-500">{item.queue_state === "paused" ? workPauseReason(item.hold_reason) : workScope(item)}</p>
               </div>
@@ -678,6 +757,7 @@ function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueue
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-bold text-stone-800">{copy?.label || humanize(type)}</p>
+          {stage && <div className="mt-1"><WorkerTypeBadge kind={stage.worker_kind} /></div>}
           <p className="mt-0.5 min-h-7 text-[10px] text-stone-400">{copy?.detail}</p>
         </div>
         <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${running > 0 ? "bg-blue-500" : waiting > 0 ? "bg-amber-400" : paused > 0 ? "bg-stone-400" : scheduled > 0 ? "bg-violet-400" : "bg-emerald-500"}`} />
@@ -696,6 +776,11 @@ function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueue
         {type === "monitor_visual_check" && units > 0 ? ` · ${units} comparisons ready` : ""}
         {stage?.oldest_queued_at ? `, oldest ${formatRelative(stage.oldest_queued_at)}` : ""}
       </p>
+      {stage && waiting > 0 && <p className={`mt-2 text-[10px] font-semibold ${stage.worker_capacity.unserved_ready_jobs > 0 ? "text-rose-700" : "text-stone-500"}`}>
+        {stage.worker_capacity.unserved_ready_jobs > 0
+          ? `${stage.worker_capacity.unserved_ready_jobs} ready ${stage.worker_capacity.unserved_ready_jobs === 1 ? "job has" : "jobs have"} no matching worker online`
+          : `Workers: ${stage.worker_capacity.busy_workers} busy · ${stage.worker_capacity.idle_workers} idle`}
+      </p>}
     </div>
   );
 }
@@ -720,6 +805,7 @@ function RunStage({ type, stage, operationState }: {
   return (
     <div className={`min-w-0 rounded-md px-2 py-1.5 ${color}`} title={title}>
       <p className="truncate text-[9px] font-bold">{JOB_COPY[type]?.label}</p>
+      {stage && <div className="mt-1"><WorkerTypeBadge kind={stage.worker_kind} compact /></div>}
       <p className="mt-0.5 truncate text-[9px] opacity-75">
         {status === "running" ? `${stage?.in_progress_jobs} running`
           : status === "queued" ? `${stage?.pending_jobs ?? 0} ready`

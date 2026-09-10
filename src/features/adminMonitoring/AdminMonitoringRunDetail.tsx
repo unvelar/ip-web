@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { JobScrapeMethodBadge } from "./ScrapeMethodBadge";
 import { workPauseReason, workStateLabel, WORK_STATE_COPY } from "./workState";
+import { WorkerTypeBadge } from "./WorkerTypeBadge";
 import { MONITORING_JOB_COPY, supportsScrapeMethod, type MonitoringJobType } from "./monitoringJobs";
 import {
   AlertCircle,
@@ -327,6 +328,7 @@ function CandidateRows({ candidate, open, onToggle }: {
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700">
                 <JobStatusDot status={activeJob.queue_state ?? activeJob.status} /> {JOB_LABELS[activeJob.type] ?? humanize(activeJob.type)}
               </div>
+              <div className="mt-1"><WorkerTypeBadge kind={activeJob.worker_kind} /></div>
               <JobScrapeMethodBadge job={activeJob} />
               <p className="mt-1 text-[10px] text-stone-400">
                 {workStateLabel(activeJob)}{activeJob.queue_state === "paused" ? ` · ${workPauseReason(activeJob.hold_reason)}` : activeJob.queue_state === "scheduled" ? ` · After ${formatTimestamp(activeJob.available_at)}` : ""}
@@ -510,7 +512,7 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
       <JobStatusDot status={job.queue_state ?? job.status} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p>
+          <div className="flex flex-wrap items-center gap-1.5"><p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p><WorkerTypeBadge kind={job.worker_kind} /></div>
           <p className="text-[10px] text-stone-400">{workStateLabel(job)}</p>
         </div>
         <JobScrapeMethodBadge job={job} />
