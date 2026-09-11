@@ -1233,6 +1233,11 @@ export interface AdminMonitoringQueueStage {
   pending_units: number;
   in_progress_units: number;
   oldest_queued_at: string | null;
+  timing?: {
+    average_seconds: number | null;
+    sample_size: number;
+    window_hours: number;
+  };
 }
 
 export interface AdminMonitoringRunJobStage {

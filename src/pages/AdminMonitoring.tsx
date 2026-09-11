@@ -43,6 +43,7 @@ import { ADMIN_JOB_COPY, monitoringRunJobTypes } from "../features/adminMonitori
 import { WORK_STATE_COPY, workPauseReason, workStateLabel } from "../features/adminMonitoring/workState";
 import { WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
 import { WORKER_KIND_COPY } from "../features/adminMonitoring/workerKinds";
+import { QueueTiming } from "../features/adminMonitoring/QueueTiming";
 
 const JOB_COPY = ADMIN_JOB_COPY;
 
@@ -201,6 +202,9 @@ export default function AdminMonitoring() {
         <div className="grid gap-px bg-stone-200 sm:grid-cols-2 xl:grid-cols-4">
           {overview.queue.map((stage) => <QueueStage key={stage.type} type={stage.type} stage={queueByType.get(stage.type)} />)}
         </div>
+        <p className="border-t border-stone-200 bg-stone-50 px-4 py-2.5 text-[11px] leading-4 text-stone-500">
+          Ready work = average runtime × ready jobs, with one worker dedicated to that queue. Workers share queues; new jobs, follow-up work and retries can extend the wait. Batch timings are per job.
+        </p>
       </section>
 
       <LiveWorkFeed
@@ -753,7 +757,7 @@ function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueue
   const running = stage?.in_progress_jobs ?? 0;
   const units = stage?.pending_units ?? 0;
   return (
-    <div className="bg-white px-4 py-3.5">
+    <div className="flex h-full flex-col bg-white px-4 py-3.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -783,6 +787,7 @@ function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueue
           ? `${stage.worker_capacity.unserved_ready_jobs} ready ${stage.worker_capacity.unserved_ready_jobs === 1 ? "job has" : "jobs have"} no matching worker online`
           : `Workers: ${stage.worker_capacity.busy_workers} busy · ${stage.worker_capacity.idle_workers} idle`}
       </p>}
+      <QueueTiming stage={stage} />
     </div>
   );
 }
