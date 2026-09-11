@@ -218,7 +218,7 @@ export function GridFindingCard({
             )}
             {whyFlagged && (
               <p>
-                <span className="font-semibold text-stone-500">Why flagged: </span>
+                <span className="font-semibold text-stone-500">Why matched: </span>
                 {whyFlagged}
               </p>
             )}

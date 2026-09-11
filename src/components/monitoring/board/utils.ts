@@ -439,12 +439,11 @@ export function actionabilityMeta(actionability: IpReviewFinding["actionability"
 }
 
 export function findingFlaggedReason(
-  f: Pick<IpReviewFinding, "match_explanation" | "infringement_reasoning" | "vlm_reasoning">,
+  f: Pick<IpReviewFinding, "match_explanation" | "vlm_reasoning">,
 ) {
   const seen = new Set<string>();
   return [
     f.match_explanation,
-    f.infringement_reasoning,
     f.vlm_reasoning,
   ]
     .map((v) => v?.trim())
