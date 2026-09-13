@@ -41,7 +41,8 @@ import {
 import { ADMIN_JOB_COPY, monitoringRunJobTypes } from "../features/adminMonitoring/monitoringJobs";
 
 import { WORK_STATE_COPY, workPauseReason, workStateLabel } from "../features/adminMonitoring/workState";
-import { WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
+import { JobExecutionBadge, WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
+import { executionDemand, isScrapflyTask, jobExecutionKind, scrapflyExecutionName, splitExecutionCapacity, type ExecutionDemand, type ExecutionKind } from "../features/adminMonitoring/executions";
 import { WORKER_KIND_COPY } from "../features/adminMonitoring/workerKinds";
 import { QueueTiming } from "../features/adminMonitoring/QueueTiming";
 
@@ -59,7 +60,7 @@ const OPERATION_STYLES: Record<string, string> = {
 };
 
 type WorkFilter = "all" | AdminJobQueueState;
-type WorkerKindFilter = "all" | AdminMonitoringWorkerKind;
+type WorkerKindFilter = "all" | ExecutionKind;
 
 export default function AdminMonitoring() {
   const feed = useAdminMonitoringFeed();
@@ -105,7 +106,7 @@ export default function AdminMonitoring() {
   };
   const visibleWork = overview.active_work.filter(work => (
     (workFilter === "all" || work.queue_state === workFilter)
-    && (workerKindFilter === "all" || work.worker_kind === workerKindFilter)
+    && (workerKindFilter === "all" || jobExecutionKind(work) === workerKindFilter)
   ));
   const openRun = (runId: string) => {
     if (!overview.runs.some((run) => run.run_id === runId)) feed.setQuery(runId);
@@ -183,7 +184,7 @@ export default function AdminMonitoring() {
         </section>
       )}
 
-      <WorkerDemand demand={overview.worker_demand} onViewReady={kind => {
+      <WorkerDemand demand={overview.worker_demand} workers={overview.workers} queues={overview.queue} onViewReady={kind => {
         setWorkerKindFilter(kind);
         setWorkFilter("ready");
         document.getElementById("monitoring-live-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -200,7 +201,7 @@ export default function AdminMonitoring() {
           <WorkerSummary overview={overview} />
         </div>
         <div className="grid gap-px bg-white sm:grid-cols-2 xl:grid-cols-4">
-          {overview.queue.map((stage) => <QueueStage key={stage.type} type={stage.type} stage={queueByType.get(stage.type)} />)}
+          {overview.queue.map((stage) => <QueueStage key={stage.type} type={stage.type} stage={queueByType.get(stage.type)} workers={overview.workers} />)}
         </div>
         <p className="border-t border-stone-200 bg-stone-50 px-4 py-2.5 text-[11px] leading-4 text-stone-500">
           Ready work = average runtime × ready jobs, with one worker dedicated to that queue. Workers share queues; new jobs, follow-up work and retries can extend the wait. Batch timings are per job.
@@ -210,7 +211,7 @@ export default function AdminMonitoring() {
       <LiveWorkFeed
         work={visibleWork}
         summary={overview.summary}
-        demand={overview.worker_demand}
+        demand={executionDemand(overview.worker_demand, overview.active_work)}
         workerKindFilter={workerKindFilter}
         onWorkerKindFilter={setWorkerKindFilter}
         filter={workFilter}
@@ -370,33 +371,37 @@ function RunRow({ run, open, onToggle, detail }: {
   );
 }
 
-function WorkerDemand({ demand, onViewReady }: {
+function WorkerDemand({ demand, workers, queues, onViewReady }: {
   demand: AdminMonitoringWorkerDemand[];
+  workers: AdminMonitoringWorker[];
+  queues: AdminMonitoringQueueStage[];
   onViewReady: (kind: AdminMonitoringWorkerKind) => void;
 }) {
   return (
     <section aria-label="Worker demand" className="mt-4">
       <h2 className="text-sm font-bold text-stone-900">Where work is waiting</h2>
-      <p className="mt-0.5 text-xs text-stone-500">Ready jobs and the online workers configured to process them.</p>
+      <p className="mt-0.5 text-xs text-stone-500">Ready jobs, available workers, and active Scrapfly tasks.</p>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {demand.map(row => {
           const copy = WORKER_KIND_COPY[row.kind];
+          const capacity = splitExecutionCapacity(row, workers, queues.filter(queue => queue.worker_kind === row.kind));
           const Icon = copy.icon;
           const pressure = row.unserved_ready_jobs > 0 ? "Missing worker capacity"
             : row.ready_jobs === 0 ? "No ready backlog"
-              : row.idle_workers === 0 ? "Workers busy" : "Capacity available";
+              : row.idle_workers === 0 ? "Processing" : "Capacity available";
           return (
-            <article key={row.kind} aria-label={copy.title} className="flex flex-col rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+            <article key={row.kind} aria-label={row.kind === "browser" ? "Browser jobs" : copy.title} className="flex flex-col rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="flex items-center gap-2 text-sm font-bold text-stone-900"><Icon className="h-4 w-4" />{copy.title}</h3>
+                <h3 className="flex items-center gap-2 text-sm font-bold text-stone-900"><Icon className="h-4 w-4" />{row.kind === "browser" ? "Browser jobs" : copy.title}</h3>
                 <span className={`rounded-md px-2 py-1 text-[10px] font-semibold ${row.unserved_ready_jobs > 0 ? "bg-rose-50 text-rose-700" : row.ready_jobs > 0 && row.idle_workers === 0 ? "bg-amber-50 text-amber-800" : "bg-stone-100 text-stone-600"}`}>{pressure}</span>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-4">
                 <div><p className="text-2xl font-black tabular-nums text-stone-950">{row.ready_jobs.toLocaleString()}</p><p className="text-[11px] text-stone-500">jobs ready</p></div>
-                <div><p className="text-2xl font-black tabular-nums text-blue-700">{row.busy_workers}</p><p className="text-[11px] text-stone-500">workers busy</p></div>
-                <div><p className="text-2xl font-black tabular-nums text-emerald-700">{row.idle_workers}</p><p className="text-[11px] text-stone-500">workers idle</p></div>
+                <div><p className="text-2xl font-black tabular-nums text-blue-700">{capacity.busy_workers}</p><p className="text-[11px] text-stone-500">workers busy</p></div>
+                <div><p className="text-2xl font-black tabular-nums text-emerald-700">{capacity.idle_workers}</p><p className="text-[11px] text-stone-500">workers idle</p></div>
               </div>
               <div className="mb-3 mt-3">
+                {capacity.scrapfly_tasks > 0 && <p className="mb-2 text-[11px] font-semibold text-orange-700">{capacity.scrapfly_tasks} individual Scrapfly {capacity.scrapfly_tasks === 1 ? "task" : "tasks"} running</p>}
                 <p className="text-[11px] text-stone-500">{row.running_jobs} {row.running_jobs === 1 ? "job" : "jobs"} running · {row.paused_jobs} paused · {row.scheduled_jobs} scheduled</p>
                 {row.unserved_ready_jobs > 0 && <p className="mt-2 text-[11px] font-semibold text-rose-700">{row.unserved_ready_jobs} ready {row.unserved_ready_jobs === 1 ? "job has" : "jobs have"} no matching worker online.</p>}
               </div>
@@ -416,7 +421,8 @@ function WorkerFleet({ overview, onOpenRun }: {
   overview: AdminMonitoringOverview;
   onOpenRun: (runId: string) => void;
 }) {
-  const browserWorkers = overview.workers.filter((worker) => worker.capabilities.browser);
+  const browserWorkers = overview.workers.filter((worker) => worker.capabilities.browser && !isScrapflyTask(worker.id));
+  const scrapflyTasks = overview.workers.filter(worker => isScrapflyTask(worker.id) && worker.effective_status === "busy" && worker.current_job_id);
   const runpodWorkers = overview.workers.filter((worker) => worker.provider === "runpod");
   const otherMlWorkers = overview.workers.filter(worker => worker.provider !== "runpod" && worker.capabilities.ml && !worker.capabilities.browser);
   const pools = Array.from(new Set([
@@ -429,18 +435,30 @@ function WorkerFleet({ overview, onOpenRun }: {
     <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
       <div className="flex flex-col gap-2 border-b border-stone-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-sm font-bold text-stone-900">Worker fleet right now</h2>
-          <p className="mt-0.5 text-xs text-stone-400">Heartbeat-backed status for browser workers and provider-backed state for RunPod.</p>
+          <h2 className="text-sm font-bold text-stone-900">Workers and Scrapfly tasks</h2>
+          <p className="mt-0.5 text-xs text-stone-400">Live browser workers, individual Scrapfly executions, and RunPod capacity.</p>
         </div>
         <WorkerSummary overview={overview} />
       </div>
 
       <div className="grid gap-px bg-stone-200 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.6fr)]">
         <div className="min-w-0 bg-white p-4">
+          <section aria-label="Scrapfly tasks" className="mb-5 border-b border-stone-200 pb-5">
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <h3 className="text-xs font-bold text-orange-800">Scrapfly tasks</h3>
+              <span className="text-[10px] font-semibold text-orange-700">{scrapflyTasks.length} running</span>
+            </div>
+            <p className="mb-3 text-[11px] leading-4 text-stone-500">One API-owned execution per job after three hours waiting. Each task ends when its attempt finishes.</p>
+            <div className="space-y-2">
+              {scrapflyTasks.length > 0
+                ? scrapflyTasks.map(worker => <WorkerRow key={worker.current_job_id} worker={worker} onOpenRun={onOpenRun} />)
+                : <EmptyFleet label="No Scrapfly task is running." />}
+            </div>
+          </section>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Globe2 className="h-4 w-4 text-blue-700" />
-              <h3 className="text-xs font-bold text-stone-900">Browser-capable workers</h3>
+              <h3 className="text-xs font-bold text-stone-900">Browser workers</h3>
             </div>
             <span className="text-[10px] font-semibold text-stone-400">{browserWorkers.length} known</span>
           </div>
@@ -565,8 +583,9 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
         : displayStatus === "provisioning" || displayStatus === "registered" ? "bg-amber-50 text-amber-700"
           : displayStatus === "error" ? "bg-red-50 text-red-700"
           : "bg-stone-100 text-stone-500";
-  const name = worker.hardware.pod_name || worker.hardware.hostname || worker.id;
   const work = worker.current_work;
+  const scrapfly = isScrapflyTask(worker.id);
+  const name = scrapfly ? work ? scrapflyExecutionName(work) : `Scrapfly task ${worker.current_job_id?.slice(0, 8) || ""}` : worker.hardware.pod_name || worker.hardware.hostname || worker.id;
   return (
     <div className={`rounded-lg border border-stone-200 bg-white ${compact ? "px-2.5 py-2" : "p-3"}`}>
       <div className="flex min-w-0 items-center justify-between gap-2">
@@ -574,13 +593,13 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
           <span className={`h-2 w-2 shrink-0 rounded-full ${displayStatus === "draining" ? "bg-orange-500" : displayStatus === "busy" ? "bg-blue-500" : displayStatus === "idle" ? "bg-emerald-500" : displayStatus === "error" ? "bg-red-500" : "bg-amber-400"}`} />
           <span className="truncate font-mono text-[10px] font-semibold text-stone-700" title={worker.id}>{name}</span>
         </div>
-        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${statusStyle}`}>{humanize(displayStatus)}</span>
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${statusStyle}`}>{scrapfly && displayStatus === "busy" ? "Running" : humanize(displayStatus)}</span>
       </div>
       <div className="mt-1.5 flex items-start justify-between gap-3">
         <div className="min-w-0">
           {worker.current_job_type ? (
             <>
-              <div className="flex flex-wrap items-center gap-1.5"><p className="truncate text-[10px] font-semibold text-stone-700">{JOB_COPY[worker.current_job_type]?.label || humanize(worker.current_job_type)}</p>{work && <WorkerTypeBadge kind={work.worker_kind} />}</div>
+              <div className="flex flex-wrap items-center gap-1.5"><p className="truncate text-[10px] font-semibold text-stone-700">{JOB_COPY[worker.current_job_type]?.label || humanize(worker.current_job_type)}</p>{work && <JobExecutionBadge job={work} />}</div>
               {work && <JobScrapeMethodBadge job={work} />}
               <p className="mt-0.5 truncate text-[9px] text-stone-400">
                 {work ? workContext(work) : "Loading job context"}
@@ -597,7 +616,7 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
           {worker.startup.error && <p className="mt-1 text-[9px] font-semibold text-red-600">{worker.startup.error}</p>}
           {!compact && (
             <p className="mt-1 text-[9px] text-stone-400">
-              {worker.hardware.gpu_name || (worker.capabilities.browser ? "Browser runtime" : worker.runtime_mode || worker.pool)}
+              {scrapfly ? "Individual Scrapfly execution" : worker.hardware.gpu_name || (worker.capabilities.browser ? "Browser runtime" : worker.runtime_mode || worker.pool)}
               {worker.last_heartbeat_at ? `, heartbeat ${formatRelative(worker.last_heartbeat_at)}` : ", no heartbeat yet"}
             </p>
           )}
@@ -615,7 +634,7 @@ function WorkerRow({ worker, onOpenRun, compact = false }: {
 function LiveWorkFeed({ work, summary, demand, filter, onFilter, workerKindFilter, onWorkerKindFilter, onOpenRun }: {
   work: AdminMonitoringActiveWorkItem[];
   summary: AdminMonitoringOverview["summary"];
-  demand: AdminMonitoringWorkerDemand[];
+  demand: ExecutionDemand[];
   filter: WorkFilter;
   onFilter: (filter: WorkFilter) => void;
   workerKindFilter: WorkerKindFilter;
@@ -644,18 +663,18 @@ function LiveWorkFeed({ work, summary, demand, filter, onFilter, workerKindFilte
             <h2 className="text-sm font-bold text-stone-900">Live work feed</h2>
           </div>
           <p className="mt-0.5 text-xs text-stone-400">
-            Showing {work.length} of {counts[filter].toLocaleString()} {workerKindFilter !== "all" ? `${WORKER_KIND_COPY[workerKindFilter].label} ` : ""}jobs. {filter === "running"
-              ? workerKindFilter === "all" ? "Every running job is shown." : "Every running job for this worker type is shown."
+            Showing {work.length} of {counts[filter].toLocaleString()} {workerKindFilter !== "all" ? `${workerKindFilter === "scrapfly" ? "Scrapfly" : WORKER_KIND_COPY[workerKindFilter].label} ` : ""}jobs. {filter === "running"
+              ? workerKindFilter === "all" ? "Every running job is shown." : "Every running job for this execution type is shown."
               : filter === "all"
                 ? "Running jobs are shown in full; waiting jobs are sampled across queues and states."
                 : "Jobs in this state are sampled across queues."}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-1" aria-label="Filter by worker type">
-          <span className="mr-2 text-[10px] font-semibold text-stone-400">Worker type</span>
+        <div className="flex flex-wrap items-center gap-1" aria-label="Filter by execution type">
+          <span className="mr-2 text-[10px] font-semibold text-stone-400">Execution type</span>
           {workerKinds.map(kind => (
             <button key={kind} type="button" onClick={() => onWorkerKindFilter(kind)} aria-pressed={workerKindFilter === kind} className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold ${workerKindFilter === kind ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`}>
-              {kind === "all" ? "All workers" : WORKER_KIND_COPY[kind].label}
+              {kind === "all" ? "All executions" : kind === "scrapfly" ? "Scrapfly tasks" : WORKER_KIND_COPY[kind].label}
             </button>
           ))}
         </div>
@@ -695,7 +714,7 @@ function LiveWorkFeed({ work, summary, demand, filter, onFilter, workerKindFilte
                 </p>
               </div>
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5"><p className="truncate text-xs font-bold text-stone-800">{JOB_COPY[item.type]?.label || humanize(item.type)}</p><WorkerTypeBadge kind={item.worker_kind} /></div>
+                <div className="flex flex-wrap items-center gap-1.5"><p className="truncate text-xs font-bold text-stone-800">{JOB_COPY[item.type]?.label || humanize(item.type)}</p><JobExecutionBadge job={item} /></div>
                 <JobScrapeMethodBadge job={item} />
                 <p className="mt-0.5 text-[10px] text-stone-500">{item.queue_state === "paused" ? workPauseReason(item.hold_reason) : workScope(item)}</p>
               </div>
@@ -706,8 +725,8 @@ function LiveWorkFeed({ work, summary, demand, filter, onFilter, workerKindFilte
               <div className="min-w-0">
                 {item.queue_state === "running" && item.worker_instance_id ? (
                   <>
-                    <p className="truncate font-mono text-[9px] font-semibold text-stone-600" title={item.worker_instance_id}>{shortId(item.worker_instance_id)}</p>
-                    <p className="mt-0.5 text-[9px] text-stone-400">worker {humanize(item.worker_status || "assigned")}</p>
+                    <p className="truncate font-mono text-[9px] font-semibold text-stone-600" title={item.worker_instance_id}>{jobExecutionKind(item) === "scrapfly" ? scrapflyExecutionName(item) : shortId(item.worker_instance_id)}</p>
+                    <p className="mt-0.5 text-[9px] text-stone-400">{jobExecutionKind(item) === "scrapfly" ? "Individual Scrapfly execution" : `worker ${humanize(item.worker_status || "assigned")}`}</p>
                   </>
                 ) : <p className="text-[10px] text-stone-400">No worker assigned</p>}
               </div>
@@ -749,7 +768,8 @@ function EmptyFleet({ label }: { label: string }) {
   return <div className="rounded-lg border border-dashed border-stone-200 px-3 py-5 text-center text-[10px] text-stone-400">{label}</div>;
 }
 
-function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueueStage | undefined }) {
+function QueueStage({ type, stage, workers }: { type: string; stage: AdminMonitoringQueueStage | undefined; workers: AdminMonitoringWorker[] }) {
+  const capacity = stage ? splitExecutionCapacity(stage.worker_capacity, workers, [stage]) : null;
   const copy = JOB_COPY[type];
   const waiting = stage?.pending_jobs ?? 0;
   const paused = stage?.paused_jobs ?? 0;
@@ -785,7 +805,7 @@ function QueueStage({ type, stage }: { type: string; stage: AdminMonitoringQueue
       {stage && waiting > 0 && <p className={`mt-2 text-[10px] font-semibold ${stage.worker_capacity.unserved_ready_jobs > 0 ? "text-rose-700" : "text-stone-500"}`}>
         {stage.worker_capacity.unserved_ready_jobs > 0
           ? `${stage.worker_capacity.unserved_ready_jobs} ready ${stage.worker_capacity.unserved_ready_jobs === 1 ? "job has" : "jobs have"} no matching worker online`
-          : `Workers: ${stage.worker_capacity.busy_workers} busy · ${stage.worker_capacity.idle_workers} idle`}
+          : `Workers: ${capacity?.busy_workers ?? 0} busy · ${capacity?.idle_workers ?? 0} idle${capacity?.scrapfly_tasks ? ` · ${capacity.scrapfly_tasks} Scrapfly ${capacity.scrapfly_tasks === 1 ? "task" : "tasks"}` : ""}`}
       </p>}
       <QueueTiming stage={stage} />
     </div>
@@ -829,13 +849,21 @@ function RunStage({ type, stage, operationState }: {
 }
 
 function WorkerSummary({ overview }: { overview: NonNullable<ReturnType<typeof useAdminMonitoringFeed>["overview"]> }) {
-  const workers = overview.summary.workers;
+  const tasks = overview.workers.filter(worker => isScrapflyTask(worker.id));
+  const workers = { ...overview.summary.workers };
+  for (const task of tasks) {
+    const status = task.effective_status;
+    const key = status === "busy" ? "busy" : status === "idle" ? "idle" : status === "offline" ? "offline" : status === "provisioning" || status === "registered" ? "starting" : null;
+    if (key) workers[key] = Math.max(0, workers[key] - 1);
+  }
+  const runningTasks = tasks.filter(task => task.effective_status === "busy" && task.current_job_id).length;
   return (
     <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500">
-      <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1 font-semibold text-blue-700"><Cpu className="h-3 w-3" /> {workers.busy} busy</span>
-      <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 font-semibold text-emerald-700"><Server className="h-3 w-3" /> {workers.idle} idle</span>
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1 font-semibold text-blue-700"><Cpu className="h-3 w-3" /> {workers.busy} {workers.busy === 1 ? "worker" : "workers"} busy</span>
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 font-semibold text-emerald-700"><Server className="h-3 w-3" /> {workers.idle} {workers.idle === 1 ? "worker" : "workers"} idle</span>
+      {runningTasks > 0 && <span className="rounded-md bg-orange-50 px-2 py-1 font-semibold text-orange-700">{runningTasks} Scrapfly {runningTasks === 1 ? "task" : "tasks"} running</span>}
       {workers.starting > 0 && <span className="rounded-md bg-amber-50 px-2 py-1 font-semibold text-amber-700">{workers.starting} starting</span>}
-      {workers.offline > 0 && <span className="rounded-md bg-red-50 px-2 py-1 font-semibold text-red-700">{workers.offline} offline</span>}
+      {workers.offline > 0 && <span className="rounded-md bg-red-50 px-2 py-1 font-semibold text-red-700">{workers.offline} {workers.offline === 1 ? "worker" : "workers"} offline</span>}
     </div>
   );
 }

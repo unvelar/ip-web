@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { JobScrapeMethodBadge } from "./ScrapeMethodBadge";
 import { workPauseReason, workStateLabel, WORK_STATE_COPY } from "./workState";
-import { WorkerTypeBadge } from "./WorkerTypeBadge";
+import { JobExecutionBadge } from "./WorkerTypeBadge";
+import { jobExecutionKind, scrapflyExecutionName } from "./executions";
 import { MONITORING_JOB_COPY, supportsScrapeMethod, type MonitoringJobType } from "./monitoringJobs";
 import {
   AlertCircle,
@@ -328,13 +329,13 @@ function CandidateRows({ candidate, open, onToggle }: {
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700">
                 <JobStatusDot status={activeJob.queue_state ?? activeJob.status} /> {JOB_LABELS[activeJob.type] ?? humanize(activeJob.type)}
               </div>
-              <div className="mt-1"><WorkerTypeBadge kind={activeJob.worker_kind} /></div>
+              <div className="mt-1"><JobExecutionBadge job={activeJob} /></div>
               <JobScrapeMethodBadge job={activeJob} />
               <p className="mt-1 text-[10px] text-stone-400">
                 {workStateLabel(activeJob)}{activeJob.queue_state === "paused" ? ` · ${workPauseReason(activeJob.hold_reason)}` : activeJob.queue_state === "scheduled" ? ` · After ${formatTimestamp(activeJob.available_at)}` : ""}
                 {activeJob.batch_index && `, batch ${activeJob.batch_index}/${activeJob.batch_count}`}
               </p>
-              {activeJob.worker_instance_id && <p className="mt-1 truncate font-mono text-[9px] text-stone-400">{activeJob.worker_instance_id}</p>}
+              {activeJob.worker_instance_id && <p className="mt-1 truncate font-mono text-[9px] text-stone-400">{jobExecutionKind(activeJob) === "scrapfly" ? scrapflyExecutionName(activeJob) : activeJob.worker_instance_id}</p>}
             </>
           ) : <span className="text-[11px] text-stone-400">No linked job</span>}
         </td>
@@ -512,7 +513,7 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
       <JobStatusDot status={job.queue_state ?? job.status} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1.5"><p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p><WorkerTypeBadge kind={job.worker_kind} /></div>
+          <div className="flex flex-wrap items-center gap-1.5"><p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p><JobExecutionBadge job={job} /></div>
           <p className="text-[10px] text-stone-400">{workStateLabel(job)}</p>
         </div>
         <JobScrapeMethodBadge job={job} />
@@ -524,7 +525,7 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
         </p>
         {job.worker_instance_id && (
           <p className="mt-1 truncate font-mono text-[9px] text-stone-400" title={job.worker_instance_id}>
-            {job.worker_instance_id}{job.worker_image_sha ? `, image ${shortId(job.worker_image_sha)}` : ""}
+            {jobExecutionKind(job) === "scrapfly" ? scrapflyExecutionName(job) : job.worker_instance_id}{job.worker_image_sha ? `, image ${shortId(job.worker_image_sha)}` : ""}
           </p>
         )}
         {job.queue_state === "paused" && <p className="mt-1 rounded bg-stone-100 px-2 py-1 text-[10px] text-stone-600">{workPauseReason(job.hold_reason)}. Requires an explicit release.</p>}

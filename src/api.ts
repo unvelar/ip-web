@@ -1223,6 +1223,7 @@ export interface AdminMonitoringWorkerDemand extends AdminMonitoringWorkerCapaci
 
 export interface AdminMonitoringQueueStage {
   type: string;
+  execution_routes: Array<{ execution_class: string | null; pending_jobs: number }>;
   worker_kind: AdminMonitoringWorkerKind;
   worker_capacity: AdminMonitoringWorkerCapacity;
   pending_jobs: number;
