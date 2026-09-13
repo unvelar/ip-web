@@ -1205,6 +1205,7 @@ export function patchComputeJobRoute(
 export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "failed" | "attention";
 export type AdminMonitoringOperationState = "queued" | "processing" | "paused" | "scheduled" | "completed" | "failed" | "stalled" | "removed";
 export type AdminMonitoringWorkerKind = "ml" | "browser" | "hybrid" | "unknown";
+export type AdminMonitoringExecutionKind = AdminMonitoringWorkerKind | "scrapfly";
 
 export interface AdminMonitoringWorkerCapacity {
   busy_workers: number;
@@ -1244,6 +1245,7 @@ export interface AdminMonitoringQueueStage {
 export interface AdminMonitoringRunJobStage {
   type: string;
   worker_kind: AdminMonitoringWorkerKind;
+  execution_kinds?: AdminMonitoringExecutionKind[];
   pending_jobs: number;
   deferred_jobs: number;
   paused_jobs: number;
@@ -1618,6 +1620,9 @@ export async function getAdminMonitoringOverview(opts: {
   if (!Number.isFinite(overview.summary.paused_jobs)
     || !Number.isFinite(overview.summary.scheduled_jobs)
     || !Array.isArray(overview.worker_demand)
+    || overview.runs.some(run => run.jobs.some(stage => stage.execution_kinds !== undefined
+      && (!Array.isArray(stage.execution_kinds) || stage.execution_kinds.some(kind =>
+        kind !== "scrapfly" && !isAdminMonitoringWorkerKind(kind)))))
     || overview.worker_demand.some(row => !isAdminMonitoringWorkerKind(row.kind))
     || overview.queue.some(queue => !isAdminMonitoringWorkerKind(queue.worker_kind) || !queue.worker_capacity)
     || overview.active_work.some(job => !isAdminMonitoringWorkerKind(job.worker_kind)

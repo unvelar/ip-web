@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { RunStageExecutionBadges } from "../src/features/adminMonitoring/WorkerTypeBadge";
 import type { AdminMonitoringRunJobStage } from "../src/api";
 import { monitoringRunStageStatus } from "../src/features/adminMonitoring/runStageStatus";
 import { monitoringRunJobTypes } from "../src/features/adminMonitoring/monitoringJobs";
@@ -52,4 +55,17 @@ describe("monitoringRunStageStatus", () => {
     expect(monitoringRunStageStatus([sellerStage].find((stage) => stage.type === types[0]), "completed")).toBe("done");
     expect(monitoringRunJobTypes(null)[0]).toBe("monitor_scrape");
   });
+});
+
+test("summary cards retain recorded executors and handle mixed or older responses", () => {
+  const render = (execution_kinds?: AdminMonitoringRunJobStage["execution_kinds"]) =>
+    renderToStaticMarkup(createElement(RunStageExecutionBadges, {
+      stage: { ...completedStage, execution_kinds },
+    }));
+  expect(render(["scrapfly"])).toContain('aria-label="Execution: Scrapfly task"');
+  expect(render(["scrapfly"])).not.toContain('Worker type: Browser');
+  const mixed = render(["browser", "scrapfly"]);
+  expect(mixed).toContain('Worker type: Browser');
+  expect(mixed).toContain('Execution: Scrapfly task');
+  expect(render()).toContain('Worker type: Browser');
 });

@@ -41,7 +41,7 @@ import {
 import { ADMIN_JOB_COPY, monitoringRunJobTypes } from "../features/adminMonitoring/monitoringJobs";
 
 import { WORK_STATE_COPY, workPauseReason, workStateLabel } from "../features/adminMonitoring/workState";
-import { JobExecutionBadge, WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
+import { JobExecutionBadge, RunStageExecutionBadges, WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
 import { executionDemand, isScrapflyTask, jobExecutionKind, scrapflyExecutionName, splitExecutionCapacity, type ExecutionDemand, type ExecutionKind } from "../features/adminMonitoring/executions";
 import { WORKER_KIND_COPY } from "../features/adminMonitoring/workerKinds";
 import { QueueTiming } from "../features/adminMonitoring/QueueTiming";
@@ -832,7 +832,7 @@ function RunStage({ type, stage, operationState }: {
   return (
     <div className={`min-w-0 rounded-md px-2 py-1.5 ${color}`} title={title}>
       <p className="truncate text-[9px] font-bold">{JOB_COPY[type]?.label}</p>
-      {stage && <div className="mt-1"><WorkerTypeBadge kind={stage.worker_kind} compact /></div>}
+      {stage && <RunStageExecutionBadges stage={stage} />}
       <p className="mt-0.5 truncate text-[9px] opacity-75">
         {status === "running" ? `${stage?.in_progress_jobs} running`
           : status === "queued" ? `${stage?.pending_jobs ?? 0} ready`

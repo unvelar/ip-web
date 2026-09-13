@@ -1,6 +1,6 @@
-import type { AdminMonitoringJob, AdminMonitoringWorker, AdminMonitoringQueueStage, AdminMonitoringWorkerCapacity, AdminMonitoringWorkerDemand, AdminMonitoringWorkerKind } from "../../api";
+import type { AdminMonitoringExecutionKind, AdminMonitoringJob, AdminMonitoringWorker, AdminMonitoringQueueStage, AdminMonitoringWorkerCapacity, AdminMonitoringWorkerDemand } from "../../api";
 
-export type ExecutionKind = AdminMonitoringWorkerKind | "scrapfly";
+export type ExecutionKind = AdminMonitoringExecutionKind;
 export type ExecutionDemand = Omit<AdminMonitoringWorkerDemand, "kind"> & { kind: ExecutionKind };
 
 // The API reserves this identity for its one-job Scrapfly processes and uses
