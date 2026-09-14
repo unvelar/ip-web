@@ -511,7 +511,7 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
   const coolingDown = recoveringAccess && job.access_cooling_down === true;
   const hasFailureDiagnostic = job.scrape?.steps.some(step => ["failed", "blocked"].includes(step.outcome ?? "") && step.diagnostics);
   return (
-    <div className="flex items-start gap-2.5">
+    <div className="flex items-start gap-2.5 has-[[data-capture-history-open=true]]:col-span-full">
       <JobStatusDot status={job.queue_state ?? job.status} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center justify-between gap-2">

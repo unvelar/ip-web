@@ -32,7 +32,7 @@ export function CaptureAttemptDetails({ job }: { job: AdminMonitoringJob }) {
     } finally { setLoading(false); }
   }
 
-  return <div className="mt-2 text-xs">
+  return <div data-capture-history-open={open} className="mt-2 text-xs">
     {failures.map(step => <p key={`${step.method}-${step.role}`} className="mb-2 rounded-md bg-amber-50 px-3 py-2 leading-5 text-amber-900">
       <span className="font-semibold">{METHOD_COPY[step.method]} attempt: </span>{step.diagnostics!.message}
     </p>)}
@@ -82,7 +82,7 @@ function DiagnosticEvidence({ diagnostic: d }: { diagnostic: CaptureDiagnostics 
     <p className="leading-5 text-stone-700">{d.message}</p>
     <details className="mt-2">
       <summary className="cursor-pointer text-[11px] font-medium text-sky-700">Evidence · {d.code}</summary>
-      <dl className="mt-2 space-y-2">
+      <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
         {facts.filter(([, value]) => value !== null && value !== "").map(([label, value]) => <div key={label}>
           <dt className="text-[10px] font-semibold text-stone-500">{label}</dt>
           <dd className="mt-0.5 break-all text-[11px] leading-4 text-stone-700">{value}</dd>
