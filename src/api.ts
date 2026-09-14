@@ -1259,6 +1259,48 @@ export interface AdminMonitoringRunJobStage {
   latest_error: string | null;
 }
 
+export interface CaptureDiagnostics {
+  version: 1;
+  code: string;
+  message: string;
+  requested_url: string | null;
+  final_url: string | null;
+  source_url: string | null;
+  http_status: number | null;
+  provider_status: number | null;
+  title: string | null;
+  html_length: number | null;
+  document_sha256: string | null;
+  content_contract_passed: boolean | null;
+  contract_code: string | null;
+  page_kind: string | null;
+  signals: string[];
+  page_url_hints: string[];
+  parser_errors: string[];
+  exception_type: string | null;
+  challenge: { family: string | null; provider: string | null; variant: string | null; signals: string[] } | null;
+}
+
+export interface AdminCaptureAttempt {
+  id: string;
+  attempt_number: number;
+  status: string;
+  error: string | null;
+  worker_instance_id: string | null;
+  worker_image_sha: string | null;
+  scrapfly_overflow: boolean;
+  started_at: string;
+  completed_at: string | null;
+  scrape: AdminMonitoringScrapeEvidence;
+}
+
+export function getAdminCaptureAttempts(jobId: string, before?: string | null) {
+  const query = before ? `?before=${encodeURIComponent(before)}` : "";
+  return request<{ attempts: AdminCaptureAttempt[]; next_cursor: string | null }>(
+    `/admin/monitoring/jobs/${encodeURIComponent(jobId)}/attempts${query}`,
+  );
+}
+
 export interface AdminMonitoringScrapeEvidence {
   source: "worker" | "candidates" | "job_result" | "page_capture" | "not_recorded";
   steps: Array<{
@@ -1268,6 +1310,7 @@ export interface AdminMonitoringScrapeEvidence {
     recorded_at: string | null;
     outcome?: "started" | "ready" | "unavailable" | "failed" | "blocked" | "skipped" | null;
     reason?: string | null;
+    diagnostics?: CaptureDiagnostics | null;
   }>;
 }
 

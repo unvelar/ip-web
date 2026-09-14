@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { CaptureAttemptDetails } from "./CaptureAttemptDetails";
 import { JobScrapeMethodBadge } from "./ScrapeMethodBadge";
 import { workPauseReason, workStateLabel, WORK_STATE_COPY } from "./workState";
 import { JobExecutionBadge } from "./WorkerTypeBadge";
@@ -508,6 +509,7 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
 function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
   const recoveringAccess = job.status === "pending" && job.queue_state !== "paused" && ((job.deferral_count ?? 0) > 0 || job.access_wait_only === true);
   const coolingDown = recoveringAccess && job.access_cooling_down === true;
+  const hasFailureDiagnostic = job.scrape?.steps.some(step => ["failed", "blocked"].includes(step.outcome ?? "") && step.diagnostics);
   return (
     <div className="flex items-start gap-2.5">
       <JobStatusDot status={job.queue_state ?? job.status} />
@@ -537,7 +539,8 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
               : "Access cooldown finished. Queued for a page check."}
             {job.access_wait_only && " No capture request was made in the last claim."}
           </p>
-        ) : job.error && <p className="mt-1 rounded bg-red-50 px-2 py-1 text-[10px] leading-4 text-red-700">{job.error}</p>}
+        ) : job.error && !hasFailureDiagnostic && <p className="mt-1 rounded bg-red-50 px-2 py-1 text-[10px] leading-4 text-red-700">{job.error}</p>}
+        {(supportsScrapeMethod(job.type) || job.type === "case_capture") && <CaptureAttemptDetails key={job.id} job={job} />}
       </div>
     </div>
   );
