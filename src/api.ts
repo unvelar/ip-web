@@ -1297,7 +1297,7 @@ export interface AdminCaptureAttempt {
 export function getAdminCaptureAttempts(jobId: string, before?: string | null) {
   const query = before ? `?before=${encodeURIComponent(before)}` : "";
   return request<{ attempts: AdminCaptureAttempt[]; next_cursor: string | null }>(
-    `/admin/monitoring/jobs/${encodeURIComponent(jobId)}/attempts${query}`,
+    `/api/admin/monitoring/jobs/${encodeURIComponent(jobId)}/attempts${query}`,
   );
 }
 

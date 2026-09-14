@@ -19,6 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install
+      - name: Verify capture history HTTP contract
+        run: bun test tests/adminCaptureDiagnostics.test.tsx
       - name: Capture build time
         run: echo "VITE_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
       - run: bun run build
