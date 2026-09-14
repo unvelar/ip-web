@@ -29,6 +29,8 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      - name: Verify capture history HTTP contract
+        run: bun test tests/adminCaptureDiagnostics.test.tsx
       - name: Capture build time
         run: echo "VITE_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
       - run: bun run build

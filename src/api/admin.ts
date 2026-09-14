@@ -106,10 +106,15 @@ export interface ComputeProfileRecord extends ComputeRuntimeSettingsRecord {
     pending_jobs: number;
     in_progress_jobs: number;
     desired_instances: number;
+    on_instances: number;
+    provisioning_instances: number;
     ready_instances: number;
+    busy_workers: number;
+    idle_workers: number;
     last_decision: string | null;
     last_reason: string | null;
     last_error: string | null;
+    metadata: Record<string, unknown>;
   } | null;
   workers: Array<{
     id: string;
@@ -155,23 +160,37 @@ export function patchComputeJobRoute(
   );
 }
 
-export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "failed";
-export type AdminMonitoringOperationState = "queued" | "processing" | "completed" | "failed" | "stalled";
+export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "failed" | "attention";
+export type AdminMonitoringOperationState = "queued" | "processing" | "paused" | "scheduled" | "completed" | "failed" | "stalled" | "removed";
 
 export interface AdminMonitoringQueueStage {
   type: string;
+  execution_routes: Array<{ execution_class: string | null; pending_jobs: number }>;
+  worker_kind: AdminMonitoringWorkerKind;
+  worker_capacity: AdminMonitoringWorkerCapacity;
   pending_jobs: number;
   deferred_jobs: number;
+  paused_jobs: number;
+  scheduled_jobs: number;
   in_progress_jobs: number;
   pending_units: number;
   in_progress_units: number;
   oldest_queued_at: string | null;
+  timing?: {
+    average_seconds: number | null;
+    sample_size: number;
+    window_hours: number;
+  };
 }
 
 export interface AdminMonitoringRunJobStage {
   type: string;
+  worker_kind: AdminMonitoringWorkerKind;
+  execution_kinds?: AdminMonitoringExecutionKind[];
   pending_jobs: number;
   deferred_jobs: number;
+  paused_jobs: number;
+  scheduled_jobs: number;
   in_progress_jobs: number;
   completed_jobs: number;
   failed_jobs: number;
@@ -190,6 +209,7 @@ export interface AdminMonitoringScrapeEvidence {
     recorded_at: string | null;
     outcome?: "started" | "ready" | "unavailable" | "failed" | "blocked" | "skipped" | null;
     reason?: string | null;
+    diagnostics?: CaptureDiagnostics | null;
   }>;
 }
 
@@ -200,6 +220,7 @@ export interface AdminMonitoringRunActivity {
   tenant_name: string | null;
   ip_catalog_id: string | null;
   ip_name: string | null;
+  ip_retired_at: string | null;
   domain_id: string | null;
   source_domain: string | null;
   source_name: string | null;
@@ -241,7 +262,7 @@ export interface AdminMonitoringWorker {
   status: string;
   effective_status: string;
   job_types: string[];
-  capabilities: { browser: boolean; gpu: boolean };
+  capabilities: { browser: boolean; gpu: boolean; ml: boolean };
   execution_class: string | null;
   runtime_mode: string | null;
   profile_revision: number | null;
@@ -261,12 +282,19 @@ export interface AdminMonitoringWorker {
     gpu_name: string | null;
     gpu_total_memory_gib: number | null;
   };
+  startup: {
+    phase: string | null;
+    phase_started_at: string | null;
+    error: string | null;
+  };
 }
 
 export interface AdminMonitoringOverview {
   generated_at: string;
   window_hours: number;
   summary: {
+    attention_runs: number;
+    failed_work_runs: number;
     active_runs: number;
     completed_runs: number;
     failed_runs: number;
@@ -276,11 +304,14 @@ export interface AdminMonitoringOverview {
     evidence_conflicts: number;
     queued_jobs: number;
     deferred_jobs: number;
+    paused_jobs: number;
+    scheduled_jobs: number;
     queued_units: number;
     running_jobs: number;
     workers: { busy: number; idle: number; starting: number; offline: number };
   };
   queue: AdminMonitoringQueueStage[];
+  worker_demand: AdminMonitoringWorkerDemand[];
   workers: AdminMonitoringWorker[];
   runpod: {
     coordinators: AdminMonitoringRunpodCoordinator[];
@@ -294,10 +325,17 @@ export interface AdminMonitoringJob {
   scrape?: AdminMonitoringScrapeEvidence | null;
   id: string;
   type: string;
+  worker_kind: AdminMonitoringWorkerKind;
   status: string;
+  queue_state: AdminJobQueueState | null;
+  hold_reason: string | null;
+  held_at: string | null;
   error: string | null;
   attempts: number;
   max_attempts: number;
+  deferral_count?: number;
+  access_wait_only?: boolean;
+  access_cooling_down?: boolean;
   capacity_units: number;
   execution_class: string | null;
   queued_at: string;
@@ -313,6 +351,8 @@ export interface AdminMonitoringJob {
 }
 
 export interface AdminMonitoringActiveWorkItem extends AdminMonitoringJob {
+  queue_state: AdminJobQueueState;
+  case_id: string | null;
   run_id: string | null;
   tenant_id: string | null;
   tenant_name: string | null;
@@ -342,6 +382,8 @@ export interface AdminMonitoringRunpodCoordinator {
   provisioning_instances: number;
   on_instances: number;
   ready_instances: number;
+  preparing_instances: number;
+  draining_instances: number;
   busy_workers: number;
   idle_workers: number;
   last_decision: string | null;
@@ -499,7 +541,7 @@ export interface AdminMonitoringRunDetail {
   }>;
 }
 
-export function getAdminMonitoringOverview(opts: {
+export async function getAdminMonitoringOverview(opts: {
   windowHours?: 1 | 6 | 24 | 72 | 168;
   status?: AdminMonitoringRunFilter;
   query?: string;
@@ -512,16 +554,34 @@ export function getAdminMonitoringOverview(opts: {
   if (opts.query) qs.set("q", opts.query);
   if (opts.limit) qs.set("limit", String(opts.limit));
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return request<AdminMonitoringOverview>(`/api/admin/monitoring/overview${suffix}`, {
+  const overview = await request<AdminMonitoringOverview>(`/api/admin/monitoring/overview${suffix}`, {
     signal: opts.signal,
   });
+  if (!Number.isFinite(overview.summary.paused_jobs)
+    || !Number.isFinite(overview.summary.scheduled_jobs)
+    || !Array.isArray(overview.worker_demand)
+    || overview.runs.some(run => run.jobs.some(stage => stage.execution_kinds !== undefined
+      && (!Array.isArray(stage.execution_kinds) || stage.execution_kinds.some(kind =>
+        kind !== "scrapfly" && !isAdminMonitoringWorkerKind(kind)))))
+    || overview.worker_demand.some(row => !isAdminMonitoringWorkerKind(row.kind))
+    || overview.queue.some(queue => !isAdminMonitoringWorkerKind(queue.worker_kind) || !queue.worker_capacity)
+    || overview.active_work.some(job => !isAdminMonitoringWorkerKind(job.worker_kind)
+      || !["running", "ready", "paused", "scheduled"].includes(job.queue_state))) {
+    throw new Error("The server has not provided complete worker and queue status yet. This page will retry automatically.");
+  }
+  return overview;
 }
 
-export function getAdminMonitoringRun(runId: string, signal?: AbortSignal) {
-  return request<AdminMonitoringRunDetail>(
+export async function getAdminMonitoringRun(runId: string, signal?: AbortSignal) {
+  const detail = await request<AdminMonitoringRunDetail>(
     `/api/admin/monitoring/runs/${encodeURIComponent(runId)}`,
     { signal },
   );
+  if (detail.jobs.some(job => !isAdminMonitoringWorkerKind(job.worker_kind))
+    || detail.candidates.some(candidate => Object.values(candidate.jobs).flat().some(job => !isAdminMonitoringWorkerKind(job.worker_kind)))) {
+    throw new Error("Worker details are still updating. This page will retry automatically.");
+  }
+  return detail;
 }
 
 export interface TenantUsageStats {
@@ -635,7 +695,7 @@ export function patchAdminIp(
 }
 
 export function deleteAdminIp(id: string) {
-  return request<{ ok: boolean; deleted_uploads: number }>(
+  return request<{ ok: boolean; cleanup_queued: number }>(
     `/api/admin/ips/${encodeURIComponent(id)}`,
     { method: "DELETE" }
   );
@@ -665,4 +725,79 @@ export function deleteAdminImage(id: string, imageId: string) {
     `/api/admin/ips/${encodeURIComponent(id)}/images/${encodeURIComponent(imageId)}`,
     { method: "DELETE" }
   );
+}
+
+
+export type AdminMonitoringWorkerKind = "ml" | "browser" | "hybrid" | "unknown";
+
+export type AdminMonitoringExecutionKind = AdminMonitoringWorkerKind | "scrapfly";
+
+
+export interface AdminMonitoringWorkerCapacity {
+  busy_workers: number;
+  idle_workers: number;
+  unserved_ready_jobs: number;
+}
+
+
+export interface AdminMonitoringWorkerDemand extends AdminMonitoringWorkerCapacity {
+  kind: AdminMonitoringWorkerKind;
+  ready_jobs: number;
+  running_jobs: number;
+  paused_jobs: number;
+  scheduled_jobs: number;
+  oldest_queued_at: string | null;
+}
+
+
+export interface CaptureDiagnostics {
+  version: 1;
+  code: string;
+  message: string;
+  requested_url: string | null;
+  final_url: string | null;
+  source_url: string | null;
+  http_status: number | null;
+  provider_status: number | null;
+  title: string | null;
+  html_length: number | null;
+  document_sha256: string | null;
+  content_contract_passed: boolean | null;
+  contract_code: string | null;
+  page_kind: string | null;
+  signals: string[];
+  page_url_hints: string[];
+  parser_errors: string[];
+  exception_type: string | null;
+  challenge: { family: string | null; provider: string | null; variant: string | null; signals: string[] } | null;
+}
+
+
+export interface AdminCaptureAttempt {
+  id: string;
+  attempt_number: number;
+  status: string;
+  error: string | null;
+  worker_instance_id: string | null;
+  worker_image_sha: string | null;
+  scrapfly_overflow: boolean;
+  started_at: string;
+  completed_at: string | null;
+  scrape: AdminMonitoringScrapeEvidence;
+}
+
+
+export function getAdminCaptureAttempts(jobId: string, before?: string | null) {
+  const query = before ? `?before=${encodeURIComponent(before)}` : "";
+  return request<{ attempts: AdminCaptureAttempt[]; next_cursor: string | null }>(
+    `/api/admin/monitoring/jobs/${encodeURIComponent(jobId)}/attempts${query}`,
+  );
+}
+
+
+export type AdminJobQueueState = "running" | "ready" | "paused" | "scheduled";
+
+
+function isAdminMonitoringWorkerKind(kind: unknown): kind is AdminMonitoringWorkerKind {
+  return typeof kind === "string" && ["ml", "browser", "hybrid", "unknown"].includes(kind);
 }

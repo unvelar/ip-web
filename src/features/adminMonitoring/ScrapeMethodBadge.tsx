@@ -1,6 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import type { AdminMonitoringJob, AdminMonitoringScrapeEvidence } from "../../api";
-import { supportsScrapeMethod } from "./scrapeMethods";
+import { supportsScrapeMethod } from "./monitoringJobs";
 
 const METHOD_COPY = {
   marketplace_specific: { label: "Marketplace specific", style: "bg-sky-50 text-sky-700 border-sky-100" },
@@ -25,11 +25,12 @@ export function ScrapeMethodBadge({ scrape, status }: {
     return <span className="inline-flex rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 text-[9px] text-stone-500" title="No historical scraper-method evidence is available. The current website recipe is not used to infer past executions.">{label}</span>;
   }
   return (
-    <span className="inline-flex flex-wrap items-center gap-1" aria-label={`Scrape method: ${scrape.steps.map((step) => METHOD_COPY[step.method].label).join(", ")}`}>
+    <span className="inline-flex flex-wrap items-center gap-1" aria-label={`Scrape method: ${scrape.steps.map((step) => `${METHOD_COPY[step.method].label}${step.method === "scrapfly" && step.role === "fallback" ? " retry" : ""}`).join(", ")}`}>
       {status === "pending" && <span className="text-[9px] text-stone-500">Previous attempt:</span>}
       {scrape.steps.map((step, index) => {
         const copy = METHOD_COPY[step.method];
-        const suffix = step.role === "shadow" ? " shadow" : step.role === "reused" ? " reused" : "";
+        const suffix = step.role === "fallback" && step.method === "scrapfly" ? " retry"
+          : step.role === "shadow" ? " shadow" : step.role === "reused" ? " reused" : "";
         const outcome = step.outcome === "started"
           ? status === "in_progress" || status === "running" ? "running" : "attempted"
           : step.outcome === "ready" ? "captured"

@@ -11,6 +11,7 @@ import CaseComments from "../../CaseComments";
 import { FindingComparison, FindingTechnicalDetails } from "./FindingComparison";
 import type { FindingUpdateOptions } from "./FindingActions";
 import { RelatedItemsPanel } from "./RelatedItemsPanel";
+import { SharedImagesPanel } from "./SharedImagesPanel";
 import { TaskAssigneeControl } from "./TaskAssigneeControl";
 import { compactListingTitle } from "./utils";
 import { APP_SHELL_OVERLAY_TOP } from "../../appShellLayout";
@@ -211,6 +212,9 @@ export function FindingInspector({
             productGroupId={productGroupId}
             onCorrectProductGroup={onCorrectProductGroup}
           />
+          <div className="mt-4 border-t border-stone-200 pt-4">
+            <SharedImagesPanel key={f.result_id} resultId={f.result_id} />
+          </div>
           {showRelatedItems && (
             <div className="mt-4 border-t border-stone-200 pt-4">
               <RelatedItemsPanel

@@ -115,6 +115,19 @@ function CandidateRow({ c }: { c: MonitorAuditCandidate }) {
   );
 }
 
+const identityReasons: Record<string, string> = {
+  full_name: "Full name found",
+  brand_product_order: "Product and brand found in a different order",
+  alias_with_context: "Alternative name with matching brand or category",
+  product_description: "Product details confirmed the name",
+  identity_not_found: "No matching product name",
+  description_no_match: "Product details did not establish a match",
+  description_unavailable: "Could not verify this listing's product details",
+  description_budget: "Description check limit reached",
+  description_required: "More product details needed",
+  short_name_visual_only: "Name too short to screen; visual checks required",
+};
+
 function RunCard({ run }: { run: MonitorAuditRun }) {
   const [open, setOpen] = useState(false);
   // Per-disposition tally for the collapsed summary.
@@ -152,6 +165,7 @@ function RunCard({ run }: { run: MonitorAuditRun }) {
           )}
         </div>
         <div className="flex items-center gap-3 text-[11px] text-stone-500">
+          {run.identity_screening && <span>{run.identity_screening.harvested} found · {run.identity_screening.rejected} filtered</span>}
           <span>{run.candidates.length} scored</span>
           {Object.entries(tally).map(([k, n]) => (
             <span key={k} className={`px-1.5 py-0.5 rounded ${dispositionStyle(k)}`}>
@@ -165,6 +179,28 @@ function RunCard({ run }: { run: MonitorAuditRun }) {
 
       {open && (
         <div className="px-5 pb-5 border-t border-stone-100">
+          {run.identity_screening ? (
+            <section className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+              <h3 className="text-sm font-semibold text-stone-900">Name screening</h3>
+              <p className="mt-1 text-xs text-stone-600">
+                {run.identity_screening.harvested} candidates found, {run.identity_screening.admitted} admitted to scoring,
+                {" "}{run.identity_screening.rejected} filtered out. Product details checked for {run.identity_screening.inspected} listings.
+              </p>
+              {run.identity_screening.items.length > 0 && <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-stone-700">See candidate decisions</summary>
+                <ul className="mt-2 max-h-80 space-y-3 overflow-y-auto">
+                  {run.identity_screening.items.map((item, index) => <li key={`${item.page_url}-${index}`} className="border-t border-stone-200 pt-2 text-xs">
+                    {item.page_url && /^https?:\/\//i.test(item.page_url)
+                      ? <a href={item.page_url} target="_blank" rel="noreferrer" className="font-medium text-stone-800 underline underline-offset-2">{item.title || "View listing"}</a>
+                      : <span className="font-medium text-stone-800">{item.title || "Untitled candidate"}</span>}
+                    <p className={`mt-1 ${item.outcome === "admit" ? "text-emerald-700" : "text-stone-600"}`}>
+                      {item.outcome === "admit" ? "Admitted" : "Filtered"}: {identityReasons[item.reason] ?? item.reason}
+                    </p>
+                  </li>)}
+                </ul>
+              </details>}
+            </section>
+          ) : <p className="mt-4 text-xs text-stone-500">Name screening details were not recorded for this run.</p>}
           {run.error && (
             <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
               {run.error}

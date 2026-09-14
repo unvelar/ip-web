@@ -512,6 +512,10 @@ export default function Admin() {
               {profiles.map((profile) => {
                 const draft = profileDrafts[profile.pool];
                 const status = profile.status;
+                const drainingInstances = Number(status?.metadata.draining_instances || 0);
+                const preparingInstances = status
+                  ? Math.max(0, status.on_instances - status.ready_instances - drainingInstances)
+                  : 0;
                 const hasHardwareChanges = Boolean(draft) && (
                   draft.gpuTypeIds !== profile.settings.gpuTypeIds.join(", ")
                   || Number(draft.minimumGpuMemoryGb) !== profile.settings.minimumGpuMemoryGb
@@ -533,18 +537,26 @@ export default function Admin() {
                       <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
                         status?.last_error
                           ? "bg-red-50 text-red-700"
-                          : status?.ready_instances
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-stone-100 text-stone-500"
+                          : drainingInstances > 0
+                            ? "bg-orange-50 text-orange-700"
+                            : (status?.busy_workers ?? 0) > 0
+                              ? "bg-blue-50 text-blue-700"
+                              : preparingInstances > 0
+                                ? "bg-amber-50 text-amber-700"
+                                : status?.ready_instances
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-stone-100 text-stone-500"
                       }`}>
-                        {status?.last_error ? "Error" : status?.ready_instances ? "Ready" : "Idle"}
+                        {status?.last_error ? "Error" : drainingInstances > 0 ? "Draining" : (status?.busy_workers ?? 0) > 0 ? "Busy" : preparingInstances > 0 ? "Preparing" : status?.ready_instances ? "Ready" : "Scaled down"}
                       </span>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-3 gap-2">
-                      <ProfileMetric label="Runtime" value="vLLM" />
-                      <ProfileMetric label="Queue" value={String(status?.pending_jobs ?? 0)} />
-                      <ProfileMetric label="Ready pods" value={String(status?.ready_instances ?? 0)} />
+                    <div className="mt-4 grid grid-cols-5 gap-2">
+                      <ProfileMetric label="On" value={String(status?.on_instances ?? 0)} />
+                      <ProfileMetric label="Preparing" value={String(preparingInstances)} />
+                      <ProfileMetric label="Ready" value={String(status?.ready_instances ?? 0)} />
+                      <ProfileMetric label="Busy" value={String(status?.busy_workers ?? 0)} />
+                      <ProfileMetric label="Draining" value={String(drainingInstances)} />
                     </div>
 
                     <div className="mt-4 grid gap-3">

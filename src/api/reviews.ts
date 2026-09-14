@@ -440,6 +440,19 @@ export interface MonitorAuditRun {
   completed_at: string | null;
   pages: MonitorAuditPage[];
   candidates: MonitorAuditCandidate[];
+  identity_screening?: {
+    harvested: number;
+    admitted: number;
+    rejected: number;
+    inspected: number;
+    items: Array<{
+      page_url: string | null;
+      title: string;
+      outcome: "admit" | "reject";
+      reason: string;
+      matched_name: string | null;
+    }>;
+  } | null;
 }
 
 export async function getIpMonitoringAudit(ipId: string) {

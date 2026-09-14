@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
+import { CaptureAttemptDetails } from "./CaptureAttemptDetails";
 import { JobScrapeMethodBadge } from "./ScrapeMethodBadge";
-import { supportsScrapeMethod } from "./scrapeMethods";
+import { workPauseReason, workStateLabel, WORK_STATE_COPY } from "./workState";
+import { JobExecutionBadge } from "./WorkerTypeBadge";
+import { jobExecutionKind, scrapflyExecutionName } from "./executions";
+import { MONITORING_JOB_COPY, supportsScrapeMethod, type MonitoringJobType } from "./monitoringJobs";
 import {
   AlertCircle,
   Check,
@@ -32,6 +36,8 @@ const DECISION_STYLES: Record<AdminMonitoringCandidate["debug"]["decision"]["sta
 
 const PIPELINE_STYLES: Record<string, string> = {
   waiting: "text-stone-600",
+  paused: "text-stone-600",
+  scheduled: "text-violet-700",
   score_queued: "text-blue-700",
   scoring: "text-blue-700",
   visual_queued: "text-violet-700",
@@ -42,12 +48,9 @@ const PIPELINE_STYLES: Record<string, string> = {
   failed: "text-red-700",
 };
 
-const JOB_LABELS: Record<string, string> = {
-  monitor_scrape: "Discovery",
-  monitor_score: "Matching",
-  monitor_visual_check: "Visual check",
-  finding_qualify: "Page check",
-};
+const JOB_LABELS: Record<string, string> = Object.fromEntries(
+  (Object.keys(MONITORING_JOB_COPY) as MonitoringJobType[]).map((type) => [type, MONITORING_JOB_COPY[type].label]),
+);
 
 export function AdminMonitoringRunDetailPanel({
   detail,
@@ -123,6 +126,11 @@ export function AdminMonitoringRunDetailPanel({
 
   return (
     <div className="border-t border-stone-200 bg-stone-50/70">
+      {detail.run.ip_retired_at && (
+        <div className="m-4 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
+          This IP was removed from monitoring on {formatTimestamp(detail.run.ip_retired_at)}. The outcomes below are historical. No retry is needed for this removed IP.
+        </div>
+      )}
       {error && (
         <div className="m-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -140,7 +148,7 @@ export function AdminMonitoringRunDetailPanel({
       {detail.jobs.some((job) => supportsScrapeMethod(job.type)) && (
         <section className="border-b border-stone-200 px-4 py-4">
           <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-stone-500">Fetch executions</h3>
-          <p className="mt-0.5 text-xs text-stone-400">Discovery and page verification, with each job's own methods.</p>
+          <p className="mt-0.5 text-xs text-stone-400">Methods and outcomes recorded for each fetch job.</p>
           <div className="mt-3 grid max-h-80 gap-3 overflow-y-auto sm:grid-cols-2">
             {[...new Map(detail.jobs.filter((job) => supportsScrapeMethod(job.type)).map((job) => [job.id, job])).values()].map((job) => (
               <JobTimelineRow key={job.id} job={job} />
@@ -190,7 +198,7 @@ export function AdminMonitoringRunDetailPanel({
               ["confirmed", "Confirmed"],
               ["rejected", "Rejected"],
               ["screened_out", "Screened"],
-              ["attention", "Investigate"],
+              ["attention", detail.run.ip_retired_at ? "Historical issues" : "Needs attention"],
             ] as Array<[CandidateFilter, string]>).map(([value, label]) => (
               <button
                 key={value}
@@ -309,7 +317,7 @@ function CandidateRows({ candidate, open, onToggle }: {
         </td>
         <td className="px-3 py-2.5">
           <div className={`flex items-center gap-1.5 text-xs font-bold ${PIPELINE_STYLES[pipeline.state] ?? "text-stone-700"}`}>
-            {pipelineInProgress || pipelineQueued
+            {pipelineInProgress || pipelineQueued || pipeline.state === "paused" || pipeline.state === "scheduled"
               ? <LoaderCircle className={`h-3.5 w-3.5 ${pipelineInProgress ? "animate-spin" : ""}`} />
               : <Check className="h-3.5 w-3.5" />}
             {pipeline.label}
@@ -320,14 +328,15 @@ function CandidateRows({ candidate, open, onToggle }: {
           {activeJob ? (
             <>
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700">
-                <JobStatusDot status={activeJob.status} /> {JOB_LABELS[activeJob.type] ?? humanize(activeJob.type)}
+                <JobStatusDot status={activeJob.queue_state ?? activeJob.status} /> {JOB_LABELS[activeJob.type] ?? humanize(activeJob.type)}
               </div>
+              <div className="mt-1"><JobExecutionBadge job={activeJob} /></div>
               <JobScrapeMethodBadge job={activeJob} />
               <p className="mt-1 text-[10px] text-stone-400">
-                {activeJob.status === "pending" ? `Queued ${formatRelative(activeJob.queued_at)}` : humanize(activeJob.status)}
+                {workStateLabel(activeJob)}{activeJob.queue_state === "paused" ? ` · ${workPauseReason(activeJob.hold_reason)}` : activeJob.queue_state === "scheduled" ? ` · After ${formatTimestamp(activeJob.available_at)}` : ""}
                 {activeJob.batch_index && `, batch ${activeJob.batch_index}/${activeJob.batch_count}`}
               </p>
-              {activeJob.worker_instance_id && <p className="mt-1 truncate font-mono text-[9px] text-stone-400">{activeJob.worker_instance_id}</p>}
+              {activeJob.worker_instance_id && <p className="mt-1 truncate font-mono text-[9px] text-stone-400">{jobExecutionKind(activeJob) === "scrapfly" ? scrapflyExecutionName(activeJob) : activeJob.worker_instance_id}</p>}
             </>
           ) : <span className="text-[11px] text-stone-400">No linked job</span>}
         </td>
@@ -421,6 +430,7 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
                         : <div className="flex h-full items-center justify-center text-stone-300"><ImageIcon className="h-5 w-5" /></div>}
                     </div>
                     <p className="mt-1 truncate font-mono text-[9px] text-stone-400" title={reference.id}>{shortId(reference.id)}</p>
+                    {reference.status === "removed" && <p className="mt-0.5 text-[10px] text-stone-500">Reference removed</p>}
                   </div>
                 ))}
               </div>
@@ -497,26 +507,40 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
 }
 
 function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
+  const recoveringAccess = job.status === "pending" && job.queue_state !== "paused" && ((job.deferral_count ?? 0) > 0 || job.access_wait_only === true);
+  const coolingDown = recoveringAccess && job.access_cooling_down === true;
+  const hasFailureDiagnostic = job.scrape?.steps.some(step => ["failed", "blocked"].includes(step.outcome ?? "") && step.diagnostics);
   return (
-    <div className="flex items-start gap-2.5">
-      <JobStatusDot status={job.status} />
+    <div className="flex items-start gap-2.5 has-[[data-capture-history-open=true]]:col-span-full">
+      <JobStatusDot status={job.queue_state ?? job.status} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p>
-          <p className="text-[10px] text-stone-400">{humanize(job.status)}</p>
+          <div className="flex flex-wrap items-center gap-1.5"><p className="text-[11px] font-semibold text-stone-700">{JOB_LABELS[job.type] ?? humanize(job.type)}</p><JobExecutionBadge job={job} /></div>
+          <p className="text-[10px] text-stone-400">{workStateLabel(job)}</p>
         </div>
         <JobScrapeMethodBadge job={job} />
         <p className="mt-0.5 text-[10px] text-stone-400">
           attempt {job.attempts}/{job.max_attempts}
+          {(job.deferral_count ?? 0) > 0 && `, ${job.deferral_count} access retries`}
           {job.batch_index && `, batch ${job.batch_index}/${job.batch_count}`}
           {job.capacity_units > 1 && `, ${job.capacity_units} comparisons`}
         </p>
         {job.worker_instance_id && (
           <p className="mt-1 truncate font-mono text-[9px] text-stone-400" title={job.worker_instance_id}>
-            {job.worker_instance_id}{job.worker_image_sha ? `, image ${shortId(job.worker_image_sha)}` : ""}
+            {jobExecutionKind(job) === "scrapfly" ? scrapflyExecutionName(job) : job.worker_instance_id}{job.worker_image_sha ? `, image ${shortId(job.worker_image_sha)}` : ""}
           </p>
         )}
-        {job.error && <p className="mt-1 rounded bg-red-50 px-2 py-1 text-[10px] leading-4 text-red-700">{job.error}</p>}
+        {job.queue_state === "paused" && <p className="mt-1 rounded bg-stone-100 px-2 py-1 text-[10px] text-stone-600">{workPauseReason(job.hold_reason)}. Requires an explicit release.</p>}
+        {job.queue_state === "scheduled" && !recoveringAccess && <p className="mt-1 text-[10px] text-violet-700">Scheduled after {formatTimestamp(job.available_at)}.</p>}
+        {recoveringAccess ? (
+          <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-[10px] leading-4 text-amber-800" title={job.error ?? undefined}>
+            {coolingDown
+              ? `Waiting for access cooldown. Next check after ${formatTimestamp(job.available_at)}.`
+              : "Access cooldown finished. Queued for a page check."}
+            {job.access_wait_only && " No capture request was made in the last claim."}
+          </p>
+        ) : job.error && !hasFailureDiagnostic && <p className="mt-1 rounded bg-red-50 px-2 py-1 text-[10px] leading-4 text-red-700">{job.error}</p>}
+        {(supportsScrapeMethod(job.type) || job.type === "case_capture") && <CaptureAttemptDetails key={job.id} job={job} />}
       </div>
     </div>
   );
@@ -593,7 +617,7 @@ function ExternalUrl({ href, label, className = "" }: { href: string; label: str
 }
 
 function JobStatusDot({ status }: { status: string }) {
-  const color = status === "completed" ? "bg-emerald-500"
+  const color = status in WORK_STATE_COPY ? WORK_STATE_COPY[status as keyof typeof WORK_STATE_COPY].dot : status === "completed" ? "bg-emerald-500"
     : status === "in_progress" ? "bg-blue-500"
       : status === "failed" ? "bg-red-500"
         : "bg-amber-400";

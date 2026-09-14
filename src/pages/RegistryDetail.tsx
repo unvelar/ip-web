@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import MonitoringIdentitySettings from "../components/MonitoringIdentitySettings";
 import { useParams, useNavigate } from "react-router-dom";
 import { Check, Copy, ExternalLink, Trash2 } from "lucide-react";
 import {
@@ -170,7 +171,7 @@ function RegistryDetailContent({ id }: { id: string }) {
   }
 
   async function handleDelete() {
-    if (!id || deleting || !confirm("Delete this IP and all its images?")) return;
+    if (!id || deleting || !confirm("Remove this IP from monitoring and delete its reference images? Existing cases and findings will be kept.")) return;
     setDeleting(true);
     setError("");
     try {
@@ -401,6 +402,8 @@ function RegistryDetailContent({ id }: { id: string }) {
           </button>
         </div>
       </div>
+
+      <MonitoringIdentitySettings key={ip.id} ip={ip} onSaved={(updated) => setIp((current) => current ? { ...current, ...updated } : current)} />
 
       <KeywordLearningPanel
         ipId={ip.id}

@@ -17,6 +17,7 @@ export interface Trademark {
   public_slug: string | null;
   tenant_public_slug: string | null;
   description: string | null;
+  monitoring_identity?: MonitoringIdentity;
   /** Monitoring keywords proposed by the wizard's VLM step + user edits. */
   keywords: string[];
   monitoring_frequency: MonitoringFrequency;
@@ -313,6 +314,7 @@ export function updateTrademark(
     baseline_config?: BaselineConfig | null;
     keywords?: string[];
     monitoring_frequency?: MonitoringFrequency;
+    monitoring_identity?: MonitoringIdentity;
   }
 ) {
   return request<{ trademark: Trademark }>(`/api/ip/${id}`, {
@@ -348,4 +350,12 @@ export function importOnboardingWebsiteReference(trademarkId: string) {
     `/api/ip/${trademarkId}/onboarding-reference`,
     { method: "POST" },
   );
+}
+
+
+
+export interface MonitoringIdentity {
+  aliases: string[];
+  brands: string[];
+  categories: string[];
 }

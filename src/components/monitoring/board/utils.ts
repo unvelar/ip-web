@@ -254,10 +254,9 @@ export function tableImageUrls(f: IpReviewFinding): string[] {
   return out;
 }
 
-// Fallback quantity when the listing didn't expose stock — most marketplaces
-// hide it, so a flat 150 keeps the KPI honest as a rough market estimate rather
-// than the per-listing `1` that systematically under-counts.
-export const QTY_FALLBACK = 150;
+// Modeled quantity for listings without exposed stock. Keep aligned with the
+// API's MARKET_QUANTITY_FALLBACK; this is an assumption, not observed inventory.
+export const QTY_FALLBACK = 30;
 
 // Per-row "Estimated unlicensed market" = USD unit price × quantity. Uses the
 // server-converted `price_value_usd` so every row reads in one currency (USD),
@@ -440,12 +439,11 @@ export function actionabilityMeta(actionability: IpReviewFinding["actionability"
 }
 
 export function findingFlaggedReason(
-  f: Pick<IpReviewFinding, "match_explanation" | "infringement_reasoning" | "vlm_reasoning">,
+  f: Pick<IpReviewFinding, "match_explanation" | "vlm_reasoning">,
 ) {
   const seen = new Set<string>();
   return [
     f.match_explanation,
-    f.infringement_reasoning,
     f.vlm_reasoning,
   ]
     .map((v) => v?.trim())
