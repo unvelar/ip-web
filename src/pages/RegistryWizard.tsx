@@ -32,6 +32,8 @@ export default function RegistryWizard() {
         <div className="mt-6 rounded-xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-600">{flow.error}</div>
       )}
 
+      {flow.indexingError && <p role="alert" className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-700">{flow.indexingError}</p>}
+
       <div className="mt-6">
         {flow.transition ? (
           <ProcessingStep

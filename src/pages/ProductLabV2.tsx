@@ -1,404 +1,74 @@
+import { Check, Clock3, Layers3, Link2, LoaderCircle, RefreshCw, RotateCcw, Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import type { MonitoringDismissReasonCode, MonitoringReviewOutcome } from "../api/findingActions";
 import {
-  ArrowLeft,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Clock3,
-  Layers3,
-  Link2,
-  LoaderCircle,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  Settings2,
-  Square,
-  Sparkles,
-  X,
-} from "lucide-react";
-import {
-  approveTakedownBatch,
   allowIpFindingProductImage,
   dismissIpFinding,
-  getMonitoringFinding,
-  getPersistedProductGroups,
-  listMonitoringFindingsGlobal,
-  listProductClusterScopes,
   markIpFindingNeedsReview,
-  mergePersistedProductGroups,
   reopenIpFinding,
-  revokePersistedProductGroupMerge,
   undismissIpFinding,
-  type IpReviewFinding,
-  type MonitoringDismissReasonCode,
-  type MonitoringReviewOutcome,
-  type ProductGroupCommercialSubgroup,
-  type PersistedProductGroup,
-  type PersistedProductGroupOverview,
-  type TakedownFeedbackAssociationScope,
-} from "../api";
-import { BatchConfirmModal } from "../components/monitoring/board/batch";
+} from "../api/findingActions";
+import { getMonitoringFinding } from "../api/monitoring";
+import type { PersistedProductGroup, PersistedProductGroupOverview } from "../api/products";
 import {
-  dismissalOptionsForBatchAction,
-  runPool,
-} from "../components/monitoring/board/batchUtils";
-import { FindingInspector } from "../components/monitoring/board/FindingInspector";
-import { AssigneeAvatar } from "../components/monitoring/board/AssigneeAvatar";
+  listProductClusterScopes,
+  mergePersistedProductGroups,
+  revokePersistedProductGroupMerge,
+} from "../api/products";
+import type { IpReviewFinding } from "../api/reviews";
+import type { TakedownFeedbackAssociationScope } from "../api/takedowns";
+import { approveTakedownBatch } from "../api/takedowns";
 import { preferredAllowedProductImage } from "../components/monitoring/board/allowedProduct";
-import {
-  findingPlatformLabel,
-  formatMoney,
-} from "../components/monitoring/board/utils";
+import { BatchConfirmModal } from "../components/monitoring/board/batch";
+import { dismissalOptionsForBatchAction, runPool } from "../components/monitoring/board/batchUtils";
+import { FindingInspector } from "../components/monitoring/board/FindingInspector";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
-import { ProductGroupSettings } from "./ProductClusters";
+import { BatchWorkspace } from "../features/products/BatchWorkspace";
+import {
+  loadCanonicalProductGroup,
+  loadProductGroupFindings,
+  loadProductGroupPage,
+  loadRecentDecisionPages,
+} from "../features/products/data";
+import type {
+  ProductLabView,
+  ProductMergeNotice,
+  RecentDecisionCursors,
+  ReviewBucket,
+} from "../features/products/labDomain";
+import {
+  appendPage,
+  buildProductCategoryTree,
+  expandedCategoryGroups,
+  mergeRecentDecisions,
+  messageFor,
+  PAGE_SIZE,
+  productName,
+  RECENT_DECISION_STATUSES,
+  reviewBucket,
+} from "../features/products/labDomain";
+import { ProductCategoryBranch } from "../features/products/ProductCategoryBranch";
+import { ProductSettingsWorkspace } from "../features/products/ProductSettingsWorkspace";
+import { QueueSkeleton } from "../features/products/QueueSkeleton";
+import { QuietState } from "../features/products/QuietState";
+import { RecentDecisionRow } from "../features/products/RecentDecisionRow";
+import type { ProductLabBatchAction } from "../features/products/reviewDecisions";
 import {
   adjacentFinding,
-  productNeedsAttention,
   productCommercialReviewLanes,
   productCommercialSubgroupKeyForCaseId,
+  productNeedsAttention,
   recentDecisionCanUndo,
-  recommendedBatchActionForSelection,
-  reconcileProductAttentionOverview,
   recentDecisionKind,
-  recentDecisionTimestamp,
+  reconcileProductAttentionOverview,
+  reconcileProductCommercialSubgroupCount,
   removeProcessedFindings,
   resetOptimisticProductStateAfterUndo,
   scopeFindingsToCommercialSubgroup,
-  sortRecentDecisions,
-  type ProductCommercialReviewLane,
-  type ProductLabBatchAction,
-} from "./productLabV2Utils";
-
-type ProductLabView = "attention" | "history" | "all";
-type ReviewBucket =
-  | "all"
-  | "takedown"
-  | "second_hand"
-  | "different_product"
-  | "licensed"
-  | "needs_review";
-const PAGE_SIZE = 24;
-
-type ProductMergeNotice = {
-  message: string;
-  tone: "success" | "error";
-  undo?: {
-    decisions: Array<{
-      decisionId: string;
-      canonicalProductId: string;
-    }>;
-    groupId: string;
-    sourceGroupId: string;
-  };
-};
-
-type CategorizedProduct = {
-  group: PersistedProductGroup;
-  index: number;
-};
-
-type ProductCategoryNode = {
-  key: string;
-  label: string;
-  path: string;
-  groups: CategorizedProduct[];
-  children: ProductCategoryNode[];
-  groupCount: number;
-};
-
-function buildProductCategoryTree(groups: PersistedProductGroup[]): ProductCategoryNode[] {
-  type MutableCategoryNode = Omit<ProductCategoryNode, "children" | "groupCount"> & {
-    children: Map<string, MutableCategoryNode>;
-  };
-
-  const roots = new Map<string, MutableCategoryNode>();
-
-  groups.forEach((group, index) => {
-    const categoryPath = group.catalog_primary_category_path?.trim();
-    const categoryName = group.catalog_primary_category_name?.trim();
-    const segments = (categoryPath || categoryName || "Unclassified")
-      .split(" > ")
-      .map((segment) => segment.trim())
-      .filter(Boolean);
-    let siblings = roots;
-    const pathSegments: string[] = [];
-    let leaf: MutableCategoryNode | null = null;
-
-    for (const segment of segments) {
-      pathSegments.push(segment);
-      const path = pathSegments.join(" > ");
-      const key = path === "Unclassified" ? "unclassified" : path;
-      leaf = siblings.get(key) ?? {
-        key,
-        label: segment,
-        path,
-        groups: [],
-        children: new Map(),
-      };
-      siblings.set(key, leaf);
-      siblings = leaf.children;
-    }
-
-    leaf?.groups.push({ group, index });
-  });
-
-  const finalize = (node: MutableCategoryNode): ProductCategoryNode => {
-    const children = [...node.children.values()]
-      .map(finalize);
-    return {
-      ...node,
-      children,
-      groupCount: node.groups.length + children.reduce(
-        (total, child) => total + child.groupCount,
-        0,
-      ),
-    };
-  };
-
-  return [...roots.values()]
-    .map(finalize);
-}
-
-function expandedCategoryGroups(
-  categories: ProductCategoryNode[],
-  collapsedPaths: ReadonlySet<string>,
-  forceExpanded: boolean,
-): PersistedProductGroup[] {
-  const groups: PersistedProductGroup[] = [];
-  for (const category of categories) {
-    if (!forceExpanded && collapsedPaths.has(category.path)) continue;
-    groups.push(...category.groups.map((item) => item.group));
-    groups.push(...expandedCategoryGroups(
-      category.children,
-      collapsedPaths,
-      forceExpanded,
-    ));
-  }
-  return groups;
-}
-
-function messageFor(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function productName(group: PersistedProductGroup, index?: number) {
-  const representative = group.members[0] ?? group.triage_members[0] ?? null;
-  const title = representative?.listing_title?.trim();
-  const profileTitle = representative?.profile_text
-    .split("\n")[0]
-    ?.replace(/^Title:\s*/i, "")
-    .trim();
-  return group.display_name?.trim() || title || profileTitle ||
-    (index == null ? "Untitled product" : `Product ${index + 1}`);
-}
-
-function representativeImage(group: PersistedProductGroup) {
-  return (group.members[0] ?? group.triage_members[0] ?? null)?.image_url ?? null;
-}
-
-function commercialReviewLaneLabel(subgroup: ProductGroupCommercialSubgroup) {
-  if (subgroup.price_band === "unusually_low") {
-    return `${subgroup.variant_label} · unusually low`;
-  }
-  if (subgroup.price_band === "unpriced") {
-    return `${subgroup.variant_label} · price unavailable`;
-  }
-  return subgroup.variant_label;
-}
-
-function priceRange(group: PersistedProductGroup) {
-  const ranges = group.commercial_subgroups.flatMap((subgroup) =>
-    subgroup.price_range ? [subgroup.price_range] : []
-  );
-  if (ranges.length === 0) return null;
-  const minimum = Math.min(...ranges.map((range) => range.minimum));
-  const maximum = Math.max(...ranges.map((range) => range.maximum));
-  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return null;
-  if (minimum === maximum) return formatMoney(minimum, "USD");
-  return `${formatMoney(minimum, "USD")}–${formatMoney(maximum, "USD")}`;
-}
-
-function productStatus(group: PersistedProductGroup) {
-  const reviewCount = group.triage_member_count ?? 0;
-  if (group.confirmation_status !== "confirmed") {
-    return {
-      label: "Needs confirmation",
-      dotClass: "bg-amber-500",
-      textClass: "text-amber-800",
-    };
-  }
-  if (reviewCount > 0) {
-    return {
-      label: `${reviewCount} to review`,
-      dotClass: "bg-red-600",
-      textClass: "text-red-800",
-    };
-  }
-  return {
-    label: "Up to date",
-    dotClass: "bg-emerald-600",
-    textClass: "text-emerald-800",
-  };
-}
-
-function appendPage(
-  current: PersistedProductGroupOverview,
-  next: PersistedProductGroupOverview,
-) {
-  const known = new Set(current.groups.map((group) => group.id));
-  return {
-    ...next,
-    groups: [
-      ...current.groups,
-      ...next.groups.filter((group) => !known.has(group.id)),
-    ],
-  };
-}
-
-async function loadProductGroupPage(
-  ipId: string,
-  view: Exclude<ProductLabView, "history">,
-  options: {
-    cursor?: string | null;
-    query?: string | null;
-    allProducts?: boolean;
-    signal?: AbortSignal;
-  } = {},
-) {
-  const { allProducts = false, ...requestOptions } = options;
-  return getPersistedProductGroups(
-    ipId,
-    "same",
-    view === "attention" && !allProducts ? "triage" : "all",
-    { limit: PAGE_SIZE, ...requestOptions },
-  );
-}
-
-async function loadCanonicalProductGroup(
-  ipId: string,
-  canonicalProductId: string,
-) {
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const overview = await getPersistedProductGroups(
-        ipId,
-        "same",
-        "all",
-        {
-          limit: 1,
-          productId: canonicalProductId,
-          catalogScope: "catalog",
-        },
-      );
-      const group = overview.groups[0];
-      if (group) return group;
-    } catch (caught: unknown) {
-      lastError = caught;
-    }
-    if (attempt < 2) {
-      await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
-    }
-  }
-  if (lastError) throw lastError;
-  throw new Error("The merged product is still being prepared. Refresh and try again.");
-}
-
-function reviewBucket(finding: IpReviewFinding): Exclude<ReviewBucket, "all"> {
-  const key = finding.actionability?.key;
-  if (key === "send_takedown") return "takedown";
-  if (key === "allowed_resale") return "second_hand";
-  if (key === "licensed_seller") return "licensed";
-  if (key === "false_positive") return "different_product";
-  return "needs_review";
-}
-
-async function loadProductGroupFindings(ipId: string, groupId: string) {
-  const findings: IpReviewFinding[] = [];
-  const seenResultIds = new Set<string>();
-  const seenCursors = new Set<string>();
-  let cursor: string | null = null;
-
-  do {
-    const page = await listMonitoringFindingsGlobal({
-      status: "pending",
-      ip_id: ipId,
-      product_group_id: groupId,
-      limit: 200,
-      cursor,
-    });
-    for (const finding of page.findings) {
-      if (seenResultIds.has(finding.result_id)) continue;
-      seenResultIds.add(finding.result_id);
-      findings.push(finding);
-    }
-    cursor = page.next_cursor;
-    if (cursor && seenCursors.has(cursor)) break;
-    if (cursor) seenCursors.add(cursor);
-  } while (cursor);
-
-  return findings;
-}
-
-const RECENT_DECISION_STATUSES = [
-  "dismissed",
-  "review",
-  "takedown_pending",
-  "takedown_sent",
-  "enforced",
-] as const;
-type RecentDecisionStatus = typeof RECENT_DECISION_STATUSES[number];
-type RecentDecisionCursors = Record<RecentDecisionStatus, string | null>;
-
-function mergeRecentDecisions(
-  current: IpReviewFinding[],
-  incoming: IpReviewFinding[],
-) {
-  const byResultId = new Map(current.map((finding) => [finding.result_id, finding]));
-  for (const finding of incoming) {
-    const existing = byResultId.get(finding.result_id);
-    if (
-      !existing ||
-      Date.parse(recentDecisionTimestamp(finding)) >
-        Date.parse(recentDecisionTimestamp(existing))
-    ) byResultId.set(finding.result_id, finding);
-  }
-  return sortRecentDecisions([...byResultId.values()]);
-}
-
-async function loadRecentDecisionPages(
-  ipId: string,
-  cursors?: RecentDecisionCursors,
-  signal?: AbortSignal,
-) {
-  const statuses = RECENT_DECISION_STATUSES.filter((status) =>
-    cursors === undefined || Boolean(cursors[status])
-  );
-  const pages = await Promise.all(statuses.map((status) =>
-    listMonitoringFindingsGlobal({
-      ip_id: ipId,
-      status,
-      show_dismissed: status === "dismissed",
-      sort: "updated_desc",
-      limit: 50,
-      cursor: cursors?.[status] ?? null,
-      signal,
-    })
-  ));
-  const nextCursors = Object.fromEntries(
-    RECENT_DECISION_STATUSES.map((status) => [status, null]),
-  ) as RecentDecisionCursors;
-  if (cursors) Object.assign(nextCursors, cursors);
-  statuses.forEach((status, index) => {
-    nextCursors[status] = pages[index].next_cursor;
-  });
-  return {
-    findings: mergeRecentDecisions([], pages.flatMap((page) => page.findings)),
-    cursors: nextCursors,
-  };
-}
+} from "../features/products/reviewDecisions";
+import { ViewTab } from "../features/products/ViewTab";
 
 export default function ProductLab() {
   const { actingTenantId } = useAuth();
@@ -741,13 +411,14 @@ export default function ProductLab() {
     ) ? focusedGroup : null
   );
   const selectedGroupRequestId = selectedGroup?.id ?? selectedGroupId;
+  const selectedGroupResolvedId = selectedGroup?.id ?? null;
 
   const commercialReviewLanes = useMemo(() => {
     return productCommercialReviewLanes(
       selectedGroup?.commercial_subgroups ?? [],
-      batchFindings,
+      null,
     );
-  }, [batchFindings, selectedGroup]);
+  }, [selectedGroup]);
   const linkedFindingCaseId = requestedFindingId
     ? batchFindings?.find((finding) => finding.result_id === requestedFindingId)?.case_id ??
       (activeFinding?.result_id === requestedFindingId ? activeFinding.case_id : null)
@@ -770,6 +441,9 @@ export default function ProductLab() {
   const selectedCommercialSubgroup = commercialReviewLanes.find(({ subgroup }) =>
     subgroup.key === selectedCommercialSubgroupKey
   )?.subgroup ?? null;
+  const selectedCommercialCaseIdsKey = selectedCommercialSubgroup
+    ?.triage_case_ids.join(",") ?? null;
+  const batchFindingsCoverWholeGroup = selectedCommercialSubgroupKey == null;
   const scopedBatchFindings = useMemo(() => {
     return scopeFindingsToCommercialSubgroup(
       batchFindings,
@@ -838,8 +512,9 @@ export default function ProductLab() {
   const selectedGroupConfirmationStatus = selectedGroup?.confirmation_status;
 
   useEffect(() => {
-    const nextBatchScope = activeIpId && selectedGroupRequestId
-      ? `${actingTenantId ?? ""}:${activeIpId}:${selectedGroupRequestId}`
+    const nextBatchScope = activeIpId && selectedGroupResolvedId
+      ? `${actingTenantId ?? ""}:${activeIpId}:${selectedGroupResolvedId}:` +
+        `${selectedCommercialSubgroupKey ?? "all"}`
       : null;
     const scopeChanged = batchScopeRef.current !== nextBatchScope;
     if (scopeChanged) {
@@ -853,14 +528,21 @@ export default function ProductLab() {
       optimisticallyProcessedIdsRef.current.clear();
     }
     setBatchError(null);
-    if (!nextBatchScope || !activeIpId || !selectedGroupRequestId) {
+    if (!nextBatchScope || !activeIpId || !selectedGroupResolvedId) {
       setLoadingBatch(false);
       return;
     }
 
     let alive = true;
     setLoadingBatch(true);
-    void loadProductGroupFindings(activeIpId, selectedGroupRequestId)
+    const selectedCaseIds = selectedCommercialSubgroupKey == null
+      ? null
+      : selectedCommercialCaseIdsKey?.split(",").filter(Boolean) ?? [];
+    void loadProductGroupFindings(
+      activeIpId,
+      selectedGroupResolvedId,
+      selectedCaseIds,
+    )
       .then((findings) => {
         if (!alive) return;
         const displayedFindings = removeProcessedFindings(
@@ -881,15 +563,26 @@ export default function ProductLab() {
           const next = new Set([...current].filter((resultId) => availableResultIds.has(resultId)));
           return next.size === current.size ? current : next;
         });
-        exactPendingCountsRef.current[selectedGroupRequestId] = displayedFindings.length;
-        setOverview((current) => current
-          ? reconcileProductAttentionOverview(
-              current,
-              selectedGroupRequestId,
+        if (selectedCommercialSubgroupKey) {
+          updateSelectedGroup((group) =>
+            reconcileProductCommercialSubgroupCount(
+              group,
+              selectedCommercialSubgroupKey,
               displayedFindings.length,
             )
-          : current);
+          );
+        } else {
+          exactPendingCountsRef.current[selectedGroupResolvedId] = displayedFindings.length;
+          setOverview((current) => current
+            ? reconcileProductAttentionOverview(
+                current,
+                selectedGroupResolvedId,
+                displayedFindings.length,
+              )
+            : current);
+        }
         if (
+          !selectedCommercialSubgroupKey &&
           view === "attention" &&
           selectedGroupConfirmationStatus &&
           !productNeedsAttention({
@@ -914,8 +607,11 @@ export default function ProductLab() {
     actingTenantId,
     refreshToken,
     selectGroup,
+    selectedCommercialCaseIdsKey,
+    selectedCommercialSubgroupKey,
     selectedGroupConfirmationStatus,
-    selectedGroupRequestId,
+    selectedGroupResolvedId,
+    updateSelectedGroup,
     view,
   ]);
 
@@ -1260,10 +956,20 @@ export default function ProductLab() {
             batchFindings,
             processedResultIds,
           ).length;
-          exactPendingCountsRef.current[selectedGroupRequestId] = remainingCount;
-          setOverview((current) => current
-            ? reconcileProductAttentionOverview(current, selectedGroupRequestId, remainingCount)
-            : current);
+          if (batchFindingsCoverWholeGroup) {
+            exactPendingCountsRef.current[selectedGroupRequestId] = remainingCount;
+            setOverview((current) => current
+              ? reconcileProductAttentionOverview(current, selectedGroupRequestId, remainingCount)
+              : current);
+          } else if (selectedCommercialSubgroupKey) {
+            updateSelectedGroup((group) =>
+              reconcileProductCommercialSubgroupCount(
+                group,
+                selectedCommercialSubgroupKey,
+                remainingCount,
+              )
+            );
+          }
         }
       }
       setBatchNotice([
@@ -1984,1024 +1690,6 @@ export default function ProductLab() {
             : undefined}
         />
       )}
-    </div>
-  );
-}
-
-function ViewTab({
-  active,
-  label,
-  count,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  count: number | null | undefined;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={`relative h-[34px] shrink-0 text-[11px] font-medium transition ${
-        active ? "text-stone-950" : "text-stone-500 hover:text-stone-800"
-      }`}
-    >
-      <span>{label}</span>
-      {count != null && (
-        <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[9px] ${
-          active ? "bg-stone-200/70 text-stone-700" : "bg-stone-100 text-stone-400"
-        }`}>
-          {count}
-        </span>
-      )}
-      {active && <span className="absolute inset-x-0 bottom-0 h-px bg-stone-950" />}
-    </button>
-  );
-}
-
-function ProductCategoryBranch({
-  category,
-  depth,
-  ancestors = [],
-  collapsedPaths,
-  forceExpanded,
-  showAllListings,
-  selectedGroupId,
-  mergeSourceGroupId,
-  mergeTargetGroupIds,
-  mergeDisabled,
-  onToggle,
-  onSelectGroup,
-  onToggleMergeGroup,
-}: {
-  category: ProductCategoryNode;
-  depth: number;
-  ancestors?: ProductCategoryNode[];
-  collapsedPaths: Set<string>;
-  forceExpanded: boolean;
-  showAllListings: boolean;
-  selectedGroupId: string | null;
-  mergeSourceGroupId: string | null;
-  mergeTargetGroupIds: Set<string>;
-  mergeDisabled: boolean;
-  onToggle: (path: string) => void;
-  onSelectGroup: (groupId: string) => void;
-  onToggleMergeGroup: (groupId: string) => void;
-}) {
-  const categoryChain = [category];
-  let terminalCategory = category;
-  while (terminalCategory.children.length === 1) {
-    terminalCategory = terminalCategory.children[0];
-    categoryChain.push(terminalCategory);
-  }
-  const breadcrumbChain = [...ancestors, ...categoryChain];
-  const collapsed = !forceExpanded && breadcrumbChain.some((item) => collapsedPaths.has(item.path));
-  const breadcrumb = breadcrumbChain.map((item) => item.label).join(" / ");
-  const rootCategory = breadcrumbChain[0];
-  const currentCategory = breadcrumbChain[breadcrumbChain.length - 1];
-  const hiddenCategories = breadcrumbChain.slice(1, -1);
-  const categoryGroups = categoryChain.flatMap((item) => item.groups);
-  const headerTone = depth === 0
-    ? "sticky top-0 z-10 bg-[#f0eeea]/95 font-semibold text-stone-700 backdrop-blur"
-    : "bg-[#faf9f7] font-medium text-stone-600";
-  const indent = 16 + Math.min(depth, 5) * 14;
-
-  if (categoryGroups.length === 0 && terminalCategory.children.length > 0) {
-    return (
-      <>
-        {terminalCategory.children.map((child) => (
-          <ProductCategoryBranch
-            key={child.key}
-            category={child}
-            depth={depth}
-            ancestors={breadcrumbChain}
-            collapsedPaths={collapsedPaths}
-            forceExpanded={forceExpanded}
-            showAllListings={showAllListings}
-            selectedGroupId={selectedGroupId}
-            mergeSourceGroupId={mergeSourceGroupId}
-            mergeTargetGroupIds={mergeTargetGroupIds}
-            mergeDisabled={mergeDisabled}
-            onToggle={onToggle}
-            onSelectGroup={onSelectGroup}
-            onToggleMergeGroup={onToggleMergeGroup}
-          />
-        ))}
-      </>
-    );
-  }
-
-  return (
-    <div role="group" aria-label={breadcrumb}>
-      <div
-        className={`flex w-full items-center gap-2 border-b border-stone-200/80 py-2 pr-4 text-left text-[10px] transition hover:bg-stone-100 ${headerTone}`}
-        style={{ paddingLeft: indent }}
-        title={breadcrumb}
-      >
-        <div className={`flex min-w-0 flex-1 items-center ${depth === 0 ? "uppercase tracking-[0.07em]" : ""}`}>
-          <CategoryPathToggle
-            category={rootCategory}
-            collapsed={!forceExpanded && collapsedPaths.has(rootCategory.path)}
-            forceExpanded={forceExpanded}
-            onToggle={onToggle}
-            className="max-w-[115px]"
-          />
-
-          {hiddenCategories.length > 0 && (
-            <>
-              <span className="mx-1 shrink-0 text-stone-300">/</span>
-              <details
-                data-category-overflow-menu
-                className="group/path relative shrink-0 normal-case tracking-normal"
-              >
-                <summary
-                  className="flex cursor-pointer list-none items-center gap-1 rounded-sm px-1 py-0.5 text-stone-500 transition hover:bg-stone-200/70 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 [&::-webkit-details-marker]:hidden"
-                  aria-label={`Show ${hiddenCategories.length} hidden category ${hiddenCategories.length === 1 ? "level" : "levels"}`}
-                  title={hiddenCategories.map((item) => item.label).join(" / ")}
-                >
-                  <span className="font-semibold">…</span>
-                  <span className="rounded bg-stone-200/80 px-1 text-[8px] tabular-nums text-stone-500">
-                    {hiddenCategories.length}
-                  </span>
-                </summary>
-                <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-[240px] overflow-hidden rounded-md border border-stone-200 bg-white py-1 shadow-lg">
-                  {hiddenCategories.map((item) => (
-                    <CategoryPathToggle
-                      key={item.path}
-                      category={item}
-                      collapsed={!forceExpanded && collapsedPaths.has(item.path)}
-                      forceExpanded={forceExpanded}
-                      onToggle={onToggle}
-                      closeMenuOnToggle
-                      className="w-full max-w-none px-2.5 py-1.5 text-left font-medium normal-case tracking-normal hover:bg-stone-50"
-                    />
-                  ))}
-                </div>
-              </details>
-            </>
-          )}
-
-          {breadcrumbChain.length > 1 && (
-            <>
-              <span className="mx-1 shrink-0 text-stone-300">/</span>
-              <CategoryPathToggle
-                category={currentCategory}
-                collapsed={!forceExpanded && collapsedPaths.has(currentCategory.path)}
-                forceExpanded={forceExpanded}
-                onToggle={onToggle}
-                className="min-w-0 flex-1 max-w-none font-semibold"
-              />
-            </>
-          )}
-        </div>
-        <span className="shrink-0 rounded bg-stone-200/70 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
-          {categoryGroups.length}
-        </span>
-      </div>
-
-      {!collapsed && (
-        <>
-          {categoryGroups.map(({ group, index }) => (
-            <ProductRow
-              key={group.id}
-              group={group}
-              index={index}
-              listingCount={showAllListings
-                ? group.member_count
-                : group.triage_member_count ?? group.member_count}
-              depth={depth + 1}
-              selected={selectedGroupId === group.id}
-              mergeState={mergeSourceGroupId
-                ? mergeSourceGroupId === group.id
-                  ? "source"
-                  : mergeTargetGroupIds.has(group.id)
-                    ? "selected"
-                    : "available"
-                : null}
-              mergeDisabled={mergeDisabled}
-              onSelect={() => onSelectGroup(group.id)}
-              onToggleMerge={() => onToggleMergeGroup(group.id)}
-            />
-          ))}
-          {terminalCategory.children.map((child) => (
-            <ProductCategoryBranch
-              key={child.key}
-              category={child}
-              depth={depth + 1}
-              ancestors={breadcrumbChain}
-              collapsedPaths={collapsedPaths}
-              forceExpanded={forceExpanded}
-              showAllListings={showAllListings}
-              selectedGroupId={selectedGroupId}
-              mergeSourceGroupId={mergeSourceGroupId}
-              mergeTargetGroupIds={mergeTargetGroupIds}
-              mergeDisabled={mergeDisabled}
-              onToggle={onToggle}
-              onSelectGroup={onSelectGroup}
-              onToggleMergeGroup={onToggleMergeGroup}
-            />
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
-
-function CategoryPathToggle({
-  category,
-  collapsed,
-  forceExpanded,
-  onToggle,
-  closeMenuOnToggle = false,
-  className = "",
-}: {
-  category: ProductCategoryNode;
-  collapsed: boolean;
-  forceExpanded: boolean;
-  onToggle: (path: string) => void;
-  closeMenuOnToggle?: boolean;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-expanded={!collapsed}
-      aria-label={`${collapsed ? "Expand" : "Collapse"} ${category.path}`}
-      disabled={forceExpanded}
-      onClick={(event) => {
-        onToggle(category.path);
-        if (closeMenuOnToggle) event.currentTarget.closest("details")?.removeAttribute("open");
-      }}
-      className={`inline-flex min-w-0 items-center gap-0.5 rounded-sm py-0.5 transition hover:text-stone-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 disabled:cursor-default ${className}`}
-      title={`${collapsed ? "Expand" : "Collapse"} ${category.path}`}
-    >
-      {collapsed ? (
-        <ChevronRight size={11} className="shrink-0 text-stone-400" />
-      ) : (
-        <ChevronDown size={11} className="shrink-0 text-stone-400" />
-      )}
-      <span className="truncate">{category.label}</span>
-    </button>
-  );
-}
-
-function ProductRow({
-  group,
-  index,
-  listingCount,
-  depth = 0,
-  selected,
-  mergeState,
-  mergeDisabled,
-  onSelect,
-  onToggleMerge,
-}: {
-  group: PersistedProductGroup;
-  index: number;
-  listingCount: number;
-  depth?: number;
-  selected: boolean;
-  mergeState: "source" | "selected" | "available" | null;
-  mergeDisabled: boolean;
-  onSelect: () => void;
-  onToggleMerge: () => void;
-}) {
-  const image = representativeImage(group);
-  const status = productStatus(group);
-  const prices = priceRange(group);
-  const mergeSelected = mergeState === "source" || mergeState === "selected";
-  const rowSelected = mergeState ? mergeSelected : selected;
-  const rowTone = mergeState === "source"
-    ? "bg-violet-100/90 ring-1 ring-inset ring-violet-300"
-    : mergeState === "selected"
-      ? "bg-violet-50 ring-1 ring-inset ring-violet-200"
-      : mergeState === "available"
-        ? "bg-transparent hover:bg-violet-50/70"
-        : selected
-          ? "bg-stone-100/90"
-          : "bg-transparent hover:bg-stone-50";
-
-  return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={rowSelected}
-      aria-disabled={mergeState === "source" || mergeDisabled || undefined}
-      disabled={mergeDisabled}
-      onClick={mergeState ? onToggleMerge : onSelect}
-      className={`group flex w-full items-center gap-3 border-b border-stone-200/70 px-4 py-3 text-left transition focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset disabled:cursor-wait disabled:opacity-60 sm:px-6 lg:px-4 ${
-        mergeState ? "focus-visible:ring-violet-400" : "focus-visible:ring-stone-400"
-      } ${rowTone}`}
-      style={{ paddingLeft: 16 + Math.min(depth, 5) * 14 }}
-    >
-      {mergeState && (
-        <span className={`grid size-5 shrink-0 place-items-center rounded-full border transition ${
-          mergeSelected
-            ? "border-violet-700 bg-violet-700 text-white"
-            : "border-stone-300 bg-white text-transparent group-hover:border-violet-400"
-        }`} aria-hidden="true">
-          <Check size={11} />
-        </span>
-      )}
-      <div className="size-12 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-stone-100">
-        {image ? (
-          <img src={image} alt="" className="h-full w-full object-cover" loading="lazy" />
-        ) : (
-          <span className="grid h-full place-items-center text-[14px] font-semibold text-stone-400">
-            {productName(group, index).slice(0, 1).toUpperCase()}
-          </span>
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h2 className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-[-0.01em] text-stone-900">
-            {productName(group, index)}
-          </h2>
-          {mergeState === "source" ? (
-            <span className="shrink-0 rounded bg-violet-700 px-1.5 py-0.5 text-[9px] font-semibold text-white">
-              Starting product
-            </span>
-          ) : mergeState === "selected" ? (
-            <span className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-semibold text-violet-800">
-              Same product
-            </span>
-          ) : mergeState ? null : (
-            <ChevronRight
-              size={14}
-              className={`shrink-0 transition ${selected ? "text-stone-600" : "text-stone-300 group-hover:text-stone-500"}`}
-              aria-hidden="true"
-            />
-          )}
-        </div>
-        <div className="mt-1 flex min-w-0 items-center gap-2 text-[10px] text-stone-500">
-          <span className={`inline-flex min-w-0 items-center gap-1.5 font-medium ${status.textClass}`}>
-            <span className={`size-1.5 shrink-0 rounded-full ${status.dotClass}`} />
-            <span className="truncate">{status.label}</span>
-          </span>
-          <span className="text-stone-300">·</span>
-          <span className="truncate">{listingCount} {listingCount === 1 ? "listing" : "listings"}</span>
-          {prices && (
-            <span className="hidden items-center gap-2 sm:inline-flex">
-              <span className="text-stone-300">·</span>
-              <span className="truncate font-mono text-[9px] text-stone-600">{prices}</span>
-            </span>
-          )}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function recentDecisionPresentation(finding: IpReviewFinding) {
-  const kind = recentDecisionKind(finding);
-  if (kind === "dismissed") {
-    const labels: Record<string, string> = {
-      false_positive: "Different product",
-      do_not_pursue: "Not pursued",
-      second_hand: "Second hand",
-      resale: "Second hand",
-      licensed: "Licensed seller",
-      allowed_product: "Allowed product",
-      manual_cleared: "Cleared",
-    };
-    return {
-      label: labels[finding.dismissal_reason ?? ""] ?? "Cleared",
-      badge: "border-emerald-200 bg-emerald-50 text-emerald-800",
-      undoLabel: "Undo",
-    };
-  }
-  if (kind === "review") return {
-    label: "Needs review",
-    badge: "border-amber-200 bg-amber-50 text-amber-800",
-    undoLabel: "Undo",
-  };
-  if (kind === "takedown_pending") return {
-    label: "Takedown queued",
-    badge: "border-red-200 bg-red-50 text-red-800",
-    undoLabel: "Undo",
-  };
-  if (kind === "takedown_sent") return {
-    label: "Takedown sent",
-    badge: "border-red-200 bg-red-50 text-red-800",
-    undoLabel: "Reopen",
-  };
-  return {
-    label: "Enforced",
-    badge: "border-stone-300 bg-stone-100 text-stone-700",
-    undoLabel: "Reopen",
-  };
-}
-
-function decisionTime(value: string) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  const elapsed = Date.now() - date.getTime();
-  const minutes = Math.max(0, Math.floor(elapsed / 60_000));
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
-}
-
-function decisionExactTime(value: string) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "Unknown time";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function RecentDecisionRow({
-  finding,
-  selected,
-  undoing,
-  onOpen,
-  onUndo,
-}: {
-  finding: IpReviewFinding;
-  selected: boolean;
-  undoing: boolean;
-  onOpen: () => void;
-  onUndo: () => void;
-}) {
-  const presentation = recentDecisionPresentation(finding);
-  const canUndo = recentDecisionCanUndo(finding);
-  const title = finding.listing_title?.trim() || "Untitled listing";
-  const decisionAuthor = finding.decision_by_display_name?.trim() ||
-    finding.decision_by_email?.trim() || null;
-  const decisionReason = finding.decision_reason?.trim() || null;
-  const decisionBatchSize = Math.max(1, finding.decision_batch_size ?? 1);
-  return (
-    <div
-      role="option"
-      aria-selected={selected}
-      className={`flex items-center gap-2 border-b border-stone-200/70 px-4 py-3 sm:px-6 lg:px-4 ${
-        selected ? "bg-stone-100/90" : "hover:bg-stone-50"
-      }`}
-    >
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none"
-      >
-        <div className="size-12 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-stone-100">
-          {finding.image_url ? (
-            <img src={finding.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-          ) : (
-            <span className="grid h-full place-items-center text-[14px] font-semibold text-stone-400">
-              {title.slice(0, 1).toUpperCase()}
-            </span>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[13px] font-medium tracking-[-0.01em] text-stone-900">
-            {title}
-          </h2>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-stone-400">
-            <span className={`shrink-0 rounded border px-1.5 py-0.5 font-medium ${presentation.badge}`}>
-              {presentation.label}
-            </span>
-            <span className="truncate">{findingPlatformLabel(finding)}</span>
-            <span>·</span>
-            <span
-              className="shrink-0"
-              title={decisionTime(recentDecisionTimestamp(finding))}
-            >
-              {decisionExactTime(recentDecisionTimestamp(finding))}
-            </span>
-          </div>
-          {(decisionAuthor || decisionReason || decisionBatchSize > 1) && (
-            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-stone-500">
-              {finding.decision_by_account_id && (
-                <AssigneeAvatar
-                  accountId={finding.decision_by_account_id}
-                  displayName={finding.decision_by_display_name}
-                  email={finding.decision_by_email}
-                  pictureUrl={finding.decision_by_picture_url}
-                  size={16}
-                />
-              )}
-              <span className="shrink-0">{decisionAuthor ?? "Legacy or system action"}</span>
-              {decisionBatchSize > 1 && (
-                <span className="shrink-0 rounded bg-stone-100 px-1 py-0.5">
-                  Batch of {decisionBatchSize}
-                </span>
-              )}
-              {decisionReason && (
-                <span className="truncate" title={decisionReason}>· {decisionReason}</span>
-              )}
-            </div>
-          )}
-        </div>
-      </button>
-      {canUndo && (
-        <button
-          type="button"
-          onClick={onUndo}
-          disabled={undoing}
-          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 text-[10px] font-medium text-stone-600 transition hover:border-stone-300 hover:text-stone-950 disabled:opacity-50"
-        >
-          {undoing ? <LoaderCircle size={11} className="animate-spin" /> : <RotateCcw size={11} />}
-          {undoing ? "Undoing…" : presentation.undoLabel}
-        </button>
-      )}
-    </div>
-  );
-}
-
-const REVIEW_BUCKETS: Array<{
-  key: ReviewBucket;
-  label: string;
-  badge: string;
-}> = [
-  { key: "all", label: "All", badge: "border-stone-200 bg-white text-stone-600" },
-  { key: "takedown", label: "Takedown", badge: "border-red-200 bg-red-50 text-red-800" },
-  { key: "second_hand", label: "Second hand", badge: "border-violet-200 bg-violet-50 text-violet-800" },
-  { key: "different_product", label: "Different product", badge: "border-sky-200 bg-sky-50 text-sky-800" },
-  { key: "licensed", label: "Licensed seller", badge: "border-emerald-200 bg-emerald-50 text-emerald-800" },
-  { key: "needs_review", label: "Review", badge: "border-amber-200 bg-amber-50 text-amber-800" },
-];
-
-function ProductSettingsWorkspace({
-  group,
-  ipId,
-  onBack,
-  onReview,
-  onGroupChange,
-  onRefresh,
-}: {
-  group: PersistedProductGroup;
-  ipId: string;
-  onBack: () => void;
-  onReview: () => void;
-  onGroupChange: (
-    update: (current: PersistedProductGroup) => PersistedProductGroup,
-  ) => void;
-  onRefresh: () => void;
-}) {
-  return (
-    <div className="mx-auto min-h-full w-full max-w-[1040px]">
-      <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-stone-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-7">
-        <div className="min-w-0">
-          <button
-            type="button"
-            onClick={onBack}
-            className="mb-1 inline-flex items-center gap-1 text-[10px] font-medium text-stone-400 hover:text-stone-700 lg:hidden"
-          >
-            <ArrowLeft size={12} />
-            Product groups
-          </button>
-          <div className="flex items-center gap-2">
-            <Settings2 size={15} className="shrink-0 text-stone-500" />
-            <div className="min-w-0">
-              <p className="truncate text-[13px] font-semibold text-stone-900">Group settings</p>
-              <p className="truncate text-[10px] text-stone-400">{productName(group)}</p>
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onReview}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2.5 text-[10px] font-semibold text-stone-700 hover:bg-stone-50 hover:text-stone-950"
-        >
-          <ArrowLeft size={12} />
-          Review queue
-        </button>
-      </div>
-      <div className="px-4 py-4 sm:px-7">
-        <ProductGroupSettings
-          group={group}
-          ipId={ipId}
-          onGroupChange={onGroupChange}
-          onRefresh={onRefresh}
-        />
-      </div>
-    </div>
-  );
-}
-
-function BatchWorkspace({
-  group,
-  findings,
-  commercialReviewLanes,
-  selectedCommercialSubgroupKey,
-  loading,
-  error,
-  filter,
-  selectedResultIds,
-  batchProgress,
-  notice,
-  selectingSameProduct,
-  onBack,
-  onFilterChange,
-  onCommercialSubgroupChange,
-  onToggleFinding,
-  onSetFindingsSelected,
-  onOpenFinding,
-  onBatchAction,
-  onMergeProduct,
-  onOpenSettings,
-  onDismissNotice,
-}: {
-  group: PersistedProductGroup;
-  findings: IpReviewFinding[] | null;
-  commercialReviewLanes: ProductCommercialReviewLane<ProductGroupCommercialSubgroup>[];
-  selectedCommercialSubgroupKey: string | null;
-  loading: boolean;
-  error: string | null;
-  filter: ReviewBucket;
-  selectedResultIds: Set<string>;
-  batchProgress: { done: number; total: number } | null;
-  notice: string | null;
-  selectingSameProduct: boolean;
-  onBack: () => void;
-  onFilterChange: (filter: ReviewBucket) => void;
-  onCommercialSubgroupChange: (subgroupKey: string) => void;
-  onToggleFinding: (resultId: string) => void;
-  onSetFindingsSelected: (resultIds: string[], selected: boolean) => void;
-  onOpenFinding: (finding: IpReviewFinding) => void;
-  onBatchAction: (action: ProductLabBatchAction) => void;
-  onMergeProduct: () => void;
-  onOpenSettings: () => void;
-  onDismissNotice: () => void;
-}) {
-  const status = productStatus(group);
-  const listingCount = findings?.length ?? group.triage_member_count ?? 0;
-  const counts = new Map<ReviewBucket, number>([["all", findings?.length ?? 0]]);
-  for (const finding of findings ?? []) {
-    const bucket = reviewBucket(finding);
-    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
-  }
-  const visibleFindings = (findings ?? []).filter((finding) =>
-    filter === "all" || reviewBucket(finding) === filter
-  );
-  const selectedFindings = (findings ?? []).filter((finding) =>
-    selectedResultIds.has(finding.result_id)
-  );
-  const visibleResultIds = visibleFindings.map((finding) => finding.result_id);
-  const allVisibleSelected = visibleResultIds.length > 0 && visibleResultIds.every((resultId) =>
-    selectedResultIds.has(resultId)
-  );
-  const recommendedAction = recommendedBatchActionForSelection(selectedFindings);
-
-  return (
-    <div className="mx-auto flex min-h-full w-full max-w-[1040px] flex-col">
-      <div className="sticky top-0 z-20 border-b border-stone-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-7">
-        <button
-          type="button"
-          onClick={onBack}
-          className="mb-3 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-800 lg:hidden"
-        >
-          <ArrowLeft size={14} />
-          Product groups
-        </button>
-        <div className="flex items-start gap-3">
-          <div className="size-14 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-stone-100 sm:size-16">
-          {representativeImage(group) ? (
-            <img src={representativeImage(group)!} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <span className="grid h-full place-items-center text-[18px] font-semibold text-stone-400">
-              {productName(group).slice(0, 1).toUpperCase()}
-            </span>
-          )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className={`flex items-center gap-1.5 text-[10px] font-medium ${status.textClass}`}>
-              <span className={`size-1.5 rounded-full ${status.dotClass}`} />
-              {status.label}
-            </div>
-            <h2 className="mt-1 truncate text-[18px] font-semibold tracking-[-0.025em] text-stone-950 sm:text-[20px]">
-              {productName(group)}
-            </h2>
-            <p className="mt-1 text-[10px] text-stone-500">
-              {listingCount} {listingCount === 1 ? "listing" : "listings"} in this batch
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              disabled={selectingSameProduct}
-              onClick={onMergeProduct}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-semibold text-violet-800 transition hover:border-violet-300 hover:bg-violet-100 disabled:cursor-default disabled:border-violet-300 disabled:bg-violet-100"
-            >
-              <Link2 size={12} />
-              {selectingSameProduct ? "Selecting in list" : "Same product"}
-            </button>
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-stone-200 px-2.5 text-[10px] font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800"
-            >
-              <Settings2 size={11} />
-              Group settings
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {commercialReviewLanes.length > 0 && (
-        <div className="border-b border-stone-200 bg-white px-4 py-3 sm:px-7">
-          <div className="flex items-center gap-3">
-            <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.12em] text-stone-400">
-              Offer
-            </span>
-            <div
-              className="flex min-w-0 items-center gap-1 overflow-x-auto"
-              role="tablist"
-              aria-label="Commercial offer variants"
-            >
-              {commercialReviewLanes.map(({ subgroup, findingCount }) => {
-                const selected = subgroup.key === selectedCommercialSubgroupKey;
-                return (
-                  <button
-                    key={subgroup.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    title={commercialReviewLaneLabel(subgroup)}
-                    onClick={() => onCommercialSubgroupChange(subgroup.key)}
-                    className={`inline-flex h-7 max-w-[260px] shrink-0 items-center gap-1.5 rounded-md px-2 text-[10px] font-medium transition ${
-                      selected
-                        ? "bg-violet-100 text-violet-900"
-                        : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-                    }`}
-                  >
-                    <span className="truncate">{commercialReviewLaneLabel(subgroup)}</span>
-                    <span className={selected ? "text-violet-500" : "text-stone-400"}>
-                      {findingCount}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="border-b border-stone-200 bg-[#faf9f7] px-4 py-3 sm:px-7">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-1 overflow-x-auto" role="tablist" aria-label="Listing recommendations">
-            {REVIEW_BUCKETS.map((bucket) => (
-              <button
-                key={bucket.key}
-                type="button"
-                role="tab"
-                aria-selected={filter === bucket.key}
-                onClick={() => onFilterChange(bucket.key)}
-                className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[10px] font-medium transition ${
-                  filter === bucket.key
-                    ? "bg-stone-900 text-white"
-                    : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-                }`}
-              >
-                {bucket.label}
-                <span className={filter === bucket.key ? "text-stone-300" : "text-stone-400"}>
-                  {counts.get(bucket.key) ?? 0}
-                </span>
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            disabled={visibleResultIds.length === 0 || Boolean(batchProgress)}
-            aria-pressed={allVisibleSelected}
-            onClick={() => onSetFindingsSelected(visibleResultIds, !allVisibleSelected)}
-            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2 text-[10px] font-medium text-stone-600 transition hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900 disabled:cursor-default disabled:opacity-50"
-          >
-            {allVisibleSelected ? <Check size={12} strokeWidth={3} /> : <Square size={12} />}
-            {allVisibleSelected ? "Deselect all" : "Select all"}
-          </button>
-        </div>
-      </div>
-
-      {notice && (
-        <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-[11px] text-stone-700 sm:mx-7">
-          <span>{notice}</span>
-          <button type="button" onClick={onDismissNotice} className="shrink-0 font-medium text-stone-400 hover:text-stone-800">
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      <div className="flex-1 px-4 py-4 sm:px-7">
-        {error && findings == null ? (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</div>
-        ) : loading && findings == null ? (
-          <div className="grid min-h-56 place-items-center text-center">
-            <div>
-              <LoaderCircle size={18} className="mx-auto animate-spin text-stone-400" />
-              <p className="mt-2 text-[11px] text-stone-500">Loading the full batch…</p>
-            </div>
-          </div>
-        ) : visibleFindings.length === 0 ? (
-          <QuietState
-            icon={<Check size={18} />}
-            title={filter === "all" ? "Batch complete" : "Nothing in this category"}
-            detail={filter === "all"
-              ? "There are no pending listings left in this product group."
-              : "Choose another recommendation to keep processing."}
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {visibleFindings.map((finding) => (
-              <BatchListingCard
-                key={finding.result_id}
-                finding={finding}
-                selected={selectedResultIds.has(finding.result_id)}
-                disabled={Boolean(batchProgress)}
-                onToggle={() => onToggleFinding(finding.result_id)}
-                onOpen={() => onOpenFinding(finding)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {selectedFindings.length > 0 && (
-        <div className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-2.5 shadow-[0_-12px_28px_-24px_rgba(28,25,23,0.8)] backdrop-blur sm:px-7">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="shrink-0 border-r border-stone-200 pr-2">
-              <p className="whitespace-nowrap text-[10px] font-semibold text-stone-700">
-                {selectedFindings.length} selected
-              </p>
-            </div>
-            {batchProgress ? (
-              <span className="inline-flex items-center gap-2 text-[11px] text-stone-500">
-                <LoaderCircle size={13} className="animate-spin" />
-                Processing {batchProgress.done}/{batchProgress.total}
-              </span>
-            ) : (
-              <div className="min-w-0 flex-1 overflow-x-auto pb-0.5">
-                <div className="flex min-w-max items-center gap-1">
-                  <BatchDecisionButton label="Takedown" primary={recommendedAction === "send"} onClick={() => onBatchAction("send")} />
-                  <BatchDecisionButton label="Different product" primary={recommendedAction === "false_positive"} onClick={() => onBatchAction("false_positive")} />
-                  <BatchDecisionButton label="Second hand" primary={recommendedAction === "second_hand"} onClick={() => onBatchAction("second_hand")} />
-                  <BatchDecisionButton label="Do not pursue" onClick={() => onBatchAction("do_not_pursue")} />
-                  <BatchDecisionButton label="Allow product" onClick={() => onBatchAction("allow_product")} />
-                  <BatchDecisionButton label="Review" primary={recommendedAction === "review"} onClick={() => onBatchAction("review")} />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BatchListingCard({
-  finding,
-  selected,
-  disabled,
-  onToggle,
-  onOpen,
-}: {
-  finding: IpReviewFinding;
-  selected: boolean;
-  disabled: boolean;
-  onToggle: () => void;
-  onOpen: () => void;
-}) {
-  const bucket = reviewBucket(finding);
-  const bucketMeta = REVIEW_BUCKETS.find((candidate) => candidate.key === bucket)!;
-  const price = finding.price_value_usd != null
-    ? formatMoney(finding.price_value_usd, "USD")
-    : finding.price || "Price unavailable";
-
-  return (
-    <article className={`group relative overflow-hidden rounded-md border bg-white transition ${
-      selected ? "border-stone-900 ring-1 ring-stone-900" : "border-stone-200 hover:border-stone-300"
-    }`}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onOpen}
-        className="absolute inset-0 z-10 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-stone-500 disabled:cursor-wait"
-      >
-        <span className="sr-only">Open {finding.listing_title ?? "listing"}</span>
-      </button>
-      <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
-        {finding.image_url ? (
-          <img src={finding.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-        ) : (
-          <span className="grid h-full place-items-center text-[10px] text-stone-400">No image</span>
-        )}
-        <button
-          type="button"
-          aria-pressed={selected}
-          aria-label={`${selected ? "Deselect" : "Select"} ${finding.listing_title ?? "listing"}`}
-          disabled={disabled}
-          onClick={onToggle}
-          className={`absolute left-2 top-2 z-20 grid size-7 place-items-center rounded-md border shadow-sm transition ${
-          selected ? "border-stone-900 bg-stone-900 text-white" : "border-white/80 bg-white/95 text-stone-400"
-        }`}
-        >
-          {selected ? <Check size={15} strokeWidth={3} /> : <Square size={14} />}
-        </button>
-        {finding.assigned_to_account_id && (
-          <span className="pointer-events-none absolute right-2 top-2 z-20">
-            <AssigneeAvatar
-              accountId={finding.assigned_to_account_id}
-              displayName={finding.assignee_display_name}
-              email={finding.assignee_email}
-              pictureUrl={finding.assignee_picture_url}
-              size={24}
-            />
-          </span>
-        )}
-        <span className={`absolute bottom-2 left-2 rounded border px-1.5 py-0.5 text-[8px] font-semibold ${bucketMeta.badge}`}>
-          {bucketMeta.label}
-        </span>
-      </div>
-      <div className="p-2.5">
-        <h3 className="line-clamp-2 min-h-8 text-[11px] font-medium leading-4 text-stone-800">
-          {finding.listing_title || "Untitled listing"}
-        </h3>
-        <div className="mt-2 flex items-center justify-between gap-2 text-[9px] text-stone-400">
-          <div className="flex min-w-0 items-center gap-1.5">
-            {finding.seller_name && <span className="truncate">{finding.seller_name}</span>}
-            <span className="shrink-0 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-600">
-              {findingPlatformLabel(finding)}
-            </span>
-          </div>
-          <span className="shrink-0 font-mono font-medium text-stone-600">{price}</span>
-        </div>
-        <p className="mt-2 text-[9px] font-medium text-stone-400 group-hover:text-stone-700">
-          Open details
-        </p>
-      </div>
-    </article>
-  );
-}
-
-function BatchDecisionButton({
-  label,
-  primary = false,
-  onClick,
-}: {
-  label: string;
-  primary?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={primary ? `Recommended action: ${label}` : undefined}
-      data-recommended-action={primary ? "Recommended" : undefined}
-      className={`inline-flex h-8 items-center whitespace-nowrap rounded-md px-2 text-[10px] font-semibold transition ${
-        primary
-          ? "gap-1.5 bg-stone-950 text-white hover:bg-stone-800"
-          : "border border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:text-stone-900"
-      }`}
-    >
-      {primary && (
-        <Sparkles size={11} aria-hidden="true" />
-      )}
-      {label}
-    </button>
-  );
-}
-
-function QuietState({
-  icon,
-  title,
-  detail,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <div className="px-8 py-16 text-center">
-      <span className="mx-auto grid size-9 place-items-center rounded-full border border-stone-200 bg-white text-stone-400">
-        {icon}
-      </span>
-      <h2 className="mt-3 text-[13px] font-medium text-stone-800">{title}</h2>
-      <p className="mx-auto mt-1 max-w-[280px] text-[11px] leading-4 text-stone-400">{detail}</p>
-    </div>
-  );
-}
-
-function QueueSkeleton() {
-  return (
-    <div aria-label="Loading products" className="animate-pulse">
-      {Array.from({ length: 6 }, (_, index) => (
-        <div key={index} className="flex items-center gap-3 border-b border-stone-200/70 px-4 py-3 sm:px-6 lg:px-4">
-          <div className="size-12 rounded-md bg-stone-200/70" />
-          <div className="min-w-0 flex-1">
-            <div className="h-2.5 w-2/3 rounded bg-stone-200/80" />
-            <div className="mt-2 h-2 w-1/2 rounded bg-stone-200/60" />
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

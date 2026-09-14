@@ -1,0 +1,286 @@
+import { ArrowLeft, Check, Link2, LoaderCircle, Settings2, Square } from "lucide-react";
+import type { PersistedProductGroup, ProductGroupCommercialSubgroup } from "../../api/products";
+import type { IpReviewFinding } from "../../api/reviews";
+import { BatchDecisionButton } from "./BatchDecisionButton";
+import { BatchListingCard } from "./BatchListingCard";
+import type { ReviewBucket } from "./labDomain";
+import {
+  commercialReviewLaneLabel,
+  productName,
+  productStatus,
+  representativeImage,
+  REVIEW_BUCKETS,
+  reviewBucket,
+} from "./labDomain";
+import { QuietState } from "./QuietState";
+import type { ProductCommercialReviewLane, ProductLabBatchAction } from "./reviewDecisions";
+import { recommendedBatchActionForSelection } from "./reviewDecisions";
+
+export function BatchWorkspace({
+  group,
+  findings,
+  commercialReviewLanes,
+  selectedCommercialSubgroupKey,
+  loading,
+  error,
+  filter,
+  selectedResultIds,
+  batchProgress,
+  notice,
+  selectingSameProduct,
+  onBack,
+  onFilterChange,
+  onCommercialSubgroupChange,
+  onToggleFinding,
+  onSetFindingsSelected,
+  onOpenFinding,
+  onBatchAction,
+  onMergeProduct,
+  onOpenSettings,
+  onDismissNotice,
+}: {
+  group: PersistedProductGroup;
+  findings: IpReviewFinding[] | null;
+  commercialReviewLanes: ProductCommercialReviewLane<ProductGroupCommercialSubgroup>[];
+  selectedCommercialSubgroupKey: string | null;
+  loading: boolean;
+  error: string | null;
+  filter: ReviewBucket;
+  selectedResultIds: Set<string>;
+  batchProgress: { done: number; total: number } | null;
+  notice: string | null;
+  selectingSameProduct: boolean;
+  onBack: () => void;
+  onFilterChange: (filter: ReviewBucket) => void;
+  onCommercialSubgroupChange: (subgroupKey: string) => void;
+  onToggleFinding: (resultId: string) => void;
+  onSetFindingsSelected: (resultIds: string[], selected: boolean) => void;
+  onOpenFinding: (finding: IpReviewFinding) => void;
+  onBatchAction: (action: ProductLabBatchAction) => void;
+  onMergeProduct: () => void;
+  onOpenSettings: () => void;
+  onDismissNotice: () => void;
+}) {
+  const status = productStatus(group);
+  const listingCount = findings?.length ?? group.triage_member_count ?? 0;
+  const counts = new Map<ReviewBucket, number>([["all", findings?.length ?? 0]]);
+  for (const finding of findings ?? []) {
+    const bucket = reviewBucket(finding);
+    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+  }
+  const visibleFindings = (findings ?? []).filter((finding) =>
+    filter === "all" || reviewBucket(finding) === filter
+  );
+  const selectedFindings = (findings ?? []).filter((finding) =>
+    selectedResultIds.has(finding.result_id)
+  );
+  const visibleResultIds = visibleFindings.map((finding) => finding.result_id);
+  const allVisibleSelected = visibleResultIds.length > 0 && visibleResultIds.every((resultId) =>
+    selectedResultIds.has(resultId)
+  );
+  const recommendedAction = recommendedBatchActionForSelection(selectedFindings);
+
+  return (
+    <div className="mx-auto flex min-h-full w-full max-w-[1040px] flex-col">
+      <div className="sticky top-0 z-20 border-b border-stone-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-7">
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-3 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-800 lg:hidden"
+        >
+          <ArrowLeft size={14} />
+          Product groups
+        </button>
+        <div className="flex items-start gap-3">
+          <div className="size-14 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-stone-100 sm:size-16">
+          {representativeImage(group) ? (
+            <img src={representativeImage(group)!} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="grid h-full place-items-center text-[18px] font-semibold text-stone-400">
+              {productName(group).slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className={`flex items-center gap-1.5 text-[10px] font-medium ${status.textClass}`}>
+              <span className={`size-1.5 rounded-full ${status.dotClass}`} />
+              {status.label}
+            </div>
+            <h2 className="mt-1 truncate text-[18px] font-semibold tracking-[-0.025em] text-stone-950 sm:text-[20px]">
+              {productName(group)}
+            </h2>
+            <p className="mt-1 text-[10px] text-stone-500">
+              {listingCount} {listingCount === 1 ? "listing" : "listings"} in this batch
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              disabled={selectingSameProduct}
+              onClick={onMergeProduct}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-semibold text-violet-800 transition hover:border-violet-300 hover:bg-violet-100 disabled:cursor-default disabled:border-violet-300 disabled:bg-violet-100"
+            >
+              <Link2 size={12} />
+              {selectingSameProduct ? "Selecting in list" : "Same product"}
+            </button>
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-stone-200 px-2.5 text-[10px] font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800"
+            >
+              <Settings2 size={11} />
+              Group settings
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {commercialReviewLanes.length > 0 && (
+        <div className="border-b border-stone-200 bg-white px-4 py-3 sm:px-7">
+          <div className="flex items-center gap-3">
+            <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.12em] text-stone-400">
+              Offer
+            </span>
+            <div
+              className="flex min-w-0 items-center gap-1 overflow-x-auto"
+              role="tablist"
+              aria-label="Commercial offer variants"
+            >
+              {commercialReviewLanes.map(({ subgroup, findingCount }) => {
+                const selected = subgroup.key === selectedCommercialSubgroupKey;
+                return (
+                  <button
+                    key={subgroup.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    title={commercialReviewLaneLabel(subgroup)}
+                    onClick={() => onCommercialSubgroupChange(subgroup.key)}
+                    className={`inline-flex h-7 max-w-[260px] shrink-0 items-center gap-1.5 rounded-md px-2 text-[10px] font-medium transition ${
+                      selected
+                        ? "bg-violet-100 text-violet-900"
+                        : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+                    }`}
+                  >
+                    <span className="truncate">{commercialReviewLaneLabel(subgroup)}</span>
+                    <span className={selected ? "text-violet-500" : "text-stone-400"}>
+                      {findingCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="border-b border-stone-200 bg-[#faf9f7] px-4 py-3 sm:px-7">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-1 overflow-x-auto" role="tablist" aria-label="Listing recommendations">
+            {REVIEW_BUCKETS.map((bucket) => (
+              <button
+                key={bucket.key}
+                type="button"
+                role="tab"
+                aria-selected={filter === bucket.key}
+                onClick={() => onFilterChange(bucket.key)}
+                className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[10px] font-medium transition ${
+                  filter === bucket.key
+                    ? "bg-stone-900 text-white"
+                    : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+                }`}
+              >
+                {bucket.label}
+                <span className={filter === bucket.key ? "text-stone-300" : "text-stone-400"}>
+                  {counts.get(bucket.key) ?? 0}
+                </span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={visibleResultIds.length === 0 || Boolean(batchProgress)}
+            aria-pressed={allVisibleSelected}
+            onClick={() => onSetFindingsSelected(visibleResultIds, !allVisibleSelected)}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2 text-[10px] font-medium text-stone-600 transition hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900 disabled:cursor-default disabled:opacity-50"
+          >
+            {allVisibleSelected ? <Check size={12} strokeWidth={3} /> : <Square size={12} />}
+            {allVisibleSelected ? "Deselect all" : "Select all"}
+          </button>
+        </div>
+      </div>
+
+      {notice && (
+        <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-[11px] text-stone-700 sm:mx-7">
+          <span>{notice}</span>
+          <button type="button" onClick={onDismissNotice} className="shrink-0 font-medium text-stone-400 hover:text-stone-800">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <div className="flex-1 px-4 py-4 sm:px-7">
+        {error && findings == null ? (
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</div>
+        ) : loading && findings == null ? (
+          <div className="grid min-h-56 place-items-center text-center">
+            <div>
+              <LoaderCircle size={18} className="mx-auto animate-spin text-stone-400" />
+              <p className="mt-2 text-[11px] text-stone-500">Loading the full batch…</p>
+            </div>
+          </div>
+        ) : visibleFindings.length === 0 ? (
+          <QuietState
+            icon={<Check size={18} />}
+            title={filter === "all" ? "Batch complete" : "Nothing in this category"}
+            detail={filter === "all"
+              ? "There are no pending listings left in this product group."
+              : "Choose another recommendation to keep processing."}
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {visibleFindings.map((finding) => (
+              <BatchListingCard
+                key={finding.result_id}
+                finding={finding}
+                selected={selectedResultIds.has(finding.result_id)}
+                disabled={Boolean(batchProgress)}
+                onToggle={() => onToggleFinding(finding.result_id)}
+                onOpen={() => onOpenFinding(finding)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selectedFindings.length > 0 && (
+        <div className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-2.5 shadow-[0_-12px_28px_-24px_rgba(28,25,23,0.8)] backdrop-blur sm:px-7">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="shrink-0 border-r border-stone-200 pr-2">
+              <p className="whitespace-nowrap text-[10px] font-semibold text-stone-700">
+                {selectedFindings.length} selected
+              </p>
+            </div>
+            {batchProgress ? (
+              <span className="inline-flex items-center gap-2 text-[11px] text-stone-500">
+                <LoaderCircle size={13} className="animate-spin" />
+                Processing {batchProgress.done}/{batchProgress.total}
+              </span>
+            ) : (
+              <div className="min-w-0 flex-1 overflow-x-auto pb-0.5">
+                <div className="flex min-w-max items-center gap-1">
+                  <BatchDecisionButton label="Takedown" primary={recommendedAction === "send"} onClick={() => onBatchAction("send")} />
+                  <BatchDecisionButton label="Different product" primary={recommendedAction === "false_positive"} onClick={() => onBatchAction("false_positive")} />
+                  <BatchDecisionButton label="Second hand" primary={recommendedAction === "second_hand"} onClick={() => onBatchAction("second_hand")} />
+                  <BatchDecisionButton label="Do not pursue" onClick={() => onBatchAction("do_not_pursue")} />
+                  <BatchDecisionButton label="Allow product" onClick={() => onBatchAction("allow_product")} />
+                  <BatchDecisionButton label="Review" primary={recommendedAction === "review"} onClick={() => onBatchAction("review")} />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -28,6 +28,8 @@ export function createAuthSessionStore(
     ? tabStorage.getItem(SIMULATED_ACTING_TENANT_KEY)
     : sharedStorage.getItem(SHARED_ACTING_TENANT_KEY);
 
+  let externalVersion = 0;
+
   function activeStorage() {
     return simulated ? tabStorage : sharedStorage;
   }
@@ -41,6 +43,17 @@ export function createAuthSessionStore(
   }
 
   return {
+    getExternalVersion: () => externalVersion,
+    synchronize() {
+      if (simulated) return false;
+      const nextToken = sharedStorage.getItem(SHARED_TOKEN_KEY);
+      const nextTenant = sharedStorage.getItem(SHARED_ACTING_TENANT_KEY);
+      if (nextToken === token && nextTenant === actingTenant) return false;
+      token = nextToken;
+      actingTenant = nextTenant;
+      externalVersion += 1;
+      return true;
+    },
     getToken: () => token,
     setToken(value: string | null) {
       token = value;
@@ -73,3 +86,23 @@ const emptyStorage: AuthStorage = {
 export const browserAuthSession = typeof window === "undefined"
   ? createAuthSessionStore(emptyStorage, emptyStorage, "")
   : createAuthSessionStore(window.localStorage, window.sessionStorage, window.location.search);
+
+/** External session changes invalidate the whole signed-in component tree. */
+export function subscribeToAuthChanges(onChange: () => void) {
+  const synchronize = () => {
+    if (browserAuthSession.synchronize()) onChange();
+  };
+  const onStorage = (event: StorageEvent) => {
+    if (event.storageArea === window.localStorage &&
+      (event.key === null || event.key === SHARED_TOKEN_KEY || event.key === SHARED_ACTING_TENANT_KEY)) {
+      synchronize();
+    }
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener("focus", synchronize);
+  synchronize();
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener("focus", synchronize);
+  };
+}

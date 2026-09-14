@@ -5,6 +5,7 @@ import {
   resetOptimisticProductStateAfterUndo,
   productNeedsAttention,
   productCommercialReviewLanes,
+  reconcileProductCommercialSubgroupCount,
   productCommercialSubgroupKeyForCaseId,
   recentDecisionCanUndo,
   recentDecisionKind,
@@ -166,6 +167,19 @@ describe("commercial offer review lanes", () => {
     const lanes = productCommercialReviewLanes([sample, fullSize], [findings[0]]);
 
     expect(lanes.map(({ subgroup }) => subgroup.key)).toEqual(["sample-offer"]);
+  });
+
+  test("reconciles one lazily loaded offer without replacing the group total", () => {
+    expect(reconcileProductCommercialSubgroupCount({
+      triage_member_count: 5,
+      commercial_subgroups: [
+        { ...sample, triage_member_count: 3 },
+        fullSize,
+      ],
+    }, "sample-offer", 1)).toEqual({
+      triage_member_count: 3,
+      commercial_subgroups: [sample, fullSize],
+    });
   });
 });
 

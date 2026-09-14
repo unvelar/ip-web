@@ -47,3 +47,30 @@ describe("auth session persistence", () => {
     expect(session.getToken()).toBe("user-token");
   });
 });
+
+test("invalidates an open session when another tab changes identity or tenant", () => {
+  const shared = memoryStorage({ auth_token: "old-token", acting_tenant: "tenant-a" });
+  const first = createAuthSessionStore(shared, memoryStorage(), "");
+  const second = createAuthSessionStore(shared, memoryStorage(), "");
+  first.setToken(null);
+  expect(second.synchronize()).toBe(true);
+  expect(second.getToken()).toBe(null);
+  expect(second.getExternalVersion()).toBe(1);
+  first.setToken("new-token");
+  first.setActingTenant("tenant-b");
+  expect(second.synchronize()).toBe(true);
+  expect(second.getToken()).toBe("new-token");
+  expect(second.getActingTenant()).toBe("tenant-b");
+  expect(second.getExternalVersion()).toBe(2);
+  expect(second.synchronize()).toBe(false);
+});
+
+test("shared logout does not invalidate a simulated tab", () => {
+  const shared = memoryStorage({ auth_token: "admin-token" });
+  const simulation = createAuthSessionStore(shared, memoryStorage(), "?simulated_login=1");
+  simulation.enableSimulation("simulation-token");
+  shared.removeItem("auth_token");
+  expect(simulation.synchronize()).toBe(false);
+  expect(simulation.getToken()).toBe("simulation-token");
+  expect(simulation.getExternalVersion()).toBe(0);
+});

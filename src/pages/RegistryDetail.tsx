@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Check, Copy, ExternalLink, Trash2 } from "lucide-react";
 import {
+  isApiError,
   getTrademark,
   deleteTrademark,
   updateTrademark,
@@ -33,11 +34,19 @@ function errorMessage(e: unknown) {
 
 export default function RegistryDetail() {
   const { id } = useParams<{ id: string }>();
+  return id ? <RegistryDetailContent key={id} id={id} /> : <p role="alert">IP not found</p>;
+}
+
+function RegistryDetailContent({ id }: { id: string }) {
   const navigate = useNavigate();
   const [ip, setIp] = useState<Trademark | null>(null);
   const [images, setImages] = useState<TrademarkImage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  const activeRequest = useRef<AbortController | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [indexJobId, setIndexJobId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [editingDesc, setEditingDesc] = useState(false);
@@ -47,7 +56,7 @@ export default function RegistryDetail() {
   const [copiedPublicLink, setCopiedPublicLink] = useState(false);
   const keywordSaveSeq = useRef(0);
 
-  const indexJob = useJobPoller(indexJobId);
+  const { job: indexJob, error: indexingError } = useJobPoller(indexJobId);
   const {
     status: onboardingStatus,
     loading: onboardingLoading,
@@ -99,17 +108,31 @@ export default function RegistryDetail() {
   }
 
   const load = useCallback(async () => {
-    if (!id) return;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    setLoadError("");
+    setNotFound(false);
     try {
-      const data = await getTrademark(id);
+      const data = await getTrademark(id, controller.signal);
+      if (controller.signal.aborted) return;
       setIp(data.trademark);
       setImages(data.images);
+    } catch (caught) {
+      if (controller.signal.aborted) return;
+      if (isApiError(caught, 404)) {
+        setNotFound(true);
+        setIp(null);
+      } else setLoadError(errorMessage(caught));
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [id]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => activeRequest.current?.abort();
+  }, [load]);
 
   useEffect(() => {
     if (indexJob?.status === "completed" || indexJob?.status === "failed") {
@@ -137,15 +160,27 @@ export default function RegistryDetail() {
 
   async function handleDeleteImage(imageId: string) {
     if (!id) return;
-    await deleteTrademarkImage(id, imageId);
-    void load();
-    void refreshOnboarding(true);
+    try {
+      await deleteTrademarkImage(id, imageId);
+      void load();
+      void refreshOnboarding(true);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
   }
 
   async function handleDelete() {
-    if (!id || !confirm("Delete this IP and all its images?")) return;
-    await deleteTrademark(id);
-    navigate("/ips");
+    if (!id || deleting || !confirm("Delete this IP and all its images?")) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteTrademark(id);
+      navigate("/ips");
+    } catch (e: unknown) {
+      setError(errorMessage(e));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function copyPublicSummaryLink(url: string) {
@@ -165,7 +200,13 @@ export default function RegistryDetail() {
       </div>
     );
   }
-  if (!ip) return <p className="text-red-600 p-8">IP not found</p>;
+  if (notFound) return <p role="alert" className="text-red-600 p-8">IP not found</p>;
+  if (!ip) return (
+    <div role="alert" className="m-8 rounded-xl bg-red-50 p-5 text-red-700">
+      <p>Unable to load this IP. {loadError}</p>
+      <button type="button" onClick={() => { setLoading(true); void load(); }} className="mt-3 font-semibold underline">Try again</button>
+    </div>
+  );
 
   const pendingImages = images.filter((i) => i.status === "pending");
   const publicSummaryUrl = publicSummaryUrlForIp(ip);
@@ -219,13 +260,23 @@ export default function RegistryDetail() {
           )}
           <button
             onClick={handleDelete}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm text-red-500 border border-red-100 rounded-xl hover:bg-red-50 transition-all"
+            disabled={deleting}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm text-red-500 border border-red-100 rounded-xl hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
           >
             <Trash2 className="w-4 h-4" aria-hidden="true" />
-            Delete
+            {deleting ? "Deleting..." : "Delete"}
           </button>
         </div>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-5 py-4"
+        >
+          {error}
+        </div>
+      )}
 
       <IpOnboardingStatusCard
         status={onboardingStatus}
@@ -378,7 +429,12 @@ export default function RegistryDetail() {
       {/* Takedown signer — per-IP rights-holder + signatory details */}
       <IpTakedownSigner ipId={ip.id} />
 
+      {loadError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+        <p>Unable to refresh this IP. {loadError}</p>
+        <button type="button" onClick={() => void load()} className="mt-2 font-semibold underline">Try again</button>
+      </div>}
       {/* Index job status */}
+      {indexingError && <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{indexingError}. Retrying automatically.</p>}
       {indexJob && indexJob.status !== "completed" && (
         <div className={`rounded-xl px-5 py-4 text-sm ${
           indexJob.status === "failed"
@@ -393,12 +449,6 @@ export default function RegistryDetail() {
                 Indexing reference images...
               </div>
             )}
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-5 py-4">
-          {error}
         </div>
       )}
 

@@ -1,86 +1,70 @@
-# React + TypeScript + Vite
+# Unvelar web
+
+React and TypeScript frontend for IP registration, monitoring, product review,
+and administration. Vite builds the application for GitHub Pages.
+
+## Local development
+
+Use Node.js 22.12+ (CI uses Node.js 22) and the Bun version pinned in
+`package.json`; `bun.lock` is the canonical lockfile.
+
+```sh
+bun install --frozen-lockfile
+# Set VITE_API_URL=https://api.unvelar.com in your untracked .env file.
+bun run dev --host 127.0.0.1
+```
+
+Reuse an existing frontend on `http://localhost:5173` when one is running.
+Validate authenticated routes through the Chrome extension in the **Unvelar**
+profile. Use the normal WorkOS sign-in flow. Production-backed validation is
+read-only unless the user explicitly authorizes a mutation. See [AGENTS.md](AGENTS.md).
+
+## Checks and deployment
+
+```sh
+bun run check  # lint, regression tests, TypeScript
+bun run build  # brand assets, TypeScript, Vite, static route entries
+```
+
+Tests live in `tests/` and run with Bun; component tests use React and Happy DOM.
+The Validate workflow checks pull requests. Production deployment depends on
+validation, and PR previews run the same checks against the exact preview commit
+before publishing. Dependency installs in CI use the frozen lockfile.
+Configure **Lint, tests, and types** as a required status check in repository
+branch protection if merges should also be blocked before deployment.
+
+To update dependencies intentionally, run `bun install` and commit `bun.lock`
+alongside `package.json`.
+
+## Code organization
+
+- `src/App.tsx`: route definitions and lazy route loading, with a recoverable
+  page error boundary.
+- `src/api/`: transport, domain contracts, and endpoints. Import the appropriate
+  domain in new feature code; `src/api.ts` remains a compatibility entry point.
+  Session, registry, and job responses validate the fields needed for identity
+  and UI state before reaching consumers.
+- `src/features/`: feature components, data loading, and domain rules. Product
+  settings and review components are shared here rather than imported from pages.
+- `src/pages/`: route-level orchestration.
+- `src/components/`: shared controls and application layout.
+
+Keep async results scoped to their request identity, cancel obsolete reads,
+and distinguish request failures from successful empty results. Polling must
+not overlap requests or reuse a previous job's completion state. External
+session changes remount the signed-in tree so identity, tenant, and cached UI
+refresh together; simulated logins remain isolated to their tab.
 
 ## Brand assets
 
-`public/logo/logo.svg` is the source of truth for the Unvelar mark. `npm run build`,
-`bun run build`, and `npm run assets:generate` generate the favicon, touch icons,
+`public/logo/logo.svg` is the source of truth for the Unvelar mark. `bun run build`,
+`bun run dev`, and `bun run assets:generate` generate the favicon, touch icons,
 web manifest icons, and social preview image from that SVG.
 
 ## Deploy freshness
 
 The GitHub Pages workflow injects `VITE_BUILD_SHA` and a UTC `VITE_BUILD_TIME`
-captured immediately before `bun run build`. The Vite build also emits
-`build.json` with the same values so open tabs can detect when a newer deployment
-is live and offer a reload instead of staying on a stale cached bundle.
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+captured immediately before the production build. Vite emits the same metadata
+in `build.json`; open tabs can detect a newer deployment and offer a reload.
+PR previews set `VITE_BASE_PATH` to their preview directory so assets and routes
+stay within the preview.

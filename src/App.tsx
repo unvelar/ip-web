@@ -1,39 +1,41 @@
+import { lazy, Suspense } from "react";
+import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
-import { useAuth } from "./context/AuthContext";
-import { stashReturnTo } from "./context/AuthContext";
-import AppShell from "./components/AppShell";
+import { useAuth, stashReturnTo } from "./context/AuthContext";
 import DeploymentUpdatePrompt from "./components/DeploymentUpdatePrompt";
-import Landing from "./pages/Landing";
-import Login from "./pages/Login";
-import Registry from "./pages/Registry";
-import RegistryDetail from "./pages/RegistryDetail";
-import RegistryAudit from "./pages/RegistryAudit";
-import RegistryWizard from "./pages/RegistryWizard";
-import ClearanceReviewNew from "./pages/ClearanceReviewNew";
-import ClearanceTasks from "./pages/ClearanceTasks";
-import IpReviewDetail from "./pages/IpReviewDetail";
-import Findings from "./pages/Findings";
-import MonitoringTasks from "./pages/MonitoringTasks";
-import MonitoringFirstScan from "./pages/MonitoringFirstScan";
-import MonitoringCampaigns from "./pages/MonitoringCampaigns";
-import ProductLab from "./pages/ProductLabV2";
-import MonitoringNew from "./pages/MonitoringNew";
-import Sellers from "./pages/Sellers";
-import SellerProfile from "./pages/SellerProfile";
-import Monitors from "./pages/Monitors";
-import Dashboard from "./pages/Dashboard";
-import BrandsCatalog from "./pages/BrandsCatalog";
-import DesignsCatalog from "./pages/DesignsCatalog";
-import PopCultureCatalog from "./pages/PopCultureCatalog";
-import BrandSumup from "./pages/BrandSumup";
-import PublicIntake from "./pages/PublicIntake";
-import Admin from "./pages/Admin";
-import AdminIntakes from "./pages/AdminIntakes";
-import AdminIpDetail from "./pages/AdminIpDetail";
-import AdminTenants from "./pages/AdminTenants";
-import AdminMonitoring from "./pages/AdminMonitoring";
-import Settings from "./pages/Settings";
-import Notifications from "./pages/Notifications";
+
+const AppShell = lazy(() => import("./components/AppShell"));
+const Landing = lazy(() => import("./pages/Landing"));
+const Login = lazy(() => import("./pages/Login"));
+const Registry = lazy(() => import("./pages/Registry"));
+const RegistryDetail = lazy(() => import("./pages/RegistryDetail"));
+const RegistryAudit = lazy(() => import("./pages/RegistryAudit"));
+const RegistryWizard = lazy(() => import("./pages/RegistryWizard"));
+const ClearanceReviewNew = lazy(() => import("./pages/ClearanceReviewNew"));
+const ClearanceTasks = lazy(() => import("./pages/ClearanceTasks"));
+const IpReviewDetail = lazy(() => import("./pages/IpReviewDetail"));
+const Findings = lazy(() => import("./pages/Findings"));
+const MonitoringTasks = lazy(() => import("./pages/MonitoringTasks"));
+const MonitoringFirstScan = lazy(() => import("./pages/MonitoringFirstScan"));
+const MonitoringCampaigns = lazy(() => import("./pages/MonitoringCampaigns"));
+const ProductLab = lazy(() => import("./pages/ProductLabV2"));
+const MonitoringNew = lazy(() => import("./pages/MonitoringNew"));
+const Sellers = lazy(() => import("./pages/Sellers"));
+const SellerProfile = lazy(() => import("./pages/SellerProfile"));
+const Monitors = lazy(() => import("./pages/Monitors"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const BrandsCatalog = lazy(() => import("./pages/BrandsCatalog"));
+const DesignsCatalog = lazy(() => import("./pages/DesignsCatalog"));
+const PopCultureCatalog = lazy(() => import("./pages/PopCultureCatalog"));
+const BrandSumup = lazy(() => import("./pages/BrandSumup"));
+const PublicIntake = lazy(() => import("./pages/PublicIntake"));
+const Admin = lazy(() => import("./pages/Admin"));
+const AdminIntakes = lazy(() => import("./pages/AdminIntakes"));
+const AdminIpDetail = lazy(() => import("./pages/AdminIpDetail"));
+const AdminTenants = lazy(() => import("./pages/AdminTenants"));
+const AdminMonitoring = lazy(() => import("./pages/AdminMonitoring"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Notifications = lazy(() => import("./pages/Notifications"));
 
 function TrademarkRedirect() {
   const { id } = useParams();
@@ -143,9 +145,12 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const location = useLocation();
   return (
     <>
       <DeploymentUpdatePrompt />
+      <RouteErrorBoundary resetKey={location.pathname}>
+      <Suspense fallback={<div role="status" className="flex min-h-[60vh] items-center justify-center text-sm text-stone-500">Loading page…</div>}>
       <Routes>
         {/* Signed-in routes (AppShell layout) */}
         <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
@@ -209,7 +214,14 @@ export default function App() {
         <Route path="/trademarks" element={<Navigate to="/ips" replace />} />
         <Route path="/trademarks/:id" element={<TrademarkRedirect />} />
         <Route path="/ip-reviews" element={<Navigate to="/clearance/tasks" replace />} />
+        <Route path="*" element={<div className="mx-auto max-w-xl px-6 py-16 text-center">
+          <h1 className="text-2xl font-bold">Page not found</h1>
+          <p className="mt-3 text-stone-500">This address doesn’t match an available page.</p>
+          <a href={import.meta.env.BASE_URL} className="mt-6 inline-block font-semibold underline">Go to the home page</a>
+        </div>} />
       </Routes>
+      </Suspense>
+      </RouteErrorBoundary>
     </>
   );
 }

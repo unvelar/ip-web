@@ -21,6 +21,7 @@ import {
   type FirstScanSourceState,
 } from "../../lib/firstScanProgress";
 import type { ResultFilter } from "./useFirstScanFeed";
+import type { FirstScanResultTotals } from "./resultTotals";
 import {
   ACCESS_BLOCKED_RESULT_COPY,
   RESULT_STATE_COPY,
@@ -49,6 +50,7 @@ export function FirstScanResults({
   results,
   allResultCount,
   totals,
+  resultFilterTotals,
   query,
   resultFilter,
   sourceFilter,
@@ -61,6 +63,7 @@ export function FirstScanResults({
   results: IpFirstScanResult[];
   allResultCount: number;
   totals: FirstScanTotals;
+  resultFilterTotals: FirstScanResultTotals;
   query: string;
   resultFilter: ResultFilter;
   sourceFilter: string;
@@ -86,11 +89,11 @@ export function FirstScanResults({
 
       <div className="flex flex-col gap-2 border-b border-stone-200 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-1 overflow-x-auto">
-          <ResultFilterButton label="All" count={totals.discovered} value="all" active={resultFilter} onChange={onResultFilterChange} />
-          <ResultFilterButton label="Processing" count={totals.processing} value="processing" active={resultFilter} onChange={onResultFilterChange} />
-          <ResultFilterButton label="Ready" count={totals.ready} value="ready" active={resultFilter} onChange={onResultFilterChange} />
-          <ResultFilterButton label="Filtered" count={totals.filtered} value="filtered" active={resultFilter} onChange={onResultFilterChange} />
-          {totals.failed > 0 && <ResultFilterButton label="Failed" count={totals.failed} value="failed" active={resultFilter} onChange={onResultFilterChange} />}
+          <ResultFilterButton label="All" count={resultFilterTotals.discovered} value="all" active={resultFilter} onChange={onResultFilterChange} />
+          <ResultFilterButton label="Processing" count={resultFilterTotals.processing} value="processing" active={resultFilter} onChange={onResultFilterChange} />
+          <ResultFilterButton label="Ready" count={resultFilterTotals.ready} value="ready" active={resultFilter} onChange={onResultFilterChange} />
+          <ResultFilterButton label="Filtered" count={resultFilterTotals.filtered} value="filtered" active={resultFilter} onChange={onResultFilterChange} />
+          {resultFilterTotals.failed > 0 && <ResultFilterButton label="Failed" count={resultFilterTotals.failed} value="failed" active={resultFilter} onChange={onResultFilterChange} />}
         </div>
         <label className="relative block w-full lg:w-80">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />

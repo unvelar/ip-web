@@ -106,6 +106,7 @@ export default function MonitoringFirstScan() {
         results={feed.visibleResults}
         allResultCount={feed.allResults.length}
         totals={totals}
+        resultFilterTotals={feed.resultFilterTotals}
         query={feed.query}
         resultFilter={feed.resultFilter}
         sourceFilter={feed.sourceFilter}

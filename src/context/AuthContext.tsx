@@ -1,18 +1,9 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  getMe,
-  isApiError,
-  devLogin,
-  setToken,
-  getToken,
-  setSimulatedLoginToken,
-  workosLoginUrl,
-  logout as apiLogout,
-  getActingTenant,
-  setActingTenant as persistActingTenant,
-  type AuthUser,
-} from "../api";
+import { getMe, devLogin, workosLoginUrl, logout as apiLogout, type AuthUser } from "../api/auth";
+import { isApiError, setToken, getToken, setSimulatedLoginToken, getActingTenant, setActingTenant as persistActingTenant } from "../api/transport";
+
+import { browserAuthSession, subscribeToAuthChanges } from "../features/auth/authSession";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -101,11 +92,19 @@ function consumeForceReauthForNextSignIn() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const version = useSyncExternalStore(subscribeToAuthChanges, browserAuthSession.getExternalVersion);
+  return <AuthSessionProvider key={version}>{children}</AuthSessionProvider>;
+}
+
+function AuthSessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(() => !!getToken() || new URLSearchParams(window.location.search).has("token"));
+  const [loading, setLoading] = useState(() => !!getToken() || Boolean(new URLSearchParams(window.location.search).get("token")));
+  const [sessionError, setSessionError] = useState("");
   const navigate = useNavigate();
+  const signInReturnTo = useRef<string | null>(null);
 
   useEffect(() => {
+    let active = true;
     // After WorkOS callback the backend redirects us back here with `?token=…`
     // (and optionally `?next=…`) in the URL. Consume both, persist the token
     // into localStorage, then strip them from the URL so refreshes don't
@@ -114,16 +113,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const tokenFromUrl = urlParams.get("token");
     const nextFromUrl = urlParams.get("next");
     const simulatedLogin = urlParams.get("simulated_login") === "1";
-    let justSignedIn = false;
     let returnTo: string | null = null;
     if (tokenFromUrl) {
       if (simulatedLogin) setSimulatedLoginToken(tokenFromUrl);
       else setToken(tokenFromUrl);
-      justSignedIn = true;
       // Prefer the URL param (travels with the OAuth round-trip and survives
       // any storage wipe). Fall back to sessionStorage for older clients or
       // if the start request didn't carry return_to for some reason.
       returnTo = isSafePath(nextFromUrl) ? nextFromUrl : readStashedReturnTo();
+      signInReturnTo.current = returnTo ?? "/dashboard";
       clearStashedReturnTo();
       urlParams.delete("token");
       urlParams.delete("next");
@@ -137,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (getToken()) {
       getMe()
         .then(({ user }) => {
+          if (!active) return;
           if (user) {
             // A persisted acting-tenant override is only meaningful for admins;
             // drop a stale one for everyone else so requests stay home-scoped.
@@ -144,21 +143,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               persistActingTenant(null);
             }
             setUser(user);
-            if (justSignedIn) {
-              navigate(returnTo ?? "/dashboard", { replace: true });
+            if (signInReturnTo.current) {
+              navigate(signInReturnTo.current, { replace: true });
+              signInReturnTo.current = null;
             }
           } else {
             setToken(null);
           }
         })
         .catch((error) => {
-          if (!isApiError(error, 401)) return;
+          if (!active) return;
+          if (!isApiError(error, 401)) {
+            setSessionError(error instanceof Error ? error.message : "Unable to check your session");
+            return;
+          }
           setToken(null);
           persistActingTenant(null);
           setUser(null);
         })
-        .finally(() => setLoading(false));
+        .finally(() => { if (active) setLoading(false); });
     }
+    return () => { active = false; };
   }, [navigate]);
 
   // Effective acting tenant: the persisted override, or the home tenant.
@@ -221,7 +226,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         switchTenant,
       }}
     >
-      {children}
+      {sessionError ? <div role="alert" className="mx-auto max-w-xl px-6 py-16 text-center">
+        <h1 className="text-xl font-bold">Unable to check your session</h1>
+        <p className="mt-3 text-sm text-stone-600">{sessionError}</p>
+        <button type="button" onClick={() => window.location.reload()} className="mt-6 font-semibold underline">Try again</button>
+      </div> : children}
     </AuthContext.Provider>
   );
 }

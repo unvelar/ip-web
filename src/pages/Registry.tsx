@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, ExternalLink } from "lucide-react";
-import { listTrademarks, type Trademark } from "../api";
+import { listTrademarks, type Trademark } from "../api/registry";
 import BulkIngest from "../components/BulkIngest";
 import { publicSummaryUrlForIp } from "../lib/publicSummary";
 
@@ -12,16 +12,29 @@ export default function Registry() {
   const [loading, setLoading] = useState(true);
   const [copiedPublicSummaryIp, setCopiedPublicSummaryIp] = useState<string | null>(null);
 
-  async function load() {
+  const [error, setError] = useState("");
+  const activeRequest = useRef<AbortController | null>(null);
+  const load = useCallback(async () => {
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    setLoading(true);
+    setError("");
     try {
-      const { trademarks } = await listTrademarks();
+      const { trademarks } = await listTrademarks(controller.signal);
+      if (controller.signal.aborted) return;
       setIps(trademarks);
+    } catch (caught) {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Unable to load IPs");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  }
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void load();
+    return () => activeRequest.current?.abort();
+  }, [load]);
 
   async function copyPublicSummaryLink(ip: Trademark) {
     const url = publicSummaryUrlForIp(ip);
@@ -68,7 +81,12 @@ export default function Registry() {
           </Link>
         </div>
 
-        {loading ? (
+        {error ? (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+            <p>Unable to load your IPs. {error}</p>
+            <button type="button" onClick={() => void load()} className="mt-3 font-semibold underline">Try again</button>
+          </div>
+        ) : loading ? (
           <div className="py-12 flex justify-center">
             <div className="w-6 h-6 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
           </div>

@@ -68,7 +68,7 @@ export function useRegistryWizard() {
   const [startingMonitoring, setStartingMonitoring] = useState(false);
   const [monitoringCompleted, setMonitoringCompleted] = useState(0);
   const [error, setError] = useState("");
-  const indexJob = useJobPoller(indexJobId);
+  const { job: indexJob, error: indexingError } = useJobPoller(indexJobId);
 
   useEffect(() => {
     if (!onboardingDomain) return;
@@ -391,6 +391,7 @@ export function useRegistryWizard() {
   }
 
   return {
+    indexingError: indexingError || (indexJob?.status === "failed" ? `Indexing failed: ${indexJob.error ?? "Unable to process reference images"}` : ""),
     trademark,
     images,
     uploading,

@@ -22,6 +22,7 @@ import {
 } from "../../lib/firstScanProgress";
 import { RequestTimeoutError, withRequestTimeout } from "../../lib/requestTimeout";
 import { compareFirstScanResults, emptyFindingsPage, findingToProgressiveResult } from "./adapters";
+import { summarizeFirstScanResults } from "./resultTotals";
 
 const POLL_INTERVAL_MS = 5_000;
 const FEED_REQUEST_TIMEOUT_MS = 8_000;
@@ -178,16 +179,25 @@ export function useFirstScanFeed(requestedIpId: string | null) {
 
   const totals = useMemo(() => {
     const sources = snapshot?.sources ?? [];
+    const resultTotals = summarizeFirstScanResults(allResults);
     return {
       websites: sources.length,
       connected: sources.filter((source) => source.source.source_type === "web_search" || source.source.recipe).length,
-      discovered: allResults.length > 0 ? allResults.length : sources.reduce((total, source) => total + source.discovered, 0),
-      processing: allResults.filter((result) => FIRST_SCAN_ACTIVE_RESULT_STAGES.has(result.stage)).length,
-      ready: allResults.filter((result) => result.stage === "ready").length,
-      filtered: allResults.filter((result) => result.stage === "filtered").length,
-      failed: allResults.filter((result) => result.stage === "failed").length,
+      ...resultTotals,
+      discovered: resultTotals.discovered > 0
+        ? resultTotals.discovered
+        : sources.reduce((total, source) => total + source.discovered, 0),
     };
   }, [allResults, snapshot?.sources]);
+
+  const resultFilterTotals = useMemo(
+    () => summarizeFirstScanResults(
+      sourceFilter === "all"
+        ? allResults
+        : allResults.filter((result) => result.source_id === sourceFilter),
+    ),
+    [allResults, sourceFilter],
+  );
 
   const visibleResults = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -225,6 +235,7 @@ export function useFirstScanFeed(requestedIpId: string | null) {
     allResults,
     visibleResults,
     totals,
+    resultFilterTotals,
     refresh,
   };
 }
