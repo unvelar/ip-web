@@ -104,9 +104,14 @@ export default function MonitoringFirstScan() {
         ipId={ipId}
         sources={snapshot.sources}
         results={feed.visibleResults}
-        allResultCount={feed.allResults.length}
+        allResultCount={totals.discovered}
         totals={totals}
         resultFilterTotals={feed.resultFilterTotals}
+        filteredTotal={feed.filteredTotal}
+        hasMore={feed.hasMore}
+        loadingMore={feed.loadingMore}
+        refreshing={feed.refreshing}
+        onLoadMore={() => void feed.loadMore()}
         query={feed.query}
         resultFilter={feed.resultFilter}
         sourceFilter={feed.sourceFilter}
@@ -123,7 +128,7 @@ export default function MonitoringFirstScan() {
       )}
 
       <footer className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
-        <span>You can leave this page — monitoring continues in the background.</span>
+        <span>You can leave this page. Monitoring continues in the background.</span>
         <Link to={`/monitoring/tasks?ip_id=${encodeURIComponent(ipId)}&status=all`} className="inline-flex items-center gap-1 font-semibold text-stone-700 hover:text-stone-950">
           View all monitoring tasks <ChevronRight className="h-3.5 w-3.5" />
         </Link>

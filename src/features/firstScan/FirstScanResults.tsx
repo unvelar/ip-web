@@ -20,8 +20,8 @@ import {
   type FirstScanSourceProgress,
   type FirstScanSourceState,
 } from "../../lib/firstScanProgress";
-import type { ResultFilter } from "./useFirstScanFeed";
 import type { FirstScanResultTotals } from "./resultTotals";
+import type { ResultFilter } from "./useFirstScanFeed";
 import {
   ACCESS_BLOCKED_RESULT_COPY,
   RESULT_STATE_COPY,
@@ -51,6 +51,11 @@ export function FirstScanResults({
   allResultCount,
   totals,
   resultFilterTotals,
+  filteredTotal,
+  hasMore,
+  loadingMore,
+  refreshing,
+  onLoadMore,
   query,
   resultFilter,
   sourceFilter,
@@ -64,6 +69,11 @@ export function FirstScanResults({
   allResultCount: number;
   totals: FirstScanTotals;
   resultFilterTotals: FirstScanResultTotals;
+  filteredTotal: number;
+  hasMore: boolean;
+  loadingMore: boolean;
+  refreshing: boolean;
+  onLoadMore: () => void;
   query: string;
   resultFilter: ResultFilter;
   sourceFilter: string;
@@ -97,7 +107,7 @@ export function FirstScanResults({
         </div>
         <label className="relative block w-full lg:w-80">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
-          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search listings, sellers, or keywords" className="h-8 w-full rounded-lg border border-stone-200 bg-stone-50 pl-8 pr-3 text-xs text-stone-800 outline-none transition focus:border-stone-400 focus:bg-white" />
+          <input value={query} maxLength={500} onChange={(event) => onQueryChange(event.target.value)} aria-label="Search all listings" placeholder="Search all listings, sellers, or keywords" className="h-8 w-full rounded-lg border border-stone-200 bg-stone-50 pl-8 pr-3 text-xs text-stone-800 outline-none transition focus:border-stone-400 focus:bg-white" />
         </label>
       </div>
 
@@ -121,6 +131,18 @@ export function FirstScanResults({
       </div>
 
       {results.length === 0 && <ResultEmptyState hasAnyResults={allResultCount > 0} sources={sources} />}
+      <div className="flex items-center justify-between gap-3 border-t border-stone-200 px-4 py-3">
+        <p className="text-xs tabular-nums text-stone-500" aria-live="polite">
+          Showing {results.length.toLocaleString()} of {filteredTotal.toLocaleString()} listings
+        </p>
+        {hasMore && (
+          <button type="button" onClick={onLoadMore} disabled={loadingMore || refreshing}
+            className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-700 transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-wait disabled:opacity-50">
+            {loadingMore && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
+            {loadingMore ? "Loading listings…" : "Load more listings"}
+          </button>
+        )}
+      </div>
     </section>
   );
 }
@@ -219,7 +241,7 @@ function MetadataValue({ value, icon, pending, strong = false }: { value: string
   return (
     <div className={`flex min-w-0 items-center gap-1 text-[11px] ${strong ? "font-semibold text-stone-700" : "text-stone-500"}`}>
       {icon && <span className="shrink-0 text-stone-300">{icon}</span>}
-      {value ? <span className="truncate" title={value}>{value}</span> : <span className={`truncate ${pending ? "text-stone-300" : "text-stone-400"}`}>{pending ? "Waiting…" : "—"}</span>}
+      {value ? <span className="truncate" title={value}>{value}</span> : <span className={`truncate ${pending ? "text-stone-300" : "text-stone-400"}`}>{pending ? "Waiting…" : "Unavailable"}</span>}
     </div>
   );
 }

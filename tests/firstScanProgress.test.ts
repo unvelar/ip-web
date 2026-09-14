@@ -117,6 +117,19 @@ function result(overrides: Partial<IpFirstScanResult> = {}): IpFirstScanResult {
 }
 
 describe("first scan progress", () => {
+  test("uses complete source totals even when only one page or no rows for that source are loaded", () => {
+    for (const rows of [[], [result({ stage: "ready" })]]) {
+      const summary = summarizeFirstScanSource(source, [], findingsPage({}), rows, true, {
+        discovered: 515, processing: 0, ready: 301, filtered: 214, failed: 0, qualified: 301,
+      });
+      expect(summary.discovered).toBe(515);
+      expect(summary.ready).toBe(301);
+      expect(summary.filtered).toBe(214);
+      expect(summary.state).toBe("ready");
+      expect(summary.results).toEqual(rows);
+    }
+  });
+
   test("does not revive an old run count when the progressive feed has zero rows", () => {
     const summary = summarizeFirstScanSource(
       source,

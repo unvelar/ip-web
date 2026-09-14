@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   getIpFirstScanResults,
@@ -9,6 +9,9 @@ import {
   listMonitoringFindingsGlobal,
   listMonitoringRuns,
   type IpFirstScanResult,
+  type IpFirstScanResultsPage,
+  type IpFirstScanResultsOptions,
+  type IpFirstScanTotals,
   type IpOnboardingStatus,
   type IpReviewFinding,
   type MonitoredDomain,
@@ -22,10 +25,13 @@ import {
 } from "../../lib/firstScanProgress";
 import { RequestTimeoutError, withRequestTimeout } from "../../lib/requestTimeout";
 import { compareFirstScanResults, emptyFindingsPage, findingToProgressiveResult } from "./adapters";
+
 import { summarizeFirstScanResults } from "./resultTotals";
 
 const POLL_INTERVAL_MS = 5_000;
 const FEED_REQUEST_TIMEOUT_MS = 8_000;
+const RESULTS_PAGE_SIZE = 100;
+const EMPTY_TOTALS: IpFirstScanTotals = { discovered: 0, processing: 0, ready: 0, filtered: 0, failed: 0, qualified: 0 };
 const DEGRADED_FEED_MESSAGE = "Showing the 50 most recent monitoring results while the live listing feed recovers.";
 const DEGRADED_ONBOARDING_MESSAGE = "Setup status is temporarily unavailable.";
 const DEGRADED_SOURCES_MESSAGE = "Live monitoring-source status is temporarily unavailable.";
@@ -34,6 +40,7 @@ export interface FirstScanSnapshot {
   trademark: Trademark;
   onboarding: IpOnboardingStatus | null;
   sources: FirstScanSourceProgress[];
+  page: IpFirstScanResultsPage | null;
   updatedAt: Date;
 }
 
@@ -47,11 +54,24 @@ export function useFirstScanFeed(requestedIpId: string | null) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadedPages = useRef(1);
+  const activeRequest = useRef<AbortController | null>(null);
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const refresh = useCallback(async (parentSignal?: AbortSignal, pageCount = loadedPages.current) => {
     if (!ipId) return;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const signal = parentSignal ? AbortSignal.any([parentSignal, controller.signal]) : controller.signal;
     setRefreshing(true);
     try {
       const [{ trademark }, onboardingFeed, platformFeed, progressiveFeed] = await Promise.all([
@@ -62,7 +82,11 @@ export function useFirstScanFeed(requestedIpId: string | null) {
         }),
         loadOnboardingStatus(ipId, signal),
         loadMonitoringPlatforms(ipId, signal),
-        loadProgressiveResults(ipId, signal),
+        loadProgressiveResults(ipId, {
+          source_id: sourceFilter === "all" ? undefined : sourceFilter,
+          stage: resultFilter,
+          query: debouncedQuery,
+        }, pageCount, signal),
       ]);
 
       const degradedReasons = new Set<string>();
@@ -95,6 +119,7 @@ export function useFirstScanFeed(requestedIpId: string | null) {
         progressiveFeed.results ?? [],
         legacyFindingsPage.findings,
         ipId,
+        progressiveFeed.page,
       );
       const sources = await Promise.all(platforms.map(async (source) => {
         const findingsPage = progressiveFeed.results === null
@@ -124,31 +149,36 @@ export function useFirstScanFeed(requestedIpId: string | null) {
           }
         }
         const rows = sourceResults ?? findingsPage.findings.map((finding) => findingToProgressiveResult(finding, source));
-        // Both the progressive feed and the legacy findings fallback are now
-        // normalized to the rows rendered for this source. Their count is
-        // authoritative; an older run total must not replace an empty list.
+        // A source may have no rows on this page. Only the complete server
+        // summary can determine its count or progress in a paginated feed.
         return summarizeFirstScanSource(
           source,
           runsPage.runs,
           findingsPage,
           rows,
           true,
+          progressiveFeed.page
+            ? progressiveFeed.page.source_totals.find((totals) => totals.source_id === source.id) ?? EMPTY_TOTALS
+            : undefined,
         );
       }));
 
       if (signal?.aborted) return;
-      setSnapshot({ trademark, onboarding: onboardingFeed.status, sources, updatedAt: new Date() });
+      loadedPages.current = pageCount;
+      setSnapshot({ trademark, onboarding: onboardingFeed.status, sources, page: progressiveFeed.page, updatedAt: new Date() });
       setError([...degradedReasons].join(" ") || null);
     } catch (caught) {
       if (signal?.aborted) return;
       setError(caught instanceof Error ? caught.message : "Unable to load monitoring progress");
     } finally {
+      if (activeRequest.current === controller) activeRequest.current = null;
       if (!signal?.aborted) {
         setLoading(false);
         setRefreshing(false);
+        setLoadingMore(false);
       }
     }
-  }, [ipId]);
+  }, [ipId, sourceFilter, resultFilter, debouncedQuery]);
 
   useEffect(() => {
     if (!ipId) {
@@ -159,9 +189,12 @@ export function useFirstScanFeed(requestedIpId: string | null) {
     let stopped = false;
     let timer: number | undefined;
     let controller: AbortController | null = null;
+    loadedPages.current = 1;
     const poll = async () => {
-      controller = new AbortController();
-      await refresh(controller.signal);
+      if (!activeRequest.current || activeRequest.current.signal.aborted) {
+        controller = new AbortController();
+        await refresh(controller.signal);
+      }
       if (!stopped) timer = window.setTimeout(poll, POLL_INTERVAL_MS);
     };
     void poll();
@@ -169,6 +202,7 @@ export function useFirstScanFeed(requestedIpId: string | null) {
       stopped = true;
       if (timer !== undefined) window.clearTimeout(timer);
       controller?.abort();
+      activeRequest.current?.abort();
     };
   }, [ipId, loadingActiveIp, refresh]);
 
@@ -179,34 +213,29 @@ export function useFirstScanFeed(requestedIpId: string | null) {
 
   const totals = useMemo(() => {
     const sources = snapshot?.sources ?? [];
-    const resultTotals = summarizeFirstScanResults(allResults);
     return {
       websites: sources.length,
       connected: sources.filter((source) => source.source.source_type === "web_search" || source.source.recipe).length,
-      ...resultTotals,
-      discovered: resultTotals.discovered > 0
-        ? resultTotals.discovered
-        : sources.reduce((total, source) => total + source.discovered, 0),
+      discovered: sources.reduce((total, source) => total + source.discovered, 0),
+      processing: sources.reduce((total, source) => total + source.preparing, 0),
+      ready: sources.reduce((total, source) => total + source.ready, 0),
+      filtered: sources.reduce((total, source) => total + source.filtered, 0),
+      failed: sources.reduce((total, source) => total + source.failed, 0),
     };
-  }, [allResults, snapshot?.sources]);
+  }, [snapshot?.sources]);
 
-  const resultFilterTotals = useMemo(
-    () => summarizeFirstScanResults(
-      sourceFilter === "all"
-        ? allResults
-        : allResults.filter((result) => result.source_id === sourceFilter),
-    ),
-    [allResults, sourceFilter],
-  );
+  const loadMore = useCallback(async () => {
+    if (!snapshot?.page?.next_cursor || refreshing || loadingMore) return;
+    setLoadingMore(true);
+    // Refresh the loaded prefix together, keeping new rows and progress
+    // consistent across pages. Polling preserves this depth afterward.
+    await refresh(undefined, loadedPages.current + 1);
+  }, [snapshot?.page?.next_cursor, refreshing, loadingMore, refresh]);
 
-  const visibleResults = useMemo(() => {
+  const sourceResults = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return [...allResults]
       .filter((result) => sourceFilter === "all" || result.source_id === sourceFilter)
-      .filter((result) => {
-        if (resultFilter === "processing") return FIRST_SCAN_ACTIVE_RESULT_STAGES.has(result.stage);
-        return resultFilter === "all" || result.stage === resultFilter;
-      })
       .filter((result) => !needle || [
         result.listing_title,
         result.candidate_title,
@@ -216,9 +245,18 @@ export function useFirstScanFeed(requestedIpId: string | null) {
         result.keyword,
         result.source_domain,
         result.page_url,
-      ].some((value) => value?.toLocaleLowerCase().includes(needle)))
-      .sort(compareFirstScanResults);
-  }, [allResults, query, resultFilter, sourceFilter]);
+      ].some((value) => value?.toLocaleLowerCase().includes(needle)));
+  }, [allResults, query, sourceFilter]);
+
+  const resultFilterTotals = useMemo(
+    () => snapshot?.page?.filter_totals ?? summarizeFirstScanResults(sourceResults),
+    [snapshot?.page?.filter_totals, sourceResults],
+  );
+  const visibleResults = useMemo(() => sourceResults
+    .filter((result) => resultFilter === "processing"
+      ? FIRST_SCAN_ACTIVE_RESULT_STAGES.has(result.stage)
+      : resultFilter === "all" || result.stage === resultFilter)
+    .sort(compareFirstScanResults), [sourceResults, resultFilter]);
 
   return {
     ipId,
@@ -236,34 +274,57 @@ export function useFirstScanFeed(requestedIpId: string | null) {
     visibleResults,
     totals,
     resultFilterTotals,
+    filteredTotal: snapshot?.page?.total ?? visibleResults.length,
+    hasMore: Boolean(snapshot?.page?.next_cursor),
+    loadingMore,
+    loadMore,
     refresh,
   };
 }
 
 async function loadProgressiveResults(
   ipId: string,
+  filters: IpFirstScanResultsOptions,
+  pageCount: number,
   signal?: AbortSignal,
-): Promise<{ results: IpFirstScanResult[] | null; degradedReason: string | null }> {
+): Promise<{ results: IpFirstScanResult[] | null; page: IpFirstScanResultsPage | null; degradedReason: string | null }> {
   try {
-    return {
-      results: (await withRequestTimeout(
-        (requestSignal) => getIpFirstScanResults(ipId, requestSignal),
+    let combined: IpFirstScanResultsPage | null = null;
+    for (let index = 0; index < pageCount; index++) {
+      const page: IpFirstScanResultsPage = await withRequestTimeout(
+        (requestSignal) => getIpFirstScanResults(ipId, {
+          ...filters, limit: RESULTS_PAGE_SIZE, cursor: combined?.next_cursor ?? undefined,
+        }, requestSignal),
         {
           signal,
           timeoutMs: FEED_REQUEST_TIMEOUT_MS,
           timeoutMessage: "Loading the live listing feed timed out.",
         },
-      )).results,
-      degradedReason: null,
-    };
+      );
+      // During a mixed-version deployment, do not claim a limited legacy
+      // response represents the whole scan.
+      if (!page.source_totals || !page.filter_totals) {
+        return { results: page.results, page: null, degradedReason: "Complete listing counts are temporarily unavailable." };
+      }
+      if (combined === null) combined = page;
+      else {
+        combined.results.push(...page.results);
+        combined.next_cursor = page.next_cursor;
+      }
+      if (!combined.next_cursor) break;
+    }
+    return { results: combined?.results ?? [], page: combined, degradedReason: null };
   } catch (caught) {
     if (signal?.aborted) throw caught;
     // Compatibility while the progressive backend endpoint rolls out.
     if (caught instanceof ApiError && caught.status === 404) {
-      return { results: null, degradedReason: null };
+      return { results: null, page: null, degradedReason: null };
     }
     if (isRecoverableFeedError(caught)) {
-      return { results: null, degradedReason: DEGRADED_FEED_MESSAGE };
+      // Keep previously loaded pages on a pagination failure so a transient
+      // timeout cannot silently replace them with a shorter legacy feed.
+      if (pageCount > 1) throw caught;
+      return { results: null, page: null, degradedReason: DEGRADED_FEED_MESSAGE };
     }
     throw caught;
   }
@@ -343,8 +404,17 @@ function supplementMonitoringPlatforms(
   progressiveResults: IpFirstScanResult[],
   findings: IpReviewFinding[],
   ipId: string,
+  page: IpFirstScanResultsPage | null,
 ): MonitoredDomain[] {
   const byId = new Map(platforms.map((platform) => [platform.id, platform]));
+
+  for (const totals of page?.source_totals ?? []) {
+    if (byId.has(totals.source_id)) continue;
+    byId.set(totals.source_id, syntheticMonitoringPlatform({
+      id: totals.source_id, domain: totals.source_domain, displayName: totals.source_name,
+      ipId, createdAt: page!.as_of,
+    }));
+  }
 
   for (const result of progressiveResults) {
     if (byId.has(result.source_id)) continue;

@@ -1,5 +1,6 @@
 import type {
   IpFirstScanResult,
+  IpFirstScanTotals,
   IpReviewFinding,
   MonitoredDomain,
   MonitoringFindingsPage,
@@ -28,6 +29,7 @@ export interface FirstScanSourceProgress {
   preparing: number;
   ready: number;
   filtered: number;
+  failed: number;
   state: FirstScanSourceState;
   error: string | null;
 }
@@ -110,24 +112,26 @@ export function summarizeFirstScanSource(
   findingsPage: MonitoringFindingsPage,
   results: IpFirstScanResult[] = [],
   resultRowsAreAuthoritative = results.length > 0,
+  totals?: IpFirstScanTotals,
 ): FirstScanSourceProgress {
   const runs = latestRunsByKeyword(allRuns);
   const runDiscovered = runs.reduce((total, run) => total + Math.max(0, run.results_found), 0);
   const runQualified = runs.reduce((total, run) => total + Math.max(0, run.results_after_filter), 0);
-  const discovered = resultRowsAreAuthoritative ? results.length : runDiscovered;
+  const discovered = totals?.discovered ?? (resultRowsAreAuthoritative ? results.length : runDiscovered);
   const qualifiedFromRows = results.filter((result) => result.result_id && result.stage !== "filtered").length;
-  const qualified = resultRowsAreAuthoritative ? qualifiedFromRows : runQualified;
+  const qualified = totals?.qualified ?? (resultRowsAreAuthoritative ? qualifiedFromRows : runQualified);
   const casesCreated = runs.reduce((total, run) => total + Math.max(0, run.cases_created), 0);
   const preparingFromRows = results.filter((result) => FIRST_SCAN_ACTIVE_RESULT_STAGES.has(result.stage)).length;
   const readyFromRows = results.filter((result) => result.stage === "ready").length;
-  const filtered = results.filter((result) => result.stage === "filtered").length;
-  const preparing = resultRowsAreAuthoritative
+  const filtered = totals?.filtered ?? results.filter((result) => result.stage === "filtered").length;
+  const failed = totals?.failed ?? results.filter((result) => result.stage === "failed").length;
+  const preparing = totals?.processing ?? (resultRowsAreAuthoritative
     ? preparingFromRows
-    : (findingsPage.facets.statuses.preparing ?? 0);
-  const ready = resultRowsAreAuthoritative
+    : (findingsPage.facets.statuses.preparing ?? 0));
+  const ready = totals?.ready ?? (resultRowsAreAuthoritative
     ? readyFromRows
-    : (findingsPage.facets.statuses.pending ?? 0);
-  const findingsTotal = resultRowsAreAuthoritative ? results.length - filtered : findingsPage.facets.total;
+    : (findingsPage.facets.statuses.pending ?? 0));
+  const findingsTotal = totals || resultRowsAreAuthoritative ? discovered - filtered : findingsPage.facets.total;
   const running = runs.some((run) => isActiveMonitoringRun(run.status));
   const failures = runs.filter((run) => FAILED_RUN_STATUSES.has(run.status.trim().toLowerCase()));
   const sourceConnected = source.source_type === "web_search"
@@ -144,7 +148,7 @@ export function summarizeFirstScanSource(
     state = "setup_processing";
   } else if (!sourceConnected) {
     state = "connecting";
-  } else if (running && results.length === 0) {
+  } else if (running && (totals ? discovered === 0 : results.length === 0)) {
     state = "scanning";
   } else if (preparing > 0 || results.some((result) => FIRST_SCAN_ACTIVE_RESULT_STAGES.has(result.stage))) {
     state = "preparing";
@@ -170,6 +174,7 @@ export function summarizeFirstScanSource(
     preparing,
     ready,
     filtered,
+    failed,
     state,
     error:
       source.setup_status === "retry_needed"

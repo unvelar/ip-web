@@ -515,9 +515,40 @@ export interface IpFirstScanResult {
   stage: IpFirstScanResultStage;
 }
 
-export function getIpFirstScanResults(ipId: string, signal?: AbortSignal) {
-  return request<{ results: IpFirstScanResult[] }>(
-    `/api/ip/${ipId}/monitoring/first-scan-results?limit=500`,
+export interface IpFirstScanTotals {
+  discovered: number;
+  processing: number;
+  ready: number;
+  filtered: number;
+  failed: number;
+  qualified: number;
+}
+
+export interface IpFirstScanResultsPage {
+  results: IpFirstScanResult[];
+  source_totals: Array<IpFirstScanTotals & { source_id: string; source_domain: string; source_name: string | null }>;
+  filter_totals: IpFirstScanTotals;
+  total: number;
+  next_cursor: string | null;
+  as_of: string;
+}
+
+export interface IpFirstScanResultsOptions {
+  limit?: number;
+  cursor?: string;
+  source_id?: string;
+  stage?: "all" | "processing" | "ready" | "filtered" | "failed";
+  query?: string;
+}
+
+export function getIpFirstScanResults(ipId: string, options: IpFirstScanResultsOptions = {}, signal?: AbortSignal) {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 100) });
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.source_id) params.set("source_id", options.source_id);
+  if (options.stage) params.set("stage", options.stage);
+  if (options.query) params.set("q", options.query);
+  return request<IpFirstScanResultsPage>(
+    `/api/ip/${ipId}/monitoring/first-scan-results?${params}`,
     { signal },
   );
 }
