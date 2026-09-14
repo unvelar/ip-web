@@ -1,0 +1,1 @@
+function e(e){return!e.tenant_public_slug||!e.public_slug?null:`${window.location.origin}/brand-sumups/${e.tenant_public_slug}/${e.public_slug}`}export{e as t};
