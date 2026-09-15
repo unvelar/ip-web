@@ -27,6 +27,7 @@ const FREQUENCY_OPTIONS: { value: MonitoringFrequency; label: string }[] = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
+  { value: "off", label: "Off" },
 ];
 
 const DEFAULT_OPEN_WEB_SCOPES = [
@@ -103,7 +104,7 @@ function openWebConfig(source?: MonitoredDomain | null): OpenWebSearchConfig {
 }
 
 function isMonitoringFrequency(value: unknown): value is MonitoringFrequency {
-  return value === "daily" || value === "weekly" || value === "monthly";
+  return FREQUENCY_OPTIONS.some((option) => option.value === value);
 }
 
 function platformLabel(platform: MonitoredDomain) {
@@ -242,6 +243,9 @@ export function PlatformsPanel({
     setErr("");
     try {
       const { trademark } = await setIpMonitoringFrequency(ipId, frequency);
+      if (trademark.monitoring_frequency !== frequency) {
+        throw new Error("The server did not save the monitoring frequency. Please try again.");
+      }
       onMonitoringFrequencyChanged?.(trademark.monitoring_frequency);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -330,13 +334,14 @@ export function PlatformsPanel({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-          <div className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5">
+          <div role="group" aria-label="Monitoring frequency" className="inline-flex flex-wrap rounded-lg border border-stone-200 bg-stone-50 p-0.5">
             {FREQUENCY_OPTIONS.map((option) => {
               const active = currentFrequency === option.value;
               return (
                 <button
                   key={option.value}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => void changeFrequency(option.value)}
                   disabled={savingFrequency !== null}
                   className={`min-w-[4.75rem] whitespace-nowrap px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all disabled:opacity-50 ${
@@ -365,6 +370,13 @@ export function PlatformsPanel({
           </button>
         </div>
       </div>
+
+      {currentFrequency === "off" && (
+        <p role="status" className="text-xs text-stone-500">
+          Scheduled scans are off. Saved sources are kept, and Refresh now is still available.
+          Scans already queued or running may finish.
+        </p>
+      )}
 
       {!hasKeywords && (
         <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">

@@ -9,7 +9,7 @@ export interface BaselineConfig {
   canonical_proximity?: { k?: number; min_proximity?: number; calibration_percentile?: string };
 }
 
-export type MonitoringFrequency = "daily" | "weekly" | "monthly";
+export type MonitoringFrequency = "daily" | "weekly" | "monthly" | "off";
 
 export interface Trademark {
   id: string;
