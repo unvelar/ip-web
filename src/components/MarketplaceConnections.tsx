@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { request } from "../api/transport";
 
 interface Connection {
@@ -16,8 +17,11 @@ const STATUS_LABELS: Record<Connection["status"], string> = {
 };
 
 export default function MarketplaceConnections() {
+  const [searchParams] = useSearchParams();
   const [connection, setConnection] = useState<Connection | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => searchParams.get("mercadolibre") === "error"
+    ? "Mercado Libre could not finish connecting. Please try connecting again."
+    : null);
   const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
