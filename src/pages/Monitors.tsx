@@ -88,9 +88,9 @@ function MonitoredIpCard({
   const [err, setErr] = useState("");
   const detailsId = `monitored-ip-${ip.ip_id}-details`;
 
-  async function stopMonitoring() {
+  async function removeSources() {
     if (removing) return;
-    if (!confirm(`Stop monitoring ${ip.ip_name}? This removes all its watched platforms.`)) return;
+    if (!confirm(`Remove all monitoring sources for ${ip.ip_name}? You will need to add them again to monitor this IP.`)) return;
     setRemoving(true);
     setErr("");
     try {
@@ -162,12 +162,12 @@ function MonitoredIpCard({
               </Link>
               <button
                 type="button"
-                onClick={stopMonitoring}
+                onClick={removeSources}
                 disabled={removing}
                 className="text-xs font-semibold text-stone-400 hover:text-red-600 disabled:opacity-50"
-                title="Stop monitoring this IP"
+                title="Remove all saved monitoring sources for this IP"
               >
-                {removing ? "Removing…" : "Stop monitoring"}
+                {removing ? "Removing…" : "Remove all sources"}
               </button>
             </div>
           </div>

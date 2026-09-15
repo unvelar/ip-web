@@ -14,7 +14,7 @@ afterEach(async () => {
   globalThis.fetch = originalFetch;
 });
 
-async function renderPanel(rejectSave = false) {
+async function renderPanel(rejectSave = false, initialFrequency: MonitoringFrequency = "weekly") {
   const window = new Window({ url: "http://localhost:5173/ips/test-ip" });
   Object.assign(globalThis, { window, document: window.document, navigator: window.navigator,
     IS_REACT_ACT_ENVIRONMENT: true });
@@ -30,7 +30,7 @@ async function renderPanel(rejectSave = false) {
     return Response.json({ platforms: [] });
   }) as typeof fetch;
   function Host() {
-    const [frequency, setFrequency] = useState<MonitoringFrequency>("weekly");
+    const [frequency, setFrequency] = useState<MonitoringFrequency>(initialFrequency);
     return createElement(PlatformsPanel, { ipId: "test-ip", keywords: ["Example"],
       monitoringFrequency: frequency, onMonitoringFrequencyChanged: setFrequency });
   }
@@ -38,28 +38,42 @@ async function renderPanel(rejectSave = false) {
   document.body.append(container);
   root = createRoot(container);
   await act(async () => root?.render(createElement(MemoryRouter, {}, createElement(Host))));
-  const button = (label: string) => Array.from(container.querySelectorAll("button"))
-    .find((item) => item.textContent === label)!;
-  return { container, patches, button };
+  const toggle = () => container.querySelector<HTMLButtonElement>('[role="switch"]')!;
+  const cadence = () => container.querySelector<HTMLSelectElement>('select[aria-label="Monitoring frequency"]');
+  return { container, patches, toggle, cadence };
 }
 
-test("Off saves through the API and a cadence resumes scheduled monitoring", async () => {
-  const { container, patches, button } = await renderPanel();
-  expect(button("Weekly").getAttribute("aria-pressed")).toBe("true");
-  await act(async () => button("Off").click());
+test("toggle saves Off, hides cadence, and resumes the selected cadence", async () => {
+  const { patches, toggle, cadence } = await renderPanel(false, "monthly");
+  expect(toggle().getAttribute("aria-checked")).toBe("true");
+  expect(cadence()?.value).toBe("monthly");
+  await act(async () => toggle().click());
   expect(patches).toEqual([{ monitoring_frequency: "off" }]);
-  expect(button("Off").getAttribute("aria-pressed")).toBe("true");
-  expect(container.textContent).toContain("Scheduled scans are off");
-  await act(async () => button("Daily").click());
-  expect(patches).toEqual([{ monitoring_frequency: "off" }, { monitoring_frequency: "daily" }]);
-  expect(button("Daily").getAttribute("aria-pressed")).toBe("true");
-  expect(container.textContent).not.toContain("Scheduled scans are off");
+  expect(toggle().getAttribute("aria-checked")).toBe("false");
+  expect(cadence()).toBeNull();
+  await act(async () => toggle().click());
+  expect(patches).toEqual([{ monitoring_frequency: "off" }, { monitoring_frequency: "monthly" }]);
+  expect(cadence()?.value).toBe("monthly");
+  await act(async () => {
+    cadence()!.value = "daily";
+    cadence()!.dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
+  expect(patches.at(-1)).toEqual({ monitoring_frequency: "daily" });
+  expect(cadence()?.value).toBe("daily");
 });
 
-test("a failed Off save keeps the previous cadence selected", async () => {
-  const { container, button } = await renderPanel(true);
-  await act(async () => button("Off").click());
-  expect(button("Weekly").getAttribute("aria-pressed")).toBe("true");
-  expect(button("Off").getAttribute("aria-pressed")).toBe("false");
-  expect(container.textContent).toContain("Could not save frequency");
+test("a saved Off state enables with Weekly as the default", async () => {
+  const { patches, toggle, cadence } = await renderPanel(false, "off");
+  expect(cadence()).toBeNull();
+  await act(async () => toggle().click());
+  expect(patches).toEqual([{ monitoring_frequency: "weekly" }]);
+  expect(cadence()?.value).toBe("weekly");
+});
+
+test("a failed Off save keeps the previous cadence and toggle state", async () => {
+  const { container, toggle, cadence } = await renderPanel(true);
+  await act(async () => toggle().click());
+  expect(toggle().getAttribute("aria-checked")).toBe("true");
+  expect(cadence()?.value).toBe("weekly");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("Could not save frequency");
 });

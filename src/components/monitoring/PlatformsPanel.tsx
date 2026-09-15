@@ -23,11 +23,12 @@ import {
   type MonitoringSourceSetupStatus,
 } from "./platformSetupStatus";
 
-const FREQUENCY_OPTIONS: { value: MonitoringFrequency; label: string }[] = [
+type ActiveMonitoringFrequency = Exclude<MonitoringFrequency, "off">;
+
+const FREQUENCY_OPTIONS: { value: ActiveMonitoringFrequency; label: string }[] = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
-  { value: "off", label: "Off" },
 ];
 
 const DEFAULT_OPEN_WEB_SCOPES = [
@@ -104,7 +105,7 @@ function openWebConfig(source?: MonitoredDomain | null): OpenWebSearchConfig {
 }
 
 function isMonitoringFrequency(value: unknown): value is MonitoringFrequency {
-  return FREQUENCY_OPTIONS.some((option) => option.value === value);
+  return value === "off" || FREQUENCY_OPTIONS.some((option) => option.value === value);
 }
 
 function platformLabel(platform: MonitoredDomain) {
@@ -145,6 +146,13 @@ export function PlatformsPanel({
 }) {
   const hasKeywords = (keywords ?? []).length > 0;
   const currentFrequency = isMonitoringFrequency(monitoringFrequency) ? monitoringFrequency : "weekly";
+
+  const monitoringOn = currentFrequency !== "off";
+  const [lastActiveFrequency, setLastActiveFrequency] = useState<{
+    ipId: string;
+    frequency: ActiveMonitoringFrequency;
+  }>({ ipId, frequency: monitoringOn ? currentFrequency : "weekly" });
+  const resumeFrequency = lastActiveFrequency.ipId === ipId ? lastActiveFrequency.frequency : "weekly";
 
   const [platforms, setPlatforms] = useState<MonitoredDomain[]>([]);
   const [newDomain, setNewDomain] = useState("");
@@ -246,6 +254,11 @@ export function PlatformsPanel({
       if (trademark.monitoring_frequency !== frequency) {
         throw new Error("The server did not save the monitoring frequency. Please try again.");
       }
+      if (frequency !== "off") {
+        setLastActiveFrequency({ ipId, frequency });
+      } else if (currentFrequency !== "off") {
+        setLastActiveFrequency({ ipId, frequency: currentFrequency });
+      }
       onMonitoringFrequencyChanged?.(trademark.monitoring_frequency);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -325,35 +338,46 @@ export function PlatformsPanel({
   const openWebSource = platforms.find((p) => p.source_type === "web_search") ?? null;
 
   return (
-    <div className="rounded-xl border border-stone-200 bg-white px-5 py-4 space-y-3">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
+    <div className="@container rounded-xl border border-stone-200 bg-white px-5 py-4 space-y-3">
+      <div className="flex flex-col items-start justify-between gap-3 @[42rem]:flex-row @[42rem]:items-center">
+        <div className="min-w-0 flex-1">
           <label className="text-xs font-medium text-stone-400 uppercase tracking-wider">Monitoring</label>
-          <p className="text-xs text-stone-500 mt-0.5">
-            Specific platforms and open-web searches for this IP's keywords.
-          </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-          <div role="group" aria-label="Monitoring frequency" className="inline-flex flex-wrap rounded-lg border border-stone-200 bg-stone-50 p-0.5">
-            {FREQUENCY_OPTIONS.map((option) => {
-              const active = currentFrequency === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => void changeFrequency(option.value)}
-                  disabled={savingFrequency !== null}
-                  className={`min-w-[4.75rem] whitespace-nowrap px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all disabled:opacity-50 ${
-                    active
-                      ? "bg-white text-stone-900 shadow-sm"
-                      : "text-stone-500 hover:text-stone-900"
-                  }`}
-                >
-                  {savingFrequency === option.value ? "Saving…" : option.label}
-                </button>
-              );
-            })}
+        <div className="flex max-w-full items-center gap-2 shrink-0 flex-wrap justify-start @[42rem]:justify-end">
+          <div role="group" aria-label="Automatic monitoring" className="flex items-center gap-3">
+            <span className="text-xs font-medium text-stone-600">Automatic monitoring</span>
+            <button
+              type="button"
+              role="switch"
+              aria-label="Automatic monitoring"
+              aria-checked={monitoringOn}
+              disabled={savingFrequency !== null}
+              onClick={() => void changeFrequency(monitoringOn ? "off" : resumeFrequency)}
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:ring-offset-2 disabled:opacity-50 ${monitoringOn ? "bg-stone-900" : "bg-stone-300"}`}
+            >
+              <span aria-hidden="true" className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${monitoringOn ? "translate-x-4" : "translate-x-0.5"}`} />
+            </button>
+            {savingFrequency !== null ? (
+              <span role="status" className="inline-flex items-center gap-1 text-xs text-stone-500">
+                <LoaderCircle size={12} className="animate-spin" aria-hidden="true" /> Saving…
+              </span>
+            ) : (
+              <span className="text-xs text-stone-500">{monitoringOn ? "On" : "Off"}</span>
+            )}
+            {monitoringOn && (
+              <select
+                aria-label="Monitoring frequency"
+                value={currentFrequency}
+                disabled={savingFrequency !== null}
+                onChange={(event) => {
+                  const frequency = event.target.value;
+                  if (isMonitoringFrequency(frequency) && frequency !== "off") void changeFrequency(frequency);
+                }}
+                className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-medium text-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-50"
+              >
+                {FREQUENCY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            )}
           </div>
           <Link
             to={`/ips/${ipId}/audit`}
@@ -371,20 +395,13 @@ export function PlatformsPanel({
         </div>
       </div>
 
-      {currentFrequency === "off" && (
-        <p role="status" className="text-xs text-stone-500">
-          Scheduled scans are off. Saved sources are kept, and Refresh now is still available.
-          Scans already queued or running may finish.
-        </p>
-      )}
-
       {!hasKeywords && (
         <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           Add monitoring keywords first — the scrape needs search terms.
         </div>
       )}
 
-      {err && <div className="text-xs text-red-600">{err}</div>}
+      {err && <div role="alert" className="text-xs text-red-600">{err}</div>}
 
       <div className="pt-1">
         <div className="flex items-center justify-between gap-2 mb-2">
