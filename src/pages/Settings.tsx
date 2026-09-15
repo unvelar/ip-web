@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import MarketplaceConnections from "../components/MarketplaceConnections";
 import {
   listApiKeys,
   createApiKey,
@@ -12,6 +14,7 @@ import {
 const DOCS_URL = `${import.meta.env.VITE_API_URL || ""}/api/docs`;
 
 export default function Settings() {
+  const { user } = useAuth();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,11 +79,13 @@ export default function Settings() {
       <div>
         <h1 className="text-2xl font-black text-stone-900 tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-stone-500">
-          Tenant-wide settings. Anyone in your workspace can see and change these.
+          Manage your workspace settings and API access.
         </p>
       </div>
 
       <MonitoringSettingsSection />
+
+      {user?.role === "admin" && <MarketplaceConnections />}
 
       <section className="space-y-5">
         <div className="flex items-end justify-between gap-4">
