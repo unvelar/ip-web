@@ -20,6 +20,7 @@ import { useAuth } from "../context/AuthContext";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { monitoringPlatformLabel } from "../lib/platforms";
 import { sellerProfilePath } from "../lib/sellers";
+import { SellerSales } from "../components/monitoring/SellerSales";
 import { formatAgo, formatMoney } from "../components/monitoring/board/utils";
 
 const STATUS_OPTIONS: Array<{
@@ -376,7 +377,7 @@ function SellerCard({ seller }: { seller: MonitoringSellerSummary }) {
           </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-stone-500">
             {seller.rating != null && <span>★ {seller.rating.toFixed(1)}</span>}
-            {seller.sales != null && <span>{seller.sales.toLocaleString()} sales</span>}
+            <SellerSales count={seller.sales} observation={seller.sales_observation} />
             <span className="inline-flex items-center gap-1"><Clock3 size={11} /> {formatAgo(seller.latest_found_at) ?? "recently"}</span>
           </div>
         </div>

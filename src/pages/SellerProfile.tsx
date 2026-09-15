@@ -29,6 +29,7 @@ import {
 } from "../components/monitoring/board/utils";
 import { ManagedFindingInspector } from "../components/monitoring/board/ManagedFindingInspector";
 import { monitoringPlatformLabel } from "../lib/platforms";
+import { SellerSales } from "../components/monitoring/SellerSales";
 
 const STATUS_OPTIONS: Array<{ value: MonitoringSellerStatus; label: string }> = [
   { value: "open", label: "Open" },
@@ -186,7 +187,7 @@ export default function SellerProfile() {
                     {seller.rating_count != null && ` (${seller.rating_count.toLocaleString()})`}
                   </span>
                 )}
-                {seller.sales != null && <span>{seller.sales.toLocaleString()} marketplace sales</span>}
+                <SellerSales count={seller.sales} observation={seller.sales_observation} />
                 {seller.years_active != null && <span>{seller.years_active} years active</span>}
                 {seller.location && <span className="inline-flex items-center gap-1"><MapPin size={13} />{seller.location}</span>}
               </div>

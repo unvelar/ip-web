@@ -256,7 +256,7 @@ export function tableImageUrls(f: IpReviewFinding): string[] {
 
 // Modeled quantity for listings without exposed stock. Keep aligned with the
 // API's MARKET_QUANTITY_FALLBACK; this is an assumption, not observed inventory.
-export const QTY_FALLBACK = 30;
+export const QTY_FALLBACK = 10;
 
 // Per-row "Estimated unlicensed market" = USD unit price × quantity. Uses the
 // server-converted `price_value_usd` so every row reads in one currency (USD),

@@ -11,6 +11,7 @@ import {
 } from "../../../api";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
+import { SellerSales } from "../SellerSales";
 import { sellerProfilePath } from "../../../lib/sellers";
 import {
   actionabilityMeta,
@@ -435,9 +436,7 @@ export function FindingComparison({
               )}
             </span>
           )}
-          {f.seller_sales != null && f.seller_sales > 0 && (
-            <span>· {f.seller_sales.toLocaleString()} sales</span>
-          )}
+          <SellerSales count={f.seller_sales} observation={f.seller_sales_observation} />
           {f.seller_years_active != null && f.seller_years_active > 0 && (
             <span>· {f.seller_years_active}y</span>
           )}

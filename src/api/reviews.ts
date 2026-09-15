@@ -1,5 +1,6 @@
 import type { CaseReviewStatus, SaleType, SaleUrgencyBand } from "./cases";
 import type {
+  SellerSalesObservation,
   ListingAuthenticityAssessment,
   ListingConditionAssessment,
   MonitoringActionability,
@@ -257,6 +258,7 @@ export interface IpReviewFinding {
     matched_ref_image_id?: string | null;
   }> | null;
   seller_sales: number | null;
+  seller_sales_observation?: SellerSalesObservation | null;
   seller_prior_enforcement_count: number | null;
   seller_years_active: number | null;
   seller_rating: number | null;

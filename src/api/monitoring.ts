@@ -2,6 +2,13 @@ import type { MonitoringFrequency } from "./registry";
 import type { IpReviewFinding } from "./reviews";
 import { isApiError, request } from "./transport";
 
+export interface SellerSalesObservation {
+  value: number;
+  lower_bound: boolean;
+  source_text: string;
+  observed_at: string;
+}
+
 // --- Tenant-wide monitoring hub (across ALL monitored IPs) ---
 
 /** Sort modes (must match api/src/db.ts MonitoringSortMode). */
@@ -431,6 +438,7 @@ export interface MonitoringSellerSummary {
   profile_url: string | null;
   rating: number | null;
   sales: number | null;
+  sales_observation?: SellerSalesObservation | null;
   open_listing_count: number;
   returned_listing_count: number;
   prior_enforcement_count: number;
@@ -461,6 +469,7 @@ export interface MonitoringSellerProfilePage {
     rating: number | null;
     rating_count: number | null;
     sales: number | null;
+    sales_observation?: SellerSalesObservation | null;
     years_active: number | null;
     location: string | null;
   };
