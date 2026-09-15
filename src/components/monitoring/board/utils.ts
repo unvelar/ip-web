@@ -254,9 +254,12 @@ export function tableImageUrls(f: IpReviewFinding): string[] {
   return out;
 }
 
-// Modeled quantity for listings without exposed stock. Keep aligned with the
-// API's MARKET_QUANTITY_FALLBACK; this is an assumption, not observed inventory.
-export const QTY_FALLBACK = 10;
+// The backend owns stock assumptions so row values and aggregates agree.
+// An older API can still supply explicit stock; never invent a local fallback.
+export function marketQuantity(f: IpReviewFinding): number | null {
+  const quantity = Number(f.market_quantity ?? f.quantity_available);
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : null;
+}
 
 // Per-row "Estimated unlicensed market" = USD unit price × quantity. Uses the
 // server-converted `price_value_usd` so every row reads in one currency (USD),
@@ -267,9 +270,8 @@ export function estimatedMarket(
   // Coerce: Postgres NUMERIC arrives as a string when not cast to float8.
   const price = f.price_value_usd == null ? null : Number(f.price_value_usd);
   if (price == null || !Number.isFinite(price) || price <= 0) return null;
-  const qty = f.quantity_available && f.quantity_available > 0
-    ? f.quantity_available
-    : QTY_FALLBACK;
+  const qty = marketQuantity(f);
+  if (qty == null) return null;
   return { value: price * qty, currency: "USD" };
 }
 

@@ -5,7 +5,7 @@ import { sellerProfilePath } from "../../../lib/sellers";
 import { ActionabilityBadge } from "./ActionabilityBadge";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import {
-  QTY_FALLBACK,
+  marketQuantity,
   actionabilityMeta,
   compactListingTitle,
   estimatedMarket,
@@ -202,7 +202,7 @@ export function FindingRow({
           [
             f.price ? `Listed ${f.price}` : null,
             market
-              ? `Est. market ${formatMoney(market.value, market.currency)} (unit × qty ${f.quantity_available && f.quantity_available > 0 ? f.quantity_available : QTY_FALLBACK})`
+              ? `Est. market ${formatMoney(market.value, market.currency)} (unit × qty ${marketQuantity(f)})`
               : null,
           ]
             .filter(Boolean)

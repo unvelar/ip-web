@@ -282,6 +282,8 @@ export interface IpReviewFinding {
   /** `price_value` converted to USD server-side (fx_rates). Use this for all
    *  per-row figures so the UI shows one unified currency. */
   price_value_usd: number | null;
+  /** Quantity chosen by the backend for market estimates; absent on older APIs. */
+  market_quantity?: number;
   description_risk_breakdown: Record<string, unknown> | null;
   condition_assessment: ListingConditionAssessment | null;
   authenticity_assessment: ListingAuthenticityAssessment | null;
