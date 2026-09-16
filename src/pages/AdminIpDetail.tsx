@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   deleteAdminImage,
   deleteAdminIp,
@@ -9,6 +9,8 @@ import {
   type AdminIpDetail,
   type AdminIpImage,
 } from "../api";
+import { Check, FileText, Image as ImageIcon, Loader2, Trash2 } from "lucide-react";
+import { AdminPage, AdminSectionHeading } from "../components/admin/AdminPage";
 import ImageUploader from "../components/ImageUploader";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -21,6 +23,10 @@ const SOURCE_LABELS: Record<string, string> = {
 export default function AdminIpDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const catalogState: unknown = location.state?.catalogUrl;
+  const catalogUrl = typeof catalogState === "string" && /^\/admin\/ips(?:\?|$)/.test(catalogState) ? catalogState : "/admin/ips";
+  const [showAllImages, setShowAllImages] = useState(false);
 
   const [data, setData] = useState<AdminIpDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +100,7 @@ export default function AdminIpDetailPage() {
     setError("");
     try {
       await deleteAdminIp(id);
-      navigate("/admin");
+      navigate(catalogUrl);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Request failed");
       setDeletingAll(false);
@@ -120,19 +126,13 @@ export default function AdminIpDetailPage() {
     }
   }
 
-  if (loading) {
+  if (loading || !data) {
     return (
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <div className="w-6 h-6 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <p className="text-sm text-stone-500">Not found.</p>
-      </div>
+      <AdminPage section="catalog" title="IP details" description="Reference images and matching details." back={{ to: catalogUrl, label: "IP catalog" }}>
+        <div className="admin-card admin-empty">
+          {loading ? <><Loader2 size={20} className="animate-spin" aria-hidden="true" />Loading IP</> : <><p role="alert">{error || "IP not found."}</p><button type="button" className="admin-button" onClick={() => void load()}>Try again</button></>}
+        </div>
+      </AdminPage>
     );
   }
 
@@ -140,67 +140,29 @@ export default function AdminIpDetailPage() {
   const captionChanged = caption.trim() !== (data.caption_text ?? "").trim();
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12 space-y-10">
-      {/* Breadcrumb + header */}
-      <div className="space-y-2">
-        <Link to="/admin" className="text-sm text-stone-500 hover:text-stone-900 transition-colors">
-          ← All IPs
-        </Link>
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-stone-900 tracking-tight">{data.name || "(unnamed)"}</h1>
-            <div className="mt-1 flex items-center gap-2 text-sm text-stone-500">
-              <span className="inline-block text-[10px] font-semibold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                {SOURCE_LABELS[data.source] ?? data.source}
-              </span>
-              {data.entity_type && <span>{data.entity_type}</span>}
-              <span className="text-stone-300">·</span>
-              <span>
-                {data.images.length} reference{data.images.length !== 1 ? "s" : ""}
-                {indexedCount > 0 && <> · {indexedCount} indexed</>}
-              </span>
-            </div>
-            {data.aliases.length > 0 && (
-              <p className="mt-1 text-xs text-stone-400">aliases: {data.aliases.join(", ")}</p>
-            )}
-          </div>
-          <button
-            onClick={handleDeleteIp}
-            disabled={deletingAll}
-            className="px-4 py-2 rounded-xl text-sm font-semibold bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50 transition-all"
-          >
-            {deletingAll ? "Deleting..." : "Delete IP"}
-          </button>
-        </div>
-      </div>
-
+    <AdminPage section="catalog" title={data.name || "Unnamed IP"} description={`${SOURCE_LABELS[data.source] ?? data.source}${data.entity_type ? ` · ${data.entity_type}` : ""}`}
+      image={data.images[0]?.url}
+      back={{ to: catalogUrl, label: "IP catalog" }}
+      meta={<><span><ImageIcon size={13} aria-hidden="true" />{data.images.length} reference{data.images.length === 1 ? "" : "s"}</span><span><Check size={13} aria-hidden="true" />{indexedCount} indexed</span>{data.aliases.length > 0 && <span>Also known as {data.aliases.join(", ")}</span>}</>}
+    >
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{error}</div>
       )}
 
-      {/* Upload */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-bold text-stone-900">Add reference images</h2>
-        <p className="text-xs text-stone-500">
-          New poses improve multi-pose retrieval. Embedding + centroid recompute run async after upload.
-        </p>
+      <section className="admin-card admin-card-padded admin-reference-section" aria-label="Reference images">
+        <AdminSectionHeading icon={ImageIcon} title="Reference images" description="Add different views to improve visual matching. New images are indexed after upload." aside={`${data.images.length} image${data.images.length === 1 ? "" : "s"}`} />
         <ImageUploader onUpload={handleUpload} uploading={uploading} />
-      </section>
-
-      {/* Image grid */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-bold text-stone-900">References ({data.images.length})</h2>
         {data.images.length === 0 ? (
           <p className="text-sm text-stone-400 py-8 text-center">No reference images yet.</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {data.images.map((img) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {(showAllImages ? data.images : data.images.slice(0, 6)).map((img) => (
               <div
                 key={img.key}
-                className="group relative bg-white border border-stone-200 rounded-xl overflow-hidden hover:shadow-md transition-all"
+                className="group relative bg-white border border-stone-200 rounded-xl overflow-hidden"
               >
                 <div className="aspect-square bg-stone-50 flex items-center justify-center">
-                  <img src={img.url} alt={img.key} className="w-full h-full object-contain" />
+                  <img src={img.url} alt="IP reference" loading="lazy" className="w-full h-full object-contain" />
                 </div>
                 <div className="p-2 text-xs">
                   <StatusBadge img={img} />
@@ -209,24 +171,27 @@ export default function AdminIpDetailPage() {
                   <button
                     onClick={() => handleDeleteImage(img)}
                     disabled={deletingImageId === img.image_id}
-                    className="absolute top-2 right-2 px-2 py-1 bg-red-600 text-white text-xs font-semibold rounded opacity-0 group-hover:opacity-100 hover:bg-red-700 disabled:opacity-100 disabled:bg-stone-400 transition-all"
+                    className="admin-icon-button admin-image-delete absolute top-2 right-2 text-red-600"
+                    aria-label="Delete reference image"
                   >
-                    {deletingImageId === img.image_id ? "..." : "Delete"}
+                    {deletingImageId === img.image_id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                   </button>
                 )}
               </div>
             ))}
           </div>
         )}
+        {data.images.length > 6 && <button type="button" className="admin-button self-start" aria-expanded={showAllImages} onClick={() => setShowAllImages((value) => !value)}>{showAllImages ? "Show fewer images" : `Show all ${data.images.length} images`}</button>}
       </section>
 
       {/* Details: description / guidelines / caption */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-bold text-stone-900">Details</h2>
-        <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
+      <section className="admin-card admin-card-padded" aria-label="Matching details">
+        <AdminSectionHeading icon={FileText} title="Matching details" description="Describe this IP and the rules used when reviewing matches." />
+        <div className="admin-detail-fields">
           <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1.5">Description</label>
+            <label htmlFor="admin-ip-description" className="block text-sm font-medium text-stone-700 mb-1.5">Description</label>
             <textarea
+              id="admin-ip-description"
               value={description}
               onChange={(e) => { setDescription(e.target.value); setDirty(true); }}
               rows={2}
@@ -235,8 +200,9 @@ export default function AdminIpDetailPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1.5">Guidelines</label>
+            <label htmlFor="admin-ip-guidelines" className="block text-sm font-medium text-stone-700 mb-1.5">Guidelines</label>
             <textarea
+              id="admin-ip-guidelines"
               value={guidelines}
               onChange={(e) => { setGuidelines(e.target.value); setDirty(true); }}
               rows={3}
@@ -245,13 +211,14 @@ export default function AdminIpDetailPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1.5">
+            <label htmlFor="admin-ip-caption" className="block text-sm font-medium text-stone-700 mb-1.5">
               Caption{" "}
               <span className="font-normal text-stone-400">
-                — the text the caption embedding is built from. Editing re-embeds it (async).
+                Used for text matching. Saving updates the search index.
               </span>
             </label>
             <textarea
+              id="admin-ip-caption"
               value={caption}
               onChange={(e) => { setCaption(e.target.value); setDirty(true); }}
               rows={4}
@@ -260,20 +227,24 @@ export default function AdminIpDetailPage() {
             />
             {captionChanged && (
               <p className="text-xs text-amber-600 mt-1">
-                Caption changed — saving re-embeds it for caption-based retrieval.
+                Saving this caption will update text matching.
               </p>
             )}
           </div>
           <button
             onClick={handleSave}
             disabled={!dirty || saving}
-            className="px-5 py-2.5 bg-stone-900 text-white rounded-xl text-sm font-semibold hover:bg-stone-800 disabled:opacity-50 transition-all"
+            className="admin-button admin-button-primary self-start"
           >
             {saving ? "Saving..." : dirty ? "Save changes" : "Saved"}
           </button>
         </div>
       </section>
-    </div>
+      <div className="admin-danger">
+        <AdminSectionHeading icon={Trash2} title="Remove this IP" description="Stops monitoring and removes owned references. Existing cases and findings are kept." />
+        <button type="button" onClick={handleDeleteIp} disabled={deletingAll} className="admin-button admin-button-danger"><Trash2 size={14} aria-hidden="true" />{deletingAll ? "Removing…" : "Remove IP"}</button>
+      </div>
+    </AdminPage>
   );
 }
 

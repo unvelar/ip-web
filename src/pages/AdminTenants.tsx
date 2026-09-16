@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   Building2,
+  ChevronDown,
+  LogIn,
   Loader2,
   Plus,
   RefreshCw,
@@ -17,6 +18,8 @@ import {
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { SimulatedLoginPanel } from "../features/auth/SimulatedLoginPanel";
+
+import { AdminPage, AdminSectionHeading } from "../components/admin/AdminPage";
 
 const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
 
@@ -123,27 +126,9 @@ export default function AdminTenants() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <Link to="/admin" className="text-xs font-semibold text-stone-400 hover:text-stone-700">
-            Admin
-          </Link>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-stone-900">
-            Tenants
-          </h1>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="h-9 w-9 rounded-md border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 inline-flex items-center justify-center disabled:opacity-45"
-          title="Refresh"
-        >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-        </button>
-      </header>
-
+    <AdminPage section="tenants" title="Tenants" description="Manage workspaces and review tenant accounts."
+      actions={<button type="button" onClick={() => void load()} disabled={loading} className="admin-button" aria-label="Refresh tenants"><RefreshCw size={14} className={loading ? "animate-spin" : ""} aria-hidden="true" />Refresh</button>}
+    >
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -156,39 +141,9 @@ export default function AdminTenants() {
         </div>
       )}
 
-      <section className="rounded-lg border border-stone-200 bg-white p-4">
-        <form onSubmit={(event) => void handleCreate(event)} className="flex flex-col gap-3 sm:flex-row">
-          <label className="flex-1">
-            <span className="block text-xs font-bold text-stone-500 mb-1.5">Tenant name</span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              maxLength={160}
-              className="h-10 w-full rounded-md border border-stone-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={!name.trim() || creating}
-            className="sm:self-end h-10 px-4 rounded-md bg-stone-900 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 hover:bg-stone-800 disabled:opacity-45"
-          >
-            {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-            Create
-          </button>
-        </form>
-      </section>
-
-      <SimulatedLoginPanel
-        onError={setError}
-        onStarted={async () => {
-          await load();
-          window.dispatchEvent(new Event(TENANTS_CHANGED_EVENT));
-        }}
-      />
-
-      <section className="rounded-lg border border-stone-200 bg-white overflow-hidden">
-        <div className="border-b border-stone-200 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-xs font-bold text-stone-500">
+      <section className="admin-card overflow-hidden">
+        <div className="admin-card-header admin-toolbar">
+          <div className="flex-1 text-xs text-stone-500">
             {loading ? "Loading" : `${filtered.length.toLocaleString()} of ${tenants.length.toLocaleString()} tenants`}
           </div>
           <label className="relative sm:w-72">
@@ -197,6 +152,7 @@ export default function AdminTenants() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search tenants"
+              aria-label="Search tenants"
               className="h-9 w-full rounded-md border border-stone-200 bg-white pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
             />
           </label>
@@ -214,11 +170,11 @@ export default function AdminTenants() {
           <div className="divide-y divide-stone-100">
             {filtered.map((tenant) => {
               return (
-                <div key={tenant.id} className="px-4 py-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                <div key={tenant.id} className="px-4 py-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <Building2 size={16} className="shrink-0 text-stone-400" />
-                      <h2 className="font-bold text-stone-900 truncate">{tenantLabel(tenant)}</h2>
+                      <h2 className="text-sm font-semibold text-stone-900 truncate">{tenantLabel(tenant)}</h2>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
                       {tenant.public_slug && <span>/{tenant.public_slug}</span>}
@@ -233,7 +189,7 @@ export default function AdminTenants() {
                     disabled={Boolean(deletingId)}
                     onClick={() => void handleRemove(tenant)}
                     title="Delete tenant and all related tenant data"
-                    className="h-9 px-3 rounded-md text-xs font-semibold inline-flex items-center justify-center gap-2 border border-red-200 text-red-700 bg-white hover:bg-red-50 disabled:opacity-45 disabled:cursor-wait transition-colors"
+                    className="admin-button admin-button-danger justify-self-start"
                   >
                     {deletingId === tenant.id ? (
                       <Loader2 size={15} className="animate-spin" />
@@ -248,7 +204,42 @@ export default function AdminTenants() {
           </div>
         )}
       </section>
-    </div>
+      <details className="admin-disclosure">
+        <summary><Plus size={17} aria-hidden="true" /><span>Create tenant<small>Add a workspace for a new customer</small></span><ChevronDown size={16} aria-hidden="true" /></summary>
+        <section>
+          <AdminSectionHeading title="New tenant" description="Create a workspace with its own IPs and monitoring." />
+          <form onSubmit={(event) => void handleCreate(event)} className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <label className="flex-1">
+              <span className="block text-xs font-bold text-stone-500 mb-1.5">Tenant name</span>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                maxLength={160}
+                className="h-10 w-full rounded-md border border-stone-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={!name.trim() || creating}
+              className="sm:self-end h-10 px-4 rounded-md bg-stone-900 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 hover:bg-stone-800 disabled:opacity-45"
+            >
+              {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+              Create
+            </button>
+          </form>
+        </section>
+      </details>
+      <details className="admin-disclosure">
+        <summary><LogIn size={17} aria-hidden="true" /><span>Simulate successful login<small>Open a customer's onboarding flow in a separate tab</small></span><ChevronDown size={16} aria-hidden="true" /></summary>
+        <SimulatedLoginPanel
+          onError={setError}
+          onStarted={async () => {
+            await load();
+            window.dispatchEvent(new Event(TENANTS_CHANGED_EVENT));
+          }}
+        />
+      </details>
+    </AdminPage>
   );
 }
 

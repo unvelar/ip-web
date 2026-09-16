@@ -12,7 +12,6 @@ import {
   HardDrive,
   LoaderCircle,
   Play,
-  Radar,
   RefreshCw,
   Search,
   Server,
@@ -46,6 +45,8 @@ import { executionDemand, isScrapflyTask, jobExecutionKind, scrapflyExecutionNam
 import { WORKER_KIND_COPY } from "../features/adminMonitoring/workerKinds";
 import { QueueTiming } from "../features/adminMonitoring/QueueTiming";
 
+import { AdminPage } from "../components/admin/AdminPage";
+
 const JOB_COPY = ADMIN_JOB_COPY;
 
 const OPERATION_STYLES: Record<string, string> = {
@@ -78,17 +79,19 @@ export default function AdminMonitoring() {
     [feed.overview?.queue],
   );
 
-  if (feed.loading && !feed.overview) return <AdminMonitoringSkeleton />;
+  if (feed.loading && !feed.overview) return <AdminPage section="monitoring" title="Monitoring" description="Follow searches and worker activity across every tenant." wide><AdminMonitoringSkeleton /></AdminPage>;
   if (!feed.overview) {
     return (
-      <div className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-6 text-center">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-red-600"><AlertCircle className="h-5 w-5" /></div>
-        <h1 className="mt-4 text-lg font-bold text-stone-900">Monitoring operations are unavailable</h1>
-        <p className="mt-1 text-sm text-stone-500">{feed.error || "Try loading this page again."}</p>
-        <button type="button" onClick={() => void feed.refresh()} className="mt-5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white">
-          Try again
-        </button>
-      </div>
+      <AdminPage section="monitoring" title="Monitoring" description="Follow searches and worker activity across every tenant." wide>
+        <div className="admin-card admin-empty" role="alert">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-red-600"><AlertCircle className="h-5 w-5" /></div>
+          <h2 className="text-sm font-semibold text-stone-900">Monitoring operations are unavailable</h2>
+          <p className="mt-1 text-sm text-stone-500">{feed.error || "Try loading this page again."}</p>
+          <button type="button" onClick={() => void feed.refresh()} className="mt-5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white">
+            Try again
+          </button>
+        </div>
+      </AdminPage>
     );
   }
 
@@ -115,192 +118,173 @@ export default function AdminMonitoring() {
   };
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6">
-      <header className="flex flex-col gap-3 border-b border-stone-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-stone-400">
-            <Radar className="h-3.5 w-3.5" /> Admin operations
+    <AdminPage section="monitoring" title="Monitoring" description="Follow searches and worker activity across every tenant." wide
+      actions={<>
+        <span className="admin-live" aria-live="polite"><span className="admin-live-dot" />Updated {formatClock(overview.generated_at)}{feed.refreshing && <LoaderCircle size={13} className="animate-spin" aria-hidden="true" />}</span>
+        <button type="button" onClick={() => void feed.refresh()} aria-label="Refresh monitoring operations" className="admin-icon-button"><RefreshCw size={15} className={feed.refreshing ? "animate-spin" : ""} /></button>
+      </>}
+    >
+      <nav className="admin-jump-nav" aria-label="Monitoring sections">
+        <a href="#monitoring-overview">Overview</a><a href="#monitoring-workers">Workers</a><a href="#monitoring-queues">Queues</a><a href="#monitoring-live-work">Live work</a><a href="#monitoring-runs">Searches</a>
+      </nav>
+      <div className="admin-monitoring">
+        {feed.error && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            The latest refresh failed. Showing the last known state: {feed.error}
           </div>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-stone-950">Monitoring across every tenant</h1>
-          <p className="mt-0.5 max-w-3xl text-sm text-stone-500">
-            See all worker jobs across every tenant, including searches, case analysis, product processing, and background work.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-          <div className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-500" aria-live="polite">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            Live, updated {formatClock(overview.generated_at)}
-            {feed.refreshing && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
-          </div>
-          <button
-            type="button"
-            onClick={() => void feed.refresh()}
-            aria-label="Refresh monitoring operations"
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50 hover:text-stone-800"
-          >
-            <RefreshCw className={`h-4 w-4 ${feed.refreshing ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </header>
+        )}
 
-      {feed.error && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          The latest refresh failed. Showing the last known state: {feed.error}
-        </div>
-      )}
+        <section id="monitoring-overview" className="admin-card admin-monitoring-metrics" aria-label="Monitoring overview">
+          <Metric label="Running now" value={overview.summary.running_jobs} detail="jobs across all queues" icon={<Play className="h-4 w-4" />} accent={overview.summary.running_jobs > 0} />
+          <Metric label="Ready to start" value={overview.summary.queued_jobs} detail="jobs awaiting a worker" icon={<Clock3 className="h-4 w-4" />} warning={overview.summary.queued_jobs > 0} />
+          <Metric label="Paused" value={overview.summary.paused_jobs} detail="requires an explicit release" icon={<Pause className="h-4 w-4" />} />
+          <Metric label="Scheduled" value={overview.summary.scheduled_jobs} detail="future starts and retries" icon={<RefreshCw className="h-4 w-4" />} />
+          <Metric label="Unfinished searches" value={overview.summary.active_runs} detail="includes waiting and paused searches" icon={<Activity className="h-4 w-4" />} />
+          <Metric label="Searches to review" value={attentionTotal} detail={attentionReasons} icon={<ShieldAlert className="h-4 w-4" />} attention={attentionTotal > 0} onClick={showAttention} selected={feed.status === "attention"} />
+        </section>
 
-      <section className="mt-4 grid overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:grid-cols-2 xl:grid-cols-6">
-        <Metric label="Running now" value={overview.summary.running_jobs} detail="jobs across all queues" icon={<Play className="h-4 w-4" />} accent={overview.summary.running_jobs > 0} />
-        <Metric label="Ready to start" value={overview.summary.queued_jobs} detail="jobs awaiting a worker" icon={<Clock3 className="h-4 w-4" />} warning={overview.summary.queued_jobs > 0} />
-        <Metric label="Paused" value={overview.summary.paused_jobs} detail="requires an explicit release" icon={<Pause className="h-4 w-4" />} />
-        <Metric label="Scheduled" value={overview.summary.scheduled_jobs} detail="future starts and retries" icon={<RefreshCw className="h-4 w-4" />} />
-        <Metric label="Unfinished searches" value={overview.summary.active_runs} detail="includes waiting and paused searches" icon={<Activity className="h-4 w-4" />} />
-        <Metric label="Searches to review" value={attentionTotal} detail={attentionReasons} icon={<ShieldAlert className="h-4 w-4" />} attention={attentionTotal > 0} onClick={showAttention} selected={feed.status === "attention"} />
-      </section>
-
-      {(overview.summary.not_evaluated_checks > 0 || overview.summary.evidence_conflicts > 0) && (
-        <section className="mt-3 grid gap-2 lg:grid-cols-2">
-          {overview.summary.not_evaluated_checks > 0 && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-              <div>
-                <p className="text-xs font-bold text-amber-900">{overview.summary.not_evaluated_checks} checks were labeled without a model verdict</p>
-                <p className="mt-0.5 text-[11px] leading-4 text-amber-800">This includes the former visual-check quota and legacy rejection labels with no stored VLM evidence.</p>
+        {(overview.summary.not_evaluated_checks > 0 || overview.summary.evidence_conflicts > 0) && (
+          <section className="mt-3 grid gap-2 lg:grid-cols-2">
+            {overview.summary.not_evaluated_checks > 0 && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                <div>
+                  <p className="text-xs font-bold text-amber-900">{overview.summary.not_evaluated_checks} checks were labeled without a model verdict</p>
+                  <p className="mt-0.5 text-[11px] leading-4 text-amber-800">This includes the former visual-check quota and legacy rejection labels with no stored VLM evidence.</p>
+                </div>
               </div>
+            )}
+            {overview.summary.evidence_conflicts > 0 && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3">
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
+                <div>
+                  <p className="text-xs font-bold text-red-900">{overview.summary.evidence_conflicts} stored labels conflict with their VLM verdict</p>
+                  <p className="mt-0.5 text-[11px] leading-4 text-red-800">These audit records need investigation. Conflicting evidence does not override a saved finding.</p>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        <WorkerDemand demand={overview.worker_demand} workers={overview.workers} queues={overview.queue} onViewReady={kind => {
+          setWorkerKindFilter(kind);
+          setWorkFilter("ready");
+          document.getElementById("monitoring-live-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }} />
+
+        <WorkerFleet overview={overview} onOpenRun={openRun} />
+
+        <section id="monitoring-queues" className="admin-card overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-stone-900">Work by queue</h2>
+              <p className="mt-0.5 text-xs text-stone-400">All job types across all tenants, including browser and GPU work.</p>
+            </div>
+            <WorkerSummary overview={overview} />
+          </div>
+          <div className="grid gap-px bg-white sm:grid-cols-2 xl:grid-cols-4">
+            {overview.queue.map((stage) => <QueueStage key={stage.type} type={stage.type} stage={queueByType.get(stage.type)} workers={overview.workers} />)}
+          </div>
+          <p className="border-t border-stone-200 bg-stone-50 px-4 py-2.5 text-[11px] leading-4 text-stone-500">
+            Ready work = average runtime × ready jobs, with one worker dedicated to that queue. Workers share queues; new jobs, follow-up work and retries can extend the wait. Batch timings are per job.
+          </p>
+        </section>
+
+        <LiveWorkFeed
+          work={visibleWork}
+          summary={overview.summary}
+          demand={executionDemand(overview.worker_demand, overview.active_work)}
+          workerKindFilter={workerKindFilter}
+          onWorkerKindFilter={setWorkerKindFilter}
+          filter={workFilter}
+          onFilter={setWorkFilter}
+          onOpenRun={openRun}
+        />
+
+        <section id="monitoring-runs" className="admin-card overflow-hidden" aria-label="Monitoring searches">
+          <div className="admin-run-toolbar border-b border-stone-200">
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {([
+                ["all", "All", overview.runs.length],
+                ["attention", "Needs attention", attentionTotal],
+                ["active", "Unfinished", overview.summary.active_runs],
+                ["completed", "Completed", overview.summary.completed_runs],
+                ["cancelled", "Cancelled", overview.summary.cancelled_runs ?? 0],
+                ["failed", "Failed", overview.summary.failed_runs],
+              ] as Array<[AdminMonitoringRunFilter, string, number]>).map(([value, label, count]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => feed.setStatus(value)}
+                  className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
+                    feed.status === value ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+                  }`}
+                >
+                  {label} {value !== "all" && <span className={feed.status === value ? "text-white/60" : "text-stone-400"}>{count}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label className="relative block w-full sm:w-80">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                <input
+                  value={feed.query}
+                  onChange={(event) => feed.setQuery(event.target.value)}
+                  placeholder="Search tenant, IP, website, keyword, or run ID"
+                  aria-label="Search monitoring runs"
+                  className="h-9 w-full rounded-lg border border-stone-200 bg-stone-50 pl-8 pr-3 text-xs text-stone-800 outline-none focus:border-stone-400 focus:bg-white"
+                />
+              </label>
+              <select
+                value={feed.windowHours}
+                onChange={(event) => feed.setWindowHours(Number(event.target.value) as AdminMonitoringWindow)}
+                aria-label="Activity window"
+                className="h-9 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-600 outline-none focus:border-stone-400"
+              >
+                <option value={1}>Last hour</option>
+                <option value={6}>Last 6 hours</option>
+                <option value={24}>Last 24 hours</option>
+                <option value={72}>Last 3 days</option>
+                <option value={168}>Last 7 days</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="border-b border-stone-100 bg-stone-50/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">
+            Showing {overview.runs.length} matching searches · Includes older unfinished searches · {overview.summary.findings.toLocaleString()} findings in the last {windowLabel(overview.window_hours)}
+          </div>
+
+          {overview.runs.length > 0 ? (
+            <div className="divide-y divide-stone-100">
+              {overview.runs.map((run) => (
+                <RunRow
+                  key={run.run_id}
+                  run={run}
+                  open={visibleSelectedRunId === run.run_id}
+                  onToggle={() => setSelectedRunId((current) => current === run.run_id ? null : run.run_id)}
+                  detail={visibleSelectedRunId === run.run_id ? detailFeed : null}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center">
+              <Search className="h-5 w-5 text-stone-300" />
+              <p className="mt-3 text-sm font-semibold text-stone-700">{feed.status === "attention" && !feed.query ? "No runs need attention in this window" : "No monitoring runs match these filters"}</p>
+              <p className="mt-1 text-xs text-stone-400">{feed.status === "attention" && !feed.query ? "Removed IPs remain available in All and Failed as history." : "Try a longer activity window or clear the search."}</p>
             </div>
           )}
-          {overview.summary.evidence_conflicts > 0 && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3">
-              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
-              <div>
-                <p className="text-xs font-bold text-red-900">{overview.summary.evidence_conflicts} stored labels conflict with their VLM verdict</p>
-                <p className="mt-0.5 text-[11px] leading-4 text-red-800">These audit records need investigation. Conflicting evidence does not override a saved finding.</p>
-              </div>
+
+          {overview.runs.length >= feed.limit && feed.limit < 200 && (
+            <div className="border-t border-stone-200 bg-stone-50 px-4 py-3 text-center">
+              <button type="button" onClick={() => feed.setLimit(Math.min(200, feed.limit + 40))} className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-600 hover:border-stone-300 hover:text-stone-900">
+                Load more runs
+              </button>
             </div>
           )}
         </section>
-      )}
-
-      <WorkerDemand demand={overview.worker_demand} workers={overview.workers} queues={overview.queue} onViewReady={kind => {
-        setWorkerKindFilter(kind);
-        setWorkFilter("ready");
-        document.getElementById("monitoring-live-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }} />
-
-      <WorkerFleet overview={overview} onOpenRun={openRun} />
-
-      <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-stone-900">Work by queue</h2>
-            <p className="mt-0.5 text-xs text-stone-400">All job types across all tenants, including browser and GPU work.</p>
-          </div>
-          <WorkerSummary overview={overview} />
-        </div>
-        <div className="grid gap-px bg-white sm:grid-cols-2 xl:grid-cols-4">
-          {overview.queue.map((stage) => <QueueStage key={stage.type} type={stage.type} stage={queueByType.get(stage.type)} workers={overview.workers} />)}
-        </div>
-        <p className="border-t border-stone-200 bg-stone-50 px-4 py-2.5 text-[11px] leading-4 text-stone-500">
-          Ready work = average runtime × ready jobs, with one worker dedicated to that queue. Workers share queues; new jobs, follow-up work and retries can extend the wait. Batch timings are per job.
-        </p>
-      </section>
-
-      <LiveWorkFeed
-        work={visibleWork}
-        summary={overview.summary}
-        demand={executionDemand(overview.worker_demand, overview.active_work)}
-        workerKindFilter={workerKindFilter}
-        onWorkerKindFilter={setWorkerKindFilter}
-        filter={workFilter}
-        onFilter={setWorkFilter}
-        onOpenRun={openRun}
-      />
-
-      <section id="monitoring-runs" className="mt-3 scroll-mt-28 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {([
-              ["all", "All", overview.runs.length],
-              ["attention", "Needs attention", attentionTotal],
-              ["active", "Unfinished", overview.summary.active_runs],
-              ["completed", "Completed", overview.summary.completed_runs],
-              ["cancelled", "Cancelled", overview.summary.cancelled_runs ?? 0],
-              ["failed", "Failed", overview.summary.failed_runs],
-            ] as Array<[AdminMonitoringRunFilter, string, number]>).map(([value, label, count]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => feed.setStatus(value)}
-                className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
-                  feed.status === value ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-                }`}
-              >
-                {label} {value !== "all" && <span className={feed.status === value ? "text-white/60" : "text-stone-400"}>{count}</span>}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <label className="relative block w-full sm:w-80">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
-              <input
-                value={feed.query}
-                onChange={(event) => feed.setQuery(event.target.value)}
-                placeholder="Search tenant, IP, website, keyword, or run ID"
-                className="h-9 w-full rounded-lg border border-stone-200 bg-stone-50 pl-8 pr-3 text-xs text-stone-800 outline-none focus:border-stone-400 focus:bg-white"
-              />
-            </label>
-            <select
-              value={feed.windowHours}
-              onChange={(event) => feed.setWindowHours(Number(event.target.value) as AdminMonitoringWindow)}
-              aria-label="Activity window"
-              className="h-9 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-600 outline-none focus:border-stone-400"
-            >
-              <option value={1}>Last hour</option>
-              <option value={6}>Last 6 hours</option>
-              <option value={24}>Last 24 hours</option>
-              <option value={72}>Last 3 days</option>
-              <option value={168}>Last 7 days</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="border-b border-stone-100 bg-stone-50/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">
-          Showing {overview.runs.length} matching searches · Includes older unfinished searches · {overview.summary.findings.toLocaleString()} findings in the last {windowLabel(overview.window_hours)}
-        </div>
-
-        {overview.runs.length > 0 ? (
-          <div className="divide-y divide-stone-100">
-            {overview.runs.map((run) => (
-              <RunRow
-                key={run.run_id}
-                run={run}
-                open={visibleSelectedRunId === run.run_id}
-                onToggle={() => setSelectedRunId((current) => current === run.run_id ? null : run.run_id)}
-                detail={visibleSelectedRunId === run.run_id ? detailFeed : null}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center">
-            <Search className="h-5 w-5 text-stone-300" />
-            <p className="mt-3 text-sm font-semibold text-stone-700">{feed.status === "attention" && !feed.query ? "No runs need attention in this window" : "No monitoring runs match these filters"}</p>
-            <p className="mt-1 text-xs text-stone-400">{feed.status === "attention" && !feed.query ? "Removed IPs remain available in All and Failed as history." : "Try a longer activity window or clear the search."}</p>
-          </div>
-        )}
-
-        {overview.runs.length >= feed.limit && feed.limit < 200 && (
-          <div className="border-t border-stone-200 bg-stone-50 px-4 py-3 text-center">
-            <button type="button" onClick={() => feed.setLimit(Math.min(200, feed.limit + 40))} className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-600 hover:border-stone-300 hover:text-stone-900">
-              Load more runs
-            </button>
-          </div>
-        )}
-      </section>
-    </div>
+      </div>
+    </AdminPage>
   );
 }
 
@@ -380,7 +364,7 @@ function WorkerDemand({ demand, workers, queues, onViewReady }: {
   onViewReady: (kind: AdminMonitoringWorkerKind) => void;
 }) {
   return (
-    <section aria-label="Worker demand" className="mt-4">
+    <section aria-label="Worker demand" className="mt-0">
       <h2 className="text-sm font-bold text-stone-900">Where work is waiting</h2>
       <p className="mt-0.5 text-xs text-stone-500">Ready jobs, available workers, and active Scrapfly tasks.</p>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -398,9 +382,9 @@ function WorkerDemand({ demand, workers, queues, onViewReady }: {
                 <span className={`rounded-md px-2 py-1 text-[10px] font-semibold ${row.unserved_ready_jobs > 0 ? "bg-rose-50 text-rose-700" : row.ready_jobs > 0 && row.idle_workers === 0 ? "bg-amber-50 text-amber-800" : "bg-stone-100 text-stone-600"}`}>{pressure}</span>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-4">
-                <div><p className="text-2xl font-black tabular-nums text-stone-950">{row.ready_jobs.toLocaleString()}</p><p className="text-[11px] text-stone-500">jobs ready</p></div>
-                <div><p className="text-2xl font-black tabular-nums text-blue-700">{capacity.busy_workers}</p><p className="text-[11px] text-stone-500">workers busy</p></div>
-                <div><p className="text-2xl font-black tabular-nums text-emerald-700">{capacity.idle_workers}</p><p className="text-[11px] text-stone-500">workers idle</p></div>
+                <div><p className="admin-metric-value tabular-nums text-stone-950">{row.ready_jobs.toLocaleString()}</p><p className="text-[11px] text-stone-500">jobs ready</p></div>
+                <div><p className="admin-metric-value tabular-nums text-blue-700">{capacity.busy_workers}</p><p className="text-[11px] text-stone-500">workers busy</p></div>
+                <div><p className="admin-metric-value tabular-nums text-emerald-700">{capacity.idle_workers}</p><p className="text-[11px] text-stone-500">workers idle</p></div>
               </div>
               <div className="mb-3 mt-3">
                 {capacity.scrapfly_tasks > 0 && <p className="mb-2 text-[11px] font-semibold text-orange-700">{capacity.scrapfly_tasks} individual Scrapfly {capacity.scrapfly_tasks === 1 ? "task" : "tasks"} running</p>}
@@ -434,7 +418,7 @@ function WorkerFleet({ overview, onOpenRun }: {
   ])).sort();
 
   return (
-    <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+    <section id="monitoring-workers" className="admin-card overflow-hidden">
       <div className="flex flex-col gap-2 border-b border-stone-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-sm font-bold text-stone-900">Workers and Scrapfly tasks</h2>
@@ -657,7 +641,7 @@ function LiveWorkFeed({ work, summary, demand, filter, onFilter, workerKindFilte
     scheduled: selectedDemand?.scheduled_jobs ?? summary.scheduled_jobs,
   };
   return (
-    <section id="monitoring-live-work" className="mt-3 scroll-mt-20 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+    <section id="monitoring-live-work" className="admin-card overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-3">
         <div>
           <div className="flex items-center gap-2">
@@ -834,7 +818,7 @@ function RunStage({ type, stage, operationState }: {
         : JOB_COPY[type]?.detail);
   return (
     <div className={`min-w-0 rounded-md px-2 py-1.5 ${color}`} title={title}>
-      <p className="truncate text-[9px] font-bold">{JOB_COPY[type]?.label}</p>
+      <p className="text-[10px] font-medium leading-snug">{JOB_COPY[type]?.label}</p>
       {stage && <RunStageExecutionBadges stage={stage} />}
       <p className="mt-0.5 truncate text-[9px] opacity-75">
         {status === "running" ? `${stage?.in_progress_jobs} running`
@@ -892,7 +876,7 @@ function Metric({ label, value, detail, icon, accent = false, warning = false, a
         {icon}{label}{onClick && <ArrowRight className="ml-auto h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />}
       </div>
       <div className="mt-1">
-        <span className={`text-xl font-black tabular-nums ${attention ? "text-rose-900" : warning ? "text-amber-900" : accent ? "text-blue-900" : "text-stone-950"}`}>{value.toLocaleString()}</span>
+        <span className={`admin-metric-value tabular-nums ${attention ? "text-rose-900" : warning ? "text-amber-900" : accent ? "text-blue-900" : "text-stone-950"}`}>{value.toLocaleString()}</span>
         <p className="mt-0.5 text-[10px] leading-4 text-stone-500">{detail}</p>
       </div>
     </Tag>
@@ -909,7 +893,7 @@ function CountPill({ value, label, tone = "stone" }: { value: number; label: str
 
 function AdminMonitoringSkeleton() {
   return (
-    <div className="mx-auto max-w-[1600px] animate-pulse px-4 py-5 sm:px-6">
+    <div className="animate-pulse">
       <div className="h-3 w-28 rounded bg-stone-200" />
       <div className="mt-3 h-7 w-96 max-w-full rounded bg-stone-200" />
       <div className="mt-2 h-4 w-[42rem] max-w-full rounded bg-stone-100" />

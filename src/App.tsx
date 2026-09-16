@@ -29,7 +29,8 @@ const DesignsCatalog = lazy(() => import("./pages/DesignsCatalog"));
 const PopCultureCatalog = lazy(() => import("./pages/PopCultureCatalog"));
 const BrandSumup = lazy(() => import("./pages/BrandSumup"));
 const PublicIntake = lazy(() => import("./pages/PublicIntake"));
-const Admin = lazy(() => import("./pages/Admin"));
+const AdminCatalog = lazy(() => import("./pages/AdminCatalog"));
+const AdminCompute = lazy(() => import("./pages/AdminCompute"));
 const AdminIntakes = lazy(() => import("./pages/AdminIntakes"));
 const AdminIpDetail = lazy(() => import("./pages/AdminIpDetail"));
 const AdminTenants = lazy(() => import("./pages/AdminTenants"));
@@ -192,10 +193,12 @@ export default function App() {
 
         {/* Admin (separate gate, same shell) */}
         <Route element={<AdminRoute><AppShell /></AdminRoute>}>
-          <Route path="/admin" element={<Admin />} />
+          <Route path="/admin" element={<Navigate to="/admin/monitoring" replace />} />
+          <Route path="/admin/compute" element={<AdminCompute />} />
           <Route path="/admin/intakes" element={<AdminIntakes />} />
           <Route path="/admin/tenants" element={<AdminTenants />} />
           <Route path="/admin/monitoring" element={<AdminMonitoring />} />
+          <Route path="/admin/ips" element={<AdminCatalog />} />
           <Route path="/admin/ips/:id" element={<AdminIpDetail />} />
         </Route>
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Loader2, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { Check, Inbox, Loader2, RefreshCw, ShieldCheck, X } from "lucide-react";
 import {
   convertPublicIpIntake,
   getPublicIpIntake,
@@ -13,6 +13,8 @@ import {
   type PublicIpIntakeStatus,
   type Tenant,
 } from "../api";
+
+import { AdminPage } from "../components/admin/AdminPage";
 
 const PAGE_SIZE = 40;
 const STATUSES: Array<PublicIpIntakeStatus | ""> = ["pending", "converted", "rejected", ""];
@@ -160,18 +162,21 @@ export default function AdminIntakes() {
     (tenantMode !== "new" || tenantName.trim());
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10 space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <Link to="/admin" className="text-xs font-semibold text-stone-400 hover:text-stone-700">
-            Admin
-          </Link>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-stone-900">
-            Public intakes
-          </h1>
+    <AdminPage section="intakes" title="Public intakes" description="Review submitted IPs and prepare them for monitoring."
+      actions={<button type="button" onClick={() => void loadList()} disabled={loading} className="admin-button" aria-label="Refresh intakes"><RefreshCw size={14} className={loading ? "animate-spin" : ""} aria-hidden="true" />Refresh</button>}
+    >
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
-        <div className="flex items-center gap-2">
+      )}
+
+      <div className={`admin-intake-grid${!loading && !detail && intakes.length === 0 ? " admin-intake-grid-empty" : ""}`}>
+        <section className="admin-card overflow-hidden">
+          <div className="admin-card-header admin-toolbar text-xs text-stone-500">
+            <span className="flex-1">{loading ? "Loading" : `${total.toLocaleString()} intake${total === 1 ? "" : "s"}`}</span>
           <select
+            aria-label="Intake status"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as PublicIpIntakeStatus | "");
@@ -186,35 +191,17 @@ export default function AdminIntakes() {
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            onClick={() => void loadList()}
-            className="h-9 w-9 rounded-md border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 inline-flex items-center justify-center"
-            title="Refresh"
-          >
-            <RefreshCw size={16} />
-          </button>
-        </div>
-      </header>
 
-      {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <div className="grid lg:grid-cols-[0.95fr_1.3fr] gap-5 items-start">
-        <section className="rounded-lg border border-stone-200 bg-white overflow-hidden">
-          <div className="border-b border-stone-200 px-4 py-3 text-xs font-bold text-stone-500">
-            {loading ? "Loading" : `${total.toLocaleString()} intake${total === 1 ? "" : "s"}`}
           </div>
           {loading ? (
             <div className="h-52 flex items-center justify-center text-stone-400">
               <Loader2 size={22} className="animate-spin" />
             </div>
           ) : intakes.length === 0 ? (
-            <div className="h-52 flex items-center justify-center text-sm text-stone-400">
-              No intakes
+            <div className="admin-empty">
+              <Inbox size={24} aria-hidden="true" />
+              <strong>{status ? `No ${status} intakes` : "No intakes yet"}</strong>
+              <p>{status === "pending" ? "New submissions will appear here for review." : "Choose another status to see more submissions."}</p>
             </div>
           ) : (
             <div className="divide-y divide-stone-100">
@@ -223,9 +210,10 @@ export default function AdminIntakes() {
                   key={intake.id}
                   type="button"
                   onClick={() => setSelectedId(intake.id)}
+                  aria-pressed={selectedId === intake.id}
                   className={[
                     "w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors",
-                    selectedId === intake.id ? "bg-red-50/60" : "",
+                    selectedId === intake.id ? "bg-stone-100/70" : "",
                   ].join(" ")}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -270,7 +258,7 @@ export default function AdminIntakes() {
           )}
         </section>
 
-        <section className="rounded-lg border border-stone-200 bg-white min-h-[520px]">
+        <section className="admin-card min-h-[300px]" hidden={!loading && !detail && intakes.length === 0}>
           {detailLoading ? (
             <div className="h-52 flex items-center justify-center text-stone-400">
               <Loader2 size={22} className="animate-spin" />
@@ -281,9 +269,9 @@ export default function AdminIntakes() {
             </div>
           ) : (
             <div className="p-5 space-y-6">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-xl font-black tracking-tight text-stone-900">
                       {detail.product_name}
                     </h2>
@@ -314,7 +302,7 @@ export default function AdminIntakes() {
                       className="aspect-square rounded-md overflow-hidden border border-stone-200 bg-stone-100"
                     >
                       {image.url ? (
-                        <img src={image.url} alt="" className="h-full w-full object-cover" />
+                        <img src={image.url} alt="" className="h-full w-full object-contain" />
                       ) : (
                         <span className="h-full flex items-center justify-center text-xs text-stone-400">
                           image
@@ -410,7 +398,7 @@ export default function AdminIntakes() {
           )}
         </section>
       </div>
-    </div>
+    </AdminPage>
   );
 }
 
