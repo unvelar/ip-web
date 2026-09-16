@@ -3,7 +3,7 @@ import type {
   AdminMonitoringRunJobStage,
 } from "../../api";
 
-export type MonitoringRunStageStatus = "waiting" | "queued" | "paused" | "scheduled" | "running" | "done" | "failed" | "not_needed" | "not_reached";
+export type MonitoringRunStageStatus = "waiting" | "queued" | "paused" | "scheduled" | "running" | "done" | "cancelled" | "failed" | "not_needed" | "not_reached";
 
 export function monitoringRunStageStatus(
   stage: AdminMonitoringRunJobStage | undefined,
@@ -15,9 +15,10 @@ export function monitoringRunStageStatus(
     if (stage.pending_jobs > 0) return "queued";
     if (stage.scheduled_jobs > 0) return "scheduled";
     if (stage.paused_jobs > 0) return "paused";
+    if ((stage.cancelled_jobs ?? 0) > 0) return "cancelled";
     if (stage.completed_jobs > 0) return "done";
   }
   if (operationState === "completed") return "not_needed";
-  if (operationState === "failed" || operationState === "removed") return "not_reached";
+  if (operationState === "failed" || operationState === "removed" || operationState === "cancelled") return "not_reached";
   return "waiting";
 }

@@ -8,6 +8,7 @@ import { MONITORING_JOB_COPY, supportsScrapeMethod, type MonitoringJobType } fro
 import {
   AlertCircle,
   Check,
+  CircleSlash,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -22,10 +23,11 @@ import type {
   AdminMonitoringRunDetail,
 } from "../../api";
 
-type CandidateFilter = "all" | "pending" | "confirmed" | "rejected" | "screened_out" | "attention";
+type CandidateFilter = "all" | "pending" | "confirmed" | "rejected" | "screened_out" | "cancelled" | "attention";
 
 const DECISION_STYLES: Record<AdminMonitoringCandidate["debug"]["decision"]["state"], string> = {
   pending: "border-blue-200 bg-blue-50 text-blue-700",
+  cancelled: "border-stone-200 bg-stone-100 text-stone-600",
   confirmed: "border-emerald-200 bg-emerald-50 text-emerald-700",
   rejected: "border-rose-200 bg-rose-50 text-rose-700",
   screened_out: "border-stone-200 bg-stone-100 text-stone-600",
@@ -36,6 +38,7 @@ const DECISION_STYLES: Record<AdminMonitoringCandidate["debug"]["decision"]["sta
 
 const PIPELINE_STYLES: Record<string, string> = {
   waiting: "text-stone-600",
+  cancelled: "text-stone-500",
   paused: "text-stone-600",
   scheduled: "text-violet-700",
   score_queued: "text-blue-700",
@@ -72,6 +75,7 @@ export function AdminMonitoringRunDetailPanel({
     return {
       all: candidates.length,
       pending: candidates.filter((candidate) => candidate.debug.decision.state === "pending").length,
+      cancelled: candidates.filter((candidate) => candidate.debug.decision.state === "cancelled").length,
       confirmed: candidates.filter((candidate) => candidate.debug.decision.state === "confirmed").length,
       rejected: candidates.filter((candidate) => candidate.debug.decision.state === "rejected").length,
       screened_out: candidates.filter((candidate) => (
@@ -126,6 +130,12 @@ export function AdminMonitoringRunDetailPanel({
 
   return (
     <div className="border-t border-stone-200 bg-stone-50/70">
+      {detail.run.status === "cancelled" && (
+        <div className="m-4 flex items-start gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
+          <CircleSlash className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          This run was cancelled. Nothing is waiting to run. Saved decisions and fetch history remain available below.
+        </div>
+      )}
       {detail.run.ip_retired_at && (
         <div className="m-4 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
           This IP was removed from monitoring on {formatTimestamp(detail.run.ip_retired_at)}. The outcomes below are historical. No retry is needed for this removed IP.
@@ -198,6 +208,7 @@ export function AdminMonitoringRunDetailPanel({
               ["confirmed", "Confirmed"],
               ["rejected", "Rejected"],
               ["screened_out", "Screened"],
+              ["cancelled", "Cancelled"],
               ["attention", detail.run.ip_retired_at ? "Historical issues" : "Needs attention"],
             ] as Array<[CandidateFilter, string]>).map(([value, label]) => (
               <button
@@ -317,7 +328,9 @@ function CandidateRows({ candidate, open, onToggle }: {
         </td>
         <td className="px-3 py-2.5">
           <div className={`flex items-center gap-1.5 text-xs font-bold ${PIPELINE_STYLES[pipeline.state] ?? "text-stone-700"}`}>
-            {pipelineInProgress || pipelineQueued || pipeline.state === "paused" || pipeline.state === "scheduled"
+            {pipeline.state === "cancelled"
+              ? <CircleSlash className="h-3.5 w-3.5" />
+              : pipelineInProgress || pipelineQueued || pipeline.state === "paused" || pipeline.state === "scheduled"
               ? <LoaderCircle className={`h-3.5 w-3.5 ${pipelineInProgress ? "animate-spin" : ""}`} />
               : <Check className="h-3.5 w-3.5" />}
             {pipeline.label}
@@ -539,7 +552,7 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
               : "Access cooldown finished. Queued for a page check."}
             {job.access_wait_only && " No capture request was made in the last claim."}
           </p>
-        ) : job.error && !hasFailureDiagnostic && <p className="mt-1 rounded bg-red-50 px-2 py-1 text-[10px] leading-4 text-red-700">{job.error}</p>}
+        ) : job.error && !hasFailureDiagnostic && <p className={`mt-1 rounded px-2 py-1 text-[10px] leading-4 ${job.status === "cancelled" ? "bg-stone-100 text-stone-600" : "bg-red-50 text-red-700"}`}>{job.error}</p>}
         {(supportsScrapeMethod(job.type) || job.type === "case_capture") && <CaptureAttemptDetails key={job.id} job={job} />}
       </div>
     </div>
@@ -618,7 +631,8 @@ function ExternalUrl({ href, label, className = "" }: { href: string; label: str
 
 function JobStatusDot({ status }: { status: string }) {
   const color = status in WORK_STATE_COPY ? WORK_STATE_COPY[status as keyof typeof WORK_STATE_COPY].dot : status === "completed" ? "bg-emerald-500"
-    : status === "in_progress" ? "bg-blue-500"
+    : status === "cancelled" ? "bg-stone-400"
+      : status === "in_progress" ? "bg-blue-500"
       : status === "failed" ? "bg-red-500"
         : "bg-amber-400";
   return <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${color}`} />;

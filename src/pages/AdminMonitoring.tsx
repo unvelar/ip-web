@@ -54,6 +54,7 @@ const OPERATION_STYLES: Record<string, string> = {
   scheduled: "border-violet-200 bg-violet-50 text-violet-700",
   processing: "border-violet-200 bg-violet-50 text-violet-700",
   completed: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  cancelled: "border-stone-200 bg-stone-100 text-stone-600",
   failed: "border-red-200 bg-red-50 text-red-700",
   stalled: "border-amber-200 bg-amber-50 text-amber-800",
   removed: "border-stone-200 bg-stone-100 text-stone-500",
@@ -227,6 +228,7 @@ export default function AdminMonitoring() {
               ["attention", "Needs attention", attentionTotal],
               ["active", "Unfinished", overview.summary.active_runs],
               ["completed", "Completed", overview.summary.completed_runs],
+              ["cancelled", "Cancelled", overview.summary.cancelled_runs ?? 0],
               ["failed", "Failed", overview.summary.failed_runs],
             ] as Array<[AdminMonitoringRunFilter, string, number]>).map(([value, label, count]) => (
               <button
@@ -821,13 +823,14 @@ function RunStage({ type, stage, operationState }: {
   const color = status === "failed" ? "bg-red-100 text-red-700"
     : status === "running" ? "bg-blue-100 text-blue-700"
       : status === "scheduled" ? "bg-violet-100 text-violet-700"
-        : status === "paused" ? "bg-stone-100 text-stone-600"
+        : status === "paused" || status === "cancelled" ? "bg-stone-100 text-stone-600"
           : status === "queued" ? "bg-amber-100 text-amber-700"
             : status === "done" ? "bg-emerald-100 text-emerald-700"
               : "bg-stone-100 text-stone-400";
   const title = stage?.latest_error
     || (status === "not_needed" ? "The run completed without needing this stage."
-      : status === "not_reached" ? "The run failed before reaching this stage."
+      : status === "not_reached" ? "The run ended before reaching this stage."
+        : status === "cancelled" ? "Work was cancelled. Nothing is waiting to run in this stage."
         : JOB_COPY[type]?.detail);
   return (
     <div className={`min-w-0 rounded-md px-2 py-1.5 ${color}`} title={title}>
@@ -840,6 +843,7 @@ function RunStage({ type, stage, operationState }: {
               : status === "scheduled" ? `${stage?.scheduled_jobs ?? 0} scheduled`
                 : status === "failed" ? `${stage?.failed_jobs} failed`
                   : status === "done" ? "done"
+                    : status === "cancelled" ? `${stage?.cancelled_jobs ?? 0} cancelled`
                     : status === "not_needed" ? "not needed"
                       : status === "not_reached" ? "not reached"
                         : "waiting"}

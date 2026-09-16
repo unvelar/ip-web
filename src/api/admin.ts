@@ -160,8 +160,8 @@ export function patchComputeJobRoute(
   );
 }
 
-export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "failed" | "attention";
-export type AdminMonitoringOperationState = "queued" | "processing" | "paused" | "scheduled" | "completed" | "failed" | "stalled" | "removed";
+export type AdminMonitoringRunFilter = "all" | "active" | "completed" | "cancelled" | "failed" | "attention";
+export type AdminMonitoringOperationState = "queued" | "processing" | "paused" | "scheduled" | "completed" | "cancelled" | "failed" | "stalled" | "removed";
 
 export interface AdminMonitoringQueueStage {
   type: string;
@@ -193,6 +193,7 @@ export interface AdminMonitoringRunJobStage {
   scheduled_jobs: number;
   in_progress_jobs: number;
   completed_jobs: number;
+  cancelled_jobs?: number;
   failed_jobs: number;
   pending_units: number;
   in_progress_units: number;
@@ -297,6 +298,7 @@ export interface AdminMonitoringOverview {
     failed_work_runs: number;
     active_runs: number;
     completed_runs: number;
+    cancelled_runs?: number;
     failed_runs: number;
     candidates: number;
     findings: number;
@@ -451,7 +453,7 @@ export interface AdminMonitoringCandidate {
       detail: string;
     };
     decision: {
-      state: "pending" | "confirmed" | "rejected" | "screened_out" | "suppressed" | "not_evaluated" | "failed";
+      state: "pending" | "confirmed" | "rejected" | "screened_out" | "suppressed" | "not_evaluated" | "cancelled" | "failed";
       label: string;
       code: string | null;
       phase: "pipeline" | "matching" | "visual" | "qualification";

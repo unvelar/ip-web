@@ -23,6 +23,13 @@ const completedStage: AdminMonitoringRunJobStage = {
 };
 
 describe("monitoringRunStageStatus", () => {
+  test("cancelled work and unreached stages never appear as waiting", () => {
+    const cancelled = { ...completedStage, completed_jobs: 0, cancelled_jobs: 1 };
+    expect(monitoringRunStageStatus(cancelled, "cancelled")).toBe("cancelled");
+    expect(monitoringRunStageStatus(undefined, "cancelled")).toBe("not_reached");
+    expect(monitoringRunStageStatus(completedStage, "cancelled")).toBe("done");
+    expect(monitoringRunStageStatus({...cancelled,pending_jobs:1}, "queued")).toBe("queued");
+  });
   test("keeps deliberate pauses distinct from ready work and scheduled retries", () => {
     const paused = { ...completedStage, completed_jobs: 0, deferred_jobs: 1, paused_jobs: 1 };
     expect(monitoringRunStageStatus(paused, "paused")).toBe("paused");
