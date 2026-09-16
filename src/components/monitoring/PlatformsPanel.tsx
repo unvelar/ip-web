@@ -435,7 +435,7 @@ export function PlatformsPanel({
               <div
                 key={p.id}
                 id={`monitoring-source-${p.id}`}
-                className={`flex scroll-mt-24 items-center gap-3 px-3 py-2 text-xs target:ring-2 target:ring-inset target:ring-amber-400 ${
+                className={`ip-source-row flex scroll-mt-24 items-center gap-3 px-3 py-2 text-xs target:ring-2 target:ring-inset target:ring-amber-400 ${
                   setup?.tone === "attention" ? "bg-rose-50/60" : ""
                 }`}
               >
@@ -448,7 +448,7 @@ export function PlatformsPanel({
                 >
                   {p.enabled ? "On" : "Off"}
                 </button>
-                <div className="flex-1 min-w-0">
+                <div className="ip-source-identity flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="font-mono text-stone-700 truncate" title={label}>
                       {label}
@@ -488,7 +488,7 @@ export function PlatformsPanel({
                   value={p.country ?? ""}
                   onChange={(e) => void changeCountry(p, e.target.value)}
                   title="See the platform as a shopper in this country would"
-                  className="shrink-0 px-1.5 py-0.5 rounded-md border border-stone-200 bg-white text-[11px] text-stone-600 max-w-[9rem]"
+                  className="ip-source-country shrink-0 px-1.5 py-0.5 rounded-md border border-stone-200 bg-white text-[11px] text-stone-600 max-w-[9rem]"
                 >
                   <option value="">🌐 Anywhere</option>
                   {COUNTRIES.map((cn) => (
@@ -497,7 +497,7 @@ export function PlatformsPanel({
                     </option>
                   ))}
                 </select>
-                <span className="text-stone-400 shrink-0">
+                <span className="ip-source-time text-stone-400 shrink-0">
                   {p.last_run_at ? `last run ${new Date(p.last_run_at).toLocaleDateString()}` : "never run"}
                 </span>
                 <button

@@ -1,3 +1,5 @@
+import { Signature } from "lucide-react";
+import { IpSettingsHeading } from "./IpSettingsPrimitives";
 import { useEffect, useState } from "react";
 import {
   getIpTakedownProfile,
@@ -70,11 +72,7 @@ export default function IpTakedownSigner({ ipId }: { ipId: string }) {
   return (
     <section id="takedown-signer" className="space-y-3 scroll-mt-6">
       <div>
-        <h2 className="text-lg font-black text-stone-900 tracking-tight">Takedown signer</h2>
-        <p className="mt-1 text-sm text-stone-500">
-          Fills in every takedown notice for this IP. Platforms require the
-          rights-holder's name, contact details, and an authorized signatory.
-        </p>
+        <IpSettingsHeading icon={Signature} title="Takedown signer" description="Rights-holder and contact details used in every takedown notice." />
       </div>
 
       {error && (
@@ -92,11 +90,12 @@ export default function IpTakedownSigner({ ipId }: { ipId: string }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {PROFILE_FIELDS.map((f) => (
               <div key={f.key} className={f.multiline ? "sm:col-span-2" : undefined}>
-                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                <label htmlFor={`signer-${f.key}`} className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
                   {f.label}
                 </label>
                 {f.multiline ? (
                   <textarea
+                    id={`signer-${f.key}`}
                     value={form[f.key] ?? ""}
                     onChange={(e) => set(f.key, e.target.value)}
                     placeholder={f.placeholder}
@@ -105,6 +104,7 @@ export default function IpTakedownSigner({ ipId }: { ipId: string }) {
                   />
                 ) : (
                   <input
+                    id={`signer-${f.key}`}
                     value={form[f.key] ?? ""}
                     onChange={(e) => set(f.key, e.target.value)}
                     placeholder={f.placeholder}

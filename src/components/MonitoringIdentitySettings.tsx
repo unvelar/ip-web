@@ -1,3 +1,5 @@
+import { Fingerprint, Pencil } from "lucide-react";
+import { IpSettingsHeading } from "./IpSettingsPrimitives";
 import { useState } from "react";
 import { updateTrademark, type MonitoringIdentity, type Trademark } from "../api";
 
@@ -50,10 +52,9 @@ export default function MonitoringIdentitySettings({ ip, onSaved }: { ip: Tradem
     <section className="rounded-xl border border-stone-200 bg-white p-4 space-y-4" aria-labelledby="matching-names-heading">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 id="matching-names-heading" className="text-sm font-semibold text-stone-900">Matching names</h2>
-          <p className="mt-1 text-xs text-stone-500">Help monitoring recognize this product in listings. Images still need to confirm a match.</p>
+          <div id="matching-names-heading"><IpSettingsHeading icon={Fingerprint} title="Matching names" description="Other names for this product. Images still confirm the match." /></div>
         </div>
-        {!editing && <button type="button" onClick={edit} className="text-xs font-medium text-stone-700 hover:text-stone-950">Edit</button>}
+        {!editing && <button type="button" onClick={edit} className="ip-button inline-flex items-center gap-1.5 text-xs font-medium text-stone-700 hover:text-stone-950"><Pencil size={13} aria-hidden="true" />Edit</button>}
       </div>
       {editing ? (
         <form onSubmit={(e) => { e.preventDefault(); void save(); }} className="space-y-4">
