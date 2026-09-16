@@ -46,7 +46,6 @@ export const ADMIN_SOURCES = [
   "euipo_trademark",
   "wipo_design",
   "giantbomb",
-  "anilist",
 ] as const;
 export type AdminSource = (typeof ADMIN_SOURCES)[number];
 

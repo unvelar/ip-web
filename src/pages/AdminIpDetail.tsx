@@ -16,7 +16,6 @@ const SOURCE_LABELS: Record<string, string> = {
   euipo_trademark: "EUIPO",
   wipo_design: "WIPO",
   giantbomb: "Giantbomb",
-  anilist: "Anilist",
 };
 
 export default function AdminIpDetailPage() {
