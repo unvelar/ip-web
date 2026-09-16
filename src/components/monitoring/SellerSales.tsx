@@ -1,8 +1,9 @@
 import type { SellerSalesObservation } from "../../api/monitoring";
 
-export function SellerSales({ count, observation }: {
+export function SellerSales({ count, observation, showCaptureDate = true }: {
   count: number | null;
   observation?: SellerSalesObservation | null;
+  showCaptureDate?: boolean;
 }) {
   if (count == null) return null;
   // During rolling deployment, legacy counts have no verified observation.
@@ -13,7 +14,7 @@ export function SellerSales({ count, observation }: {
   return (
     <span title={verified?.source_text ?? "Seller sales from an earlier capture; its observation date is unavailable."}>
       {count.toLocaleString()}{verified?.lower_bound ? "+" : ""} sales
-      <span className="text-stone-400"> · {date ? `checked ${date}` : "capture date unknown"}</span>
+      {showCaptureDate && <span className="text-stone-400"> · {date ? `checked ${date}` : "capture date unknown"}</span>}
     </span>
   );
 }
