@@ -1,3 +1,4 @@
+import { Globe2, LockKeyhole, LoaderCircle, CircleAlert } from "lucide-react";
 import { useState } from "react";
 import { updateTrademark, type Trademark } from "../api";
 
@@ -32,13 +33,14 @@ export default function PublicSummarySettings({
   }
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-4 space-y-3" aria-labelledby="public-summary-heading">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 id="public-summary-heading" className="text-sm font-semibold text-stone-900">Public brand summary</h2>
-          <p id="public-summary-description" className="mt-1 max-w-xl text-xs leading-5 text-stone-500">
-            Publish this IP's monitoring results, takedown counts, and estimated infringement values.
-            Anyone with the link can view the summary without signing in. Off by default.
+    <section className="rounded-xl border border-stone-200 bg-white p-4" aria-labelledby="public-summary-heading">
+      <div className="ip-publication-header">
+        <span className="ip-publication-symbol" data-published={published}>{!available ? <CircleAlert size={18} aria-hidden="true" /> : published ? <Globe2 size={19} aria-hidden="true" /> : <LockKeyhole size={18} aria-hidden="true" />}</span>
+        <div className="ip-publication-copy">
+          <h2 id="public-summary-heading">Public brand summary</h2>
+          <p role="status" className="ip-publication-status">
+            {saving && <LoaderCircle size={12} className="animate-spin" aria-hidden="true" />}
+            {saving ? published ? "Unpublishing…" : "Publishing…" : !available ? "Publication status unavailable" : published ? "Published" : "Not published"}
           </p>
         </div>
         <button
@@ -54,15 +56,8 @@ export default function PublicSummarySettings({
           <span aria-hidden="true" className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${published ? "translate-x-5" : "translate-x-0"}`} />
         </button>
       </div>
-      <p role="status" className={`text-xs font-medium ${published ? "text-emerald-700" : "text-stone-500"}`}>
-        {saving
-          ? published ? "Unpublishing..." : "Publishing..."
-          : !available
-            ? "Publication settings are temporarily unavailable. Please try again shortly."
-            : published
-              ? "Published. Turn off to disable access through the public link."
-              : "Not published. Enable to create a public summary link."}
-      </p>
+      <p id="public-summary-description" className="ip-publication-help">Anyone with the link can see monitoring results, takedown counts, and infringement estimates.</p>
+      {!available && <p className="ip-publication-help">Publication settings are temporarily unavailable. Please try again shortly.</p>}
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     </section>
   );

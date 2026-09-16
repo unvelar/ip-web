@@ -1,0 +1,124 @@
+/* Navigation uses a compact pixel scale, independent of page typography. */
+.app-shell {
+  --app-shell-topbar-height: 56px;
+  --app-shell-banner-sticky-top: 56px;
+  --shell-border: #e8e6e2;
+  background: #faf9f6;
+}
+.shell-sidebar {
+  background: #f6f5f2;
+  border-right: 1px solid var(--shell-border);
+  color: #57534e;
+}
+.shell-sidebar svg, .shell-desktop-topbar svg, .shell-mobile-topbar svg {
+  flex-shrink: 0;
+  stroke-width: 1.7;
+}
+.shell-brand-row {
+  height: 60px;
+  flex-shrink: 0;
+  padding: 0 18px;
+}
+.shell-brand-row > a { gap: 9px; }
+.shell-brand-row > a > svg { width: 25px; height: 25px; }
+.shell-brand-row > a > span { font-size: 15px; font-weight: 600; letter-spacing: -.4px; }
+.shell-brand-row > button { width: 26px; height: 26px; }
+.shell-sidebar-scroll { padding: 0 12px 16px; }
+.shell-sidebar-scroll > nav > div:first-child { margin-bottom: 8px; padding-bottom: 8px; }
+.shell-sidebar-scroll > nav > div:nth-child(2) { font-size: 10px; letter-spacing: .05em; padding: 0 10px 6px; font-weight: 500; }
+.shell-nav-item, .ip-section-link {
+  display: flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  color: #78716c;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 450;
+  transition: background 150ms ease, color 150ms ease;
+}
+.shell-nav-item > span:first-child svg { width: 16px; height: 16px; }
+.shell-nav-item:hover, .ip-section-link:hover { background: #eeedea; color: #292524; }
+.shell-nav-item[aria-current], .ip-section-link[aria-current] {
+  color: #292524;
+  background: #eae9e5;
+  font-weight: 550;
+  box-shadow: inset 0 0 0 1px #29252403;
+}
+.shell-sidebar :is(button,a,select):focus-visible,
+.shell-desktop-topbar :is(button,a,select):focus-visible,
+.ip-section-link:focus-visible {
+  outline: 2px solid #a8a29e;
+  outline-offset: 2px;
+}
+.shell-nav-item .shell-count {
+  height: 18px;
+  min-width: 21px;
+  border-radius: 5px;
+  padding: 0 5px;
+  background: #e8e6e2;
+  color: #78716c;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.shell-nav-item .shell-count-collapsed { height: 14px; min-width: 16px; padding: 0 3px; font-size: 8px; top: -1px; right: -3px; }
+.shell-nav-group { margin-top: 12px; }
+.shell-nav-group > button { padding: 0 10px 6px; font-size: 10px; line-height: 20px; font-weight: 500; letter-spacing: .04em; color: #a8a29e; }
+.shell-nav-group > button > span { gap: 7px; }
+.shell-nav-group > button svg { width: 12px; height: 12px; }
+.shell-nav-group > div { margin-top: 2px; }
+.shell-sidebar-footer { padding: 8px 12px; border-color: var(--shell-border); }
+.shell-account { margin-top: 6px; padding-top: 8px; border-color: var(--shell-border); }
+.shell-account > button { min-height: 34px; padding: 6px 8px; gap: 9px; }
+.shell-account > button > span { font-size: 12px; font-weight: 500; }
+.shell-account > button > img { width: 25px !important; height: 25px !important; }
+.shell-account-popover { width: 260px; right: auto; border-radius: 10px; box-shadow: 0 8px 28px #29252412, 0 1px 4px #2925240a; }
+.shell-account-popover .text-sm { font-size: 13px; }
+.shell-account-popover .text-xs { font-size: 11px; }
+.shell-account-popover > div { padding: 12px; }
+.shell-account-popover > button { padding: 10px 12px; }
+.shell-account-popover select { padding: 8px; }
+.shell-sidebar[data-collapsed=true] .shell-brand-row { justify-content: center; padding: 0; }
+.shell-sidebar[data-collapsed=true] .shell-sidebar-scroll { padding: 0 8px 12px; }
+.shell-sidebar[data-collapsed=true] .shell-sidebar-footer { padding: 8px; }
+.shell-sidebar[data-collapsed=true] .shell-nav-item { justify-content: center; padding: 8px; }
+.shell-sidebar[data-collapsed=true] .shell-account > button { padding: 6px 0; }
+.shell-sidebar[data-collapsed=true] .shell-nav-group { padding-top: 10px; margin-top: 12px; }
+.shell-sidebar[data-collapsed=true] .shell-nav-group > div:first-child { height: 18px; }
+.shell-sidebar-scroll > button { height: 30px; margin-bottom: 8px; padding: 5px; }
+.shell-desktop-topbar, .shell-mobile-topbar { background: #faf9f6ed; border-color: var(--shell-border); }
+.shell-desktop-topbar { padding: 0 24px; }
+.shell-ip-selector { gap: 6px; }
+.shell-ip-selector > label { height: 30px; padding: 0 9px; border-color: #e5e3df; border-radius: 7px; box-shadow: 0 1px 2px #29252404; gap: 8px; }
+.shell-ip-selector > label > span:not(.relative) { font-size: 9px; font-weight: 500; letter-spacing: .02em; }
+.shell-ip-selector select { height: 28px; font-size: 12px; font-weight: 500; }
+.shell-ip-selector .shell-manage-ips { height: 30px; border: 1px solid #e5e3df; background: white; color: #78716c; border-radius: 7px; font-size: 11px; font-weight: 500; padding: 0 9px; box-shadow: 0 1px 2px #29252404; gap: 6px; }
+.shell-ip-selector .shell-manage-ips[data-active=true] { background: #eeede9; color: #292524; }
+.shell-ip-selector .shell-manage-ips:hover { background: #eeede9; }
+.shell-notification-bell { height: 30px; width: 30px; }
+.shell-notification-bell svg { width: 16px; height: 16px; }
+.shell-tenant-banner { background: #faf5e6; border-color: #eae0c6; color: #85683f; padding: 0 24px; font-size: 11px; gap: 7px; }
+.shell-tenant-banner button { font-weight: 500; }
+.shell-mobile-topbar { height: 56px; padding: 0 12px; gap: 10px; }
+.shell-mobile-topbar > a > svg { width: 24px; height: 24px; }
+.shell-mobile-topbar > a > span { font-size: 14px; }
+.shell-mobile-topbar > button { padding: 6px; }
+.shell-mobile-drawer { width: 272px; max-width: calc(100vw - 48px); }
+@media (min-width: 1024px) {
+  .app-shell { --app-shell-topbar-height: 40px; --app-shell-banner-sticky-top: 0px; }
+  .shell-sidebar-frame { width: 224px; transition: width 180ms ease; }
+  .shell-sidebar-frame[data-collapsed=true] { width: 60px; }
+  .shell-ip-selector > label { width: 252px; }
+}
+@media (max-width: 639px) {
+  .shell-tenant-banner { padding: 0 16px; }
+  .shell-ip-selector > label { width: 130px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell-sidebar-frame, .shell-sidebar *, .shell-desktop-topbar *, .ip-section-link { transition: none !important; }
+}

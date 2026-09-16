@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import MonitoringIdentitySettings from "../components/MonitoringIdentitySettings";
 import PublicSummarySettings from "../components/PublicSummarySettings";
-import { useParams, useNavigate } from "react-router-dom";
-import { Check, Copy, ExternalLink, Trash2 } from "lucide-react";
+import { IpSettingsHeading, IpSetupProgress } from "../components/IpSettingsPrimitives";
+import "./RegistryDetail.css";
+import IpSettingsNav from "../components/IpSettingsNav";
+import { ipSettingsSection } from "../lib/ipSettingsNavigation";
+import MonitoringIdentitySettings from "../components/MonitoringIdentitySettings";
+import { Link, useLocation, useParams, useNavigate } from "react-router-dom";
+import { ArrowLeft, ArrowUpRight, Check, CircleAlert, Copy, ExternalLink, FileText, Fingerprint, Globe2, ImageIcon, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import {
   isApiError,
   getTrademark,
@@ -24,7 +28,6 @@ import { useJobPoller } from "../hooks/useJobPoller";
 import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
 import ImageUploader from "../components/ImageUploader";
 import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
-import { IpOnboardingStatusCard } from "../components/monitoring/IpOnboardingStatusCard";
 import { KeywordLearningPanel } from "../components/monitoring/KeywordLearningPanel";
 import IpTakedownSigner from "../components/IpTakedownSigner";
 import { consumeCommittedKeywords, mergeKeywords } from "../lib/keywords";
@@ -41,7 +44,10 @@ export default function RegistryDetail() {
 
 function RegistryDetailContent({ id }: { id: string }) {
   const navigate = useNavigate();
+  const { hash } = useLocation();
+  const section = ipSettingsSection(hash);
   const [ip, setIp] = useState<Trademark | null>(null);
+  const [showAllImages, setShowAllImages] = useState(false);
   const [images, setImages] = useState<TrademarkImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -65,6 +71,17 @@ function RegistryDetailContent({ id }: { id: string }) {
     error: onboardingError,
     refresh: refreshOnboarding,
   } = useIpOnboardingStatus(id);
+
+  useEffect(() => {
+    if (loading || !hash) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = ["#overview", "#search", "#protection"].includes(hash)
+        ? document.querySelector(".ip-settings-page")
+        : document.getElementById(hash.slice(1));
+      target?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [hash, loading]);
 
   async function saveKeywords(next: string[]) {
     if (!ip) return;
@@ -210,67 +227,20 @@ function RegistryDetailContent({ id }: { id: string }) {
     </div>
   );
 
-  const pendingImages = images.filter((i) => i.status === "pending");
   const publicSummaryUrl = publicSummaryUrlForIp(ip);
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-12 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-stone-900 tracking-tight">{ip.name}</h1>
-          <div className="mt-3 flex items-center gap-2 text-sm">
-            <span className="text-stone-400">{images.length} reference image{images.length !== 1 ? "s" : ""}</span>
-            {ip.centroid_dino ? (
-              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full">Indexed</span>
-            ) : pendingImages.length > 0 ? (
-              <span className="text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full">
-                {pendingImages.length} pending
-              </span>
-            ) : (
-              <span className="text-xs font-semibold text-stone-400 bg-stone-50 px-2.5 py-0.5 rounded-full">No images</span>
-            )}
+    <div className="ip-settings-page">
+      <Link to="/ips" className="ip-back"><ArrowLeft size={14} aria-hidden="true" /> All intellectual properties</Link>
+      <header className="ip-page-header">
+        <div className="ip-identity">
+          <div className="ip-avatar">{images[0] ? <img src={images[0].url} alt="" /> : <Fingerprint size={28} aria-hidden="true" />}</div>
+          <div><p className="ip-eyebrow">IP settings</p><h1>{ip.name}</h1>
+            <div className="ip-meta"><span><ImageIcon size={13} aria-hidden="true" />{images.length} reference{images.length === 1 ? "" : "s"}</span><span><Search size={13} aria-hidden="true" />{ip.keywords?.length ?? 0} keywords</span></div>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {publicSummaryUrl && (
-            <div className="flex items-center rounded-xl border border-stone-200 bg-white overflow-hidden">
-              <button
-                type="button"
-                onClick={() => void copyPublicSummaryLink(publicSummaryUrl)}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 transition-colors"
-                title="Copy public summary link"
-              >
-                {copiedPublicLink ? (
-                  <Check className="w-4 h-4 text-emerald-600" aria-hidden="true" />
-                ) : (
-                  <Copy className="w-4 h-4" aria-hidden="true" />
-                )}
-                {copiedPublicLink ? "Copied" : "Copy public summary"}
-              </button>
-              <a
-                href={publicSummaryUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center w-10 self-stretch border-l border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors"
-                title="Open public summary"
-                aria-label="Open public summary"
-              >
-                <ExternalLink className="w-4 h-4" aria-hidden="true" />
-              </a>
-            </div>
-          )}
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm text-red-500 border border-red-100 rounded-xl hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
-          >
-            <Trash2 className="w-4 h-4" aria-hidden="true" />
-            {deleting ? "Deleting..." : "Delete"}
-          </button>
-        </div>
-      </div>
-
+        <Link className="ip-button" to={`/monitoring/first-scan?ip_id=${ip.id}`}>View monitoring<ArrowUpRight size={14} aria-hidden="true" /></Link>
+      </header>
       {error && (
         <div
           role="alert"
@@ -280,28 +250,32 @@ function RegistryDetailContent({ id }: { id: string }) {
         </div>
       )}
 
-      <IpOnboardingStatusCard
-        status={onboardingStatus}
-        loading={onboardingLoading}
-        error={onboardingError}
-      />
-
+      <div className="ip-settings-layout">
+        <IpSettingsNav />
+        <div className="ip-settings-body">
+        <section hidden={section !== "overview"} id="overview" className="ip-settings-pane" aria-label="Overview">
+          <IpSetupProgress status={onboardingStatus} loading={onboardingLoading} error={onboardingError} ipId={ip.id} />
+          <div className="ip-publication">
+            <PublicSummarySettings ip={ip} onSaved={(public_summary_enabled) => { setIp((current) => current ? { ...current, public_summary_enabled } : current); setCopiedPublicLink(false); }} />
+            {publicSummaryUrl && <div className="ip-share-actions"><span className="ip-share-url"><Globe2 size={14} aria-hidden="true" />{ip.tenant_public_slug}/{ip.public_slug}</span><button type="button" className="ip-button" onClick={() => void copyPublicSummaryLink(publicSummaryUrl)}>{copiedPublicLink ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}{copiedPublicLink ? "Copied" : "Copy link"}</button><a className="ip-icon-button" href={publicSummaryUrl} target="_blank" rel="noreferrer" aria-label="Open public summary" title="Open public summary"><ExternalLink size={15} aria-hidden="true" /></a></div>}
+          </div>
       {/* Description — inline editable */}
       <div className="border border-stone-200 rounded-xl bg-white p-4">
         <div className="flex items-center justify-between mb-1">
-          <label className="text-xs font-medium text-stone-400 uppercase tracking-wider">Description</label>
+          <IpSettingsHeading icon={FileText} title="Description" />
           {!editingDesc && (
             <button
               onClick={() => { setDescDraft(ip.description || ""); setEditingDesc(true); }}
-              className="text-xs text-stone-400 hover:text-stone-700 transition-colors"
+              className="ip-button"
             >
-              {ip.description ? "Edit" : "Add"}
+              <Pencil size={13} aria-hidden="true" />{ip.description ? "Edit" : "Add"}
             </button>
           )}
         </div>
         {editingDesc ? (
           <div className="space-y-2">
             <textarea
+              aria-label="IP description"
               value={descDraft}
               onChange={(e) => setDescDraft(e.target.value)}
               rows={2}
@@ -310,7 +284,7 @@ function RegistryDetailContent({ id }: { id: string }) {
               className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all resize-y"
             />
             <p className="text-xs text-stone-400">
-              Describe the design concept, shape, and distinguishing features. Used for concept-level matching during clearance.
+              Used to recognize the design during clearance.
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -342,104 +316,10 @@ function RegistryDetailContent({ id }: { id: string }) {
         ) : ip.description ? (
           <p className="text-sm text-stone-600">{ip.description}</p>
         ) : (
-          <p className="text-sm text-stone-400 italic">
-            No description — add one to improve concept-level matching during clearance.
+          <p className="text-sm text-stone-500">
+            Describe the shape and details that make this IP distinctive.
           </p>
         )}</div>
-
-      <PublicSummarySettings
-        ip={ip}
-        onSaved={(public_summary_enabled) => {
-          setIp((current) => current ? { ...current, public_summary_enabled } : current);
-          setCopiedPublicLink(false);
-        }}
-      />
-
-      {/* Monitoring keywords */}
-      <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
-        <div>
-          <label className="text-xs font-medium text-stone-400 uppercase tracking-wider">
-            Monitoring keywords
-          </label>
-          <p className="text-xs text-stone-500 mt-0.5">
-            Used by monitoring to scrape linked sites. Add precise search terms
-            (e.g. “PUMA running shoes”) — precise product terms reduce irrelevant results.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {(ip.keywords ?? []).length === 0 ? (
-            <span className="text-xs text-stone-400 italic">
-              No keywords yet — add them below.
-            </span>
-          ) : (
-            (ip.keywords ?? []).map((k, idx) => (
-              <span
-                key={`${idx}-${k}`}
-                className="inline-flex items-center gap-1 bg-stone-100 text-stone-800 px-3 py-1 rounded-full text-xs"
-              >
-                {k}
-                <button
-                  onClick={() => removeKeyword(idx)}
-                  className="text-stone-400 hover:text-red-600 font-bold"
-                  title="Remove"
-                >
-                  ×
-                </button>
-              </span>
-            ))
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            value={keywordDraft}
-            onChange={(e) => handleKeywordDraftChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void addKeyword();
-              }
-            }}
-            placeholder="PUMA running shoes, Mandarina Duck luggage"
-            className="flex-1 px-3 py-1.5 rounded-lg border border-stone-200 text-xs"
-          />
-          <button
-            onClick={addKeyword}
-            disabled={!keywordDraft.trim()}
-            className="px-3 py-1.5 rounded-lg bg-stone-100 text-stone-700 text-xs font-semibold disabled:opacity-50"
-          >
-            Add
-          </button>
-        </div>
-      </div>
-
-      <MonitoringIdentitySettings key={ip.id} ip={ip} onSaved={(updated) => setIp((current) => current ? { ...current, ...updated } : current)} />
-
-      <KeywordLearningPanel
-        ipId={ip.id}
-        onKeywordsChanged={(keywords) => {
-          setIp((current) => (current ? { ...current, keywords } : current));
-          void refreshOnboarding(true);
-        }}
-      />
-
-      {/* Licenses — authorised sellers per domain */}
-      <LicensesSection ipId={ip.id} />
-
-      {/* Allowed product images — reviewer-selected visual exceptions */}
-      <AllowedProductImagesSection ipId={ip.id} />
-
-      {/* Monitoring — watched platforms + findings board */}
-      <div id="monitoring" className="scroll-mt-20">
-        <MonitoringSection
-          ip={ip}
-          onFrequencyChanged={(monitoring_frequency) =>
-            setIp((current) => (current ? { ...current, monitoring_frequency } : current))
-          }
-        />
-      </div>
-
-      {/* Takedown signer — per-IP rights-holder + signatory details */}
-      <IpTakedownSigner ipId={ip.id} />
 
       {loadError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
         <p>Unable to refresh this IP. {loadError}</p>
@@ -464,33 +344,35 @@ function RegistryDetailContent({ id }: { id: string }) {
         </div>
       )}
 
-      {/* Upload */}
+      <div id="reference-images" className="ip-reference-section">
+      <IpSettingsHeading icon={ImageIcon} title="Reference images" description="The visual source of truth for matching." aside={`${images.length} images`} />
       <ImageUploader
+        compact
         onUpload={handleUpload}
         uploading={uploading}
-        label="Drop reference images here or click to browse"
+        label="Add reference images"
       />
 
       {/* Image grid */}
       {images.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {images.map((img) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {(showAllImages ? images : images.slice(0, 6)).map((img) => (
             <div key={img.id} className="relative group rounded-xl border border-stone-200 overflow-hidden bg-stone-50">
-              <img src={img.url} alt="" className="w-full aspect-square object-cover" />
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <img src={img.url} alt="IP reference" loading="lazy" className="w-full aspect-square object-contain" />
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }}
                   className="bg-white/90 text-red-500 rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold hover:bg-red-50 border border-stone-200 shadow-sm"
-                  title="Delete image"
+                  aria-label="Delete reference image" title="Delete image"
                 >
-                  x
+                  <X size={13} aria-hidden="true" />
                 </button>
               </div>
               <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-sm px-3 py-1.5 text-xs font-medium">
                 {img.status === "indexed" ? (
-                  <span className="text-emerald-600">Indexed</span>
+                  <span className="inline-flex items-center gap-1.5 text-emerald-700"><Check size={12} aria-hidden="true" />Indexed</span>
                 ) : img.status === "failed" ? (
-                  <span className="text-red-500">Failed</span>
+                  <span className="inline-flex items-center gap-1.5 text-red-600"><CircleAlert size={12} aria-hidden="true" />Failed</span>
                 ) : (
                   <span className="text-stone-400">Pending</span>
                 )}
@@ -500,6 +382,101 @@ function RegistryDetailContent({ id }: { id: string }) {
         </div>
       )}
 
+      {images.length > 6 && <button type="button" className="ip-button" onClick={() => setShowAllImages((shown) => !shown)} aria-expanded={showAllImages}>{showAllImages ? "Show fewer images" : `Show all ${images.length} images`}</button>}
+      </div>
+        </section>
+        <section hidden={section !== "monitoring"} id="search" className="ip-settings-pane" aria-label="Monitoring">
+          <div className="ip-pane-intro"><h2>Monitoring</h2><p>Choose what to look for and where to find it.</p></div>
+      <div id="keywords">
+      <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+        <div>
+          <IpSettingsHeading icon={Search} title="Search keywords" description="The words we use to find your products." />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {(ip.keywords ?? []).length === 0 ? (
+            <span className="text-xs text-stone-400 italic">
+              Add your first search term.
+            </span>
+          ) : (
+            (ip.keywords ?? []).map((k, idx) => (
+              <span
+                key={`${idx}-${k}`}
+                className="inline-flex items-center gap-1 bg-stone-100 text-stone-800 px-3 py-1 rounded-full text-xs"
+              >
+                {k}
+                <button
+                  onClick={() => removeKeyword(idx)}
+                  className="text-stone-400 hover:text-red-600 font-bold"
+                  aria-label={`Remove keyword ${k}`} title="Remove keyword"
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            aria-label="New monitoring keyword"
+            value={keywordDraft}
+            onChange={(e) => handleKeywordDraftChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void addKeyword();
+              }
+            }}
+            placeholder="Brand, product name…"
+            className="flex-1 px-3 py-1.5 rounded-lg border border-stone-200 text-xs"
+          />
+          <button
+            onClick={addKeyword}
+            disabled={!keywordDraft.trim()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 text-stone-700 text-xs font-semibold disabled:opacity-50"
+          >
+            <Plus size={14} aria-hidden="true" /><span>Add</span>
+          </button>
+        </div>
+      </div>
+
+      </div>
+      <div id="matching-names"><MonitoringIdentitySettings key={ip.id} ip={ip} onSaved={(updated) => setIp((current) => current ? { ...current, ...updated } : current)} /></div>
+
+      <details className="ip-disclosure" id="keyword-learning"><summary><Sparkles size={17} aria-hidden="true" /><span>Keyword suggestions<small>Review phrases discovered in your results</small></span><Plus size={16} className="ip-disclosure-plus" aria-hidden="true" /></summary>
+      <KeywordLearningPanel
+        ipId={ip.id}
+        onKeywordsChanged={(keywords) => {
+          setIp((current) => (current ? { ...current, keywords } : current));
+          void refreshOnboarding(true);
+        }}
+      />
+      </details>
+      {/* Monitoring — watched platforms + findings board */}
+      <div id="monitoring" className="scroll-mt-20">
+        <MonitoringSection
+          ip={ip}
+          onFrequencyChanged={(monitoring_frequency) =>
+            setIp((current) => (current ? { ...current, monitoring_frequency } : current))
+          }
+        />
+      </div>
+
+        </section>
+        <section hidden={section !== "protection"} id="protection" className="ip-settings-pane" aria-label="Protection">
+          <div className="ip-pane-intro"><h2>Protection</h2><p>Manage trusted sellers, exceptions, and takedown details.</p></div>
+      {/* Licenses — authorised sellers per domain */}
+      <LicensesSection ipId={ip.id} />
+
+      {/* Allowed product images — reviewer-selected visual exceptions */}
+      <AllowedProductImagesSection ipId={ip.id} />
+
+      {/* Takedown signer — per-IP rights-holder + signatory details */}
+      <IpTakedownSigner ipId={ip.id} />
+
+          <div className="ip-danger"><div><IpSettingsHeading icon={Trash2} title="Remove this IP" description="Stops monitoring and removes reference images. Existing cases and findings are kept." /></div><button className="ip-button ip-button-danger" onClick={handleDelete} disabled={deleting}><Trash2 size={14} aria-hidden="true" />{deleting ? "Removing…" : "Remove IP"}</button></div>
+        </section>
+        </div>
+      </div>
     </div>
   );
 }
@@ -559,12 +536,7 @@ function AllowedProductImagesSection({ ipId }: { ipId: string }) {
   return (
     <div id="allowed-product-images" className="rounded-xl border border-stone-200 bg-white px-5 py-4 space-y-3">
       <div>
-        <label className="text-xs font-medium text-stone-400 uppercase tracking-wider">
-          Allowed product images
-        </label>
-        <p className="text-xs text-stone-500 mt-0.5">
-          Product images allowed from monitoring findings for this IP.
-        </p>
+        <IpSettingsHeading icon={ImageIcon} title="Allowed images" description="Visual exceptions approved from your monitoring findings." />
       </div>
 
       {err && <div className="text-xs text-red-600">{err}</div>}
@@ -709,11 +681,7 @@ function LicensesSection({ ipId }: { ipId: string }) {
   return (
     <div className="rounded-xl border border-stone-200 bg-white px-5 py-4 space-y-3">
       <div>
-        <label className="text-xs font-medium text-stone-400 uppercase tracking-wider">Licenses</label>
-        <p className="text-xs text-stone-500 mt-0.5">
-          Authorised sellers per domain. A monitoring finding whose seller matches
-          a license (by name or shop URL) is auto-dismissed as licensed.
-        </p>
+        <IpSettingsHeading icon={ShieldCheck} title="Licensed sellers" description="Listings from matching sellers are automatically dismissed." />
       </div>
 
       {err && <div className="text-xs text-red-600">{err}</div>}
@@ -748,15 +716,15 @@ function LicensesSection({ ipId }: { ipId: string }) {
       <div className="flex items-end gap-2 flex-wrap">
         <div className="flex flex-col">
           <span className="text-[10px] text-stone-400 uppercase tracking-wide">Domain</span>
-          <input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="etsy.com" className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs w-36" />
+          <input aria-label="License domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="etsy.com" className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs w-36" />
         </div>
         <div className="flex flex-col">
           <span className="text-[10px] text-stone-400 uppercase tracking-wide">Seller name</span>
-          <input value={sellerName} onChange={(e) => setSellerName(e.target.value)} placeholder="ThaliasCrafts" className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs w-44" />
+          <input aria-label="Licensed seller name" value={sellerName} onChange={(e) => setSellerName(e.target.value)} placeholder="ThaliasCrafts" className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs w-44" />
         </div>
         <div className="flex flex-col flex-1 min-w-[12rem]">
           <span className="text-[10px] text-stone-400 uppercase tracking-wide">Shop URL (optional)</span>
-          <input value={sellerUrl} onChange={(e) => setSellerUrl(e.target.value)} placeholder="https://www.etsy.com/shop/ThaliasCrafts" className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs w-full" />
+          <input aria-label="Licensed shop URL" value={sellerUrl} onChange={(e) => setSellerUrl(e.target.value)} placeholder="https://www.etsy.com/shop/ThaliasCrafts" className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs w-full" />
         </div>
         <button onClick={add} disabled={!canAdd || saving} className="px-3 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-semibold disabled:opacity-50">
           {saving ? "Adding…" : "Add license"}
