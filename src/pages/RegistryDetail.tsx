@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import MonitoringIdentitySettings from "../components/MonitoringIdentitySettings";
+import PublicSummarySettings from "../components/PublicSummarySettings";
 import { useParams, useNavigate } from "react-router-dom";
 import { Check, Copy, ExternalLink, Trash2 } from "lucide-react";
 import {
@@ -345,6 +346,14 @@ function RegistryDetailContent({ id }: { id: string }) {
             No description — add one to improve concept-level matching during clearance.
           </p>
         )}</div>
+
+      <PublicSummarySettings
+        ip={ip}
+        onSaved={(public_summary_enabled) => {
+          setIp((current) => current ? { ...current, public_summary_enabled } : current);
+          setCopiedPublicLink(false);
+        }}
+      />
 
       {/* Monitoring keywords */}
       <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">

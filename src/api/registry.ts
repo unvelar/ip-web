@@ -16,6 +16,7 @@ export interface Trademark {
   name: string;
   public_slug: string | null;
   tenant_public_slug: string | null;
+  public_summary_enabled: boolean;
   description: string | null;
   monitoring_identity?: MonitoringIdentity;
   /** Monitoring keywords proposed by the wizard's VLM step + user edits. */
@@ -315,6 +316,7 @@ export function updateTrademark(
     keywords?: string[];
     monitoring_frequency?: MonitoringFrequency;
     monitoring_identity?: MonitoringIdentity;
+    public_summary_enabled?: boolean;
   }
 ) {
   return request<{ trademark: Trademark }>(`/api/ip/${id}`, {

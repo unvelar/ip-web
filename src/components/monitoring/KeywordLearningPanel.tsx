@@ -128,8 +128,8 @@ function SuggestionCard({
           Why this was suggested
         </summary>
         <div className="mt-2 border-t border-stone-200 pt-2 space-y-1.5">
-          {candidate.evidence.sample_titles.map((title) => (
-            <p key={title} className="text-xs leading-5 text-stone-600">“{title}”</p>
+          {candidate.evidence.sample_titles.map((title, index) => (
+            <p key={`${index}-${title}`} className="text-xs leading-5 text-stone-600">“{title}”</p>
           ))}
         </div>
       </details>

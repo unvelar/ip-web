@@ -97,6 +97,7 @@ export interface PublicBrandSumup {
 export async function getPublicBrandSumup(tenantName: string, ipName: string) {
   const res = await fetch(
     `${API}/api/brand-sumups/${encodeURIComponent(tenantName)}/${encodeURIComponent(ipName)}`,
+    { cache: "no-store" },
   );
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
