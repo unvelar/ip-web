@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
-  Clock3,
+  ChevronRight,
   ExternalLink,
   Search,
   ShieldAlert,
-  ShieldCheck,
-  ShoppingBag,
   Store,
+  X,
 } from "lucide-react";
 import {
   listMonitoringSellers,
@@ -20,8 +19,10 @@ import { useAuth } from "../context/AuthContext";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { monitoringPlatformLabel } from "../lib/platforms";
 import { sellerProfilePath } from "../lib/sellers";
+import { SellerListings } from "../components/monitoring/SellerListings";
 import { SellerSales } from "../components/monitoring/SellerSales";
 import { formatAgo, formatMoney } from "../components/monitoring/board/utils";
+import "./Sellers.css";
 
 const STATUS_OPTIONS: Array<{
   value: MonitoringSellerListStatus;
@@ -47,7 +48,7 @@ function withQuery(path: string, params: Record<string, string | null | undefine
 
 export default function Sellers() {
   const { actingTenantId } = useAuth();
-  const { ips, activeIpId, activeIp, selectIp, loading: loadingIps } = useActiveIp();
+  const { ips, activeIpId, selectIp, loading: loadingIps } = useActiveIp();
   const [params, setParams] = useSearchParams();
   const status = sellerListStatus(params.get("status"));
   const query = params.get("q") ?? "";
@@ -136,308 +137,239 @@ export default function Sellers() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-7 sm:px-6 lg:px-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="mb-1 flex items-center gap-2 text-red-700">
-            <Store size={17} aria-hidden />
-            <span className="text-xs font-bold uppercase tracking-[0.14em]">Seller monitoring</span>
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-stone-950">Sellers</h1>
-          <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Review sellers across their listings. Sellers with listings first discovered after a previous takedown appear first.
-          </p>
+    <div className="sellers-page">
+      <header className="sellers-header">
+        <div className="sellers-title">
+          <h1>Sellers</h1>
+          {page && <span className="sellers-count">{page.total_sellers.toLocaleString()}</span>}
         </div>
-        {page && (
-          <div className="flex items-center gap-4 text-right">
-            <HeaderMetric label="Sellers" value={page.total_sellers} />
-            <HeaderMetric label="Returned" value={page.returned_seller_count} alert={page.returned_seller_count > 0} />
-          </div>
-        )}
+        <p>Track marketplace accounts and review their listings.</p>
       </header>
 
       {returnedSellerCount > 0 && (
-        <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-red-950">
-          <div className="flex min-w-0 items-start gap-3">
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-700">
-              <ShieldAlert size={18} aria-hidden />
-            </span>
-            <div>
-              <h2 className="text-sm font-black">Previous sellers have new listings</h2>
-              <p className="mt-0.5 text-xs leading-relaxed text-red-800">
-                {returnedSellerCount === 1
-                  ? "One seller has an open listing found after an earlier takedown."
-                  : `${returnedSellerCount} sellers have open listings found after earlier takedowns.`}
-              </p>
-            </div>
-          </div>
+        <section className="sellers-notice" aria-label="Returned sellers">
+          <ShieldAlert size={18} aria-hidden />
+          <p><strong>{returnedSellerCount} {returnedSellerCount === 1 ? "seller has" : "sellers have"} returned.</strong>{" "}
+            New listings found after a previous takedown.
+          </p>
           {status !== "returned" && (
-            <button
-              type="button"
-              onClick={() => updateParam("status", "returned")}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-red-700 px-3 text-xs font-bold text-white shadow-sm hover:bg-red-800"
-            >
-              Review returned sellers <ArrowRight size={13} aria-hidden />
+            <button type="button" onClick={() => updateParam("status", "returned")}>
+              Review <ArrowRight size={14} aria-hidden />
             </button>
           )}
         </section>
       )}
 
-      <section className="space-y-3">
-        <div className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center">
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3">
-            <Search size={15} className="shrink-0 text-stone-400" aria-hidden />
-            <input
-              value={query}
-              onChange={(event) => updateParam("q", event.target.value)}
-              placeholder="Search seller or marketplace"
-              className="h-10 min-w-0 flex-1 bg-transparent text-sm text-stone-800 outline-none placeholder:text-stone-400"
-              aria-label="Search sellers"
-            />
-          </div>
+      <nav className="sellers-tabs" aria-label="Seller status">
+        {STATUS_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={status === option.value}
+            onClick={() => updateParam("status", option.value, "open")}
+          >
+            {option.label}
+            {option.value === "returned" && returnedSellerCount > 0 && (
+              <span className="sellers-returned-count">{returnedSellerCount}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <div className="sellers-toolbar">
+        <div className="sellers-search">
+          <Search size={16} aria-hidden />
+          <input
+            value={query}
+            onChange={(event) => updateParam("q", event.target.value)}
+            placeholder="Search sellers…"
+            aria-label="Search sellers"
+            type="search"
+          />
+          {query && (
+            <button type="button" aria-label="Clear search" onClick={() => updateParam("q", null)}>
+              <X size={14} aria-hidden />
+            </button>
+          )}
+        </div>
+        <div className="sellers-filters">
           <select
             value={allIps || !activeIpId ? "all" : activeIpId}
             onChange={(event) => updateIp(event.target.value)}
             disabled={loadingIps}
-            className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-700"
             aria-label="Filter sellers by IP"
           >
             <option value="all">All IPs</option>
             {ips.map((ip) => <option key={ip.id} value={ip.id}>{ip.name}</option>)}
           </select>
-          <div className="relative">
-            <select
-              value={platform}
-              onChange={(event) => updateParam("platform", event.target.value)}
-              className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-700 lg:w-48"
-              aria-label="Filter sellers by marketplace"
-            >
-              <option value="">All marketplaces</option>
-              {platformOptions.map((domain) => (
-                <option key={domain} value={domain}>{monitoringPlatformLabel(domain)}</option>
-              ))}
-            </select>
+          <select
+            value={platform}
+            onChange={(event) => updateParam("platform", event.target.value)}
+            aria-label="Filter sellers by marketplace"
+          >
+            <option value="">All marketplaces</option>
+            {platformOptions.map((domain) => (
+              <option key={domain} value={domain}>{monitoringPlatformLabel(domain)}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {error && <div className="sellers-error" role="alert">{error}</div>}
+
+      <div key={`${actingTenantId}:${effectiveIpId}:${status}`} className="sellers-results" aria-busy={loading}>
+        {loading ? (
+          <SellerListSkeleton />
+        ) : !page || page.sellers.length === 0 ? (
+          <div className="sellers-empty">
+            <Store size={25} aria-hidden />
+            <h2>{error ? "Sellers could not be loaded" : status === "returned" && !query && !platform ? "No returned sellers" : "No sellers found"}</h2>
+            <p>{error ? "Please try again in a moment." : status === "returned" && !query && !platform
+              ? "No new listings found after a previous takedown in this view."
+              : "Try a different search, marketplace, or IP."}</p>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1 rounded-lg bg-stone-100 p-1">
-          {STATUS_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => updateParam("status", option.value, "open")}
-              className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
-                status === option.value
-                  ? "bg-white text-stone-900 shadow-sm"
-                  : "text-stone-500 hover:text-stone-800"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-          {!allIps && activeIp && (
-            <span className="ml-auto hidden px-2 text-[11px] font-semibold text-stone-400 sm:inline">
-              {activeIp.name}
-            </span>
-          )}
-        </div>
-      </section>
-
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
-
-      {loading && !page ? (
-        <SellerGridSkeleton />
-      ) : !page || page.sellers.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-6 py-16 text-center">
-          <Store className="mx-auto text-stone-300" size={30} aria-hidden />
-          <h2 className="mt-3 text-sm font-bold text-stone-800">No sellers in this view</h2>
-          <p className="mt-1 text-xs text-stone-500">Try another status, IP, marketplace, or search.</p>
-        </div>
-      ) : (
-        <div className={`space-y-7 transition-opacity ${loading ? "opacity-60" : "opacity-100"}`}>
-          {returnedSellers.length > 0 && (
-            <SellerSection
-              title="Returned sellers"
-              description="Different listings found after an earlier takedown."
-              sellers={returnedSellers}
-            />
-          )}
-          {otherSellers.length > 0 && (
-            <SellerSection
-              title={returnedSellers.length > 0 ? "Other sellers" : "Sellers with current listings"}
-              description="Grouped by marketplace account, with the most active sellers first."
-              sellers={otherSellers}
-            />
-          )}
-          {page.next_cursor && (
-            <div className="flex justify-center pt-1">
-              <button
-                type="button"
-                onClick={() => void loadMore()}
-                disabled={loadingMore}
-                className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-xs font-bold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-              >
-                {loadingMore ? "Loading…" : "Load more sellers"}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function HeaderMetric({ label, value, alert = false }: { label: string; value: number; alert?: boolean }) {
-  return (
-    <div>
-      <div className="text-[10px] font-bold uppercase tracking-wide text-stone-400">{label}</div>
-      <div className={`text-xl font-black tabular-nums ${alert ? "text-red-700" : "text-stone-900"}`}>
-        {value.toLocaleString()}
+        ) : (
+          <>
+            {returnedSellers.length > 0 && (
+              <SellerSection title="Returned sellers" sellers={returnedSellers} ipId={effectiveIpId} listStatus={status} returned />
+            )}
+            {otherSellers.length > 0 && (
+              <SellerSection
+                title={returnedSellers.length > 0 ? "Other sellers" : status === "all" ? "Seller history" : "Sellers with open listings"}
+                sellers={otherSellers}
+                ipId={effectiveIpId} listStatus={status}
+              />
+            )}
+            <footer className="sellers-footer">
+              <span role="status">Showing {page.sellers.length.toLocaleString()} of {page.total_sellers.toLocaleString()} sellers</span>
+              {page.next_cursor && (
+                <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>
+                  {loadingMore ? "Loading…" : "Load more sellers"}
+                </button>
+              )}
+            </footer>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function SellerSection({
-  title,
-  description,
-  sellers,
-}: {
+function SellerSection({ title, sellers, ipId, listStatus, returned = false }: {
   title: string;
-  description: string;
   sellers: MonitoringSellerSummary[];
+  ipId: string | null;
+  listStatus: MonitoringSellerListStatus;
+  returned?: boolean;
 }) {
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-sm font-black text-stone-900">{title}</h2>
-        <p className="mt-0.5 text-xs text-stone-500">{description}</p>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {sellers.map((seller) => <SellerCard key={seller.seller_key} seller={seller} />)}
-      </div>
+    <section className="sellers-section" aria-label={title}>
+      {returned && <h2 className="sellers-section-label">New listings after takedown</h2>}
+      <table className="sellers-table">
+        <caption className="sr-only">{title}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Seller</th>
+            <th scope="col">Open listings</th>
+            <th scope="col">Exposure <span>USD</span></th>
+            <th scope="col">Takedowns</th>
+            <th scope="col">Latest finding</th>
+            <th scope="col"><span className="sr-only">Expand listings</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {sellers.map((seller) => <SellerRow key={seller.seller_key} seller={seller} ipId={ipId} listStatus={listStatus} />)}
+        </tbody>
+      </table>
     </section>
   );
 }
 
-function SellerCard({ seller }: { seller: MonitoringSellerSummary }) {
-  const basePath = sellerProfilePath(seller.seller_key) ?? "/monitoring/tasks";
-  const href = withQuery(basePath, {
-    finding: seller.latest_result_id,
-    status: seller.open_listing_count > 0 ? null : "all",
+function SellerRow({ seller, ipId, listStatus }: {
+  seller: MonitoringSellerSummary;
+  ipId: string | null;
+  listStatus: MonitoringSellerListStatus;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const listingsId = useId();
+  const initialStatus = listStatus === "all" ? "all" : "open";
+  const href = withQuery(sellerProfilePath(seller.seller_key) ?? "/monitoring/tasks", {
+    status: initialStatus === "all" ? "all" : null,
+    ip_id: ipId,
   });
   const returned = seller.returned_listing_count > 0;
 
   return (
-    <article className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
-      returned ? "border-red-200 ring-1 ring-red-100" : "border-stone-200"
-    }`}>
-      <div className="flex gap-4 p-4">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-stone-100 text-stone-300">
-          {seller.sample_image_url ? (
-            <img
-              src={seller.sample_image_url}
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-            />
-          ) : <Store size={24} aria-hidden />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <Link to={href} className="block truncate text-base font-black text-stone-950 hover:text-blue-700 hover:underline">
-                {seller.seller_name}
-              </Link>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-stone-500">
-                <span className="truncate">{monitoringPlatformLabel(seller.domain)}</span>
-                {seller.profile_url && (
-                  <a
-                    href={seller.profile_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(event) => event.stopPropagation()}
-                    className="shrink-0 text-stone-400 hover:text-blue-700"
-                    aria-label="Open marketplace seller profile"
-                  >
-                    <ExternalLink size={11} aria-hidden />
-                  </a>
-                )}
-              </div>
+    <Fragment>
+      <tr className={returned ? "seller-row seller-row-returned" : "seller-row"} data-expanded={expanded}>
+        <td className="seller-identity">
+          <div className="seller-identity-content">
+            <div className="seller-thumbnail">
+              {seller.sample_image_url ? (
+                <img src={seller.sample_image_url} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+              ) : <Store size={19} aria-hidden />}
             </div>
-            {returned && (
-              <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-red-700">
-                Returned
-              </span>
-            )}
+            <div className="seller-description">
+              <Link to={href} className="seller-name">{seller.seller_name}</Link>
+              <div className="seller-marketplace">
+                {seller.profile_url ? (
+                  <a href={seller.profile_url} target="_blank" rel="noreferrer" aria-label={`${seller.seller_name} on ${monitoringPlatformLabel(seller.domain)} (opens in a new tab)`}>
+                    {monitoringPlatformLabel(seller.domain)} <ExternalLink size={11} aria-hidden />
+                  </a>
+                ) : <span>{monitoringPlatformLabel(seller.domain)}</span>}
+                {seller.rating != null && <span className="seller-rating" aria-label={`Rating ${seller.rating.toFixed(1)}`}><span aria-hidden>★</span> {seller.rating.toFixed(1)}</span>}
+                {!ipId && <span title={seller.ip_names.join(", ")}>
+                  {seller.affected_ip_count === 1 ? seller.ip_names[0] ?? "1 IP" : `${seller.affected_ip_count} IPs`}
+                </span>}
+              </div>
+              {seller.sales != null && (
+                <details className="seller-history">
+                  <summary aria-label={`Marketplace sales and capture details for ${seller.seller_name}`}>
+                    <SellerSales count={seller.sales} observation={seller.sales_observation} showCaptureDate={false} />
+                  </summary>
+                  <div><SellerSales count={seller.sales} observation={seller.sales_observation} /></div>
+                </details>
+              )}
+            </div>
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-stone-500">
-            {seller.rating != null && <span>★ {seller.rating.toFixed(1)}</span>}
-            <SellerSales count={seller.sales} observation={seller.sales_observation} />
-            <span className="inline-flex items-center gap-1"><Clock3 size={11} /> {formatAgo(seller.latest_found_at) ?? "recently"}</span>
-          </div>
-        </div>
-      </div>
-
-      {returned && (
-        <div className="border-y border-red-100 bg-red-50 px-4 py-2.5 text-xs text-red-800">
-          <span className="font-black">{seller.returned_listing_count}</span>{" "}
-          {seller.returned_listing_count === 1 ? "open listing was" : "open listings were"} found after a previous takedown.
-        </div>
-      )}
-
-      <div className="grid grid-cols-3 divide-x divide-stone-100 border-b border-stone-100">
-        <CardMetric icon={<ShoppingBag size={13} />} label="Open" value={seller.open_listing_count.toLocaleString()} />
-        <CardMetric icon={<ShieldCheck size={13} />} label="Takedowns" value={seller.prior_enforcement_count.toLocaleString()} alert={returned} />
-        <CardMetric label="Exposure" value={formatMoney(seller.monitored_market_usd, "USD")} />
-      </div>
-
-      <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <p className="min-w-0 truncate text-[11px] text-stone-500" title={seller.ip_names.join(", ")}>
-          {seller.affected_ip_count === 1
-            ? seller.ip_names[0] ?? "1 affected IP"
-            : `${seller.affected_ip_count} affected IPs`}
-        </p>
-        <Link to={href} className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-blue-700 hover:underline">
-          Review listings <ArrowRight size={12} aria-hidden />
-        </Link>
-      </div>
-    </article>
+        </td>
+        <td className="seller-open" data-label="Open listings">
+          <button type="button" aria-expanded={expanded} aria-controls={listingsId} onClick={() => setExpanded((value) => !value)} aria-label={`Listings from ${seller.seller_name}`}>
+            {seller.open_listing_count.toLocaleString()}
+          </button>
+          {returned && <span className="seller-returned">{seller.returned_listing_count} returned</span>}
+        </td>
+        <td className="seller-exposure" data-label="Exposure · USD">{formatMoney(seller.monitored_market_usd, "USD")}</td>
+        <td className={seller.prior_enforcement_count === 0 ? "seller-takedowns seller-zero" : "seller-takedowns"} data-label="Takedowns">
+          {seller.prior_enforcement_count.toLocaleString()}
+        </td>
+        <td className="seller-recency" data-label="Latest finding">
+          <time dateTime={seller.latest_found_at} title={seller.latest_found_at}>{formatAgo(seller.latest_found_at) ?? "Unknown"}</time>
+        </td>
+        <td className="seller-action">
+          <button type="button" aria-expanded={expanded} aria-controls={listingsId} onClick={() => setExpanded((value) => !value)} aria-label={`${expanded ? "Collapse" : "Expand"} listings from ${seller.seller_name}`}>
+            <span>{expanded ? "Hide listings" : "Show listings"}</span><ChevronRight size={16} aria-hidden />
+          </button>
+        </td>
+      </tr>
+      <tr className="seller-listings-row" hidden={!expanded}>
+        <td colSpan={6} id={listingsId}>
+          {expanded && (
+            <div className="seller-expanded">
+              <SellerListings sellerKey={seller.seller_key} sellerName={seller.seller_name} ipId={ipId} initialStatus={initialStatus} />
+            </div>
+          )}
+        </td>
+      </tr>
+    </Fragment>
   );
 }
 
-function CardMetric({
-  icon,
-  label,
-  value,
-  alert = false,
-}: {
-  icon?: ReactNode;
-  label: string;
-  value: string;
-  alert?: boolean;
-}) {
+function SellerListSkeleton() {
   return (
-    <div className="min-w-0 px-3 py-3 text-center">
-      <div className="flex items-center justify-center gap-1 text-[9px] font-bold uppercase tracking-wide text-stone-400">
-        {icon}{label}
-      </div>
-      <div className={`mt-0.5 truncate text-sm font-black tabular-nums ${alert ? "text-red-700" : "text-stone-900"}`}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SellerGridSkeleton() {
-  return (
-    <div className="grid animate-pulse gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="sellers-skeleton" role="status" aria-label="Loading sellers">
       {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="h-64 rounded-2xl border border-stone-100 bg-stone-100" />
+        <div key={index}><span /><span /><span /></div>
       ))}
     </div>
   );
