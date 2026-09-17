@@ -2,6 +2,7 @@ import type { CaseReviewStatus, IpReviewFinding } from "../../../api";
 
 export function hasReviewAnalysis(f: IpReviewFinding) {
   return Boolean(
+    f.protected_term_assessment?.outcome === "matched" ||
     f.listing_title?.trim() ||
     f.seller_name?.trim() ||
     f.match_explanation?.trim() ||
@@ -12,7 +13,7 @@ export function hasReviewAnalysis(f: IpReviewFinding) {
 }
 
 function findingSimilarity(f: IpReviewFinding) {
-  return f.similarity_score ?? f.enforcement_priority;
+  return f.similarity_score;
 }
 
 function formatSimilarity(score: number) {
@@ -42,7 +43,7 @@ export function selectedFindingSummary(findings: IpReviewFinding[]) {
 
   const similarities = findings
     .map(findingSimilarity)
-    .filter((score) => Number.isFinite(score));
+    .filter((score): score is number => score != null && Number.isFinite(score));
   if (similarities.length > 0) {
     const min = Math.min(...similarities);
     const max = Math.max(...similarities);
@@ -441,10 +442,11 @@ export function actionabilityMeta(actionability: IpReviewFinding["actionability"
 }
 
 export function findingFlaggedReason(
-  f: Pick<IpReviewFinding, "match_explanation" | "vlm_reasoning">,
+  f: Pick<IpReviewFinding, "match_explanation" | "vlm_reasoning" | "protected_term_assessment">,
 ) {
   const seen = new Set<string>();
   return [
+    f.protected_term_assessment?.decisions.filter((d) => d.use === "reproduction_offer").map((d) => d.explanation).join(" "),
     f.match_explanation,
     f.vlm_reasoning,
   ]
@@ -499,6 +501,7 @@ export function findingChips(f: IpReviewFinding, showIp?: boolean) {
         ? "Not yet verified"
         : null;
   return [
+    f.protected_term_assessment?.outcome === "matched" ? "Protected term" : null,
     saleUrgencyChip(f),
     availabilityChip,
     showIp && f.ip_name ? f.ip_name : null,

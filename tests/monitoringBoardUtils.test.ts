@@ -3,7 +3,9 @@ import {
   dismissalBadge,
   findingPlatformLabel,
   suggestionMeta,
+  selectedFindingSummary,
 } from "../src/components/monitoring/board/utils";
+import type { IpReviewFinding } from "../src/api";
 import { BATCH_META } from "../src/components/monitoring/board/batchUtils";
 import {
   CANDIDATE_OUTCOME_LABELS,
@@ -11,6 +13,11 @@ import {
 } from "../src/components/monitoring/board/constants";
 
 describe("findingPlatformLabel", () => {
+  test("text-only findings never turn enforcement priority into image similarity", () => {
+    const summary = selectedFindingSummary([{ similarity_score: null, enforcement_priority: 0.75 } as IpReviewFinding]);
+    expect(summary.some((part) => part.includes('Similarity'))).toBe(false);
+  });
+
   test("uses the finding domain shown elsewhere in the inspector", () => {
     expect(findingPlatformLabel({
       domain: "ebay.com",

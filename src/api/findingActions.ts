@@ -138,7 +138,9 @@ export type MonitoringReviewOutcome =
 export type MonitoringDismissReasonCode =
   | "different_product"
   | "genuine_second_hand"
-  | "original_packaging_only";
+  | "original_packaging_only"
+  | "compatibility_only"
+  | "unrelated_mention";
 
 export type MonitoringDismissOptions = {
   reason?: MonitoringReviewOutcome;

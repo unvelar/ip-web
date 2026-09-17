@@ -56,8 +56,8 @@ export function GridFindingCard({
   const actionability = actionabilityMeta(f.actionability);
   const whyFlagged = findingFlaggedReason(f);
   const chips = findingChips(f, showIp);
-  const similarity = f.similarity_score ?? f.enforcement_priority;
-  const similarityText = Number.isFinite(similarity)
+  const similarity = f.similarity_score;
+  const similarityText = similarity != null && Number.isFinite(similarity)
     ? `${Math.round(similarity * 100)}% similarity`
     : null;
   const unitPriceUsd = f.price_value_usd == null ? null : Number(f.price_value_usd);

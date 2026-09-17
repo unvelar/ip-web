@@ -1,3 +1,14 @@
+export interface ProtectedTermAssessment {
+  policy_version: string;
+  configuration_revision: number;
+  outcome: "matched" | "not_matched" | "unclear";
+  listing: { title: string; description: string; captured_at: string; page_url: string; source: string };
+  decisions: Array<{ term_id: string; term: string; use: string; confidence: number;
+    item_for_sale: string; explanation: string; resale_considered: string;
+    evidence: Array<{ field: "title" | "description"; quote: string; start?: number; end?: number }>;
+    visual_use: string; visual_explanation: string }>;
+}
+
 import type { CaseReviewStatus, SaleType, SaleUrgencyBand } from "./cases";
 import type {
   SellerSalesObservation,
@@ -185,6 +196,7 @@ export interface IpReviewFinding {
   source_method: string | null;
   /** How the match fired: 'visual', 'name', or 'both'. Null on legacy rows. */
   match_method: string | null;
+  protected_term_assessment?: ProtectedTermAssessment | null;
   /** Opaque canonical seller identity. Use this for seller profile links. */
   seller_key: string | null;
   seller_name: string | null;
@@ -501,6 +513,7 @@ export interface IpFirstScanResult {
   lifecycle_state: string | null;
   similarity_score: number | null;
   match_method: string | null;
+  protected_term_assessment?: ProtectedTermAssessment | null;
   vlm_verdict: string | null;
   vlm_confidence: number | null;
   vlm_reasoning: string | null;

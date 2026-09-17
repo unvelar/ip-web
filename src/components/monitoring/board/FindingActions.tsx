@@ -293,6 +293,10 @@ export function FindingActions({
     "Shortcut 4: original packaging or an empty box only",
     "4",
   );
+  const textClearanceButtons = f.protected_term_assessment?.outcome === "matched" ? <>
+    <button type="button" className={ghostStone} disabled={actionPending} onClick={() => onDismiss("false_positive", "compatibility_only")}>Compatibility only</button>
+    <button type="button" className={ghostStone} disabled={actionPending} onClick={() => onDismiss("false_positive", "unrelated_mention")}>Unrelated mention</button>
+  </> : null;
   const needsReviewBtn = (
     <button
       key="review"
@@ -419,7 +423,8 @@ export function FindingActions({
         {secondHandBtn}
         {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
-        {allowProductBtn}
+        {f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
+        {textClearanceButtons}
         {needsReviewBtn}
         <button
           type="button"
@@ -452,7 +457,8 @@ export function FindingActions({
         {secondHandBtn}
         {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
-        {allowProductBtn}
+        {f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
+        {textClearanceButtons}
         <button
           type="button"
           disabled={!f.case_id || actionPending}
@@ -489,7 +495,8 @@ export function FindingActions({
         {secondHandBtn}
         {f.offer_subject === "packaging_only" && packagingOnlyBtn}
         {dontPursueBtn}
-        {allowProductBtn}
+        {f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
+        {textClearanceButtons}
         <button
           type="button"
           disabled={!f.case_id || actionPending}

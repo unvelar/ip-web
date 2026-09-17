@@ -331,10 +331,10 @@ export function useRegistryWizard() {
   }
 
   async function handleAssetsContinue() {
-    if (images.length === 0) return;
+    if (images.length === 0 && !trademark?.protected_terms?.length) return;
     setTransition({
-      title: "Learning your visual identity",
-      detail: "Your references are saved. Visual processing will continue quietly in the background.",
+      title: images.length ? "Learning your visual identity" : "Protected terms saved",
+      detail: images.length ? "Your references are saved. Visual processing will continue quietly in the background." : "We will check listing text for these terms and consider how they are used.",
     });
     await delay(TRANSITION_DELAY_MS);
     setTransition(null);
@@ -437,6 +437,7 @@ export function useRegistryWizard() {
     removeBrandName,
     handleDetailsContinue,
     handleAssetsContinue,
+    handleProtectedTermsSaved: setTrademark,
     handleStartMonitoring,
     handleCancel,
   };

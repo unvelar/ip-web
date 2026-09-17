@@ -1,3 +1,4 @@
+import ProtectedTermEvidence from "./ProtectedTermEvidence";
 import { useState } from "react";
 import { ExternalLink, MoreHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -39,7 +40,7 @@ export function FindingTechnicalDetails({ f }: { f: IpReviewFinding }) {
       </summary>
       <div className="mt-2 flex items-center gap-1.5 flex-wrap">
         <span className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
-          sim {Math.round((f.similarity_score ?? 0) * 100)}%
+          {f.similarity_score == null ? "No image comparison" : `sim ${Math.round(f.similarity_score * 100)}%`}
         </span>
         {f.inliers != null && (
           <span className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
@@ -129,10 +130,10 @@ export function FindingComparison({
   const sellerTarget = sellerProfilePath(f.seller_key);
   const [refreshing, setRefreshing] = useState(false);
   const [correctingProduct, setCorrectingProduct] = useState(false);
-  const similarity = f.similarity_score ?? f.enforcement_priority;
-  const similarityLabel = Number.isFinite(similarity)
+  const similarity = f.similarity_score;
+  const similarityLabel = similarity != null && Number.isFinite(similarity)
     ? `${Math.round(similarity * 100)}% sim`
-    : "sim unknown";
+    : f.protected_term_assessment?.outcome === "matched" ? "Protected term" : "No image score";
   const licensedSeller = !!f.licensed_seller || f.dismissal_reason === "licensed";
   const canLicense = !!ipId && (!!f.seller_name || !!f.seller_url) && !licensedSeller;
   // Enrichment hit a reCAPTCHA / bot-wall — the screenshot is the challenge
@@ -300,7 +301,7 @@ export function FindingComparison({
           </span>
           <span
             className="px-1.5 py-0.5 rounded bg-stone-100 text-stone-500 text-[10px] font-semibold tabular-nums"
-            title="Visual/text similarity"
+            title="Image similarity, when available"
           >
             {similarityLabel}
           </span>
@@ -515,6 +516,8 @@ export function FindingComparison({
           </p>
         </section>
       )}
+
+      <ProtectedTermEvidence assessment={f.protected_term_assessment} />
 
       {(whyFlagged || actionability.reason || authenticityLabel ||
         f.offer_subject === "packaging_only" || f.authenticity_reasoning) && (

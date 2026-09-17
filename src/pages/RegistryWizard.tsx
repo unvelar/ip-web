@@ -1,3 +1,4 @@
+import ProtectedTermsSettings from "../components/ProtectedTermsSettings";
 import { Link } from "react-router-dom";
 import ImageUploader from "../components/ImageUploader";
 import { PlatformSelector } from "../components/monitoring/PlatformSelector";
@@ -102,7 +103,7 @@ function BrandStep({ flow }: { flow: OnboardingFlow }) {
 
 function ReferencesStep({ flow }: { flow: OnboardingFlow }) {
   return (
-    <StepPanel step={2} title="Add visual references" description="Add the logos, packaging, or product images that make your brand recognisable.">
+    <StepPanel step={2} title="Choose what to protect" description="Add protected names, reference images, or both to find relevant listings.">
       <div className="space-y-4">
         {flow.importingWebsiteReference && (
           <div className="flex items-center gap-3 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-800">
@@ -122,15 +123,16 @@ function ReferencesStep({ flow }: { flow: OnboardingFlow }) {
             </button>
           </div>
         )}
+        {flow.trademark && <ProtectedTermsSettings key={flow.trademark.id} ip={flow.trademark} onSaved={flow.handleProtectedTermsSaved} />}
         <ImageUploader onUpload={flow.handleUpload} uploading={flow.uploading} compact />
         <ImageGrid images={flow.images} onDelete={(id) => void flow.handleDeleteImage(id)} />
         <div className="flex flex-col gap-3 border-t border-stone-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-stone-500">
             {flow.images.length === 0
-              ? "Add at least one reference to continue."
+              ? flow.trademark?.protected_terms?.length ? "Protected terms saved. You can continue without reference images." : "Add a reference image or configure protected terms to continue."
               : `${flow.images.length} reference${flow.images.length === 1 ? "" : "s"} added. We’ll prepare ${flow.images.length === 1 ? "it" : "them"} in the background.`}
           </p>
-          <button type="button" onClick={() => void flow.handleAssetsContinue()} disabled={flow.images.length === 0 || flow.uploading} className="shrink-0 rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50">Continue</button>
+          <button type="button" onClick={() => void flow.handleAssetsContinue()} disabled={(flow.images.length === 0 && !flow.trademark?.protected_terms?.length) || flow.uploading} className="shrink-0 rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50">Continue</button>
         </div>
       </div>
     </StepPanel>
@@ -181,7 +183,7 @@ function SearchTermsStep({ flow }: { flow: OnboardingFlow }) {
             <button type="button" onClick={flow.addKeyword} disabled={!flow.keywordDraft.trim()} className="rounded-xl bg-stone-100 px-4 py-3 text-xs font-semibold text-stone-700 disabled:opacity-50">Add</button>
           </div>
         </div>
-        <StepActions onBack={() => flow.setCurrentStep(2)} onContinue={() => void flow.handleDetailsContinue()} continueLabel="Choose websites" disabled={flow.finishing || flow.keywords.length === 0} />
+        <StepActions onBack={() => flow.setCurrentStep(2)} onContinue={() => void flow.handleDetailsContinue()} continueLabel="Choose websites" disabled={flow.finishing || (flow.keywords.length === 0 && !flow.trademark?.protected_terms?.length)} />
       </div>
     </StepPanel>
   );

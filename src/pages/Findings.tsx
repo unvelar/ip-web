@@ -35,6 +35,8 @@ interface InboxFilters {
   product_group_id: string | null;
   catalog_product_id: string | null;
   platform: string | null;
+  match_basis?: "text" | "text_only" | "visual" | "both" | null;
+  protected_term_id?: string | null;
   seller: string | null;
   query: string | null;
   assignee: string | null;
@@ -72,6 +74,8 @@ function parseFilters(params: URLSearchParams): InboxFilters {
     product_group_id: params.get("product_group_id"),
     catalog_product_id: params.get("catalog_product_id"),
     platform: params.get("platform"),
+    match_basis: ["text", "text_only", "visual", "both"].includes(params.get("match_basis") ?? "") ? params.get("match_basis") as InboxFilters["match_basis"] : null,
+    protected_term_id: params.get("protected_term_id"),
     seller: seller && seller.trim() ? seller.trim() : null,
     query: query && query.trim() ? query.trim() : null,
     assignee: assignee && assignee.trim() ? assignee.trim() : null,
@@ -122,6 +126,8 @@ function writeFilters(base: URLSearchParams, f: InboxFilters): URLSearchParams {
   setOrDel("product_group_id", f.product_group_id);
   setOrDel("catalog_product_id", f.catalog_product_id);
   setOrDel("platform", f.platform);
+  setOrDel("match_basis", f.match_basis ?? null);
+  setOrDel("protected_term_id", f.protected_term_id ?? null);
   setOrDel("seller", f.seller);
   setOrDel("q", f.query);
   setOrDel("assignee", f.assignee);

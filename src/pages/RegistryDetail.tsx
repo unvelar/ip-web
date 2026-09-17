@@ -1,3 +1,4 @@
+import ProtectedTermsSettings from "../components/ProtectedTermsSettings";
 import { useCallback, useEffect, useRef, useState } from "react";
 import PublicSummarySettings from "../components/PublicSummarySettings";
 import { IpSettingsHeading, IpSetupProgress } from "../components/IpSettingsPrimitives";
@@ -236,7 +237,7 @@ function RegistryDetailContent({ id }: { id: string }) {
         <div className="ip-identity">
           <div className="ip-avatar">{images[0] ? <img src={images[0].url} alt="" /> : <Fingerprint size={28} aria-hidden="true" />}</div>
           <div><p className="ip-eyebrow">IP settings</p><h1>{ip.name}</h1>
-            <div className="ip-meta"><span><ImageIcon size={13} aria-hidden="true" />{images.length} reference{images.length === 1 ? "" : "s"}</span><span><Search size={13} aria-hidden="true" />{ip.keywords?.length ?? 0} keywords</span></div>
+            <div className="ip-meta"><span><ImageIcon size={13} aria-hidden="true" />{images.length} reference{images.length === 1 ? "" : "s"}</span><span><Search size={13} aria-hidden="true" />{ip.keywords?.length ?? 0} keywords</span><span><ShieldCheck size={13} aria-hidden="true" />{ip.protected_terms?.length ?? 0} protected terms</span></div>
           </div>
         </div>
         <Link className="ip-button" to={`/monitoring/first-scan?ip_id=${ip.id}`}>View monitoring<ArrowUpRight size={14} aria-hidden="true" /></Link>
@@ -440,6 +441,7 @@ function RegistryDetailContent({ id }: { id: string }) {
       </div>
 
       </div>
+      <ProtectedTermsSettings key={`terms-${ip.id}`} ip={ip} onSaved={(updated) => { setIp((current) => current ? { ...current, ...updated } : current); void refreshOnboarding(true); }} />
       <div id="matching-names"><MonitoringIdentitySettings key={ip.id} ip={ip} onSaved={(updated) => setIp((current) => current ? { ...current, ...updated } : current)} /></div>
 
       <details className="ip-disclosure" id="keyword-learning"><summary><Sparkles size={17} aria-hidden="true" /><span>Keyword suggestions<small>Review phrases discovered in your results</small></span><Plus size={16} className="ip-disclosure-plus" aria-hidden="true" /></summary>
@@ -749,7 +751,7 @@ function MonitoringSection({
   return (
     <PlatformsPanel
       ipId={ip.id}
-      keywords={ip.keywords}
+      keywords={[ip.name, ...(ip.keywords ?? []), ...(ip.protected_terms ?? []).map((term) => term.phrase)]}
       monitoringFrequency={ip.monitoring_frequency}
       onMonitoringFrequencyChanged={onFrequencyChanged}
     />

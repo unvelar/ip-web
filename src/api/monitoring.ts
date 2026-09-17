@@ -313,6 +313,8 @@ export interface MonitoringFindingsQuery {
   catalog_product_id?: string | null;
   case_ids?: string[] | null;
   platform?: string | null;
+  match_basis?: "text" | "text_only" | "visual" | "both" | null;
+  protected_term_id?: string | null;
   seller?: string | null;
   query?: string | null;
   /** Tenant-member account id, or the literal "unassigned". */
@@ -348,6 +350,8 @@ function monitoringFindingsParams(
   if (opts.case_ids?.length) {
     params.set("case_ids", [...new Set(opts.case_ids)].join(","));
   }
+  if (opts.match_basis) params.set("match_basis", opts.match_basis);
+  if (opts.protected_term_id) params.set("protected_term_id", opts.protected_term_id);
   if (opts.platform)     params.set("platform", opts.platform);
   if (opts.seller)       params.set("seller", opts.seller);
   if (opts.query)        params.set("q", opts.query);

@@ -307,7 +307,7 @@ export function ListingCarousel({
   const activeBbox = activeItem.bbox;
   // Only honor the measurement when it belongs to the current slide.
   const activeNatural = natural?.url === active ? natural : null;
-  const canAllowImage = !!ipId && !!activeSourceUrl && !activeItem.isScreenshot &&
+  const canAllowImage = f.protected_term_assessment?.outcome !== "matched" && !!ipId && !!activeSourceUrl && !activeItem.isScreenshot &&
     !f.dismissed_at;
   const activeAllowed = activeSourceUrl
     ? allowedSourceUrls.has(activeSourceUrl)

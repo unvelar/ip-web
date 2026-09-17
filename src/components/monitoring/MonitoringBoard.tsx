@@ -65,6 +65,8 @@ export interface BoardFilters {
   product_group_id: string | null;
   catalog_product_id: string | null;
   platform: string | null;
+  match_basis?: "text" | "text_only" | "visual" | "both" | null;
+  protected_term_id?: string | null;
   seller: string | null;
   query: string | null;
   assignee: string | null;
@@ -94,6 +96,8 @@ function dismissalDecisionLabel(
   reason: MonitoringReviewOutcome,
   reasonCode?: MonitoringDismissReasonCode,
 ) {
+  if (reasonCode === "compatibility_only") return "Compatibility only";
+  if (reasonCode === "unrelated_mention") return "Unrelated mention";
   if (reasonCode === "original_packaging_only") return "Packaging only";
   if (reasonCode === "genuine_second_hand") return "Second hand";
   if (reasonCode === "different_product") return "Different product";
@@ -1375,6 +1379,15 @@ export function MonitoringBoard({
               )}
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+            <span className={filterHeaderLabel}>Evidence</span>
+            <select aria-label="Filter by evidence" className={FILTER_SELECT} value={filters.match_basis ?? "all"}
+              onChange={(event) => onFiltersChange({ match_basis: event.target.value === "all" ? null : event.target.value as BoardFilters["match_basis"] })}>
+              <option value="all">Any evidence</option><option value="text">Protected terms</option>
+              <option value="text_only">Text only</option><option value="visual">Images</option><option value="both">Text and images</option>
+            </select>
+            {filters.protected_term_id && <button type="button" className={FILTER_SELECT} onClick={() => onFiltersChange({ protected_term_id: null })}>Clear term filter</button>}
+          </div>
           {facets.platforms.length > 1 && (
             <div
               className={filterRow}

@@ -11,6 +11,8 @@ export interface BaselineConfig {
 
 export type MonitoringFrequency = "daily" | "weekly" | "monthly" | "off";
 
+export interface ProtectedTerm { id: string; phrase: string; variants: string[]; context: string }
+
 export interface Trademark {
   id: string;
   name: string;
@@ -18,6 +20,8 @@ export interface Trademark {
   tenant_public_slug: string | null;
   public_summary_enabled: boolean;
   description: string | null;
+  protected_terms?: ProtectedTerm[];
+  protected_terms_revision?: number;
   monitoring_identity?: MonitoringIdentity;
   /** Monitoring keywords proposed by the wizard's VLM step + user edits. */
   keywords: string[];
@@ -314,6 +318,7 @@ export function updateTrademark(
     guidelines?: string | null;
     baseline_config?: BaselineConfig | null;
     keywords?: string[];
+    protected_terms?: ProtectedTerm[];
     monitoring_frequency?: MonitoringFrequency;
     monitoring_identity?: MonitoringIdentity;
     public_summary_enabled?: boolean;
@@ -360,4 +365,12 @@ export interface MonitoringIdentity {
   aliases: string[];
   brands: string[];
   categories: string[];
+}
+
+export interface ProtectedTermsReport {
+  assessed: number; pending: number; unclear: number; unavailable: number;
+  additional_listings: number; overlapping_listings: number;
+}
+export function getProtectedTermsReport(ipId: string) {
+  return request<ProtectedTermsReport>(`/api/ip/${ipId}/protected-terms/report`);
 }
