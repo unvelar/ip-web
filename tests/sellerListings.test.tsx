@@ -132,7 +132,7 @@ test("bulk enforcement requires confirmation, retains failures, and retries a fa
   await act(async () => requests[3].resolve(Response.json({ error: "Read failed" }, { status: 503 })));
   expect(container.textContent).toContain("Marked enforced 1 · 1 failed");
   expect(container.querySelectorAll('li input:checked')).toHaveLength(1);
-  expect(container.textContent).toContain("Actions saved, but listings could not be refreshed");
+  expect(container.textContent).toContain("Changes saved, but listings could not be refreshed");
   await act(async () => button("Try again").click());
   expect(requests[4].url.pathname).toContain("/api/monitoring/sellers/");
   await respond(4, ["Second"], null, "takedown_sent");
