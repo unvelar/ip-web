@@ -549,7 +549,7 @@ function MarketCard({
 
   return (
     <div className="rounded-2xl border border-stone-200 bg-white p-5 space-y-3">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-sm font-bold text-stone-900">Monitored market</h2>
           <p className="text-xs text-stone-400 mt-0.5">
