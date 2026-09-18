@@ -356,9 +356,11 @@ function RelatedBucketSection({
 export function RelatedItemsPanel({
   finding,
   onAddToBatch,
+  hideHeading = false,
 }: {
   finding: IpReviewFinding;
   onAddToBatch: (findings: IpReviewFinding[]) => void;
+  hideHeading?: boolean;
 }) {
   const [related, setRelated] = useState<MonitoringRelatedItems | null>(null);
   const [loading, setLoading] = useState(false);
@@ -424,7 +426,7 @@ export function RelatedItemsPanel({
     <div>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-stone-900">Related items</h3>
+          {!hideHeading && <h3 className="text-sm font-bold text-stone-900">Related items</h3>}
           <div className="mt-0.5 flex items-start gap-1.5 text-[11px] leading-4 text-stone-500">
             <Info size={12} className="mt-0.5 shrink-0 text-stone-400" aria-hidden />
             <span title={related.logo_only_notice}>

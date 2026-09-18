@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, PanelRight, X } from "lucide-react";
 import type {
   IpReviewFinding,
   MonitoringDismissReasonCode,
@@ -9,13 +9,13 @@ import type {
 } from "../../../api";
 import CaseComments from "../../CaseComments";
 import { FindingComparison, FindingTechnicalDetails } from "./FindingComparison";
-import type { FindingUpdateOptions } from "./FindingActions";
+import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { RelatedItemsPanel } from "./RelatedItemsPanel";
 import { SharedImagesPanel } from "./SharedImagesPanel";
 import { TaskAssigneeControl } from "./TaskAssigneeControl";
-import { compactListingTitle } from "./utils";
 import { APP_SHELL_OVERLAY_TOP } from "../../appShellLayout";
 import { useOutsideDismiss } from "../../../hooks/useOutsideDismiss";
+import "./FindingInspector.css";
 
 export function FindingInspector({
   f,
@@ -70,8 +70,31 @@ export function FindingInspector({
   useOutsideDismiss(inspectorRef, onClose);
 
   useEffect(() => {
+    const trigger = document.activeElement;
+    const panel = inspectorRef.current;
+    return () => {
+      if (
+        trigger instanceof HTMLElement && trigger.isConnected &&
+        (document.activeElement === document.body || panel?.contains(document.activeElement))
+      ) trigger.focus({ preventScroll: true });
+    };
+  }, []);
+
+  useEffect(() => {
     inspectorRef.current?.focus({ preventScroll: true });
   }, [f.result_id]);
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
+      // Let an open native select or disclosure consume Escape first.
+      if (event.target instanceof Element && event.target.closest('select, details[open]')) return;
+      event.preventDefault();
+      onClose();
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
 
   useEffect(() => {
     function hasNativeKeyboardBehavior(target: EventTarget | null) {
@@ -130,14 +153,12 @@ export function FindingInspector({
         aria-modal="false"
         aria-label="Finding details"
         tabIndex={-1}
-        className="pointer-events-auto h-full w-full bg-white shadow-2xl shadow-stone-950/20 border-l border-stone-200 focus:outline-none sm:w-[min(92vw,48rem)] xl:w-[min(58vw,60rem)] flex flex-col"
+        className="finding-inspector pointer-events-auto focus:outline-none"
       >
-        <div className="h-12 shrink-0 border-b border-stone-200 bg-white/95 backdrop-blur flex items-center gap-3 px-4">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-bold text-stone-900 truncate">
-              {compactListingTitle(f)}
-            </div>
-            <div className="text-[11px] text-stone-400 truncate">{f.domain}</div>
+        <div className="finding-inspector-header">
+          <div className="finding-inspector-label">
+            <PanelRight size={16} aria-hidden="true" />
+            <span>Listing details</span>
           </div>
           {navigation && navigation.total > 1 && (
             <div
@@ -169,7 +190,6 @@ export function FindingInspector({
               </button>
             </div>
           )}
-          <TaskAssigneeControl finding={f} onUpdated={onUpdated} />
           {taskHref && (
             <Link
               to={taskHref}
@@ -181,14 +201,14 @@ export function FindingInspector({
           <button
             type="button"
             onClick={onClose}
-            className="h-8 w-8 rounded-md inline-flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            className="finding-inspector-close"
             aria-label="Close finding details"
-            title="Close"
+            title="Close (Esc)"
           >
             <X size={16} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+        <div className="finding-inspector-scroll">
           {error && (
             <div
               role="alert"
@@ -213,23 +233,49 @@ export function FindingInspector({
             onUpdated={onUpdated}
             productGroupId={productGroupId}
             onCorrectProductGroup={onCorrectProductGroup}
+            showActions={false}
           />
-          <div className="mt-4 border-t border-stone-200 pt-4">
+          <div className="finding-inspector-section">
             <SharedImagesPanel key={f.result_id} resultId={f.result_id} />
           </div>
           {showRelatedItems && (
-            <div className="mt-4 border-t border-stone-200 pt-4">
+            <details className="finding-inspector-section">
+              <summary className="cursor-pointer text-sm font-semibold text-stone-700">Related items</summary>
+              <div className="mt-3">
               <RelatedItemsPanel
                 finding={f}
                 onAddToBatch={onAddRelatedToBatch}
+                hideHeading
               />
-            </div>
+              </div>
+            </details>
           )}
-          <div className="mt-4 space-y-3 border-t border-stone-200 pt-3">
+          <div className="finding-inspector-section space-y-3">
             <FindingTechnicalDetails f={f} />
             {f.case_id && <CaseComments caseId={f.case_id} compact />}
           </div>
         </div>
+        <footer className="finding-inspector-footer" aria-label="Listing review actions">
+          <FindingActions
+            grouped
+            key={f.result_id}
+            f={f}
+            ipId={ipId}
+            canLicense={!!ipId && (!!f.seller_name || !!f.seller_url) && !f.licensed_seller && f.dismissal_reason !== "licensed"}
+            isDismissed={isDismissed}
+            isDismissing={isDismissing}
+            onDismiss={onDismiss}
+            onActionComplete={onActionComplete}
+            onNeedsReview={onNeedsReview}
+            onTakedownSent={onTakedownSent}
+            onEnforced={onEnforced}
+            onLicensed={onLicensed}
+            onUpdated={onUpdated}
+          />
+          <div className="finding-inspector-footer-heading">
+            <TaskAssigneeControl finding={f} onUpdated={onUpdated} />
+          </div>
+        </footer>
       </aside>
     </div>
   );

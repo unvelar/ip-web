@@ -45,6 +45,7 @@ Object.assign(globalThis, {
   document: happyWindow.document,
   navigator: happyWindow.navigator,
   HTMLElement: happyWindow.HTMLElement,
+  Element: happyWindow.Element,
   Event: happyWindow.Event,
   MouseEvent: happyWindow.MouseEvent,
   Node: happyWindow.Node,
@@ -84,11 +85,13 @@ function renderActions({
   ipId = "ip-1",
   isDismissed = false,
   isDismissing = false,
+  grouped = false,
 }: {
   item?: IpReviewFinding;
   ipId?: string | null;
   isDismissed?: boolean;
   isDismissing?: boolean;
+  grouped?: boolean;
 } = {}) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -103,6 +106,7 @@ function renderActions({
       canLicense: true,
       isDismissed,
       isDismissing,
+      grouped,
       onDismiss: dismiss,
       onActionComplete,
       onNeedsReview: mock(() => undefined),
@@ -137,6 +141,56 @@ afterEach(() => {
   }));
   dismiss.mockClear();
   mock.restore();
+});
+
+describe("Grouped finding decisions", () => {
+  test("opening Dismiss is not a decision; a reason preserves the existing outcome", () => {
+    const { container } = renderActions({ grouped: true });
+    const options = container.querySelector<HTMLElement>('[aria-label="Dismiss reasons"]')!;
+    expect(options.hidden).toBe(true);
+    act(() => button(container, "Dismiss").click());
+    expect(options.hidden).toBe(false);
+    expect(dismiss).not.toHaveBeenCalled();
+    act(() => button(container, "2Second hand").click());
+    expect(dismiss).toHaveBeenCalledWith("second_hand", "genuine_second_hand");
+    expect(options.hidden).toBe(true);
+  });
+
+  test("the recommended dismissal opens its choices instead of submitting a hidden action", () => {
+    const { container } = renderActions({ grouped: true, item: finding({ actionability: { key: "allowed_resale", reason: "Used item" } }) });
+    const recommended = container.querySelector<HTMLButtonElement>('button[data-recommended-action]')!;
+    expect(recommended.textContent).toBe("Dismiss");
+    act(() => recommended.click());
+    expect(dismiss).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLElement>('[aria-label="Dismiss reasons"]')!.hidden).toBe(false);
+  });
+
+  test("Escape closes only the menu and returns focus to its trigger", () => {
+    const { container } = renderActions({ grouped: true });
+    const escapeReachedWindow = mock(() => undefined);
+    window.addEventListener("keydown", escapeReachedWindow);
+    act(() => button(container, "Dismiss").click());
+    expect(document.activeElement).toBe(button(container, "1Different product"));
+    act(() => document.activeElement?.dispatchEvent(new happyWindow.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(escapeReachedWindow).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(button(container, "Dismiss"));
+    expect(container.querySelector<HTMLElement>('[aria-label="Dismiss reasons"]')!.hidden).toBe(true);
+    window.removeEventListener("keydown", escapeReachedWindow);
+  });
+
+  test("grouped menus keep future rules accessible and lock while a decision is pending", () => {
+    const { container } = renderActions({ grouped: true });
+    act(() => button(container, "More actions").click());
+    const options = container.querySelector<HTMLElement>('[role="group"][aria-label="More actions"]')!;
+    expect(options.hidden).toBe(false);
+    expect(button(options, "Allow product").disabled).toBe(false);
+    expect(button(options, "License seller").disabled).toBe(false);
+    expect(allowProductImage).not.toHaveBeenCalled();
+    const pending = renderActions({ grouped: true, isDismissing: true });
+    for (const action of pending.container.querySelectorAll<HTMLButtonElement>(".finding-action-buttons button")) {
+      expect(action.disabled).toBe(true);
+    }
+  });
 });
 
 describe("FindingActions allow product", () => {

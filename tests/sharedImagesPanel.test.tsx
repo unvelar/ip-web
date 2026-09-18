@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { SharedImagesEvidence } from "../src/components/monitoring/board/SharedImagesPanel";
+import { SharedImagesEvidence, SharedImagesResult } from "../src/components/monitoring/board/SharedImagesPanel";
 import type { MonitoringSharedImages } from "../src/api";
 
 const shared: MonitoringSharedImages = {
@@ -22,7 +22,9 @@ function render(data: MonitoringSharedImages) {
 test("shows paired archived evidence and separate listing/account links without identity confidence", () => {
   const html = render(shared);
   expect(html).toContain("Possible edited copy");
-  expect(html).toContain("Shared photos do not prove the same seller");
+  expect(html).toContain("catalog photos alone do not link accounts");
+  expect(html).toContain("Possible edit");
+  expect(html).toContain("Search scope and coverage");
   expect(html).toContain("/monitoring/tasks/related-finding");
   expect(html).toContain("/monitoring/sellers/seller-key");
   expect(html).toContain("source.jpg");
@@ -31,15 +33,24 @@ test("shows paired archived evidence and separate listing/account links without 
   expect(html).not.toContain("takedown");
 });
 
+test("keeps photo matches collapsed until the reviewer asks to compare them", () => {
+  const html = renderToStaticMarkup(<MemoryRouter><SharedImagesResult shared={shared} /></MemoryRouter>);
+  expect(html).toContain("Photo matches");
+  expect(html).toContain("Check for repeat listings and seller patterns");
+  expect(html).toContain("1 other listing");
+  expect(html).toContain("<details");
+  expect(html).not.toContain("<details open");
+});
+
 test("missing analysis is not shown as no matches", () => {
   const html = render({ ...shared, status: "not_analyzed", matches: [] });
-  expect(html).toContain("No current archived images");
-  expect(html).not.toContain("No shared-image candidates");
+  expect(html).toContain("No archived photos are available to compare yet");
+  expect(html).not.toContain("No photo matches found");
 });
 
 test("partial and empty coverage stays explicit and unavailable archives never use hotlinks", () => {
   const html = render({ ...shared, status: "partial", matches: [] });
-  expect(html).toContain("Partial coverage");
+  expect(html).toContain("Limited search · More matches may exist");
   expect(html).toContain("in the images checked");
   const missing = structuredClone(shared);
   missing.matches[0].evidence[0].source.url = null;

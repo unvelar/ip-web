@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ExternalLink, ImageOff, Images, Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, ExternalLink, ImageOff, Images, Loader2, RefreshCw } from "lucide-react";
 import {
   getMonitoringFindingSharedImages,
   type MonitoringSharedImages,
@@ -24,18 +24,35 @@ function EvidencePhoto({ image, label }: { image: SharedListingImage; label: str
           <img
             src={image.url}
             alt={`${label} archived listing photo`}
-            className="aspect-square w-full object-contain p-2 transition-transform group-hover:scale-[1.03]"
+            className="h-40 w-full object-contain p-2 transition-transform group-hover:scale-[1.03]"
             loading="lazy"
             onError={() => setFailed(true)}
           />
         </a>
       ) : (
-        <div className="flex aspect-square flex-col items-center justify-center gap-2 rounded-md border border-dashed border-stone-200 bg-stone-50 text-center text-xs text-stone-500">
+        <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-stone-200 bg-stone-50 text-center text-xs text-stone-500">
           <ImageOff size={20} aria-hidden />
           Archived photo unavailable
         </div>
       )}
     </div>
+  );
+}
+
+function MatchThumbnail({ image }: { image: SharedListingImage | undefined }) {
+  const [failed, setFailed] = useState(false);
+  return image?.url && !failed ? (
+    <img
+      src={image.url}
+      alt=""
+      className="h-12 w-12 shrink-0 rounded-md border border-stone-200 bg-stone-50 object-cover"
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  ) : (
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-dashed border-stone-200 bg-stone-50 text-stone-400">
+      <ImageOff size={16} aria-hidden />
+    </span>
   );
 }
 
@@ -45,87 +62,135 @@ function captureDate(value: string) {
 
 export function SharedImagesEvidence({ shared }: { shared: MonitoringSharedImages }) {
   const coverage = shared.coverage;
+  const coverageDetails = (
+    <details className={`text-xs leading-5 ${shared.status === "partial"
+      ? "rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2 text-amber-900"
+      : "text-stone-500"}`}>
+      <summary className="cursor-pointer select-none font-medium hover:underline">
+        {shared.status === "partial" ? "Limited search · More matches may exist" : "Search scope and coverage"}
+      </summary>
+      <div className="mt-2 space-y-1.5">
+        <p>
+          Photos compared: {coverage.source_images_checked.toLocaleString()}/{coverage.source_images.toLocaleString()} from this listing · {coverage.candidate_images_checked.toLocaleString()}/{coverage.candidate_images.toLocaleString()} from other listings.
+        </p>
+        <p>
+          Edited-copy checks: {coverage.source_copy_fingerprints.toLocaleString()}/{coverage.source_images_checked.toLocaleString()} here · {coverage.candidate_copy_fingerprints.toLocaleString()}/{coverage.candidate_images_checked.toLocaleString()} elsewhere. Other checked photos could match only if identical.
+        </p>
+        <p>Only archived listings in your organization were searched, not the whole marketplace.</p>
+      </div>
+    </details>
+  );
   return (
     <div className="space-y-3">
-      <p className="text-xs leading-5 text-stone-500">
-        Shared photos do not prove the same seller. Catalog photos can appear in unrelated shops.
-      </p>
       {shared.status === "not_analyzed" ? (
         <p className="rounded-lg bg-stone-50 px-3 py-2.5 text-xs leading-5 text-stone-600">
-          No current archived images are available for comparison yet. This is not a check for the absence of shared images.
+          No archived photos are available to compare yet. This does not mean there are no photo matches.
         </p>
       ) : (
         <>
-          {shared.status === "partial" && (
-            <p className="rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2 text-xs leading-5 text-amber-900">
-              Partial coverage. Some images have not been checked for edited copies, or fall outside this search. Matches may be missing.
+          {shared.matches.length > 0 && (
+            <p className="text-xs leading-5 text-stone-600">
+              Compare the products and sellers before acting; catalog photos alone do not link accounts.
             </p>
           )}
           {shared.matches.length === 0 ? (
-            <p className="py-1 text-sm text-stone-500">No shared-image candidates found in the images checked.</p>
+            <p className="py-1 text-sm text-stone-500">No photo matches found in the images checked.</p>
           ) : (
-            <div className="space-y-3">
-              {shared.matches.map((match) => (
-                <article key={match.result_id} className="rounded-lg border border-stone-200 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <Link
-                        to={`/monitoring/tasks/${match.result_id}`}
-                        className="line-clamp-2 text-sm font-semibold leading-5 text-stone-900 hover:underline"
-                      >
-                        {match.listing_title || match.domain || "Related listing"}
-                      </Link>
-                      <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-xs text-stone-500">
-                        <span>{match.domain}</span>
-                        {match.seller_name && <span aria-hidden>·</span>}
-                        {match.seller_name && (match.seller_key ? (
-                          <Link to={sellerProfilePath(match.seller_key)!} className="text-stone-700 hover:underline">
-                            {match.seller_name}
-                          </Link>
-                        ) : <span>{match.seller_name}</span>)}
-                      </div>
-                    </div>
-                    <a href={match.page_url} target="_blank" rel="noreferrer"
-                      className="shrink-0 rounded-md p-1.5 text-stone-400 hover:bg-stone-50 hover:text-stone-700"
-                      aria-label={`Open listing on ${match.domain}`} title="Open marketplace listing">
-                      <ExternalLink size={15} aria-hidden />
-                    </a>
-                  </div>
-                  {match.evidence.map((pair, index) => (
-                    <div key={`${pair.source.content_hash}-${pair.target.content_hash}`} className="mt-3">
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${pair.kind === "exact_image" ? "bg-blue-50 text-blue-700" : "bg-stone-100 text-stone-600"}`}>
-                          {pair.kind === "exact_image" ? "Identical archived image" : "Possible edited copy"}
+            <div className="space-y-2">
+              {shared.matches.map((match) => {
+                const hasExactImage = match.evidence.some((pair) => pair.kind === "exact_image");
+                return (
+                  <details key={match.result_id} className="group/match min-w-0 rounded-lg border border-stone-200 bg-white">
+                    <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+                      <MatchThumbnail image={(match.evidence.find((pair) => pair.kind === "exact_image") ?? match.evidence[0])?.target} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-stone-900">
+                          {match.listing_title || match.domain || "Other listing"}
                         </span>
-                        {index === 0 && <span className="text-[10px] text-stone-400">Compare the photos</span>}
+                        <span className="block truncate text-xs text-stone-500">
+                          {[match.seller_name, match.domain].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-medium text-stone-500">
+                        {hasExactImage ? "Exact photo" : "Possible edit"}
+                      </span>
+                      <ChevronDown size={14} className="shrink-0 text-stone-400 transition-transform group-open/match:rotate-180" aria-hidden />
+                    </summary>
+                    <div className="border-t border-stone-100 px-3 pb-3 pt-2.5">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium">
+                        <Link to={`/monitoring/tasks/${match.result_id}`} className="text-stone-700 hover:underline">
+                          Open listing details
+                        </Link>
+                        {match.seller_key && (
+                          <Link to={sellerProfilePath(match.seller_key)!} className="text-stone-700 hover:underline">
+                            Seller history
+                          </Link>
+                        )}
+                        <a href={match.page_url} target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-stone-700 hover:underline"
+                          aria-label={`Open listing on ${match.domain}`}>
+                          Marketplace <ExternalLink size={12} aria-hidden />
+                        </a>
                       </div>
-                      <div className="grid grid-cols-2 gap-2.5">
-                        <EvidencePhoto key={pair.source.url} image={pair.source} label="This listing" />
-                        <EvidencePhoto key={pair.target.url} image={pair.target} label="Related listing" />
-                      </div>
+                      {match.evidence.map((pair) => (
+                        <div key={`${pair.source.content_hash}-${pair.target.content_hash}`} className="mt-3">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${pair.kind === "exact_image" ? "bg-blue-50 text-blue-700" : "bg-stone-100 text-stone-600"}`}>
+                            {pair.kind === "exact_image" ? "Identical archived image" : "Possible edited copy"}
+                          </span>
+                          <div className="mt-2 grid grid-cols-2 gap-2.5">
+                            <EvidencePhoto key={pair.source.url} image={pair.source} label="This listing" />
+                            <EvidencePhoto key={pair.target.url} image={pair.target} label="Other listing" />
+                          </div>
+                        </div>
+                      ))}
+                      <p className="mt-2 text-[10px] leading-4 text-stone-400">
+                        Archived {shared.source_captured_at ? captureDate(shared.source_captured_at) : "earlier"}
+                        {" · "}Other listing archived {captureDate(match.captured_at)}
+                      </p>
                     </div>
-                  ))}
-                  <p className="mt-2 text-[10px] leading-4 text-stone-400">
-                    Archived {shared.source_captured_at ? captureDate(shared.source_captured_at) : "earlier"}
-                    {" · "}Related listing archived {captureDate(match.captured_at)}
-                  </p>
-                </article>
-              ))}
+                  </details>
+                );
+              })}
             </div>
           )}
-          {shared.has_more && <p className="text-xs text-stone-500">Showing the strongest matches. More candidates may be available.</p>}
-          <details className="text-[11px] leading-5 text-stone-500">
-            <summary className="cursor-pointer select-none hover:text-stone-700">What was checked?</summary>
-            <p className="mt-1.5">
-              Compared {coverage.source_images_checked.toLocaleString()} of {coverage.source_images.toLocaleString()} archived images from this listing with {coverage.candidate_images_checked.toLocaleString()} of {coverage.candidate_images.toLocaleString()} current archived images from other listings in your organization.
-            </p>
-            <p className="mt-1">
-              Edited-copy analysis is available for {coverage.source_copy_fingerprints.toLocaleString()} of the source images and {coverage.candidate_copy_fingerprints.toLocaleString()} of the other images checked. The remaining images are checked only for identical archived files. Up to three paired views are shown per listing. This does not cover the whole marketplace.
-            </p>
-          </details>
+          {shared.has_more && <p className="text-xs text-stone-500">Showing the strongest matches only.</p>}
+          {coverageDetails}
         </>
       )}
     </div>
+  );
+}
+
+export function SharedImagesResult({ shared }: { shared: MonitoringSharedImages }) {
+  const count = shared.matches.length;
+  return (
+    <section aria-label="Photo matches">
+      {count > 0 ? (
+        <details className="group/photo">
+          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <span className="flex min-w-0 items-center gap-2">
+              <Images size={15} className="shrink-0 text-stone-400" aria-hidden />
+              <span className="text-sm font-bold text-stone-900">Photo matches</span>
+              <span className="ml-auto truncate text-xs tabular-nums text-stone-500">
+                {count} {shared.has_more ? "shown" : count === 1 ? "other listing" : "other listings"}
+                {shared.status === "partial" && " · Limited search"}
+              </span>
+              <ChevronDown size={14} className="shrink-0 text-stone-400 transition-transform group-open/photo:rotate-180" aria-hidden />
+            </span>
+            <span className="mt-1 block text-xs text-stone-600">Check for repeat listings and seller patterns</span>
+          </summary>
+          <div className="mt-3"><SharedImagesEvidence shared={shared} /></div>
+        </details>
+      ) : (
+        <>
+          <div className="mb-2.5 flex items-center gap-2">
+            <Images size={15} className="text-stone-400" aria-hidden />
+            <h3 className="text-sm font-bold text-stone-900">Photo matches</h3>
+          </div>
+          <SharedImagesEvidence shared={shared} />
+        </>
+      )}
+    </section>
   );
 }
 
@@ -148,17 +213,13 @@ export function SharedImagesPanel({ resultId }: { resultId: string }) {
     return () => controller.abort();
   }, [resultId, attempt]);
 
+  if (state.kind === "loaded") return <SharedImagesResult shared={state.shared} />;
+
   return (
-    <section aria-label="Shared images">
+    <section aria-label="Photo matches">
       <div className="mb-2.5 flex items-center gap-2">
         <Images size={15} className="text-stone-400" aria-hidden />
-        <h3 className="text-sm font-bold text-stone-900">Shared images</h3>
-        <span className="rounded border border-stone-200 px-1.5 py-0.5 text-[10px] font-medium text-stone-500">Preview</span>
-        {state.kind === "loaded" && state.shared.matches.length > 0 && (
-          <span className="ml-auto text-xs tabular-nums text-stone-500">
-            {state.shared.matches.length} related {state.shared.matches.length === 1 ? "listing" : "listings"}
-          </span>
-        )}
+        <h3 className="text-sm font-bold text-stone-900">Photo matches</h3>
       </div>
       {state.kind === "loading" && (
         <p role="status" className="flex items-center gap-2 py-2 text-xs text-stone-500">
@@ -174,7 +235,6 @@ export function SharedImagesPanel({ resultId }: { resultId: string }) {
           </button>
         </div>
       )}
-      {state.kind === "loaded" && <SharedImagesEvidence shared={state.shared} />}
     </section>
   );
 }

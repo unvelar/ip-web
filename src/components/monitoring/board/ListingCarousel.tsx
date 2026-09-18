@@ -1,4 +1,5 @@
-import { type MouseEvent, useMemo, useState } from "react";
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus, X } from "lucide-react";
 import { allowIpFindingProductImage, type IpReviewFinding } from "../../../api";
 
 /** Modern "detected region" overlay: four rounded corner brackets in an
@@ -272,24 +273,49 @@ export function ListingCarousel({
   f,
   ipId,
   compact = false,
+  initialView = "screenshot",
 }: {
   f: IpReviewFinding;
   ipId?: string;
   compact?: boolean;
+  initialView?: "screenshot" | "product";
 }) {
   const items = useMemo(() => buildGalleryItems(f), [f]);
 
-  const [idx, setIdx] = useState(0);
+  const [idx, setIdx] = useState(() => initialView === "product"
+    ? Math.max(0, items.findIndex((item) => !item.isScreenshot)) : 0);
   const [allowingUrl, setAllowingUrl] = useState<string | null>(null);
   const [allowedSourceUrls, setAllowedSourceUrls] = useState<Set<string>>(new Set());
-  const [zoomPos, setZoomPos] = useState<{ x: number; y: number } | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerZoom, setViewerZoom] = useState(1);
+  const viewerRef = useRef<HTMLDialogElement>(null);
+  const viewerImageRef = useRef<HTMLDivElement>(null);
   // Natural dimensions of the active hero image — needed so the SVG bbox
   // overlay (in pixel coords) lines up under the same `object-contain`
   // letterboxing as the <img>. Keyed by URL so switching slides invalidates a
   // stale measurement during render (no setState-in-effect). Switching finding
   // remounts the whole panel via the `key` on <FindingComparison>, so `idx`
-  // resets to 0 on its own — no reset effect needed.
+  // resets to the initial view on its own — no reset effect needed.
   const [natural, setNatural] = useState<{ url: string; w: number; h: number } | null>(null);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    if (viewerOpen && !viewer.open) viewer.showModal();
+    if (!viewerOpen && viewer.open) viewer.close();
+    return () => { if (viewer.open) viewer.close(); };
+  }, [viewerOpen]);
+
+  useEffect(() => {
+    if (!viewerOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const viewport = viewerImageRef.current;
+      if (!viewport) return;
+      viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) / 2;
+      viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [viewerOpen, viewerZoom, idx]);
 
   const activeItem = items[Math.min(idx, items.length - 1)];
 
@@ -314,14 +340,6 @@ export function ListingCarousel({
     : false;
   const canZoomHero = !compact;
 
-  function updateHeroZoom(e: MouseEvent<HTMLAnchorElement>) {
-    if (!canZoomHero) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
-    const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100));
-    setZoomPos({ x, y });
-  }
-
   async function allowImageUrl(e: MouseEvent, imageUrl: string) {
     e.preventDefault();
     e.stopPropagation();
@@ -344,28 +362,20 @@ export function ListingCarousel({
         href={active}
         target="_blank"
         rel="noreferrer"
-        title={canZoomHero ? "Hover to zoom; click to open full size" : "Open full size"}
-        onMouseEnter={canZoomHero ? updateHeroZoom : undefined}
-        onMouseMove={canZoomHero ? updateHeroZoom : undefined}
-        onMouseLeave={canZoomHero ? () => setZoomPos(null) : undefined}
+        aria-label={activeItem.isScreenshot ? "Enlarge listing screenshot" : `Enlarge product photo ${Math.min(idx, items.length - 1) + 1}`}
+        title={canZoomHero ? "Click to inspect the full photo" : "Open full size"}
+        onClick={compact ? undefined : (event) => {
+          event.preventDefault();
+          setViewerZoom(activeItem.isScreenshot ? 1 : 2);
+          setViewerOpen(true);
+        }}
         className={`block w-full aspect-square bg-stone-50 border border-stone-200 rounded-lg overflow-hidden relative ${
-          compact ? "max-h-[300px]" : "max-h-[480px]"
+          compact ? "max-h-[300px]" : "max-h-[600px]"
         } ${canZoomHero ? "cursor-zoom-in" : ""}`}
       >
         <div
-          className={`absolute inset-0 pointer-events-none ${
-            canZoomHero
-              ? "transition-transform duration-150 ease-out will-change-transform motion-reduce:transition-none"
-              : ""
-          }`}
-          style={
-            canZoomHero
-              ? {
-                  transform: zoomPos ? "scale(2.15)" : "scale(1)",
-                  transformOrigin: zoomPos ? `${zoomPos.x}% ${zoomPos.y}%` : "50% 50%",
-                }
-              : undefined
-          }
+          className="absolute inset-0 pointer-events-none"
+          style={canZoomHero && !activeItem.isScreenshot ? { transform: "scale(1.7)" } : undefined}
         >
           <img
             src={active}
@@ -401,6 +411,11 @@ export function ListingCarousel({
             {Math.round(activeSim * 100)}%
           </span>
         )}
+        {!compact && (
+          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-white/90 px-2 py-1 text-[10px] font-semibold text-stone-700 shadow-sm" aria-hidden="true">
+            <Maximize2 size={11} /> View full photo
+          </span>
+        )}
         {items.length > 1 && (
           <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-900/70 text-white">
             {Math.min(idx, items.length - 1) + 1} / {items.length}
@@ -422,6 +437,96 @@ export function ListingCarousel({
           </button>
         )}
       </a>
+      {!compact && (
+        <dialog
+          ref={viewerRef}
+          aria-label="Enlarged listing photo"
+          aria-modal={viewerOpen ? "true" : undefined}
+          onClose={() => setViewerOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft" && idx > 0) {
+              event.preventDefault();
+              setIdx(idx - 1);
+              setViewerZoom(items[idx - 1].isScreenshot ? 1 : 2);
+            }
+            if (event.key === "ArrowRight" && idx < items.length - 1) {
+              event.preventDefault();
+              setIdx(idx + 1);
+              setViewerZoom(items[idx + 1].isScreenshot ? 1 : 2);
+            }
+          }}
+          className="m-auto h-[min(96dvh,1000px)] w-[min(96vw,1200px)] max-h-none max-w-none overflow-hidden rounded-xl border border-stone-200 bg-white p-0 shadow-2xl backdrop:bg-stone-950/80"
+        >
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex shrink-0 items-center gap-3 border-b border-stone-200 px-4 py-3">
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-stone-900">
+                {activeItem.isScreenshot ? "Listing screenshot" : "Product photo"}
+                {items.length > 1 && ` · ${idx + 1} of ${items.length}`}
+              </span>
+              <div className="flex shrink-0 items-center gap-1 rounded-md border border-stone-200" aria-label="Image zoom">
+                <button type="button" onClick={() => setViewerZoom((value) => Math.max(1, value - 0.5))} disabled={viewerZoom === 1}
+                  className="rounded-l-md p-1.5 text-stone-600 hover:bg-stone-100 disabled:opacity-40" aria-label="Zoom out">
+                  <Minus size={15} aria-hidden />
+                </button>
+                <span className="w-12 text-center text-xs tabular-nums text-stone-600">{Math.round(viewerZoom * 100)}%</span>
+                <button type="button" onClick={() => setViewerZoom((value) => Math.min(4, value + 0.5))} disabled={viewerZoom === 4}
+                  className="rounded-r-md p-1.5 text-stone-600 hover:bg-stone-100 disabled:opacity-40" aria-label="Zoom in">
+                  <Plus size={15} aria-hidden />
+                </button>
+              </div>
+              <button type="button" onClick={() => setViewerZoom(1)} className="shrink-0 text-xs font-medium text-stone-600 hover:underline">
+                Fit
+              </button>
+              <a href={active} target="_blank" rel="noreferrer" className="text-xs font-medium text-stone-600 underline-offset-2 hover:underline">
+                Open original
+              </a>
+              <button type="button" onClick={() => viewerRef.current?.close()} className="rounded-md p-1.5 text-stone-600 hover:bg-stone-100" aria-label="Close enlarged photo">
+                <X size={18} aria-hidden />
+              </button>
+            </div>
+            <div className="relative min-h-0 flex-1 bg-stone-100">
+              <div ref={viewerImageRef} className="h-full overflow-auto p-4">
+                <img src={active} alt={activeItem.isScreenshot ? "Enlarged listing screenshot" : "Enlarged product photo"}
+                  className={viewerZoom === 1 ? "mx-auto h-full w-full object-contain" : "mx-auto block max-w-none object-contain"}
+                  style={viewerZoom === 1 ? undefined : { height: `${viewerZoom * 100}%`, width: "auto" }} />
+              </div>
+              {items.length > 1 && (
+                <>
+                  <button type="button" onClick={() => {
+                    const nextIndex = Math.max(0, idx - 1);
+                    setIdx(nextIndex);
+                    setViewerZoom(items[nextIndex].isScreenshot ? 1 : 2);
+                  }} disabled={idx === 0}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/95 p-2 text-stone-700 shadow-md hover:bg-white disabled:opacity-40"
+                    aria-label="Previous photo"><ChevronLeft size={20} aria-hidden /></button>
+                  <button type="button" onClick={() => {
+                    const nextIndex = Math.min(items.length - 1, idx + 1);
+                    setIdx(nextIndex);
+                    setViewerZoom(items[nextIndex].isScreenshot ? 1 : 2);
+                  }} disabled={idx === items.length - 1}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/95 p-2 text-stone-700 shadow-md hover:bg-white disabled:opacity-40"
+                    aria-label="Next photo"><ChevronRight size={20} aria-hidden /></button>
+                </>
+              )}
+            </div>
+            {items.length > 1 && (
+              <div className="flex shrink-0 justify-center gap-2 overflow-x-auto border-t border-stone-200 px-4 py-3">
+                {items.map((item, imageIndex) => (
+                  <button key={item.key} type="button" onClick={() => {
+                    setIdx(imageIndex);
+                    setViewerZoom(item.isScreenshot ? 1 : 2);
+                  }}
+                    aria-label={item.isScreenshot ? "View listing screenshot enlarged" : `View product photo ${imageIndex + 1} enlarged`}
+                    aria-pressed={imageIndex === idx}
+                    className={`h-12 w-12 shrink-0 overflow-hidden rounded-md border-2 ${imageIndex === idx ? "border-stone-900" : "border-stone-200 hover:border-stone-400"}`}>
+                    <img src={item.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </dialog>
+      )}
       {allowedSourceUrls.size > 0 && (
         <div className="rounded-md border border-teal-200 bg-teal-50 px-2.5 py-2 text-xs font-medium text-teal-800">
           Similar products will be ignored going forward.
@@ -439,6 +544,8 @@ export function ListingCarousel({
               <button
                 key={item.key}
                 type="button"
+                aria-label={item.isScreenshot ? "View listing screenshot" : `View product photo ${i + 1}`}
+                aria-pressed={isActive}
                 onMouseEnter={() => setIdx(i)}
                 onClick={(e) => {
                   e.preventDefault();

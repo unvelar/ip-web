@@ -1,0 +1,281 @@
+.finding-inspector {
+  --inspector-ease: cubic-bezier(.32, .72, 0, 1);
+  display: flex;
+  flex-direction: column;
+  width: min(960px, 72vw, calc(100vw - 24px));
+  height: calc(100% - 16px);
+  margin: 8px;
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 16px;
+  box-shadow: 0 16px 64px #29252418, 0 2px 8px #2925240a;
+  animation: inspector-arrive 260ms var(--inspector-ease);
+}
+
+.finding-inspector-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px 14px 8px 24px;
+  border-bottom: 1px solid #f0efee;
+  flex-shrink: 0;
+}
+.finding-inspector-label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 10px;
+  color: #57534e;
+  font-size: 13px;
+  font-weight: 500;
+}
+.finding-inspector-label svg { color: #a8a29e; }
+.finding-inspector-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  color: #78716c;
+  flex-shrink: 0;
+  transition: background 150ms ease, transform 150ms var(--inspector-ease);
+}
+.finding-inspector-close:hover { background: #f5f5f4; color: #292524; }
+.finding-inspector-close:active { transform: scale(.94); }
+.finding-inspector :is(button, a, summary, select):focus-visible {
+  outline: 2px solid #78716c;
+  outline-offset: 3px;
+}
+.finding-inspector-scroll {
+  container-type: inline-size;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #d6d3d1 transparent;
+  padding: 14px 20px 20px;
+}
+.finding-inspector .finding-comparison-context {
+  padding-bottom: 10px;
+  margin-bottom: 16px;
+  border-color: #f0efee;
+}
+.finding-inspector .finding-comparison-context > div { min-height: 28px; }
+.finding-inspector .finding-comparison-body {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.finding-inspector .finding-comparison-gallery { position: sticky; top: 0; }
+.finding-inspector .finding-comparison-gallery > div > a {
+  max-height: 540px;
+  border-radius: 12px;
+  border-color: #eae8e6;
+  background: #fafaf9;
+}
+.finding-inspector .finding-comparison-gallery > div > div > button {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+}
+.finding-inspector .finding-comparison-info { gap: 12px; }
+.finding-inspector .finding-comparison-info > * { margin-block: 0; }
+.listing-key-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.listing-key-facts dt { font-size: 11px; color: #78716c; margin-bottom: 3px; }
+.listing-key-facts dd { font-size: 13px; font-weight: 500; color: #44403c; overflow-wrap: anywhere; }
+.listing-description h4, .listing-seller-context h4 { font-size: 11px; font-weight: 500; color: #78716c; margin: 0 0 6px; }
+.listing-description h4 span { font-weight: 400; }
+.listing-description p { overflow-wrap: anywhere; }
+.listing-description > button { font-size: 11px; font-weight: 500; color: #57534e; margin-top: 6px; text-decoration: underline; text-underline-offset: 3px; }
+.listing-description > details { margin-top: 8px; }
+.listing-description summary { cursor: pointer; }
+.listing-seller-context { border-top: 1px solid #eeedeb; padding-top: 12px; }
+.listing-seller-context > div { gap: 6px 10px; }
+.listing-seller-context > div > span:last-child { flex-basis: 100%; font-size: 11px; }
+.finding-inspector .finding-comparison-facts:empty { display: none; }
+.finding-assessment { border-top: 1px solid #eeedeb; padding-top: 16px; margin-top: 18px; }
+.finding-assessment > summary { cursor: pointer; color: #44403c; font-size: 12px; font-weight: 600; }
+.finding-assessment-rationale p { max-width: 75ch; }
+.finding-inspector .finding-comparison-info > h3 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -.5px;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+.finding-inspector-scroll .text-sm { font-size: 13px; line-height: 1.6; }
+.finding-inspector-scroll .text-xs { font-size: 12px; line-height: 1.55; }
+.finding-inspector .finding-comparison-price {
+  padding: 0 0 14px;
+  border: 0;
+  border-bottom: 1px solid #eeedeb;
+  border-radius: 0;
+  background: transparent;
+}
+.finding-inspector .finding-comparison-price > div:first-child {
+  color: #78716c;
+  font-size: 10px;
+  letter-spacing: .06em;
+  margin-bottom: 6px;
+}
+.finding-inspector .finding-comparison-price .text-2xl {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -.8px;
+}
+.finding-inspector .finding-comparison-facts { gap: 6px; }
+.finding-inspector .finding-comparison-facts > span {
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 6px;
+}
+.finding-inspector .finding-comparison-source {
+  min-height: 36px;
+  padding: 6px 12px;
+  gap: 7px;
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+  background: #fff;
+  color: #44403c;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px #29252408;
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+.finding-inspector .finding-comparison-source:hover { background: #fafaf9; box-shadow: 0 2px 4px #2925240c; }
+.finding-inspector .finding-comparison-info > details {
+  border-top: 1px solid #f0efee;
+  padding-top: 12px;
+}
+.finding-inspector .finding-comparison-info > details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  color: #57534e;
+  font-size: 12px;
+  font-weight: 500;
+}
+.finding-inspector .finding-comparison-info > details > summary::-webkit-details-marker { display: none; }
+.finding-inspector .finding-comparison-info > details > summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid #a8a29e;
+  border-bottom: 1.5px solid #a8a29e;
+  transform: rotate(45deg);
+  margin-right: 4px;
+  transition: transform 160ms var(--inspector-ease);
+}
+.finding-inspector .finding-comparison-info > details[open] > summary::after { transform: rotate(225deg); }
+.finding-inspector-section { margin-top: 18px; border-top: 1px solid #eeedeb; padding-top: 16px; }
+.finding-inspector-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #eae8e6;
+  background: #fcfcfb;
+  border-radius: 0 0 16px 16px;
+  box-shadow: 0 -4px 16px #29252403;
+}
+.finding-inspector-footer-heading { display: flex; align-items: center; gap: 12px; }
+.finding-inspector-footer-heading [title="Assignee"] > div { width: 145px; }
+.finding-inspector-footer-heading > span { font-size: 11px; font-weight: 500; color: #78716c; }
+.finding-inspector-footer-heading select { height: 30px; border-radius: 7px; background: #fff; font-weight: 500; }
+.finding-inspector-footer .finding-action-buttons { gap: 6px; }
+.finding-inspector-footer .finding-action-buttons button {
+  min-height: 34px;
+  height: auto;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-weight: 500;
+  font-size: 11px;
+  box-shadow: 0 1px 2px #29252406;
+  transition-duration: 150ms;
+}
+.finding-inspector-footer .finding-action-buttons button:not(:disabled):active { transform: scale(.97); }
+.finding-inspector-footer .finding-action-buttons .recommended-action {
+  background: #292524;
+  color: #fff;
+  box-shadow: 0 1px 2px #29252420, inset 0 1px 0 #ffffff18;
+  animation: none;
+}
+.finding-inspector-footer .finding-action-buttons .recommended-action:hover { background: #44403c; }
+
+.finding-action-popover { position: relative; }
+.finding-action-popover > button { display: inline-flex; align-items: center; gap: 8px; }
+.finding-action-disclosure { border: 1px solid #e7e5e4; background: #fff; color: #44403c; }
+.finding-action-disclosure:hover { background: #f5f5f4; }
+.finding-action-options {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 20;
+  width: 250px;
+  max-width: calc(100vw - 32px);
+  max-height: min(360px, 55dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 30px #29252418, 0 2px 6px #29252408;
+  transform-origin: bottom left;
+  animation: finding-action-options-arrive 160ms var(--inspector-ease);
+}
+.finding-action-options[hidden] { display: none; }
+.finding-action-options > p { padding: 6px 8px 10px; color: #78716c; font-size: 11px; line-height: 1.5; }
+.finding-inspector-footer .finding-action-options button {
+  width: 100%;
+  display: flex;
+  justify-content: flex-start;
+  padding: 10px 8px;
+  border: 0;
+  min-height: 38px;
+  box-shadow: none;
+}
+.finding-action-options > div { display: flex; flex-direction: column; width: 100%; }
+.finding-action-popover:last-child .finding-action-options { left: auto; right: 0; transform-origin: bottom right; }
+.finding-inspector-footer .finding-action-options button:hover { background: #f5f5f4; }
+.finding-inspector-footer .finding-action-options button.recommended-action:hover { background: #44403c; }
+@keyframes finding-action-options-arrive {
+  from { opacity: 0; transform: translateY(4px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@container (max-width: 620px) {
+  .finding-inspector .finding-comparison-body { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .finding-inspector .finding-comparison-gallery { position: static; }
+  .finding-inspector .finding-comparison-gallery > div > a { max-height: 280px; }
+}
+@media (max-width: 640px) {
+  .finding-inspector { width: 100%; height: 100%; margin: 0; border-radius: 0; border-right: 0; }
+  .finding-inspector .finding-comparison-body { grid-template-columns: minmax(0, 1fr); }
+  .finding-inspector .finding-comparison-gallery { position: static; }
+  .finding-inspector-header { padding-left: 16px; gap: 6px; }
+  .finding-inspector-scroll { padding: 12px 16px 20px; }
+  .finding-inspector-footer { padding: 10px 12px max(12px, env(safe-area-inset-bottom)); border-radius: 0; }
+  .finding-inspector-footer .finding-action-buttons button { min-height: 40px; }
+  .finding-inspector-footer .finding-action-buttons { gap: 4px; }
+  .finding-inspector-footer .finding-action-buttons > button,
+  .finding-inspector-footer .finding-action-popover > button { padding-inline: 7px; }
+  .finding-action-popover[data-more-actions] > button > span { display: none; }
+  .finding-action-popover[data-more-actions] > button { min-width: 40px; justify-content: center; }
+}
+@keyframes inspector-arrive {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .finding-inspector, .finding-inspector *, .finding-inspector *::after { animation: none !important; transition: none !important; }
+}

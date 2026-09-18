@@ -12,6 +12,7 @@ import {
 } from "../../../api";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
+import { ListingDescription } from "./ListingDescription";
 import { SellerSales } from "../../../features/sellers/SellerSales";
 import { sellerProfilePath } from "../../../lib/sellers";
 import {
@@ -109,6 +110,7 @@ export function FindingComparison({
   onUpdated,
   productGroupId,
   onCorrectProductGroup,
+  showActions = true,
 }: {
   f: IpReviewFinding;
   /** Resolved IP id for this finding (`f.ip_id ?? boardIpId`). */
@@ -126,6 +128,7 @@ export function FindingComparison({
   onUpdated: (opts?: FindingUpdateOptions) => void;
   productGroupId?: string;
   onCorrectProductGroup?: (reason: ProductGroupCorrectionReason) => Promise<void>;
+  showActions?: boolean;
 }) {
   const sellerTarget = sellerProfilePath(f.seller_key);
   const [refreshing, setRefreshing] = useState(false);
@@ -143,12 +146,6 @@ export function FindingComparison({
     !f.listing_title && !f.seller_name && !f.match_explanation && !f.description_summary;
   const inactiveListing =
     f.dismissal_reason?.startsWith("dead") || f.availability?.startsWith("dead");
-  const fullDescription = f.description_full_en || f.description_full;
-  const hasTranslatedDescription = Boolean(
-    f.description_full_en &&
-    f.description_full &&
-    f.description_full_en !== f.description_full,
-  );
 
   const sb = findingStatusBadge(f);
   const actionability = actionabilityMeta(f.actionability);
@@ -182,8 +179,7 @@ export function FindingComparison({
             title: "We do not have a reliable availability result yet. This finding remains open.",
           }
         : null;
-  const countryLabel = f.country || "Unknown";
-  const countryTitle = f.location && f.location !== f.country ? `Raw location: ${f.location}` : undefined;
+
   const unitPriceUsd = f.price_value_usd == null ? null : Number(f.price_value_usd);
   const priceUsd =
     unitPriceUsd != null && Number.isFinite(unitPriceUsd)
@@ -265,10 +261,10 @@ export function FindingComparison({
   return (
     // Cap + center the content so the panel doesn't sprawl edge-to-edge on wide
     // monitors (which left short text lines + the comment box floating in white).
-    <div className="mx-auto max-w-6xl space-y-2.5">
+    <div className="finding-comparison mx-auto max-w-6xl space-y-2.5">
       {/* Review context and decisions stay light so the listing remains the
           visual anchor. Ownership lives with the dialog-level controls. */}
-      <div className="border-b border-stone-200 pb-2">
+      <div className="finding-comparison-context border-b border-stone-200 pb-2">
         <div className="flex min-h-7 items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-x-2 gap-y-1 flex-wrap">
           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sb.cls}`}>
@@ -326,7 +322,7 @@ export function FindingComparison({
           )}
         </div>
 
-        <div className="mt-1">
+        {showActions && <div className="mt-1">
           <FindingActions
             f={f}
             ipId={ipId}
@@ -341,28 +337,28 @@ export function FindingComparison({
             onLicensed={onLicensed}
             onUpdated={onUpdated}
           />
-        </div>
+        </div>}
       </div>
 
       {/* Two-column body: bounded image left, enrichment data right. Collapses
           to a single column below lg. */}
-      <div className="grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-x-4 gap-y-3 lg:items-stretch">
+      <div className="finding-comparison-body grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-x-4 gap-y-3 lg:items-stretch">
         {/* LEFT — single image carousel. Page screenshot is the first slide
             when captured; product photos follow (best-matched marked).
             min-w-0 so the thumb strip scrolls instead of widening the track. */}
-        <div className="lg:sticky lg:top-4 min-w-0">
-          <ListingCarousel f={f} ipId={ipId} />
+        <div className="finding-comparison-gallery lg:sticky lg:top-4 min-w-0">
+          <ListingCarousel f={f} ipId={ipId} initialView="product" />
         </div>
 
         {/* RIGHT — enrichment data. */}
-        <div className="flex flex-col space-y-2.5 min-w-0">
+        <div className="finding-comparison-info flex flex-col space-y-2.5 min-w-0">
       {/* Listing context (from VLM enrichment) — what's on sale, type, where */}
       {f.listing_title && (
         <h3 className="text-base font-bold text-stone-900 leading-snug">{f.listing_title}</h3>
       )}
 
       {primaryPrice && (
-        <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
+        <div className="finding-comparison-price rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
           <div className="text-[10px] uppercase font-semibold text-stone-400">Listing price</div>
           <div className="mt-0.5 flex items-baseline gap-x-2 gap-y-1 flex-wrap">
             <span className="text-2xl font-bold tabular-nums text-stone-950 leading-none">
@@ -382,18 +378,17 @@ export function FindingComparison({
         </div>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap text-sm">
+      <dl className="listing-key-facts">
+        <div><dt>Location</dt><dd>{f.location || f.country || "Not available"}</dd></div>
+        <div><dt>Declared condition</dt><dd>{f.condition_assessment?.declared_condition === "new" ? "New"
+          : f.condition_assessment?.declared_condition === "used" ? "Used" : "Not stated"}</dd></div>
+      </dl>
+      <ListingDescription finding={f} />
+
+      <div className="finding-comparison-facts flex items-center gap-2 flex-wrap text-sm">
         {!primaryPrice && f.shipping_price && (
           <span className="text-stone-500" title="Shipping">Shipping: {f.shipping_price}</span>
         )}
-        <span
-          className={`px-1.5 py-0.5 rounded font-semibold ${
-            f.country ? "bg-stone-100 text-stone-600" : "bg-amber-50 text-amber-700"
-          }`}
-          title={countryTitle}
-        >
-          Country: {countryLabel}
-        </span>
         {f.quantity_available != null && f.quantity_available > 0 && (
           f.quantity_available <= 5 ? (
             <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold" title="Stock left">
@@ -413,9 +408,10 @@ export function FindingComparison({
       </div>
 
       {(f.seller_name || f.seller_url) && (
-        <div className="text-sm text-stone-500 flex items-center gap-x-2 gap-y-0.5 flex-wrap">
+        <section className="listing-seller-context" aria-label="Seller history">
+          <h4>Seller history</h4>
+          <div className="text-sm text-stone-500 flex items-center gap-x-2 gap-y-0.5 flex-wrap">
           <span>
-            <span className="text-stone-400">Seller: </span>
             {sellerTarget ? (
               <Link to={sellerTarget} className="text-blue-700 hover:underline font-medium">
                 {f.seller_name || "Seller profile"}
@@ -439,27 +435,74 @@ export function FindingComparison({
           )}
           <SellerSales count={f.seller_sales} observation={f.seller_sales_observation} />
           {f.seller_years_active != null && f.seller_years_active > 0 && (
-            <span>· {f.seller_years_active}y</span>
+            <span>· {f.seller_years_active} years active</span>
           )}
-          {sellerPriorEnforcement > 0 && (
-            <span className="font-semibold text-red-700">
-              · {sellerPriorEnforcement} prior takedown/enforced
-            </span>
-          )}
-        </div>
+          <span className={sellerPriorEnforcement > 0 ? "font-semibold text-red-700" : "text-stone-500"}>
+            {f.seller_prior_enforcement_count == null ? "Enforcement history unavailable"
+              : sellerPriorEnforcement === 0 ? "No prior enforcement recorded"
+              : `${sellerPriorEnforcement} prior enforcement actions`}
+          </span>
+          </div>
+        </section>
       )}
 
       <a
         href={f.page_url}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2"
+        className="finding-comparison-source inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2"
         title="Open listing"
       >
         <ExternalLink size={16} aria-hidden="true" />
         Open listing
       </a>
 
+      {f.item_details && Object.keys(f.item_details).length > 0 && (
+        <details className="text-sm text-stone-500">
+          <summary className="cursor-pointer text-stone-400 hover:text-stone-600 select-none">
+            Item details ({Object.keys(f.item_details).length})
+          </summary>
+          <dl className="mt-1.5 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
+            {Object.entries(f.item_details).map(([k, v]) => (
+              <div key={k} className="contents">
+                <dt className="text-stone-400 truncate max-w-[10rem]">{k}</dt>
+                <dd className="text-stone-600 break-words">{String(v)}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+
+      {noListingDetails && (
+        <p className="text-sm text-stone-400 italic">
+          {inactiveListing
+            ? "Listing is inactive; no current listing details available."
+            : f.enrichment_error
+              ? `Listing details unavailable: ${f.enrichment_error}`
+              : "Listing details still being analysed…"}
+        </p>
+      )}
+
+      {/* Footer meta — reviewer-relevant timestamps. */}
+      <div className="flex items-center gap-2 flex-wrap text-xs text-stone-400">
+        <span>found {new Date(f.found_at).toLocaleDateString()}</span>
+        {f.last_checked_at && (
+          <span title={new Date(f.last_checked_at).toLocaleString()}>
+            · last visit {formatAgo(f.last_checked_at)}
+          </span>
+        )}
+      </div>
+
+        </div>
+      </div>
+
+      {(productAuthenticityAssessment?.rule_assessments.length ||
+        whyFlagged || actionability.reason || authenticityLabel ||
+        f.protected_term_assessment?.outcome === "matched" ||
+        f.offer_subject === "packaging_only" || f.authenticity_reasoning) && (
+      <details className="finding-assessment" aria-label="AI assessment">
+        <summary>AI assessment · {actionability.label || "Needs review"}</summary>
+        <div className="mt-3 space-y-3">
       {productAuthenticityAssessment &&
         productAuthenticityAssessment.rule_assessments.length > 0 && (
         <section className="rounded-lg border border-stone-200 bg-stone-50 p-3">
@@ -521,11 +564,7 @@ export function FindingComparison({
 
       {(whyFlagged || actionability.reason || authenticityLabel ||
         f.offer_subject === "packaging_only" || f.authenticity_reasoning) && (
-        <details className="text-sm text-stone-500">
-          <summary className="cursor-pointer text-stone-400 hover:text-stone-600 select-none">
-            Rationale
-          </summary>
-          <div className="mt-1.5 space-y-1.5 leading-relaxed">
+        <div className="finding-assessment-rationale space-y-1.5 text-sm leading-relaxed text-stone-500">
             {(authenticityLabel || f.offer_subject === "packaging_only") && (
               <div className="flex flex-wrap items-center gap-1.5">
                 {authenticityLabel && (
@@ -558,69 +597,12 @@ export function FindingComparison({
                 {actionability.reason}
               </p>
             )}
-          </div>
-        </details>
+        </div>
       )}
-
-      {f.description_summary && (
-        <p className="text-sm text-stone-500 leading-relaxed">{f.description_summary}</p>
-      )}
-
-      {fullDescription && fullDescription !== f.description_summary && (
-        <details className="text-sm text-stone-500">
-          <summary className="cursor-pointer text-stone-400 hover:text-stone-600 select-none">
-            Full description
-          </summary>
-          <p className="mt-1.5 leading-relaxed whitespace-pre-wrap">{fullDescription}</p>
-          {hasTranslatedDescription && (
-            <details className="mt-2 border-l-2 border-stone-200 pl-3">
-              <summary className="cursor-pointer text-stone-400 hover:text-stone-600 select-none">
-                View original{f.description_language ? ` (${f.description_language.toUpperCase()})` : ""}
-              </summary>
-              <p className="mt-1.5 leading-relaxed whitespace-pre-wrap">{f.description_full}</p>
-            </details>
-          )}
-        </details>
-      )}
-
-      {f.item_details && Object.keys(f.item_details).length > 0 && (
-        <details className="text-sm text-stone-500">
-          <summary className="cursor-pointer text-stone-400 hover:text-stone-600 select-none">
-            Item details ({Object.keys(f.item_details).length})
-          </summary>
-          <dl className="mt-1.5 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
-            {Object.entries(f.item_details).map(([k, v]) => (
-              <div key={k} className="contents">
-                <dt className="text-stone-400 truncate max-w-[10rem]">{k}</dt>
-                <dd className="text-stone-600 break-words">{String(v)}</dd>
-              </div>
-            ))}
-          </dl>
-        </details>
-      )}
-
-      {noListingDetails && (
-        <p className="text-sm text-stone-400 italic">
-          {inactiveListing
-            ? "Listing is inactive; no current listing details available."
-            : f.enrichment_error
-              ? `Listing details unavailable: ${f.enrichment_error}`
-              : "Listing details still being analysed…"}
-        </p>
-      )}
-
-      {/* Footer meta — reviewer-relevant timestamps. */}
-      <div className="flex items-center gap-2 flex-wrap text-xs text-stone-400">
-        <span>found {new Date(f.found_at).toLocaleDateString()}</span>
-        {f.last_checked_at && (
-          <span title={new Date(f.last_checked_at).toLocaleString()}>
-            · last visit {formatAgo(f.last_checked_at)}
-          </span>
-        )}
-      </div>
 
         </div>
-      </div>
+      </details>
+      )}
 
       {/* Triage sends the first takedown from the row header; surface its thread
           here once a request exists. */}

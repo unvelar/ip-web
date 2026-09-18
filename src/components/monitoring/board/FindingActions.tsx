@@ -20,6 +20,7 @@ import {
 import { ButtonWithShortcut } from "./ButtonWithShortcut";
 import { preferredAllowedProductImage } from "./allowedProduct";
 import { legalQueueReasonLabel } from "./utils";
+import { FindingActionPopover } from "./FindingActionPopover";
 
 export type FindingUpdateOptions = {
   completed?: boolean;
@@ -48,6 +49,7 @@ export function FindingActions({
   onLicensed,
   onUpdated,
   compact = false,
+  grouped = false,
 }: {
   f: IpReviewFinding;
   ipId?: string;
@@ -62,6 +64,7 @@ export function FindingActions({
   onLicensed: (dismissedCount: number) => void;
   onUpdated: (opts?: FindingUpdateOptions) => void;
   compact?: boolean;
+  grouped?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [licensing, setLicensing] = useState(false);
@@ -401,6 +404,21 @@ export function FindingActions({
   let utilityButtons: ReactNode = null;
   let stateNote: ReactNode = null;
 
+  const dismissalOptions = <>
+    {falsePositiveBtn}
+    {secondHandBtn}
+    {f.offer_subject === "packaging_only" && packagingOnlyBtn}
+    {dontPursueBtn}
+    {textClearanceButtons}
+  </>;
+  const dismissButtons = grouped ? (
+    <FindingActionPopover label="Dismiss" description="Choose why this listing should be closed."
+      disabled={actionPending}
+      recommended={recommendedAction != null && ["false_positive", "second_hand", "packaging_only", "do_not_pursue"].includes(recommendedAction)}>
+      {dismissalOptions}
+    </FindingActionPopover>
+  ) : dismissalOptions;
+
   if (sellerLicensed && !isDismissed) {
     buttons = (
       <span
@@ -419,12 +437,8 @@ export function FindingActions({
     // routes enter takedown_pending for legal review and manual submission.
     buttons = (
       <>
-        {falsePositiveBtn}
-        {secondHandBtn}
-        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
-        {dontPursueBtn}
-        {f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
-        {textClearanceButtons}
+        {dismissButtons}
+        {!grouped && f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
         {needsReviewBtn}
         <button
           type="button"
@@ -453,12 +467,8 @@ export function FindingActions({
   } else if (state === "review") {
     buttons = (
       <>
-        {falsePositiveBtn}
-        {secondHandBtn}
-        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
-        {dontPursueBtn}
-        {f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
-        {textClearanceButtons}
+        {dismissButtons}
+        {!grouped && f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
         <button
           type="button"
           disabled={!f.case_id || actionPending}
@@ -491,12 +501,8 @@ export function FindingActions({
   } else if (state === "takedown_pending") {
     buttons = (
       <>
-        {falsePositiveBtn}
-        {secondHandBtn}
-        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
-        {dontPursueBtn}
-        {f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
-        {textClearanceButtons}
+        {dismissButtons}
+        {!grouped && f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
         <button
           type="button"
           disabled={!f.case_id || actionPending}
@@ -546,10 +552,7 @@ export function FindingActions({
   } else if (state === "takedown_sent") {
     buttons = (
       <>
-        {falsePositiveBtn}
-        {secondHandBtn}
-        {f.offer_subject === "packaging_only" && packagingOnlyBtn}
-        {dontPursueBtn}
+        {dismissButtons}
         <button
           type="button"
           disabled={!ipId || actionPending}
@@ -590,7 +593,14 @@ export function FindingActions({
       <div className={compact ? "finding-action-buttons grid grid-cols-2 gap-1.5" : "finding-action-buttons flex min-w-0 max-w-full flex-wrap items-center gap-1"}>
         {stateNote}
         {buttons}
-        {!compact && utilityButtons}
+        {!compact && !grouped && utilityButtons}
+        {grouped && !sellerLicensed && ["pending", "review", "takedown_pending"].includes(state) && (
+          <FindingActionPopover label="More actions" description="Allow product and License seller also affect future findings."
+            disabled={actionPending} recommended={recommendedAction === "license"}>
+            {f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
+            {utilityButtons}
+          </FindingActionPopover>
+        )}
       </div>
       {compact && (utilityButtons || refreshBtn) && (
         <div
