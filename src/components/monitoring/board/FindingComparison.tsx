@@ -12,7 +12,7 @@ import {
 } from "../../../api";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
 import { ListingCarousel } from "./ListingCarousel";
-import { SellerSales } from "../SellerSales";
+import { SellerSales } from "../../../features/sellers/SellerSales";
 import { sellerProfilePath } from "../../../lib/sellers";
 import {
   actionabilityMeta,

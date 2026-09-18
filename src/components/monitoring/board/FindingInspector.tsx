@@ -15,6 +15,7 @@ import { SharedImagesPanel } from "./SharedImagesPanel";
 import { TaskAssigneeControl } from "./TaskAssigneeControl";
 import { compactListingTitle } from "./utils";
 import { APP_SHELL_OVERLAY_TOP } from "../../appShellLayout";
+import { useOutsideDismiss } from "../../../hooks/useOutsideDismiss";
 
 export function FindingInspector({
   f,
@@ -66,6 +67,7 @@ export function FindingInspector({
   };
 }) {
   const inspectorRef = useRef<HTMLElement>(null);
+  useOutsideDismiss(inspectorRef, onClose);
 
   useEffect(() => {
     inspectorRef.current?.focus({ preventScroll: true });

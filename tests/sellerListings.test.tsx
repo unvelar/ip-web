@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
-import { SellerListings } from "../src/components/monitoring/SellerListings";
+import { SellerListings } from "../src/features/sellers/SellerListings";
 
 const originalFetch = globalThis.fetch;
 let root: Root | undefined;
@@ -27,31 +27,39 @@ async function setup() {
     sellerKey: "seller/one", sellerName: "One", ipId: "ip-one", initialStatus: "open",
   }))));
   const button = (text: string) => Array.from(container.querySelectorAll("button")).find((element) => element.textContent === text)!;
-  const respond = async (index: number, names: string[], cursor: string | null = null) => {
+  const respond = async (index: number, names: string[], cursor: string | null = null, status = "pending") => {
     await act(async () => requests[index].resolve(Response.json({
+      ips: [],
       findings: names.map((name) => ({
-        result_id: name, listing_title: name, page_url: `https://example.org/${name}`,
+        case_id: `case-${name}`, review_status: status, result_id: name, listing_title: name, page_url: `https://example.org/${name}`,
         found_at: "2026-09-11T12:00:00Z", availability: "live", price_value_usd: 12,
         images: [], ip_id: "ip-one", ip_name: "Example",
       })), next_cursor: cursor,
     })));
   };
-  return { container, requests, button, respond };
+  const statusSelect = () => container.querySelector<HTMLSelectElement>('[aria-label="Listing status"]')!;
+  const selectStatus = async (value: string) => {
+    await act(async () => {
+      statusSelect().value = value;
+      statusSelect().dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+  };
+  return { container, requests, button, respond, selectStatus, statusSelect };
 }
 
 test("listing requests keep IP scope, abort on filter change, and ignore an older response", async () => {
-  const { container, requests, button, respond } = await setup();
+  const { container, requests, selectStatus, respond } = await setup();
   expect(requests[0].url.pathname).toContain("seller%2Fone");
   expect(requests[0].url.searchParams.get("ip_id")).toBe("ip-one");
   expect(requests[0].url.searchParams.get("status")).toBe("open");
-  await act(async () => button("Closed").click());
+  await selectStatus("dismissed");
   expect(requests[0].signal.aborted).toBe(true);
   expect(requests[1].url.searchParams.get("status")).toBe("dismissed");
   await respond(1, ["Closed item"]);
   await respond(0, ["Stale open item"]);
   expect(container.textContent).toContain("Closed item");
   expect(container.textContent).not.toContain("Stale open item");
-  expect(container.querySelector('a.seller-item-title')?.getAttribute("href")).toBe("/monitoring/tasks/Closed item");
+  expect(container.querySelector('button.seller-item-title')?.getAttribute("aria-haspopup")).toBe("dialog");
 });
 
 test("pagination retains loaded items on failure and retries the same cursor", async () => {
@@ -75,4 +83,60 @@ test("closing an expanded seller cancels its pending request", async () => {
   await act(async () => root?.unmount());
   root = undefined;
   expect(requests[0].signal.aborted).toBe(true);
+});
+
+
+test("select-all affects loaded listings, pagination does not silently select new items, and filters clear selection", async () => {
+  const { container, button, respond, selectStatus } = await setup();
+  await respond(0, ["First"], "next-page");
+  const selectAll = () => container.querySelector<HTMLInputElement>('[aria-label="Select all loaded listings"]')!;
+  await act(async () => selectAll().click());
+  expect(container.textContent).toContain("1 selected");
+  await act(async () => button("Load more listings").click());
+  await respond(1, ["Second"]);
+  expect(selectAll().indeterminate).toBe(true);
+  expect(container.querySelectorAll('li input:checked')).toHaveLength(1);
+  await act(async () => selectAll().click());
+  expect(container.querySelectorAll('li input:checked')).toHaveLength(2);
+  const toolbar = container.querySelector('.seller-toolbar-slot')!;
+  expect(toolbar.querySelector('[aria-label="Selected listing actions"]')).not.toBeNull();
+  expect(toolbar.querySelector('.seller-toolbar-filters')?.getAttribute('aria-hidden')).toBe("true");
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Clear selection"]')!.click());
+  expect(toolbar.querySelector('.seller-toolbar-filters')?.getAttribute('aria-hidden')).toBe("false");
+  await selectStatus("dismissed");
+  await respond(2, ["Closed item"], null, "enforced");
+  expect(container.querySelector('[aria-label="Selected listing actions"]')).toBeNull();
+  expect(selectAll().disabled).toBe(true);
+});
+
+test("bulk enforcement requires confirmation, retains failures, and retries a failed refresh without repeating writes", async () => {
+  const { container, requests, button, respond, statusSelect } = await setup();
+  await respond(0, ["First", "Second"], null, "takedown_sent");
+  await act(async () => container.querySelector<HTMLInputElement>('[aria-label="Select all loaded listings"]')!.click());
+  expect(button("Takedown")).toBeUndefined();
+  await act(async () => button("Mark enforced").click());
+  expect(requests).toHaveLength(1);
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("2 findings");
+  const confirm = Array.from(dialog.querySelectorAll('button')).find((item) => item.textContent === "Mark enforced")!;
+  await act(async () => { confirm.click(); confirm.click(); });
+  expect(requests).toHaveLength(3);
+  expect(requests[1].url.pathname).toBe("/api/ip/ip-one/monitoring/findings/First/enforce");
+  expect(requests[2].url.pathname).toBe("/api/ip/ip-one/monitoring/findings/Second/enforce");
+  expect(statusSelect().disabled).toBe(true);
+  await act(async () => {
+    requests[1].resolve(Response.json({ ok: true }));
+    requests[2].resolve(Response.json({ error: "Temporary failure" }, { status: 503 }));
+  });
+  expect(requests).toHaveLength(4);
+  await act(async () => requests[3].resolve(Response.json({ error: "Read failed" }, { status: 503 })));
+  expect(container.textContent).toContain("Marked enforced 1 · 1 failed");
+  expect(container.querySelectorAll('li input:checked')).toHaveLength(1);
+  expect(container.textContent).toContain("Actions saved, but listings could not be refreshed");
+  await act(async () => button("Try again").click());
+  expect(requests[4].url.pathname).toContain("/api/monitoring/sellers/");
+  await respond(4, ["Second"], null, "takedown_sent");
+  expect(container.querySelectorAll('li input:checked')).toHaveLength(1);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(requests).toHaveLength(5);
 });

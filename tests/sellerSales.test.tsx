@@ -1,6 +1,6 @@
 import {expect, test} from "bun:test";
 import {renderToStaticMarkup} from "react-dom/server";
-import {SellerSales} from "../src/components/monitoring/SellerSales";
+import {SellerSales} from "../src/features/sellers/SellerSales";
 
 test("seller sales preserve the lower bound and capture date", () => {
   const html = renderToStaticMarkup(<SellerSales count={25} observation={{value:25,lower_bound:true,source_text:"25+ items sold",observed_at:"2026-09-11T12:24:43Z"}} />);

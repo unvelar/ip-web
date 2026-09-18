@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useMemo, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
@@ -19,10 +19,10 @@ import { useAuth } from "../context/AuthContext";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { monitoringPlatformLabel } from "../lib/platforms";
 import { sellerProfilePath } from "../lib/sellers";
-import { SellerListings } from "../components/monitoring/SellerListings";
-import { SellerSales } from "../components/monitoring/SellerSales";
+import { SellerListings } from "../features/sellers/SellerListings";
+import { SellerSales } from "../features/sellers/SellerSales";
 import { formatAgo, formatMoney } from "../components/monitoring/board/utils";
-import "./Sellers.css";
+import "../features/sellers/sellers.css";
 
 const STATUS_OPTIONS: Array<{
   value: MonitoringSellerListStatus;
@@ -60,6 +60,8 @@ export default function Sellers() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const scopeController = useRef<AbortController | null>(null);
+  const summaryRefresh = useRef(0);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
@@ -69,6 +71,7 @@ export default function Sellers() {
   useEffect(() => {
     if (loadingIps) return;
     const controller = new AbortController();
+    scopeController.current = controller;
     setLoading(true);
     setError("");
     void listMonitoringSellers({
@@ -89,6 +92,26 @@ export default function Sellers() {
       });
     return () => controller.abort();
   }, [actingTenantId, allIps, debouncedQuery, effectiveIpId, loadingIps, platform, status]);
+
+  async function refreshSellerSummaries() {
+    const controller = scopeController.current;
+    if (!controller || controller.signal.aborted) return;
+    const version = ++summaryRefresh.current;
+    try {
+      let refreshed: MonitoringSellersPage | null = null;
+      do {
+        const next: MonitoringSellersPage = await listMonitoringSellers({
+          status, ip_id: effectiveIpId, platform: platform.trim() || null, query: debouncedQuery || null,
+          cursor: refreshed?.next_cursor, signal: controller.signal,
+        });
+        if (controller.signal.aborted || version !== summaryRefresh.current) return;
+        refreshed = refreshed ? { ...next, sellers: [...refreshed.sellers, ...next.sellers] } : next;
+      } while (refreshed.next_cursor && refreshed.sellers.length < (page?.sellers.length ?? 24));
+      setPage(refreshed);
+    } catch {
+      if (!controller.signal.aborted) setError("Actions saved, but seller totals could not be refreshed. Reload to see current totals.");
+    }
+  }
 
   const platformOptions = useMemo(() => Array.from(new Set([
     ...(platform ? [platform] : []),
@@ -231,13 +254,13 @@ export default function Sellers() {
         ) : (
           <>
             {returnedSellers.length > 0 && (
-              <SellerSection title="Returned sellers" sellers={returnedSellers} ipId={effectiveIpId} listStatus={status} returned />
+              <SellerSection title="Returned sellers" sellers={returnedSellers} ipId={effectiveIpId} listStatus={status} onChanged={() => void refreshSellerSummaries()} returned />
             )}
             {otherSellers.length > 0 && (
               <SellerSection
                 title={returnedSellers.length > 0 ? "Other sellers" : status === "all" ? "Seller history" : "Sellers with open listings"}
                 sellers={otherSellers}
-                ipId={effectiveIpId} listStatus={status}
+                ipId={effectiveIpId} listStatus={status} onChanged={() => void refreshSellerSummaries()}
               />
             )}
             <footer className="sellers-footer">
@@ -255,12 +278,13 @@ export default function Sellers() {
   );
 }
 
-function SellerSection({ title, sellers, ipId, listStatus, returned = false }: {
+function SellerSection({ title, sellers, ipId, listStatus, onChanged, returned = false }: {
   title: string;
   sellers: MonitoringSellerSummary[];
   ipId: string | null;
   listStatus: MonitoringSellerListStatus;
   returned?: boolean;
+  onChanged: () => void;
 }) {
   return (
     <section className="sellers-section" aria-label={title}>
@@ -278,17 +302,18 @@ function SellerSection({ title, sellers, ipId, listStatus, returned = false }: {
           </tr>
         </thead>
         <tbody>
-          {sellers.map((seller) => <SellerRow key={seller.seller_key} seller={seller} ipId={ipId} listStatus={listStatus} />)}
+          {sellers.map((seller) => <SellerRow key={seller.seller_key} seller={seller} ipId={ipId} listStatus={listStatus} onChanged={onChanged} />)}
         </tbody>
       </table>
     </section>
   );
 }
 
-function SellerRow({ seller, ipId, listStatus }: {
+function SellerRow({ seller, ipId, listStatus, onChanged }: {
   seller: MonitoringSellerSummary;
   ipId: string | null;
   listStatus: MonitoringSellerListStatus;
+  onChanged: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const listingsId = useId();
@@ -301,7 +326,23 @@ function SellerRow({ seller, ipId, listStatus }: {
 
   return (
     <Fragment>
-      <tr className={returned ? "seller-row seller-row-returned" : "seller-row"} data-expanded={expanded}>
+      <tr
+        className={returned ? "seller-row seller-row-returned" : "seller-row"}
+        data-expanded={expanded}
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-controls={listingsId}
+        onClick={(event) => {
+          if (!(event.target instanceof Element) || event.target.closest("a, button, input, select, textarea, summary")) return;
+          if (window.getSelection()?.toString()) return;
+          setExpanded((value) => !value);
+        }}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+          event.preventDefault();
+          setExpanded((value) => !value);
+        }}
+      >
         <td className="seller-identity">
           <div className="seller-identity-content">
             <div className="seller-thumbnail">
@@ -356,7 +397,7 @@ function SellerRow({ seller, ipId, listStatus }: {
         <td colSpan={6} id={listingsId}>
           {expanded && (
             <div className="seller-expanded">
-              <SellerListings sellerKey={seller.seller_key} sellerName={seller.seller_name} ipId={ipId} initialStatus={initialStatus} />
+              <SellerListings sellerKey={seller.seller_key} sellerName={seller.seller_name} ipId={ipId} initialStatus={initialStatus} onChanged={onChanged} />
             </div>
           )}
         </td>
