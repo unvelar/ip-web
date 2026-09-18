@@ -4,12 +4,10 @@ import {
   Home,
   Library,
   Radar,
-  ShieldCheck,
   Settings as SettingsIcon,
   Shield,
   ChevronDown,
   ListTodo,
-  Plus,
   Menu,
   X,
   Building2,
@@ -25,7 +23,6 @@ import "./AppShell.css";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
 import {
-  getIpReviewsAttentionCount,
   getMonitoringFindingsCount,
   getReturnedMonitoringSellersCount,
   getAccountNotificationUnreadCount,
@@ -47,7 +44,6 @@ import {
 const INBOX_POLL_MS = 120_000;
 
 const MON_OPEN_KEY = "appshell.mon.open";
-const CLE_OPEN_KEY = "appshell.cle.open";
 const SIDEBAR_COLLAPSED_KEY = "appshell.sidebar.collapsed";
 const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
 const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
@@ -63,9 +59,6 @@ const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
  *     ↳ Tasks        (badge = open monitoring findings)
  *     ↳ Sellers      (badge = returned sellers with open listings)
  *     ↳ Product lab
- *   Clearance
- *     ↳ Tasks        (badge = clearance reviews needing attention)
- *     ↳ New          (launch the clearance wizard)
  *
  * The working IP lives in the topbar as shared application context. Registry
  * management stays beside it rather than competing with day-to-day navigation.
@@ -107,7 +100,6 @@ function AppShellContent() {
 
   const actingTenant = tenants.find((t) => t.id === actingTenantId) ?? null;
   const { pathname, hash } = useLocation();
-  const [clearanceCount, setClearanceCount] = useState(0);
   const [monitoringCount, setMonitoringCount] = useState(0);
   const [returnedSellerCount, setReturnedSellerCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -132,34 +124,22 @@ function AppShellContent() {
     pathname.startsWith("/monitors/") ||
     pathname === "/findings" ||
     pathname.startsWith("/findings/");
-  const clePathActive =
-    pathname.startsWith("/clearance") ||
-    pathname.startsWith("/ip-reviews/");
   const adminPathActive = pathname === "/admin" || pathname.startsWith("/admin/");
 
   const [monOpen, setMonOpen] = useState<boolean>(() => loadOpen(MON_OPEN_KEY));
-  const [cleOpen, setCleOpen] = useState<boolean>(() => loadOpen(CLE_OPEN_KEY));
   useEffect(() => {
     if (monPathActive && !monOpen) setMonOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monPathActive]);
   useEffect(() => {
-    if (clePathActive && !cleOpen) setCleOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clePathActive]);
-  useEffect(() => {
     try { localStorage.setItem(MON_OPEN_KEY, monOpen ? "1" : "0"); } catch { /* ignore */ }
   }, [monOpen]);
-  useEffect(() => {
-    try { localStorage.setItem(CLE_OPEN_KEY, cleOpen ? "1" : "0"); } catch { /* ignore */ }
-  }, [cleOpen]);
 
   // Poll the per-group badge counts while the user is signed in. Refetch on
   // path change too — when the lawyer locks a decision or triages a finding
   // and navigates back, the badge updates without waiting a tick.
   useEffect(() => {
     if (!user) {
-      setClearanceCount(0);
       setMonitoringCount(0);
       setReturnedSellerCount(0);
       setNotificationCount(0);
@@ -168,14 +148,12 @@ function AppShellContent() {
     if (adminPathActive) return;
     let alive = true;
     async function refresh() {
-      const [clearance, monitoring, returnedSellers, notifications] = await Promise.allSettled([
-        getIpReviewsAttentionCount(),
+      const [monitoring, returnedSellers, notifications] = await Promise.allSettled([
         getMonitoringFindingsCount(),
         getReturnedMonitoringSellersCount(),
         getAccountNotificationUnreadCount(),
       ]);
       if (!alive) return;
-      if (clearance.status === "fulfilled") setClearanceCount(clearance.value.count);
       if (monitoring.status === "fulfilled") setMonitoringCount(monitoring.value.count);
       if (returnedSellers.status === "fulfilled") setReturnedSellerCount(returnedSellers.value.count);
       if (notifications.status === "fulfilled") setNotificationCount(notifications.value.count);
@@ -296,29 +274,6 @@ function AppShellContent() {
           />
         </NavGroup>
 
-        <NavGroup
-          label="Clearance"
-          icon={<ShieldCheck size={14} />}
-          open={cleOpen}
-          onToggle={() => setCleOpen((v) => !v)}
-          collapsed={collapsed}
-        >
-          <NavItem
-            to="/clearance/tasks"
-            icon={<ListTodo size={18} />}
-            label="Tasks"
-            active={isActive("/clearance/tasks")}
-            badge={clearanceCount}
-            collapsed={collapsed}
-          />
-          <NavItem
-            to="/clearance/new"
-            icon={<Plus size={18} />}
-            label="New"
-            active={isActive("/clearance/new") || pathname.startsWith("/ip-reviews/new")}
-            collapsed={collapsed}
-          />
-        </NavGroup>
         </nav>
       </div>
 
