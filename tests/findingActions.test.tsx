@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, mock, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -11,6 +11,11 @@ const allowProductImage = mock(async () => ({
   dismissed: 1,
 }));
 const dismiss = mock(() => undefined);
+
+// Bun updates live re-exports when mocking the compatibility barrel. Restore
+// them after this suite so batch integration tests exercise the real adapters.
+const originalApi = { ...await import("../src/api") };
+afterAll(() => { mock.module("../src/api", () => originalApi); });
 
 mock.module("../src/api", () => ({
   DEFAULT_TAKEDOWN_FEEDBACK_SCOPES: [],

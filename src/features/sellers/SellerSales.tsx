@@ -11,8 +11,11 @@ export function SellerSales({ count, observation, showCaptureDate = true }: {
   const checked = verified ? new Date(verified.observed_at) : null;
   const date = checked && Number.isFinite(checked.getTime())
     ? checked.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : null;
+  const captureDetails = verified
+    ? [verified.source_text, date ? `Checked ${date}` : null].filter(Boolean).join(" · ")
+    : undefined;
   return (
-    <span title={verified?.source_text ?? "Seller sales from an earlier capture; its observation date is unavailable."}>
+    <span title={captureDetails}>
       {count.toLocaleString()}{verified?.lower_bound ? "+" : ""} sales
       {showCaptureDate && <span className="text-stone-400"> · {date ? `checked ${date}` : "capture date unknown"}</span>}
     </span>
