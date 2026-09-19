@@ -203,7 +203,7 @@ export interface AdminMonitoringRunJobStage {
 export interface AdminMonitoringScrapeEvidence {
   source: "worker" | "candidates" | "job_result" | "page_capture" | "not_recorded";
   steps: Array<{
-    method: "marketplace_specific" | "nodriver" | "scrapfly" | "scrapedo" | "web_search";
+    method: "marketplace_specific" | "nodriver" | "scrapling" | "scrapfly" | "scrapedo" | "web_search";
     role: "primary" | "fallback" | "shadow" | "reused";
     provider: string | null;
     recorded_at: string | null;
@@ -290,6 +290,14 @@ export interface AdminMonitoringWorker {
 }
 
 export interface AdminMonitoringOverview {
+  scrape_requests?: {
+    as_of: string; since: string; first_recorded_at: string | null;
+    methods: Array<{
+      method: AdminMonitoringScrapeEvidence["steps"][number]["method"];
+      requests: number; succeeded: number; failed: number; unavailable: number;
+      blocked: number; unfinished: number; success_rate: number | null; failure_rate: number | null;
+    }>;
+  };
   generated_at: string;
   window_hours: number;
   summary: {

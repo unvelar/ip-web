@@ -1,3 +1,4 @@
+import { ScrapeRequestStats } from "../features/adminMonitoring/ScrapeRequestStats";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
@@ -120,12 +121,24 @@ export default function AdminMonitoring() {
   return (
     <AdminPage section="monitoring" title="Monitoring" description="Follow searches and worker activity across every tenant." wide
       actions={<>
+              <select
+                value={feed.windowHours}
+                onChange={(event) => feed.setWindowHours(Number(event.target.value) as AdminMonitoringWindow)}
+                aria-label="Activity window"
+                className="h-9 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-600 outline-none focus:border-stone-400"
+              >
+                <option value={1}>Last hour</option>
+                <option value={6}>Last 6 hours</option>
+                <option value={24}>Last 24 hours</option>
+                <option value={72}>Last 3 days</option>
+                <option value={168}>Last 7 days</option>
+              </select>
         <span className="admin-live" aria-live="polite"><span className="admin-live-dot" />Updated {formatClock(overview.generated_at)}{feed.refreshing && <LoaderCircle size={13} className="animate-spin" aria-hidden="true" />}</span>
         <button type="button" onClick={() => void feed.refresh()} aria-label="Refresh monitoring operations" className="admin-icon-button"><RefreshCw size={15} className={feed.refreshing ? "animate-spin" : ""} /></button>
       </>}
     >
       <nav className="admin-jump-nav" aria-label="Monitoring sections">
-        <a href="#monitoring-overview">Overview</a><a href="#monitoring-workers">Workers</a><a href="#monitoring-queues">Queues</a><a href="#monitoring-live-work">Live work</a><a href="#monitoring-runs">Searches</a>
+        <a href="#monitoring-overview">Overview</a><a href="#monitoring-scraping">Scraping methods</a><a href="#monitoring-workers">Workers</a><a href="#monitoring-queues">Queues</a><a href="#monitoring-live-work">Live work</a><a href="#monitoring-runs">Searches</a>
       </nav>
       <div className="admin-monitoring">
         {feed.error && (
@@ -143,6 +156,8 @@ export default function AdminMonitoring() {
           <Metric label="Unfinished searches" value={overview.summary.active_runs} detail="includes waiting and paused searches" icon={<Activity className="h-4 w-4" />} />
           <Metric label="Searches to review" value={attentionTotal} detail={attentionReasons} icon={<ShieldAlert className="h-4 w-4" />} attention={attentionTotal > 0} onClick={showAttention} selected={feed.status === "attention"} />
         </section>
+
+        <ScrapeRequestStats stats={overview.scrape_requests} windowHours={overview.window_hours} updating={feed.windowHours !== overview.window_hours} />
 
         {(overview.summary.not_evaluated_checks > 0 || overview.summary.evidence_conflicts > 0) && (
           <section className="mt-3 grid gap-2 lg:grid-cols-2">
@@ -236,18 +251,7 @@ export default function AdminMonitoring() {
                   className="h-9 w-full rounded-lg border border-stone-200 bg-stone-50 pl-8 pr-3 text-xs text-stone-800 outline-none focus:border-stone-400 focus:bg-white"
                 />
               </label>
-              <select
-                value={feed.windowHours}
-                onChange={(event) => feed.setWindowHours(Number(event.target.value) as AdminMonitoringWindow)}
-                aria-label="Activity window"
-                className="h-9 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-600 outline-none focus:border-stone-400"
-              >
-                <option value={1}>Last hour</option>
-                <option value={6}>Last 6 hours</option>
-                <option value={24}>Last 24 hours</option>
-                <option value={72}>Last 3 days</option>
-                <option value={168}>Last 7 days</option>
-              </select>
+
             </div>
           </div>
 

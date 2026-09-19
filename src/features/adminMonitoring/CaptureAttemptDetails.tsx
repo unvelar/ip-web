@@ -11,7 +11,7 @@ const STATUS_COPY: Record<string, string> = {
   deferred: "Deferred for access recovery",
   resource_incompatible: "Returned to the queue for a compatible worker",
 };
-const METHOD_COPY: Record<string, string> = { nodriver: "Browser", scrapfly: "Scrapfly", scrapedo: "Scrape.do", marketplace_specific: "Marketplace API", web_search: "Web search" };
+const METHOD_COPY: Record<string, string> = { nodriver: "Nodriver", scrapling: "Scrapling", scrapfly: "Scrapfly", scrapedo: "Scrape.do", marketplace_specific: "Marketplace API", web_search: "Web search" };
 const time = (value: string) => new Date(value).toLocaleString();
 
 export function CaptureAttemptDetails({ job }: { job: AdminMonitoringJob }) {
