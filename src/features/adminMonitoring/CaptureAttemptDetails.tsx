@@ -1,3 +1,4 @@
+import { isManagedScrapeTask, managedProviderLabel } from "./executions";
 import { useState } from "react";
 import { ChevronDown, ChevronRight, LoaderCircle } from "lucide-react";
 import { getAdminCaptureAttempts, type AdminCaptureAttempt, type AdminMonitoringJob, type CaptureDiagnostics } from "../../api";
@@ -10,7 +11,7 @@ const STATUS_COPY: Record<string, string> = {
   deferred: "Deferred for access recovery",
   resource_incompatible: "Returned to the queue for a compatible worker",
 };
-const METHOD_COPY: Record<string, string> = { nodriver: "Browser", scrapfly: "Scrapfly", marketplace_specific: "Marketplace API", web_search: "Web search" };
+const METHOD_COPY: Record<string, string> = { nodriver: "Browser", scrapfly: "Scrapfly", scrapedo: "Scrape.do", marketplace_specific: "Marketplace API", web_search: "Web search" };
 const time = (value: string) => new Date(value).toLocaleString();
 
 export function CaptureAttemptDetails({ job }: { job: AdminMonitoringJob }) {
@@ -46,7 +47,7 @@ export function CaptureAttemptDetails({ job }: { job: AdminMonitoringJob }) {
     {open && <div className="mt-2 space-y-3 rounded-lg border border-stone-200 bg-stone-50/70 p-3">
       {attempts.map(attempt => <section key={attempt.id} className="rounded-md border border-stone-200 bg-white p-3">
         <div className="flex flex-wrap items-baseline justify-between gap-1">
-          <p className="font-semibold text-stone-800">{(attempt.scrapfly_overflow || attempt.worker_instance_id?.startsWith("api-scrapfly-")) ? "Scrapfly task" : "Browser worker"} · attempt {attempt.attempt_number}</p>
+          <p className="font-semibold text-stone-800">{isManagedScrapeTask(attempt.worker_instance_id) ? `${managedProviderLabel(attempt.worker_instance_id)} task` : "Browser worker"} · attempt {attempt.attempt_number}</p>
           <time className="text-[11px] text-stone-500">{time(attempt.started_at)}</time>
         </div>
         <p className="mt-1 text-stone-600">{STATUS_COPY[attempt.status] ?? attempt.status}</p>

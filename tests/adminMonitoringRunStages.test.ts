@@ -71,8 +71,11 @@ test("summary cards retain recorded executors and handle mixed or older response
     }));
   expect(render(["scrapfly"])).toContain('aria-label="Execution: Scrapfly task"');
   expect(render(["scrapfly"])).not.toContain('Worker type: Browser');
-  const mixed = render(["browser", "scrapfly"]);
+  expect(render(["scrapedo"])).toContain('aria-label="Execution: Scrape.do task"');
+  expect(render(["scrapedo"])).not.toContain('Worker type: Browser');
+  const mixed = render(["browser", "scrapfly", "scrapedo"]);
   expect(mixed).toContain('Worker type: Browser');
   expect(mixed).toContain('Execution: Scrapfly task');
+  expect(mixed).toContain('Execution: Scrape.do task');
   expect(render()).toContain('Worker type: Browser');
 });

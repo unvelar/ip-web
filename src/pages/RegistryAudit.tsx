@@ -49,6 +49,8 @@ function methodStyle(m: string | null): string {
       return "bg-blue-100 text-blue-700";
     case "brave_sidestep":
       return "bg-teal-100 text-teal-700";
+    case "scrapedo_direct":
+      return "bg-teal-100 text-teal-700";
     case "scrapfly_direct":
       return "bg-orange-100 text-orange-700";
     default:

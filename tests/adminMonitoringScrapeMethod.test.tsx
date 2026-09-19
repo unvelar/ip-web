@@ -21,6 +21,18 @@ test("does not invent a method for legacy rows or jobs that have not started", (
   expect(renderToStaticMarkup(<ScrapeMethodBadge status="pending" />)).toContain("Method selected on start");
 });
 
+test("renders Scrape.do recovery separately from historical Scrapfly attempts", () => {
+  const html = renderToStaticMarkup(<ScrapeMethodBadge status="completed" scrape={{
+    source: "worker", steps: [
+      { method: "nodriver", role: "primary", provider: null, recorded_at: null, outcome: "blocked" },
+      { method: "scrapedo", role: "fallback", provider: null, recorded_at: null, outcome: "ready" },
+    ],
+  }} />);
+  expect(html).toContain("Scrape.do retry");
+  expect(html).toContain("captured");
+  expect(html).not.toContain("Scrapfly");
+});
+
 test.each(["finding_qualify", "monitor_seller_expand"])("%s uses the shared job badge in every job state", (type) => {
   for (const status of ["pending", "in_progress", "completed", "failed"]) {
     const html = renderToStaticMarkup(<JobScrapeMethodBadge job={{ type, status, scrape: {

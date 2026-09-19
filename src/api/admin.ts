@@ -203,7 +203,7 @@ export interface AdminMonitoringRunJobStage {
 export interface AdminMonitoringScrapeEvidence {
   source: "worker" | "candidates" | "job_result" | "page_capture" | "not_recorded";
   steps: Array<{
-    method: "marketplace_specific" | "nodriver" | "scrapfly" | "web_search";
+    method: "marketplace_specific" | "nodriver" | "scrapfly" | "scrapedo" | "web_search";
     role: "primary" | "fallback" | "shadow" | "reused";
     provider: string | null;
     recorded_at: string | null;
@@ -563,7 +563,7 @@ export async function getAdminMonitoringOverview(opts: {
     || !Array.isArray(overview.worker_demand)
     || overview.runs.some(run => run.jobs.some(stage => stage.execution_kinds !== undefined
       && (!Array.isArray(stage.execution_kinds) || stage.execution_kinds.some(kind =>
-        kind !== "scrapfly" && !isAdminMonitoringWorkerKind(kind)))))
+        kind !== "scrapfly" && kind !== "scrapedo" && !isAdminMonitoringWorkerKind(kind)))))
     || overview.worker_demand.some(row => !isAdminMonitoringWorkerKind(row.kind))
     || overview.queue.some(queue => !isAdminMonitoringWorkerKind(queue.worker_kind) || !queue.worker_capacity)
     || overview.active_work.some(job => !isAdminMonitoringWorkerKind(job.worker_kind)
@@ -731,7 +731,7 @@ export function deleteAdminImage(id: string, imageId: string) {
 
 export type AdminMonitoringWorkerKind = "ml" | "browser" | "hybrid" | "unknown";
 
-export type AdminMonitoringExecutionKind = AdminMonitoringWorkerKind | "scrapfly";
+export type AdminMonitoringExecutionKind = AdminMonitoringWorkerKind | "scrapfly" | "scrapedo";
 
 
 export interface AdminMonitoringWorkerCapacity {

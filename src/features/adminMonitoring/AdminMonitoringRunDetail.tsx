@@ -3,7 +3,7 @@ import { CaptureAttemptDetails } from "./CaptureAttemptDetails";
 import { JobScrapeMethodBadge } from "./ScrapeMethodBadge";
 import { workPauseReason, workStateLabel, WORK_STATE_COPY } from "./workState";
 import { JobExecutionBadge } from "./WorkerTypeBadge";
-import { jobExecutionKind, scrapflyExecutionName } from "./executions";
+import { isManagedScrapeTask, managedExecutionName } from "./executions";
 import { MONITORING_JOB_COPY, supportsScrapeMethod, type MonitoringJobType } from "./monitoringJobs";
 import {
   AlertCircle,
@@ -349,7 +349,7 @@ function CandidateRows({ candidate, open, onToggle }: {
                 {workStateLabel(activeJob)}{activeJob.queue_state === "paused" ? ` · ${workPauseReason(activeJob.hold_reason)}` : activeJob.queue_state === "scheduled" ? ` · After ${formatTimestamp(activeJob.available_at)}` : ""}
                 {activeJob.batch_index && `, batch ${activeJob.batch_index}/${activeJob.batch_count}`}
               </p>
-              {activeJob.worker_instance_id && <p className="mt-1 truncate font-mono text-[9px] text-stone-400">{jobExecutionKind(activeJob) === "scrapfly" ? scrapflyExecutionName(activeJob) : activeJob.worker_instance_id}</p>}
+              {activeJob.worker_instance_id && <p className="mt-1 truncate font-mono text-[9px] text-stone-400">{isManagedScrapeTask(activeJob.worker_instance_id) ? managedExecutionName(activeJob) : activeJob.worker_instance_id}</p>}
             </>
           ) : <span className="text-[11px] text-stone-400">No linked job</span>}
         </td>
@@ -540,7 +540,7 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
         </p>
         {job.worker_instance_id && (
           <p className="mt-1 truncate font-mono text-[9px] text-stone-400" title={job.worker_instance_id}>
-            {jobExecutionKind(job) === "scrapfly" ? scrapflyExecutionName(job) : job.worker_instance_id}{job.worker_image_sha ? `, image ${shortId(job.worker_image_sha)}` : ""}
+            {isManagedScrapeTask(job.worker_instance_id) ? managedExecutionName(job) : job.worker_instance_id}{job.worker_image_sha ? `, image ${shortId(job.worker_image_sha)}` : ""}
           </p>
         )}
         {job.queue_state === "paused" && <p className="mt-1 rounded bg-stone-100 px-2 py-1 text-[10px] text-stone-600">{workPauseReason(job.hold_reason)}. Requires an explicit release.</p>}
