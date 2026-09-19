@@ -22,7 +22,12 @@ function RouteProbe() {
 
 async function setup(query = "") {
   const window = new Window({ url: "http://localhost:5173" });
-  Object.assign(globalThis, { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true });
+  Object.assign(globalThis, {
+    window, document: window.document, navigator: window.navigator,
+    HTMLElement: window.HTMLElement, Element: window.Element, Node: window.Node,
+    Event: window.Event, MouseEvent: window.MouseEvent, PointerEvent: window.PointerEvent,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
   const requests: { url: URL; signal: AbortSignal; resolve: (response: Response) => void }[] = [];
   globalThis.fetch = ((url, options) => new Promise<Response>((resolve) => {
     requests.push({ url: new URL(String(url), window.location.origin), signal: options?.signal as AbortSignal, resolve });
