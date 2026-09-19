@@ -7,7 +7,7 @@ import { SellerSales } from "./SellerSales";
 
 export function SellerProfileHeader({ profile }: { profile: MonitoringSellerProfilePage }) {
   const { seller, summary } = profile;
-  const notVerified = summary.blocked_listings + summary.unknown_availability;
+  const unknownAvailability = summary.blocked_listings + summary.unknown_availability;
   return (
     <div className="space-y-6 mb-6">
       <header className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
@@ -51,7 +51,7 @@ export function SellerProfileHeader({ profile }: { profile: MonitoringSellerProf
         <div className="grid grid-cols-2 divide-x divide-y divide-stone-100 sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
           <Metric label="Open findings" value={summary.monitored_listings.toLocaleString()} icon={<ShoppingBag size={15} />} />
           <Metric label="Available" value={summary.available_listings.toLocaleString()} icon={<PackageOpen size={15} />} />
-          <Metric label="Not verified" value={notVerified.toLocaleString()} />
+          <Metric label="Availability unknown" value={unknownAvailability.toLocaleString()} />
           <Metric label="Market value" value={formatMoney(summary.monitored_market_usd, "USD")} />
           <Metric label="Affected IPs" value={summary.affected_ip_count.toLocaleString()} />
           <Metric label="Prior enforcement" value={summary.prior_enforcement_count.toLocaleString()} icon={<ShieldCheck size={15} />} alert={summary.prior_enforcement_count > 0} />

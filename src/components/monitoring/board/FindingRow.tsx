@@ -57,8 +57,7 @@ function FindingTableThumbnail({
   );
 }
 
-/** Table cells (columns 2-9) for one finding — a single dense line. The
- *  enclosing <tr> owns row selection and inspector activation. */
+/** The enclosing row owns selection and inspector activation. */
 export function FindingRow({
   f,
   active,
@@ -112,48 +111,52 @@ export function FindingRow({
         <FindingTableThumbnail urls={thumbUrls} title={title} />
       </td>
 
-      {/* Listing — title + actionability badge + chips on one non-wrapping line. */}
-      <td className="py-1 px-2 align-middle max-w-0 w-full">
-        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <span className="font-semibold text-[13px] text-stone-900 truncate min-w-0">
+      {/* Keep the title separate from the labelled review context. */}
+      <td className="py-2 px-2 align-middle max-w-0 w-full">
+        <div className="min-w-0 space-y-1.5">
+          <div className="font-semibold text-[13px] text-stone-900 truncate" title={title}>
             {title}
-          </span>
-          <ActionabilityBadge
-            label={actionability.label}
-            reason={actionability.reason}
-            className="shrink-0 gap-0.5"
-            badgeClassName={`px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none ${actionability.cls}`}
-            iconClassName="h-3 w-3"
-            iconSize={11}
-          />
-          {f.manual_candidate_outcome && (
-            <span
-              className="shrink-0 px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none bg-amber-100 text-amber-700"
-              title="Manually moved during grouped triage"
-            >
-              Moved
-            </span>
-          )}
-          {f.assigned_to_account_id && (
-            <span className="shrink-0 md:hidden">
-              <AssigneeAvatar
-                accountId={f.assigned_to_account_id}
-                displayName={f.assignee_display_name}
-                email={f.assignee_email}
-                pictureUrl={f.assignee_picture_url}
-                size={18}
-              />
-            </span>
-          )}
-          {chips.slice(0, 3).map((chip) => (
-            <span
-              key={chip}
-              className="shrink-0 px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 text-[9px] font-semibold leading-none"
-              title={chip}
-            >
-              {chip}
-            </span>
-          ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+            <ActionabilityBadge
+              label={actionability.label}
+              reason={actionability.reason}
+              source={f.actionability?.reason_category === "manual" ? "Reviewer suggestion" : "AI suggestion"}
+              className="shrink-0 gap-0.5"
+              badgeClassName={`px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none ${actionability.cls}`}
+              iconClassName="h-3 w-3"
+              iconSize={11}
+            />
+            {f.manual_candidate_outcome && (
+              <span
+                className="shrink-0 px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none bg-amber-100 text-amber-700"
+                title="Manually moved during grouped triage"
+              >
+                Manually grouped
+              </span>
+            )}
+            {f.assigned_to_account_id && (
+              <span className="shrink-0 md:hidden">
+                <AssigneeAvatar
+                  accountId={f.assigned_to_account_id}
+                  displayName={f.assignee_display_name}
+                  email={f.assignee_email}
+                  pictureUrl={f.assignee_picture_url}
+                  size={18}
+                />
+              </span>
+            )}
+            {chips.slice(0, 3).map((chip) => (
+              <span
+                key={chip.key}
+                className="inline-flex min-w-0 max-w-full items-baseline gap-1 rounded bg-stone-100 px-1.5 py-0.5 leading-tight text-stone-600"
+                title={chip.title}
+              >
+                <span className="shrink-0 text-stone-500">{chip.label}:</span>
+                <span className="truncate font-semibold">{chip.value}</span>
+              </span>
+            ))}
+          </div>
         </div>
       </td>
 

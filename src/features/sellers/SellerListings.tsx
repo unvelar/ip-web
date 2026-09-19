@@ -11,7 +11,7 @@ import {
   type MonitoringSellerSort,
   type MonitoringSellerStatus,
 } from "../../api";
-import { sellerListingAvailability } from "./sellerListingAvailability";
+import { listingAvailabilityMeta } from "../../lib/listingAvailability";
 import { compactListingTitle, findingStatusBadge, formatAgo, formatMoney, tableImageUrls } from "../../components/monitoring/board/utils";
 
 import { SellerListingActions } from "./SellerListingActions";
@@ -76,8 +76,8 @@ export function SellerListings({ initialStatus = "open", filters, onFiltersChang
         <select disabled={busy} aria-label="Listing availability" value={availability ?? ""} onChange={(event) => changeFilters({ status, availability: (event.target.value || null) as MonitoringSellerAvailability | null, sort })}>
           <option value="">Any availability</option>
           <option value="available">Available</option>
-          <option value="blocked">Couldn’t verify</option>
-          <option value="unknown">Not yet verified</option>
+          <option value="blocked">Availability check blocked</option>
+          <option value="unknown">Availability unknown</option>
           <option value="unavailable">Unavailable</option>
         </select>
         <select disabled={busy} aria-label="Sort seller listings" value={sort} onChange={(event) => changeFilters({ status, availability, sort: event.target.value as MonitoringSellerSort })}>
@@ -334,7 +334,7 @@ function SellerListingRow({ finding, showIp, selected, disabled, onSelect, onOpe
   const title = compactListingTitle(finding);
   const image = tableImageUrls(finding)[0];
   const status = findingStatusBadge(finding);
-  const availability = sellerListingAvailability(finding.availability);
+  const availability = listingAvailabilityMeta(finding.availability);
   const price = finding.price_value_usd != null ? formatMoney(Number(finding.price_value_usd), "USD") : finding.price;
 
   return (

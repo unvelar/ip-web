@@ -2,6 +2,7 @@ import { Info } from "lucide-react";
 
 export function ActionabilityBadge({
   label,
+  source = "AI suggestion",
   reason,
   className,
   badgeClassName,
@@ -9,16 +10,18 @@ export function ActionabilityBadge({
   iconSize = 13,
 }: {
   label: string;
+  source?: string;
   reason?: string | null;
   className?: string;
   badgeClassName: string;
   iconClassName?: string;
   iconSize?: number;
 }) {
-  const title = reason ? `Why recommended: ${reason}` : undefined;
+  const title = reason ? `${source}: ${label}. ${reason}` : undefined;
 
   return (
     <span className={["inline-flex items-center", className].filter(Boolean).join(" ")}>
+      <span className="mr-0.5 text-[10px] font-medium text-stone-500">{source}:</span>
       <span className={badgeClassName}>{label}</span>
       {title && (
         <span

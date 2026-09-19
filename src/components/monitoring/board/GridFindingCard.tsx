@@ -124,6 +124,7 @@ export function GridFindingCard({
             <ActionabilityBadge
               label={actionability.label}
               reason={actionability.reason}
+              source={f.actionability?.reason_category === "manual" ? "Reviewer suggestion" : "AI suggestion"}
               className="shrink-0 gap-1"
               badgeClassName={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${actionability.cls}`}
               iconClassName="h-3.5 w-3.5"
@@ -135,16 +136,17 @@ export function GridFindingCard({
               className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700"
               title="Manually moved during grouped triage"
             >
-              Moved
+              Manually grouped
             </span>
           )}
           {chips.slice(0, 5).map((chip) => (
             <span
-              key={chip}
-              className="max-w-[9rem] truncate px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 text-[10px] font-semibold"
-              title={chip}
+              key={chip.key}
+              className="inline-flex min-w-0 max-w-full items-baseline gap-1 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-600"
+              title={chip.title}
             >
-              {chip}
+              <span className="shrink-0 text-stone-500">{chip.label}:</span>
+              <span className="truncate font-semibold">{chip.value}</span>
             </span>
           ))}
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${status.cls}`}>

@@ -1,4 +1,5 @@
 import type { CaseReviewStatus, IpReviewFinding } from "../../../api";
+import { listingAvailabilityMeta } from "../../../lib/listingAvailability";
 
 export function hasReviewAnalysis(f: IpReviewFinding) {
   return Boolean(
@@ -486,7 +487,14 @@ export function findingPlatformLabel(
   return "Marketplace";
 }
 
-export function findingChips(f: IpReviewFinding, showIp?: boolean) {
+export interface FindingChip {
+  key: string;
+  label: string;
+  value: string;
+  title: string;
+}
+
+export function findingChips(f: IpReviewFinding, showIp?: boolean): FindingChip[] {
   const priceUsd =
     f.price_value_usd != null ? formatMoney(Number(f.price_value_usd), "USD") : null;
   const priceText = priceUsd ?? f.price ?? null;
@@ -494,19 +502,22 @@ export function findingChips(f: IpReviewFinding, showIp?: boolean) {
     detailValue(f.item_details, ["category", "type", "department"]) ||
     null;
   const availability = f.availability?.trim().toLowerCase();
-  const availabilityChip =
-    availability === "blocked"
-      ? "Couldn't verify"
-      : availability === "error"
-        ? "Not yet verified"
-        : null;
-  return [
-    f.protected_term_assessment?.outcome === "matched" ? "Protected term" : null,
-    saleUrgencyChip(f),
-    availabilityChip,
-    showIp && f.ip_name ? f.ip_name : null,
-    category,
-    priceText,
-    f.domain,
-  ].filter(Boolean) as string[];
+  const chips: FindingChip[] = [];
+  const add = (key: string, label: string, value: string | null | undefined, title?: string) => {
+    if (value) chips.push({ key, label, value, title: title ?? `${label}: ${value}` });
+  };
+
+  if (availability === "blocked" || availability === "error") {
+    const meta = listingAvailabilityMeta(availability);
+    add("availability", "Availability", meta.label, meta.title);
+  }
+  if (f.protected_term_assessment?.outcome === "matched") {
+    add("evidence", "Evidence", "Protected term", "The listing contains a protected term associated with the monitored IP.");
+  }
+  add("sale", "Sale", saleUrgencyChip(f));
+  if (showIp) add("ip", "IP", f.ip_name, `Monitored intellectual property: ${f.ip_name}`);
+  add("category", "Category", category);
+  add("price", "Price", priceText);
+  add("website", "Website", f.domain);
+  return chips;
 }

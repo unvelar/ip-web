@@ -15,6 +15,7 @@ import { ListingCarousel } from "./ListingCarousel";
 import { ListingDescription } from "./ListingDescription";
 import { SellerSales } from "../../../features/sellers/SellerSales";
 import { sellerProfilePath } from "../../../lib/sellers";
+import { listingAvailabilityMeta } from "../../../lib/listingAvailability";
 import {
   actionabilityMeta,
   dismissalBadge,
@@ -168,17 +169,9 @@ export function FindingComparison({
   const productAuthenticityAssessment = f.product_authenticity_assessment;
   const normalizedAvailability = f.availability?.trim().toLowerCase();
   const availabilityNotice =
-    normalizedAvailability === "blocked"
-      ? {
-          label: "Couldn't verify",
-          title: "The website blocked our latest automated check. This finding remains open and will be checked again.",
-        }
-      : normalizedAvailability === "error"
-        ? {
-            label: "Not yet verified",
-            title: "We do not have a reliable availability result yet. This finding remains open.",
-          }
-        : null;
+    normalizedAvailability === "blocked" || normalizedAvailability === "error"
+      ? listingAvailabilityMeta(normalizedAvailability)
+      : null;
 
   const unitPriceUsd = f.price_value_usd == null ? null : Number(f.price_value_usd);
   const priceUsd =
@@ -275,7 +268,7 @@ export function FindingComparison({
               className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700"
               title="Manually moved during grouped triage"
             >
-              Moved
+              Manually grouped
             </span>
           )}
           {availabilityNotice && (
@@ -283,7 +276,7 @@ export function FindingComparison({
               className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700"
               title={availabilityNotice.title}
             >
-              {availabilityNotice.label}
+              Availability: {availabilityNotice.label}
             </span>
           )}
           {showIp && f.ip_name && (
@@ -321,6 +314,12 @@ export function FindingComparison({
             </div>
           )}
         </div>
+
+        {availabilityNotice && (
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-800">
+            {availabilityNotice.title}
+          </p>
+        )}
 
         {showActions && <div className="mt-1">
           <FindingActions
