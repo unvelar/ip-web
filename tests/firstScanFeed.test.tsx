@@ -43,7 +43,7 @@ async function waitFor(predicate: () => boolean) {
   while (!predicate() && Date.now() < deadline) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(predicate()).toBe(true);
 }
-async function mount() {
+async function mount(platforms = sources) {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost:5173");
     let body: unknown;
@@ -65,7 +65,7 @@ async function mount() {
         as_of: "2026-09-14T10:00:00.123456Z", filter_totals: count(matching),
         source_totals: sources.map(source => ({ ...count(rows.filter(row => row.source_id === source.id)),
           source_id: source.id, source_domain: source.domain, source_name: source.display_name })) };
-    } else if (url.pathname.endsWith("/platforms")) body = { platforms: sources };
+    } else if (url.pathname.endsWith("/platforms")) body = { platforms };
     else if (url.pathname.endsWith("/onboarding-status")) body = { status: null };
     else if (url.pathname.includes("/runs")) body = { runs: [] };
     else if (url.pathname === "/api/ip/ip") body = { trademark: { id: "ip", name: "Brand", keywords: [], image_count: 0, indexed_count: 0 }, images: [] };
@@ -80,6 +80,18 @@ async function mount() {
 afterEach(() => {
   if (root) act(() => root!.unmount()); root = undefined;
   document.body.replaceChildren(); globalThis.fetch = originalFetch; requests.length = 0; failNextPage = false; delayNextFirstPage = null;
+});
+
+test("connected count follows source setup even when cached recipes and old results exist", async () => {
+  const platforms = sources.map((source, index) => ({
+    ...source, setup_status: index ? "retry_needed" : "processing",
+  }));
+  await mount(platforms);
+  expect(feed.totals.connected).toBe(0);
+  expect(feed.totals.discovered).toBe(1115);
+  platforms[0]!.setup_status = "ready";
+  await act(async () => { await feed.refresh(); });
+  expect(feed.totals.connected).toBe(1);
 });
 
 test("full source totals survive pagination, refresh, and a failed next page", async () => {

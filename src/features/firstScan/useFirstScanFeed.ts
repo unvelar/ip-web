@@ -215,7 +215,9 @@ export function useFirstScanFeed(requestedIpId: string | null) {
     const sources = snapshot?.sources ?? [];
     return {
       websites: sources.length,
-      connected: sources.filter((source) => source.source.source_type === "web_search" || source.source.recipe).length,
+      connected: sources.filter(({ state }) =>
+        state !== "connecting" && state !== "setup_processing" && state !== "retry_needed",
+      ).length,
       discovered: sources.reduce((total, source) => total + source.discovered, 0),
       processing: sources.reduce((total, source) => total + source.preparing, 0),
       ready: sources.reduce((total, source) => total + source.ready, 0),
