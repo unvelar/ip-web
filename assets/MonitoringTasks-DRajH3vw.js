@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-C0uR3_Dm.js";import{MonitoringInboxView as t}from"./Findings-Dq2X6cwM.js";var n=e();function r(){return(0,n.jsxs)(`div`,{className:`max-w-7xl mx-auto px-6 py-2 space-y-2`,children:[(0,n.jsx)(`h1`,{className:`text-2xl font-black text-stone-900 tracking-tight`,children:`Monitoring tasks`}),(0,n.jsx)(t,{})]})}export{r as default};
