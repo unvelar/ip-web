@@ -11,6 +11,7 @@ const METHOD: Record<string, string> = {
   scrapfly: "Scrapfly", marketplace_specific: "Marketplace API", web_search: "Web search API",
 };
 const number = (value: number) => value.toLocaleString();
+const counted = (value: number, noun: string) => `${number(value)} ${noun}${value === 1 ? "" : "s"}`;
 const rate = (value: number | null) => value === null ? "No data" : `${value.toFixed(1)}%`;
 
 export function ScrapePipelineStats({ stats, windowHours }: { stats: PipelineStats; windowHours: number }) {
@@ -133,7 +134,7 @@ function DomainDetails({ domain, windowHours, asOf }: { domain: string; windowHo
       <div className="mt-3 divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white px-3">
         {data.methods.map(method => <div key={`${method.method}-${method.provider}`} className="flex items-center justify-between gap-4 py-2.5">
           <span className="font-medium text-stone-700">{METHOD[method.method] ?? method.method}{method.provider ? ` · ${method.provider}` : ""}</span>
-          <span className="text-right text-[11px] text-stone-500">{number(method.requests)} attempts · {number(method.checks)} checks</span>
+          <span className="text-right text-[11px] text-stone-500">{counted(method.requests, "attempt")} · {counted(method.checks, "check")}</span>
         </div>)}
       </div>
     </div>
