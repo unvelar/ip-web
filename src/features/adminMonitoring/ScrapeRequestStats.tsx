@@ -1,4 +1,5 @@
 import type { AdminMonitoringOverview } from "../../api";
+import { ScrapePipelineStats } from "./ScrapePipelineStats";
 
 const METHODS = [
   ["nodriver", "Nodriver"], ["scrapling", "Scrapling stealth"],
@@ -16,10 +17,10 @@ export function ScrapeRequestStats({ stats, windowHours, updating }: {
   const partialHistory = stats?.first_recorded_at && Date.parse(stats.first_recorded_at) > Date.parse(stats.since);
   const period = windowHours === 1 ? "Last hour" : windowHours === 168 ? "Last 7 days" : windowHours === 72 ? "Last 3 days" : `Last ${windowHours} hours`;
   return (
-    <section id="monitoring-scraping" className="admin-card overflow-hidden" aria-label="Scraping methods" aria-busy={updating}>
+    <section id="monitoring-scraping" className="admin-card overflow-hidden" aria-label="Scraping performance" aria-busy={updating}>
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 px-4 py-3">
         <div>
-          <h2 className="text-sm font-bold text-stone-900">Scraping methods</h2>
+          <h2 className="text-sm font-bold text-stone-900">Scraping performance</h2>
           <p className="mt-0.5 text-xs text-stone-500">{period}{stats ? ` · ${completed.toLocaleString()} completed requests` : ""}{updating ? " · Updating…" : ""}</p>
         </div>
         {stats?.first_recorded_at && <p className="text-[11px] text-stone-500">
@@ -27,6 +28,8 @@ export function ScrapeRequestStats({ stats, windowHours, updating }: {
         </p>}
       </div>
       {!stats ? <p className="px-4 py-6 text-sm text-stone-500">Request statistics are not available from the API yet.</p> : <>
+        {stats.pipeline && <ScrapePipelineStats key={windowHours} stats={stats.pipeline} windowHours={windowHours} />}
+        <h3 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold text-stone-900">Requests by method</h3>
         {partialHistory && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">Tracking began during this period. Earlier requests are not included.</p>}
         <div className={`overflow-x-auto ${updating ? "opacity-60" : ""}`}>
           <table className="w-full min-w-[660px] text-xs tabular-nums">

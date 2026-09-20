@@ -138,7 +138,7 @@ export default function AdminMonitoring() {
       </>}
     >
       <nav className="admin-jump-nav" aria-label="Monitoring sections">
-        <a href="#monitoring-overview">Overview</a><a href="#monitoring-scraping">Scraping methods</a><a href="#monitoring-workers">Workers</a><a href="#monitoring-queues">Queues</a><a href="#monitoring-live-work">Live work</a><a href="#monitoring-runs">Searches</a>
+        <a href="#monitoring-overview">Overview</a><a href="#monitoring-scraping">Scraping</a><a href="#monitoring-workers">Workers</a><a href="#monitoring-queues">Queues</a><a href="#monitoring-live-work">Live work</a><a href="#monitoring-runs">Searches</a>
       </nav>
       <div className="admin-monitoring">
         {feed.error && (

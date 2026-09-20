@@ -289,8 +289,40 @@ export interface AdminMonitoringWorker {
   };
 }
 
+export interface ScrapePipelineStats {
+  as_of: string; since: string; first_recorded_at: string | null;
+  completed: number; succeeded: number; failed: number; recovered: number;
+  pending: number; unknown: number; affected_domains: number; failure_rate: number | null;
+}
+
+export interface ScrapePipelineDomain {
+  domain: string; completed: number; succeeded: number; failed: number; recovered: number;
+  pending: number; unknown: number; failure_rate: number | null; last_failure_at: string | null;
+}
+
+export interface ScrapePipelineDomains {
+  as_of: string; total: number; next_offset: number | null; domains: ScrapePipelineDomain[];
+}
+
+export interface ScrapePipelineDomainDetail {
+  domain: string; as_of: string;
+  methods: Array<{ method: string; provider: string | null; requests: number; blocked: number; failed: number; checks: number }>;
+  reasons: Array<{ code: string; message: string; method: string; http_status: number | null; provider_status: number | null; requests: number }>;
+}
+
+export function getScrapePipelineDomains(options: { windowHours: number; asOf: string; query: string; offset: number; signal: AbortSignal }) {
+  const params = new URLSearchParams({ window_hours: String(options.windowHours), as_of: options.asOf, q: options.query, offset: String(options.offset) });
+  return request<ScrapePipelineDomains>(`/api/admin/monitoring/scraping/domains?${params}`, { signal: options.signal });
+}
+
+export function getScrapePipelineDomain(domain: string, windowHours: number, asOf: string, signal: AbortSignal) {
+  const params = new URLSearchParams({ window_hours: String(windowHours), as_of: asOf });
+  return request<ScrapePipelineDomainDetail>(`/api/admin/monitoring/scraping/domains/${encodeURIComponent(domain)}?${params}`, { signal });
+}
+
 export interface AdminMonitoringOverview {
   scrape_requests?: {
+    pipeline?: ScrapePipelineStats;
     as_of: string; since: string; first_recorded_at: string | null;
     methods: Array<{
       method: AdminMonitoringScrapeEvidence["steps"][number]["method"];
