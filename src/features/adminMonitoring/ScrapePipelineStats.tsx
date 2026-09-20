@@ -126,7 +126,7 @@ function DomainDetails({ domain, windowHours, asOf }: { domain: string; windowHo
   }, [domain, windowHours, asOf, retry]);
   if (error) return <p role="alert" className="text-red-700">Could not load failure details. <button type="button" onClick={() => setRetry(value => value + 1)} className="underline">Retry</button></p>;
   if (!data) return <p role="status" className="flex items-center gap-2 text-stone-500"><LoaderCircle className="h-4 w-4 animate-spin" />Loading failure details...</p>;
-  if (!data.methods.length) return <p className="text-stone-500">No completed checks failed on {domain} in this period.</p>;
+  if (!data.methods.length) return <p className="text-stone-500">No confirmed failures to show for {domain} in this period.</p>;
   return <div className="grid gap-5 lg:grid-cols-2">
     <div><h5 className="font-semibold text-stone-800">Methods used in failed checks</h5>
       <p className="mt-1 text-[11px] leading-4 text-stone-500">Includes every recorded retry. The methods used can differ between checks.</p>
