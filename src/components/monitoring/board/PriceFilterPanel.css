@@ -1,0 +1,47 @@
+.price-filter-panel { width: 100%; color: #242320; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.price-filter-heading { display: flex; align-items: center; gap: 8px; padding: 4px 5px 8px; }
+.price-filter-heading h3 { flex: 1; margin: 0; font-size: 14px; font-weight: 500; }
+.price-filter-heading button { display: grid; place-items: center; width: 28px; height: 26px; border-radius: 6px; color: #706d66; }
+.price-filter-heading button:hover { background: #f8f7f5; color: #242320; }
+.price-filter-range-wrap { margin: 2px 5px 15px; }
+.price-filter-range { --price-thumb: 24px; position: relative; height: 38px; }
+.price-filter-track { pointer-events: none; position: absolute; left: calc(var(--price-thumb) / 2); right: calc(var(--price-thumb) / 2); top: 17px; height: 4px; border-radius: 3px; background: #e9e6e0; }
+.price-filter-selected-track { background: transparent; }
+.price-filter-fill { position: absolute; height: 100%; border-radius: 3px; background: #242320; }
+.price-filter-scale-labels { display: flex; justify-content: space-between; color: #706d66; font-size: 11px; font-variant-numeric: tabular-nums; }
+.price-filter-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; padding: 0 5px; }
+.price-filter-field { display: block; color: #706d66; font-size: 12px; font-weight: 400; }
+.price-filter-input-wrap { display: flex; align-items: center; gap: 6px; margin-top: 5px; border: 1px solid #e9e6e0; border-radius: 6px; padding: 0 9px; background: #fff; }
+.price-filter-input-wrap:focus-within { border-color: #aaa59b; outline: 1px solid #aaa59b; }
+.price-filter-currency { color: #706d66; font-size: 14px; }
+.price-filter-number { min-width: 0; width: 100%; padding: 9px 0; border: 0; background: transparent; color: #242320; font-family: inherit; font-size: 14px; line-height: 1.45; font-variant-numeric: tabular-nums; outline: none; }
+.price-filter-number::placeholder { color: #a8a29e; font-size: 12px; }
+.price-filter-number:disabled { opacity: .5; }
+.price-filter-note { margin: 12px 5px; color: #706d66; font-size: 11px; line-height: 1.45; }
+.price-filter-error { margin: 10px 5px; color: #a32a26; font-size: 12px; }
+.price-filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 5px 5px; }
+.price-filter-actions button { border-radius: 6px; font-size: 12px; line-height: 1.45; }
+.price-filter-clear { padding: 6px; color: #706d66; }
+.price-filter-clear:hover { background: #f8f7f5; }
+.price-filter-apply { padding: 8px 12px; background: #242320; color: #fff; }
+.price-filter-apply:hover { opacity: .9; }
+.price-filter-apply:disabled { cursor: default; opacity: .4; }
+.price-filter-panel button:focus-visible { outline: 2px solid #aaa59b; outline-offset: 2px; }
+.price-filter-thumb { appearance: none; pointer-events: none; position: absolute; inset: 0; width: 100%; height: 38px; margin: 0; padding: 0; border: 0; background: transparent; outline: none; }
+.price-filter-thumb::-webkit-slider-runnable-track { height: 4px; background: transparent; }
+.price-filter-thumb::-moz-range-track { height: 4px; background: transparent; }
+.price-filter-thumb::-webkit-slider-thumb { appearance: none; pointer-events: auto; box-sizing: border-box; width: var(--price-thumb); height: var(--price-thumb); margin-top: calc((4px - var(--price-thumb)) / 2); border: 2px solid #242320; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0000001f; cursor: ew-resize; }
+.price-filter-thumb::-moz-range-thumb { pointer-events: auto; box-sizing: border-box; width: var(--price-thumb); height: var(--price-thumb); border: 2px solid #242320; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0000001f; cursor: ew-resize; }
+.price-filter-thumb:focus { z-index: 30; }
+.price-filter-thumb:focus-visible::-webkit-slider-thumb { outline: 3px solid #aaa59b; outline-offset: 3px; }
+.price-filter-thumb:focus-visible::-moz-range-thumb { outline: 3px solid #aaa59b; outline-offset: 3px; }
+.price-filter-thumb:disabled::-webkit-slider-thumb { cursor: default; }
+.price-filter-thumb:disabled::-moz-range-thumb { cursor: default; }
+@media (pointer: coarse) {
+  .price-filter-range { --price-thumb: 44px; height: 48px; }
+  .price-filter-thumb { height: 48px; }
+  .price-filter-track { top: 22px; }
+  .price-filter-thumb::-webkit-slider-thumb { border: 10px solid transparent; background: #242320; background-clip: padding-box; box-shadow: none; }
+  .price-filter-thumb::-moz-range-thumb { border: 10px solid transparent; background: #242320; background-clip: padding-box; box-shadow: none; }
+  .price-filter-number { font-size: 16px; }
+}

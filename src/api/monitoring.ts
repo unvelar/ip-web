@@ -1,6 +1,7 @@
 import type { MonitoringFrequency } from "./registry";
 import type { IpReviewFinding } from "./reviews";
 import { isApiError, request } from "./transport";
+import { formatPriceBound } from "../lib/priceRange";
 
 export interface SellerSalesObservation {
   value: number;
@@ -279,8 +280,20 @@ export interface MonitoringRelatedItems {
   logo_only_notice: string;
 }
 
+export interface MonitoringSourceFacet {
+  key: string;
+  label: string;
+  kind: "domain" | "search" | "unknown";
+  n: number;
+  websites: Array<{ domain: string; n: number }>;
+}
+
 /** Full-tenant facet counts returned alongside every findings page. */
 export interface MonitoringFacets {
+  /** Price bounds ignore the active range. Absence means API support is unavailable. */
+  price_usd?: { min: number | null; max: number | null; missing: number };
+  /** Absent until the API supports source grouping. */
+  sources?: MonitoringSourceFacet[];
   statuses: Record<string, number>;
   priorities: { high: number; med: number; low: number };
   platforms: Array<{ domain: string; n: number }>;
@@ -306,6 +319,9 @@ export type MonitoringFindingRowsPage = Pick<
 >;
 
 export interface MonitoringFindingsQuery {
+  min_price_usd?: number | null;
+  max_price_usd?: number | null;
+  source?: string | null;
   priority?: MonitoringPriorityBand | null;
   status?: MonitoringStatusFilter | null;
   ip_id?: string | null;
@@ -352,6 +368,9 @@ function monitoringFindingsParams(
   }
   if (opts.match_basis) params.set("match_basis", opts.match_basis);
   if (opts.protected_term_id) params.set("protected_term_id", opts.protected_term_id);
+  if (opts.min_price_usd != null) params.set("min_price_usd", formatPriceBound(opts.min_price_usd));
+  if (opts.max_price_usd != null) params.set("max_price_usd", formatPriceBound(opts.max_price_usd));
+  if (opts.source)       params.set("source", opts.source);
   if (opts.platform)     params.set("platform", opts.platform);
   if (opts.seller)       params.set("seller", opts.seller);
   if (opts.query)        params.set("q", opts.query);

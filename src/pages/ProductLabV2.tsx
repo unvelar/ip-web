@@ -1494,9 +1494,10 @@ export default function ProductLab() {
               onGroupChange={updateSelectedGroup}
               onRefresh={() => setRefreshToken((token) => token + 1)}
             />
-          ) : selectedGroup ? (
+          ) : selectedGroup && activeIpId ? (
             <BatchWorkspace
               group={selectedGroup}
+              ipId={activeIpId}
               findings={scopedBatchFindings}
               commercialReviewLanes={commercialReviewLanes}
               selectedCommercialSubgroupKey={selectedCommercialSubgroupKey}

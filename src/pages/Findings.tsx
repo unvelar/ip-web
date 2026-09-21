@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   getMonitoringCampaign,
   getMonitoringFinding,
@@ -7,16 +7,13 @@ import {
   listMonitoringFindingsGlobal,
   resolveMonitoringFindingTenant,
   type IpReviewFinding,
-  type MonitoringCandidateOutcome,
   type MonitoringFacets,
   type MonitoringFindingsQuery,
-  type MonitoringDismissalReasonFilter,
-  type MonitoringPriorityBand,
-  type MonitoringSortMode,
-  type MonitoringStatusFilter,
 } from "../api";
+import { parseFilters, writeFilters, type InboxFilters } from "../lib/monitoringFilters";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
-import { IpOnboardingStatusCard } from "../components/monitoring/IpOnboardingStatusCard";
+import { ChevronRight, CircleAlert } from "lucide-react";
+import "../components/monitoring/board/MonitoringResults.css";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
@@ -26,117 +23,7 @@ export default function Findings() {
   return <Navigate to="/monitoring/tasks" replace />;
 }
 
-/** Single source of truth for the inbox filter set, read from / written to
- *  the URL so refresh + share + KPI deep-links survive. */
-interface InboxFilters {
-  status: MonitoringStatusFilter | null;
-  priority: MonitoringPriorityBand | null;
-  ip_id: string | null;
-  product_group_id: string | null;
-  catalog_product_id: string | null;
-  platform: string | null;
-  match_basis?: "text" | "text_only" | "visual" | "both" | null;
-  protected_term_id?: string | null;
-  seller: string | null;
-  query: string | null;
-  assignee: string | null;
-  dismissal_reason: MonitoringDismissalReasonFilter | null;
-  candidate_outcome: MonitoringCandidateOutcome | null;
-  show_dismissed: boolean;
-  sort: MonitoringSortMode;
-}
-
-const DEFAULT_SORT: MonitoringSortMode = "score_desc";
 const MONITORING_PAGE_SIZE = 50;
-
-function parseFilters(params: URLSearchParams): InboxFilters {
-  const status = params.get("status");
-  const sort = params.get("sort");
-  const dismissalReason = params.get("dismissal_reason");
-  const candidateOutcome = params.get("candidate_outcome");
-  const seller = params.get("seller");
-  const query = params.get("q");
-  const assignee = params.get("assignee");
-  return {
-    // Default to "To triage" (pending); an explicit `status=all` clears it.
-    status:
-      status === "all"
-        ? null
-        : status === "preparing" || status === "pending" || status === "review" ||
-            status === "takedown_pending" || status === "takedown_sent" ||
-            status === "enforced" || status === "dismissed"
-          ? status
-          : status === null
-            ? "pending"
-            : null,
-    priority: null,
-    ip_id: params.get("ip_id"),
-    product_group_id: params.get("product_group_id"),
-    catalog_product_id: params.get("catalog_product_id"),
-    platform: params.get("platform"),
-    match_basis: ["text", "text_only", "visual", "both"].includes(params.get("match_basis") ?? "") ? params.get("match_basis") as InboxFilters["match_basis"] : null,
-    protected_term_id: params.get("protected_term_id"),
-    seller: seller && seller.trim() ? seller.trim() : null,
-    query: query && query.trim() ? query.trim() : null,
-    assignee: assignee && assignee.trim() ? assignee.trim() : null,
-    dismissal_reason:
-      dismissalReason === "false_positive" ||
-      dismissalReason === "do_not_pursue" ||
-      dismissalReason === "second_hand" ||
-      dismissalReason === "licensed" ||
-      dismissalReason === "allowed_product" ||
-      dismissalReason === "dead" ||
-      dismissalReason === "manual_cleared"
-        ? dismissalReason
-        : null,
-    candidate_outcome:
-      candidateOutcome === "false_positive" ||
-      candidateOutcome === "do_not_pursue" ||
-      candidateOutcome === "takedown" ||
-      candidateOutcome === "second_hand" ||
-      candidateOutcome === "none"
-        ? candidateOutcome
-        : null,
-    show_dismissed: params.get("show_dismissed") === "true",
-    sort:
-      sort === "score_desc" || sort === "score_asc" ||
-      sort === "found_desc" || sort === "found_asc" ||
-      sort === "updated_desc" || sort === "updated_asc" ||
-      sort === "price_desc" || sort === "price_asc" ||
-      sort === "seller_desc" || sort === "seller_asc" ||
-      sort === "platform_desc" || sort === "platform_asc"
-        ? sort
-        : DEFAULT_SORT,
-  };
-}
-
-/** Mutates a URLSearchParams clone with the new filter set, dropping keys
- *  that are at the default so the URL stays tidy. */
-function writeFilters(base: URLSearchParams, f: InboxFilters): URLSearchParams {
-  const next = new URLSearchParams(base);
-  const setOrDel = (k: string, v: string | null) => {
-    if (v) next.set(k, v);
-    else next.delete(k);
-  };
-  // "pending" is the default → drop it; null means All → persist as `all`
-  // so the choice survives a refresh instead of snapping back to pending.
-  setOrDel("status", f.status === "pending" ? null : f.status ?? "all");
-  setOrDel("priority", f.priority);
-  setOrDel("ip_id", f.ip_id);
-  setOrDel("product_group_id", f.product_group_id);
-  setOrDel("catalog_product_id", f.catalog_product_id);
-  setOrDel("platform", f.platform);
-  setOrDel("match_basis", f.match_basis ?? null);
-  setOrDel("protected_term_id", f.protected_term_id ?? null);
-  setOrDel("seller", f.seller);
-  setOrDel("q", f.query);
-  setOrDel("assignee", f.assignee);
-  setOrDel("dismissal_reason", f.dismissal_reason);
-  setOrDel("candidate_outcome", f.candidate_outcome);
-  setOrDel("show_dismissed", f.show_dismissed ? "true" : null);
-  setOrDel("sort", f.sort === DEFAULT_SORT ? null : f.sort);
-  return next;
-}
 
 /**
  * Tenant-wide infringement findings board. Filters/sort live in the URL;
@@ -151,6 +38,7 @@ export function MonitoringInboxView() {
   const { actingTenantId, switchTenant } = useAuth();
   const {
     activeIpId,
+    activeIp,
     loading: loadingActiveIp,
   } = useActiveIp();
   const {
@@ -199,6 +87,8 @@ export function MonitoringInboxView() {
     async (q: MonitoringFindingsQuery, minRows = MONITORING_PAGE_SIZE) => {
       const seq = ++reqSeq.current;
       setErr("");
+      // A cursor belongs to the previous filter set until this request returns.
+      setNextCursor(null);
       try {
         const limit = q.limit ?? MONITORING_PAGE_SIZE;
         const apiQuery: MonitoringFindingsQuery = {
@@ -215,6 +105,15 @@ export function MonitoringInboxView() {
           limit,
         });
         if (reqSeq.current !== seq) return;
+        if (q.source && !page.facets.sources) {
+          throw new Error("Source filtering is not available yet. Clear the source filter to view all results.");
+        }
+        if ((q.min_price_usd != null || q.max_price_usd != null) && !page.facets.price_usd) {
+          setFindings([]);
+          setFacets(null);
+          setNextCursor(null);
+          throw new Error("Price filtering is not available yet. Clear the price filter to view results.");
+        }
         const allFindings = [...page.findings];
         let cursor = page.next_cursor;
         while (cursor && allFindings.length < minRows) {
@@ -389,6 +288,7 @@ export function MonitoringInboxView() {
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
+    const seq = reqSeq.current;
     setLoadingMore(true);
     try {
       const page = await listMonitoringFindingsGlobal({
@@ -400,9 +300,11 @@ export function MonitoringInboxView() {
         ),
         cursor: nextCursor,
       });
+      if (reqSeq.current !== seq) return;
       setFindings((prev) => [...prev, ...page.findings]);
       setNextCursor(page.next_cursor);
     } catch (e) {
+      if (reqSeq.current !== seq) return;
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setLoadingMore(false);
@@ -491,66 +393,34 @@ export function MonitoringInboxView() {
         ? "No findings are available yet. See the setup status above."
         : undefined;
 
-  const queueSummary = useMemo(() => {
-    if (!facets) return "Loading…";
-    const count = filters.status === "takedown_pending"
-      ? (facets.statuses.takedown_pending ?? 0)
-      : facets.total;
-    const statusLabel =
-      filters.status === "preparing"
-        ? "preparing"
-        : filters.status === "pending"
-        ? "to triage"
-        : filters.status === "review"
-          ? "in review"
-        : filters.status === "takedown_pending"
-          ? "awaiting legal action"
-        : filters.status === "takedown_sent"
-          ? "with takedowns sent"
-          : filters.status === "enforced"
-            ? "enforced"
-            : filters.status === "dismissed"
-              ? "dismissed"
-              : filters.show_dismissed
-                ? "across all statuses"
-                : "open";
-    const ipName =
-      filters.ip_id
-        ? facets.ips.find((ip) => ip.ip_id === filters.ip_id)?.name ?? "selected IP"
-        : "all monitored IPs";
-    const productName = filters.product_group_id
-      ? facets.product_groups.find((group) =>
-        group.product_group_id === filters.product_group_id
-      )?.name ?? "selected product"
-      : filters.catalog_product_id ? "selected product" : null;
-    return `${count} finding${count === 1 ? "" : "s"} ${statusLabel} · ${ipName}${
-      productName ? ` · ${productName}` : ""
-    }.`;
-  }, [
-    facets,
-    filters.ip_id,
-    filters.product_group_id,
-    filters.catalog_product_id,
-    filters.show_dismissed,
-    filters.status,
-  ]);
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-xs text-stone-500">
-          {queueSummary}
-        </p>
-      </div>
+    <div className="monitoring-results-workspace">
+      <header className="monitoring-workspace-header">
+        <div>
+          <p className="monitoring-workspace-eyebrow">{activeIp?.name ?? "Workspace"} / Marketplaces</p>
+          <h1>Listings</h1>
+        </div>
+        {showMonitoringStatus && <Link className="monitoring-status-link" data-state={onboardingStatus?.state}
+          to={`/monitoring/first-scan?ip_id=${encodeURIComponent(activeIpId!)}`}
+          aria-label={`${onboardingStatus?.title ?? "Monitoring status"}. View live monitoring.`}>
+          {(onboardingStatus?.state === "delayed" || onboardingStatus?.customer_action_required || onboardingError) && <CircleAlert size={13} aria-hidden />}
+          <span>{onboardingLoading ? "Checking monitoring…" : onboardingError ? "Monitoring status unavailable" : onboardingStatus?.title ?? "View live monitoring"}</span>
+          <ChevronRight size={13} aria-hidden />
+        </Link>}
+      </header>
 
-      {err && <div className="text-sm text-red-600">{err}</div>}
+      {err && <div className="monitoring-workspace-notice text-sm text-red-600">
+        {err}
+        {(filters.min_price_usd != null || filters.max_price_usd != null) && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ min_price_usd: null, max_price_usd: null })}>Clear price filter</button>}
+        {filters.source && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ source: null, platform: null })}>Clear source filter</button>}
+      </div>}
       {linkedErr && (
-        <div className="text-sm text-red-600">
+        <div className="monitoring-workspace-notice text-sm text-red-600">
           Unable to open linked task: {linkedErr}
         </div>
       )}
       {campaignBatchErr && (
-        <div className="text-sm text-red-600">
+        <div className="monitoring-workspace-notice text-sm text-red-600">
           Unable to load campaign batch: {campaignBatchErr}
         </div>
       )}
@@ -558,15 +428,6 @@ export function MonitoringInboxView() {
         <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
           Campaign view loaded: {campaignBatchTitle || campaignBatchId}. Select only the rows you have reviewed.
         </div>
-      )}
-
-      {showMonitoringStatus && (
-        <IpOnboardingStatusCard
-          status={onboardingStatus}
-          loading={onboardingLoading}
-          error={onboardingError}
-          summaryHref={`/monitoring/first-scan?ip_id=${encodeURIComponent(activeIpId!)}`}
-        />
       )}
 
       {!loadingActiveIp && !activeIpId ? (

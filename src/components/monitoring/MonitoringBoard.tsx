@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleCheck, Search, X } from "lucide-react";
+import { CircleCheck, X } from "lucide-react";
 import {
   dismissIpFinding,
   excludePersistedProductGroupMember,
@@ -15,14 +15,9 @@ import {
   updateMonitoringFindingAssignment,
   type CaseReviewStatus,
   type IpReviewFinding,
-  type MonitoringCandidateOutcome,
   type MonitoringFacets,
-  type MonitoringDismissalReasonFilter,
   type MonitoringDismissReasonCode,
-  type MonitoringPriorityBand,
   type MonitoringReviewOutcome,
-  type MonitoringSortMode,
-  type MonitoringStatusFilter,
   type ProductGroupCorrectionReason,
   type TakedownFeedbackAssociationScope,
 } from "../../api";
@@ -41,40 +36,19 @@ import {
 } from "./board/batchUtils";
 import {
   CANDIDATE_OUTCOME_LABELS,
-  CANDIDATE_OUTCOME_ORDER,
   DISMISSAL_REASON_LABELS,
-  FILTER_SELECT,
   type ResortTarget,
 } from "./board/constants";
-import { GridFindingCard } from "./board/GridFindingCard";
-import { FindingRow } from "./board/FindingRow";
+import { MonitoringResultList } from "./board/MonitoringResultList";
 import { FindingInspector } from "./board/FindingInspector";
 import type { FindingUpdateOptions } from "./board/FindingActions";
-import { SortHeader } from "./board/SortHeader";
-import { FilterPill, StatusTabs } from "./board/StatusTabs";
+import { MonitoringFilters } from "./board/MonitoringFilters";
+import type { InboxFilters } from "../../lib/monitoringFilters";
 import { compactListingTitle, hasReviewAnalysis, selectedFindingSummary } from "./board/utils";
 import { useTenantMembers } from "../../hooks/useTenantMembers";
-import { AssigneeAvatar, AssigneeAvatarStack } from "./board/AssigneeAvatar";
 import { useAuth } from "../../context/AuthContext";
 
-/** Shape pushed up to the parent — must match Findings.tsx::InboxFilters. */
-export interface BoardFilters {
-  status: MonitoringStatusFilter | null;
-  priority: MonitoringPriorityBand | null;
-  ip_id: string | null;
-  product_group_id: string | null;
-  catalog_product_id: string | null;
-  platform: string | null;
-  match_basis?: "text" | "text_only" | "visual" | "both" | null;
-  protected_term_id?: string | null;
-  seller: string | null;
-  query: string | null;
-  assignee: string | null;
-  dismissal_reason: MonitoringDismissalReasonFilter | null;
-  candidate_outcome: MonitoringCandidateOutcome | null;
-  show_dismissed: boolean;
-  sort: MonitoringSortMode;
-}
+export type BoardFilters = InboxFilters;
 
 type LastReviewAction = {
   id: number;
@@ -196,43 +170,9 @@ export function MonitoringBoard({
     loading: tenantMembersLoading,
     error: tenantMembersError,
   } = useTenantMembers();
-  const selectedAssigneeMember = filters.assignee && filters.assignee !== "unassigned"
-    ? tenantMembers.find((member) => member.id === filters.assignee) ?? null
-    : null;
   const currentTenantMember = user
     ? tenantMembers.find((member) => member.id === user.id) ?? null
     : null;
-  const [taskSearch, setTaskSearch] = useState(filters.query ?? "");
-  const [groupSearch, setGroupSearch] = useState("");
-
-  useEffect(() => {
-    setTaskSearch(filters.query ?? "");
-  }, [filters.query]);
-
-  useEffect(() => {
-    const next = taskSearch.trim() || null;
-    if (next === filters.query) return;
-    const timer = window.setTimeout(() => onFiltersChange({ query: next }), 250);
-    return () => window.clearTimeout(timer);
-  }, [filters.query, onFiltersChange, taskSearch]);
-
-  const filteredProductGroups = useMemo(() => {
-    const groups = facets.product_groups ?? [];
-    const needle = groupSearch.trim().toLocaleLowerCase();
-    const isGeneratedName = (name: string) =>
-      /^potential (?:visual|product) group [0-9a-f]{8}$/i.test(name.trim());
-    const matching = needle
-      ? groups.filter((group) =>
-          `${group.name} ${group.product_group_id}`.toLocaleLowerCase().includes(needle)
-        )
-      : groups.filter((group) => !isGeneratedName(group.name)).slice(0, 50);
-    const selected = filters.product_group_id
-      ? groups.find((group) => group.product_group_id === filters.product_group_id) ?? null
-      : null;
-    return selected && !matching.some((group) => group.product_group_id === selected.product_group_id)
-      ? [selected, ...matching]
-      : matching;
-  }, [facets.product_groups, filters.product_group_id, groupSearch]);
   // Optimistically-dismissed result_ids — the next refetch replaces these
   // once `dismissed_at` lands in the payload.
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
@@ -242,7 +182,6 @@ export function MonitoringBoard({
   const completingResultIdsRef = useRef<Set<string>>(new Set());
   // Active finding shown in the side inspector. null = inspector closed.
   const [activeId, setActiveIdState] = useState<string | null>(activeFindingId ?? null);
-  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [reviewToasts, setReviewToasts] = useState<LastReviewAction[]>([]);
   const [undoingToastIds, setUndoingToastIds] = useState<Set<number>>(new Set());
   const nextToastId = useRef(0);
@@ -278,7 +217,6 @@ export function MonitoringBoard({
 
   useEffect(() => {
     setActiveIdState(activeFindingId ?? null);
-    if (activeFindingId) setViewMode("table");
   }, [activeFindingId]);
 
   const setActiveFinding = useCallback((resultId: string | null) => {
@@ -320,6 +258,8 @@ export function MonitoringBoard({
   // currently loaded in the visible page, so keep their full finding payloads
   // in a small side map without reordering the visible page.
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [reviewingSelection, setReviewingSelection] = useState(false);
+  const selectionReviewRef = useRef<HTMLDivElement>(null);
   const [selectionExtras, setSelectionExtras] = useState<Map<string, IpReviewFinding>>(new Map());
 
   const displayFindings = useMemo(() => {
@@ -661,6 +601,7 @@ export function MonitoringBoard({
   // gone. (Pruning on every refetch isn't needed: stale ids are simply ignored.)
   const filterKey = JSON.stringify(filters);
   useEffect(() => {
+    setReviewingSelection(false);
     setSelected(new Set());
     setSelectionExtras(new Map());
     setProductCorrectedResultIds(new Set());
@@ -668,11 +609,13 @@ export function MonitoringBoard({
   }, [filterKey]);
 
   function clearSelection() {
+    setReviewingSelection(false);
     setSelected(new Set());
     setSelectionExtras(new Map());
   }
 
   function toggleSelect(resultId: string) {
+    setReviewingSelection(false);
     setBatchResult(null);
     setSelected((prev) => {
       const next = new Set(prev);
@@ -682,6 +625,7 @@ export function MonitoringBoard({
     });
   }
   function addRelatedToBatch(findingsToAdd: IpReviewFinding[]) {
+    setReviewingSelection(false);
     const openFindings = findingsToAdd.filter(isBatchSelectableFinding);
     if (openFindings.length === 0) {
       setBatchResult("No open related findings to add.");
@@ -1093,6 +1037,7 @@ export function MonitoringBoard({
     function onKeyDown(e: KeyboardEvent) {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (editableTarget(e.target)) return;
+      if (document.querySelector(".monitoring-filter-popover") || (e.target instanceof Element && e.target.closest(".monitoring-filters"))) return;
       if (document.querySelector('[aria-modal="true"]')) return;
       if (e.key === "Escape" && activeFinding) {
         e.preventDefault();
@@ -1120,6 +1065,20 @@ export function MonitoringBoard({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeFinding, moveActive, runShortcutAction, setActiveFinding]);
 
+  useEffect(() => {
+    if (!reviewingSelection) return;
+    selectionReviewRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
+    selectionReviewRef.current?.focus({ preventScroll: true });
+  }, [reviewingSelection]);
+
+  const hasActiveFilters = Boolean(filters.query || filters.product_group_id || filters.catalog_product_id ||
+    filters.source || filters.platform || filters.seller || filters.assignee || filters.priority ||
+    filters.candidate_outcome || filters.dismissal_reason || filters.match_basis || filters.protected_term_id ||
+    filters.min_price_usd != null || filters.max_price_usd != null);
+  const clearFilters = () => onFiltersChange({ query: null, product_group_id: null, catalog_product_id: null,
+    source: null, platform: null, seller: null, assignee: null, priority: null, candidate_outcome: null,
+    dismissal_reason: null, min_price_usd: null, max_price_usd: null, match_basis: null, protected_term_id: null });
+
   const selectedSummary = useMemo(
     () => selectedFindingSummary(selectedActionFindings),
     [selectedActionFindings],
@@ -1134,15 +1093,10 @@ export function MonitoringBoard({
   const resortSelectedTooltip = filters.candidate_outcome
     ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
     : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
-  const showAiRecommendationTabs =
-    filters.status === null || filters.status === "pending" || !!filters.candidate_outcome;
-  const filterHeaderLabel =
-    "w-24 shrink-0 text-[10px] font-bold uppercase tracking-wide text-stone-600";
-  const filterRow =
-    "flex items-center gap-0.5 px-3 py-2 overflow-x-auto whitespace-nowrap";
   const bulkSelectionBar = (
     <BatchOperationBar
-      selectedCount={selected.size}
+      placement="inline"
+      selectedCount={selectedActionFindings.length}
       selectedSummary={selectedSummary}
       batchProgress={batchProgress}
       onAction={setConfirmAction}
@@ -1167,321 +1121,19 @@ export function MonitoringBoard({
 
   return (
     <>
-      <div className="rounded-lg border border-stone-200 bg-white overflow-hidden mb-2">
-        <div className="border-b border-stone-100 bg-white px-3 py-2">
-          <label className="relative block max-w-xl">
-            <span className="sr-only">Search all monitoring tasks</span>
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={taskSearch}
-              onChange={(event) => setTaskSearch(event.target.value)}
-              placeholder="Search listings, sellers, URLs, or websites"
-              aria-label="Search all monitoring tasks"
-              className="h-9 w-full rounded-md border border-stone-200 bg-stone-50 pl-8 pr-8 text-xs text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:bg-white focus:ring-2 focus:ring-stone-200/70"
-            />
-            {taskSearch && (
-              <button
-                type="button"
-                onClick={() => setTaskSearch("")}
-                className="absolute right-1.5 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-                aria-label="Clear task search"
-              >
-                <X size={13} aria-hidden="true" />
-              </button>
-            )}
-          </label>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-stone-100 bg-white">
-          <span className={filterHeaderLabel}>
-            Workflow
-          </span>
-          <StatusTabs
-            counts={facets.statuses}
-            active={filters.status}
-            onSelect={(s) =>
-              onFiltersChange({
-                status: s as MonitoringStatusFilter | null,
-                dismissal_reason: s === "dismissed" ? filters.dismissal_reason : null,
-                show_dismissed: s === "dismissed" ? true : filters.show_dismissed,
-              })
-            }
-          />
-          <span className="flex-1 min-w-[8px]" aria-hidden />
-          <span className="text-[11px] font-semibold text-stone-500 whitespace-nowrap">
-            {facets.total} in view
-          </span>
-        </div>
+      <MonitoringFilters
+        filters={filters}
+        facets={facets}
+        onChange={onFiltersChange}
+        ipId={filters.ip_id ?? ipId ?? null}
+        showIpFilter={showIpFilter && ipAware}
+        members={tenantMembers}
+        membersLoading={tenantMembersLoading}
+        membersError={tenantMembersError}
+        currentMemberId={currentTenantMember?.id ?? null}
+      />
 
-        <div className="divide-y divide-stone-100">
-          {showIpFilter && ipAware && facets.ips.length > 1 && (
-            <div
-              className={filterRow}
-              role="group"
-              aria-label="Filter by IP"
-            >
-              <span className={filterHeaderLabel}>
-                IP
-              </span>
-              <FilterPill
-                label="All"
-                count={facets.total}
-                active={!filters.ip_id}
-                onClick={() => onFiltersChange({
-                  ip_id: null,
-                  product_group_id: null,
-                  catalog_product_id: null,
-                })}
-              />
-              {facets.ips.map((ip) => (
-                <FilterPill
-                  key={ip.ip_id}
-                  label={ip.name ?? "Unnamed IP"}
-                  count={ip.n}
-                  active={filters.ip_id === ip.ip_id}
-                  onClick={() =>
-                    onFiltersChange({
-                      ip_id: filters.ip_id === ip.ip_id ? null : ip.ip_id,
-                      product_group_id: null,
-                      catalog_product_id: null,
-                    })
-                  }
-                  title={`${ip.name ?? "Unnamed IP"} · ${ip.n} finding${ip.n === 1 ? "" : "s"}`}
-                  className="max-w-[9rem]"
-                />
-              ))}
-            </div>
-          )}
-          {((facets.product_groups?.length ?? 0) > 0 || filters.product_group_id) && (
-            <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-              <span className={filterHeaderLabel}>
-                Group
-              </span>
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <label className="relative min-w-52 max-w-xs flex-1">
-                  <span className="sr-only">Search product and visual groups</span>
-                  <Search
-                    size={13}
-                    className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-stone-400"
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="search"
-                    value={groupSearch}
-                    onChange={(event) => setGroupSearch(event.target.value)}
-                    placeholder={`Search ${facets.product_groups?.length ?? 0} groups`}
-                    aria-label="Search product and visual groups"
-                    className="h-8 w-full rounded-md border border-stone-200 bg-white pl-7 pr-2 text-[11px] text-stone-800 outline-none focus:border-stone-400"
-                  />
-                </label>
-                <select
-                  value={filters.product_group_id ?? "all"}
-                  onChange={(event) =>
-                    onFiltersChange({
-                      product_group_id: event.target.value === "all" ? null : event.target.value,
-                    })
-                  }
-                  aria-label="Filter by product or visual group"
-                  title="Filter tasks by a stored exact-product or overlapping visual group"
-                  className={`${FILTER_SELECT} min-w-56 max-w-sm`}
-                >
-                  <option value="all">All groups</option>
-                  {filters.product_group_id && !(facets.product_groups ?? []).some(
-                    (group) => group.product_group_id === filters.product_group_id,
-                  ) && (
-                    <option value={filters.product_group_id}>Selected group (0)</option>
-                  )}
-                  {filteredProductGroups.map((group) => (
-                    <option key={group.product_group_id} value={group.product_group_id}>
-                      {group.name} ({group.n})
-                    </option>
-                  ))}
-                </select>
-                {!groupSearch && (facets.product_groups?.length ?? 0) > filteredProductGroups.length && (
-                  <span className="text-[10px] text-stone-400">
-                    Named groups shown; search to find generated groups.
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-          {(tenantMembersLoading || tenantMembers.length > 0 || tenantMembersError || filters.assignee) && (
-            <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-              <span className={filterHeaderLabel}>
-                Assignee
-              </span>
-              {currentTenantMember && (
-                <button
-                  type="button"
-                  onClick={() => onFiltersChange({
-                    assignee: filters.assignee === currentTenantMember.id
-                      ? null
-                      : currentTenantMember.id,
-                  })}
-                  aria-pressed={filters.assignee === currentTenantMember.id}
-                  className={`h-8 rounded-md border px-2 text-[11px] font-semibold transition ${
-                    filters.assignee === currentTenantMember.id
-                      ? "border-stone-900 bg-stone-900 text-white"
-                      : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
-                  }`}
-                >
-                  Assigned to me
-                </button>
-              )}
-              <div className="relative min-w-56 max-w-sm">
-                <span className="pointer-events-none absolute left-2 top-1/2 z-10 flex -translate-y-1/2 items-center">
-                  {selectedAssigneeMember ? (
-                    <AssigneeAvatar
-                      accountId={selectedAssigneeMember.id}
-                      displayName={selectedAssigneeMember.display_name}
-                      email={selectedAssigneeMember.email}
-                      pictureUrl={selectedAssigneeMember.picture_url}
-                      size={18}
-                    />
-                  ) : filters.assignee === "unassigned" ? (
-                    <AssigneeAvatar showUnassigned size={18} />
-                  ) : (
-                    <AssigneeAvatarStack members={tenantMembers} size={18} />
-                  )}
-                </span>
-                <select
-                  value={filters.assignee ?? "all"}
-                  onChange={(event) =>
-                    onFiltersChange({
-                      assignee: event.target.value === "all" ? null : event.target.value,
-                    })
-                  }
-                  disabled={tenantMembersLoading}
-                  aria-label="Filter tasks by assignee"
-                  title="Filter tasks by their assigned tenant member"
-                  className={`${FILTER_SELECT} w-full max-w-sm pl-11`}
-                >
-                  <option value="all">All assignees</option>
-                  <option value="unassigned">Unassigned</option>
-                  {filters.assignee && filters.assignee !== "unassigned" && !tenantMembers.some(
-                    (member) => member.id === filters.assignee,
-                  ) && (
-                    <option value={filters.assignee}>Selected user</option>
-                  )}
-                  {tenantMembers.map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {tenantMemberLabel(member)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {tenantMembersError && (
-                <span className="text-[11px] text-red-600">{tenantMembersError}</span>
-              )}
-            </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-            <span className={filterHeaderLabel}>Evidence</span>
-            <select aria-label="Filter by evidence" className={FILTER_SELECT} value={filters.match_basis ?? "all"}
-              onChange={(event) => onFiltersChange({ match_basis: event.target.value === "all" ? null : event.target.value as BoardFilters["match_basis"] })}>
-              <option value="all">Any evidence</option><option value="text">Protected terms</option>
-              <option value="text_only">Text only</option><option value="visual">Images</option><option value="both">Text and images</option>
-            </select>
-            {filters.protected_term_id && <button type="button" className={FILTER_SELECT} onClick={() => onFiltersChange({ protected_term_id: null })}>Clear term filter</button>}
-          </div>
-          {facets.platforms.length > 1 && (
-            <div
-              className={filterRow}
-              role="group"
-              aria-label="Filter by website"
-            >
-              <span className={filterHeaderLabel}>
-                Websites
-              </span>
-              <FilterPill
-                label="All"
-                count={facets.total}
-                active={!filters.platform}
-                onClick={() => onFiltersChange({ platform: null })}
-              />
-              {facets.platforms.map((p) => (
-                <FilterPill
-                  key={p.domain}
-                  label={p.domain}
-                  count={p.n}
-                  active={filters.platform === p.domain}
-                  onClick={() =>
-                    onFiltersChange({
-                      platform: filters.platform === p.domain ? null : p.domain,
-                    })
-                  }
-                  title={`${p.domain} · ${p.n} finding${p.n === 1 ? "" : "s"}`}
-                  className="max-w-[8rem]"
-                />
-              ))}
-            </div>
-          )}
-          {(filters.status === "dismissed" || filters.dismissal_reason) && (
-            <div className="flex items-center gap-2 px-3 py-2">
-              <span className={filterHeaderLabel}>
-                Dismissal
-              </span>
-              <select
-                value={filters.dismissal_reason ?? "all"}
-                onChange={(e) =>
-                  onFiltersChange({
-                    status: "dismissed",
-                    dismissal_reason:
-                      e.target.value === "all"
-                        ? null
-                        : (e.target.value as MonitoringDismissalReasonFilter),
-                    show_dismissed: true,
-                  })
-                }
-                aria-label="Filter dismissed findings by outcome"
-                title="Filter dismissed findings by outcome"
-                className={FILTER_SELECT}
-              >
-                <option value="all">All dismissed ({facets.statuses.dismissed ?? 0})</option>
-                {Object.entries(DISMISSAL_REASON_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label} ({facets.dismissal_reasons?.[key] ?? 0})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {showAiRecommendationTabs && (
-            <div className="flex items-center gap-1 flex-wrap px-3 py-2">
-              <span className={filterHeaderLabel}>
-                AI Reasoning
-              </span>
-              <FilterPill
-                label="All"
-                count={facets.statuses.pending ?? 0}
-                active={!filters.candidate_outcome}
-                onClick={() => onFiltersChange({ candidate_outcome: null })}
-              />
-              {CANDIDATE_OUTCOME_ORDER.map((outcome) => (
-                <FilterPill
-                  key={outcome}
-                  label={CANDIDATE_OUTCOME_LABELS[outcome]}
-                  count={facets.candidate_outcomes?.[outcome] ?? 0}
-                  active={filters.candidate_outcome === outcome}
-                  onClick={() => onFiltersChange({ candidate_outcome: outcome, status: "pending" })}
-                />
-              ))}
-              {selected.size > 0 && (
-                <span className="ml-auto text-[11px] font-semibold text-stone-500 whitespace-nowrap">
-                  {selected.size} manually selected
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div ref={queueRef} className="rounded-lg border border-stone-200 bg-white overflow-hidden">
+      <div ref={queueRef} className="monitoring-results-queue">
         {batchResult && (
           <BatchResultNotice
             result={batchResult}
@@ -1490,130 +1142,58 @@ export function MonitoringBoard({
             className="m-3"
           />
         )}
-        {displayFindings.length === 0 ? (
-          <div className="px-5 py-8 text-sm text-stone-400 text-center">
-            {emptyStateMessage ?? "No findings match the current filters."}
-          </div>
-        ) : viewMode === "grid" ? (
-          <div className="p-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {displayFindings.map((f) => {
-              const rowDismissed = !!f.dismissed_at || dismissing.has(f.result_id);
-              return (
-                <GridFindingCard
-                  key={f.result_id}
-                  f={f}
-                  ipId={f.ip_id ?? ipId}
-                  showIp={ipAware}
-                  active={activeId === f.result_id}
-                  selected={selected.has(f.result_id)}
-                  isDismissed={rowDismissed}
-                  isDismissing={dismissing.has(f.result_id) && !f.dismissed_at}
-                  onSelect={() => toggleSelect(f.result_id)}
-                  onActivate={() => setActiveFinding(f.result_id)}
-                  onOpen={() => {
-                    setActiveFinding(f.result_id);
-                    setViewMode("table");
-                  }}
-                  onDismiss={(reason, reasonCode) => handleDismiss(f, reason, reasonCode)}
-                  onActionComplete={() => advanceAfterAction(f.result_id)}
-                  onNeedsReview={() => rememberNeedsReviewAction(f)}
-                  onTakedownSent={() => rememberTakedownAction(f)}
-                  onEnforced={() => rememberEnforcedAction(f)}
-                  onLicensed={(dismissedCount) => rememberLicensedAction(f, dismissedCount)}
-                  onUpdated={(opts) => refreshAfterFindingUpdate(f.result_id, opts)}
-                />
-              );
-            })}
-          </div>
-        ) : (
-          /* Columnar findings table. Sortable headers drive the server sort;
-             clicking a row opens/updates the right-side inspector. */
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-stone-200 bg-stone-50/60 text-[10px] uppercase tracking-wide text-stone-400">
-                  <th className="w-9 pl-2 pr-1 py-1.5 align-middle">
-                    <span className="sr-only">Select reviewed task</span>
-                  </th>
-                  <SortHeader label="Priority" col="rate" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="w-20" />
-                  <th className="py-1.5 px-2 font-semibold w-16"><span className="sr-only">Image</span></th>
-                  <th className="py-1.5 px-2 font-semibold">Listing</th>
-                  <th className="hidden w-16 px-2 py-1.5 font-semibold md:table-cell">Assignee</th>
-                  <SortHeader label="Seller" col="seller" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="hidden md:table-cell" />
-                  <SortHeader label="Platform" col="platform" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} className="hidden lg:table-cell" />
-                  <th className="hidden sm:table-cell py-1.5 px-2 font-semibold">Status</th>
-                  <SortHeader label="Price" col="price" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} align="right" className="hidden md:table-cell" />
-                  <SortHeader label="Updated" col="updated" sort={filters.sort} onSort={(s) => onFiltersChange({ sort: s })} align="right" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {displayFindings.map((f) => {
-                  const active = f.result_id === activeFinding?.result_id;
-                  const rowDismissed = !!f.dismissed_at || dismissing.has(f.result_id);
-                  return (
-                    <tr
-                      key={f.result_id}
-                      onClick={() => setActiveFinding(f.result_id)}
-                      tabIndex={0}
-                      aria-label={`Open task: ${compactListingTitle(f)}`}
-                      onKeyDown={(event) => {
-                        if (event.target !== event.currentTarget) return;
-                        if (event.key !== "Enter" && event.key !== " ") return;
-                        event.preventDefault();
-                        setActiveFinding(f.result_id);
-                      }}
-                      className={`group relative cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-500 ${
-                        active ? "bg-blue-50/70" : "hover:bg-stone-50 focus-within:bg-stone-50"
-                      } ${rowDismissed ? "opacity-50" : ""}`}
-                    >
-                      <td
-                        className="w-9 pl-2 pr-1 align-middle"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <label className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-stone-100 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            aria-label="Select finding"
-                            checked={selected.has(f.result_id)}
-                            onChange={() => toggleSelect(f.result_id)}
-                            className="h-4 w-4"
-                          />
-                        </label>
-                      </td>
-                      <FindingRow
-                        f={f}
-                        active={active}
-                        showIp={ipAware}
-                      />
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <MonitoringResultList
+          findings={displayFindings}
+          total={facets.total}
+          sort={filters.sort}
+          selected={selected}
+          activeId={activeFinding?.result_id ?? null}
+          dismissing={dismissing}
+          showIp={ipAware && !filters.ip_id}
+          showStatus={filters.status === null || filters.status === "all"}
+          onSort={(sort) => onFiltersChange({ sort })}
+          onSelect={toggleSelect}
+          onOpen={setActiveFinding}
+          emptyMessage={emptyStateMessage}
+          onClearFilters={hasActiveFilters ? clearFilters : undefined}
+        />
         {/* Pagination footer: Load more when the server says there's another
             page, end-of-list marker otherwise. Hidden when there are no rows. */}
         {displayFindings.length > 0 && (
-          <div className="border-t border-stone-100 px-5 py-3 text-center">
+          <div className="monitoring-results-pagination">
             {nextCursor ? (
               <button
                 type="button"
                 disabled={loadingMore}
                 onClick={onLoadMore}
-                className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
               >
                 {loadingMore ? "Loading…" : "Load more"}
               </button>
             ) : (
-              <span className="text-[11px] text-stone-400">End of list.</span>
+              <span>End of list</span>
             )}
           </div>
         )}
       </div>
 
-      {selected.size > 0 && <div aria-hidden="true" className="h-32 sm:h-24" />}
-      {bulkSelectionBar}
+      {selectedActionFindings.length > 0 && (
+        <div className="monitoring-selection-bar" aria-label="Selected listings">
+          <span aria-live="polite">{selectedActionFindings.length} {selectedActionFindings.length === 1 ? "listing" : "listings"} selected</span>
+          <button type="button" disabled={Boolean(batchProgress)} onClick={clearSelection}>Deselect</button>
+          <button type="button" disabled={Boolean(batchProgress)} onClick={() => setReviewingSelection(true)}>Review selection</button>
+        </div>
+      )}
+      {reviewingSelection && selectedActionFindings.length > 0 && (
+        <div ref={selectionReviewRef} className="monitoring-selection-review" tabIndex={-1} aria-label="Review selected listings">
+          <h2>Review {selectedActionFindings.length} selected {selectedActionFindings.length === 1 ? "listing" : "listings"}</h2>
+          <p>Open each listing to check its evidence before choosing a decision.</p>
+          <ul>{selectedActionFindings.map((finding) => <li key={finding.result_id}>
+            <button type="button" onClick={() => setActiveFinding(finding.result_id)}>{compactListingTitle(finding)} <small>· {finding.domain}</small></button>
+          </li>)}</ul>
+          {bulkSelectionBar}
+          <button type="button" className="monitoring-back-to-list" disabled={Boolean(batchProgress)} onClick={() => { setReviewingSelection(false); queueRef.current?.scrollIntoView({ block: "start", behavior: "instant" }); queueRef.current?.querySelector<HTMLSelectElement>('[aria-label="Sort listings"]')?.focus({ preventScroll: true }); }}>Back to listings</button>
+        </div>
+      )}
 
       {activeFinding && (
         <FindingInspector
