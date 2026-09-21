@@ -58,7 +58,6 @@ import type { ProductLabBatchAction } from "../features/products/reviewDecisions
 import {
   adjacentFinding,
   productCommercialReviewLanes,
-  productCommercialSubgroupKeyForCaseId,
   productNeedsAttention,
   recentDecisionCanUndo,
   recentDecisionKind,
@@ -103,7 +102,6 @@ export default function ProductLab() {
   const [mergeNotice, setMergeNotice] = useState<ProductMergeNotice | null>(null);
   const [undoingMerge, setUndoingMerge] = useState(false);
   const [activeFinding, setActiveFinding] = useState<IpReviewFinding | null>(null);
-  const [requestedFindingLookupComplete, setRequestedFindingLookupComplete] = useState(false);
   const [dismissingResultId, setDismissingResultId] = useState<string | null>(null);
   const [recentDecisions, setRecentDecisions] = useState<IpReviewFinding[]>([]);
   const [historyVisibleCount, setHistoryVisibleCount] = useState(50);
@@ -419,25 +417,9 @@ export default function ProductLab() {
       null,
     );
   }, [selectedGroup]);
-  const linkedFindingCaseId = requestedFindingId
-    ? batchFindings?.find((finding) => finding.result_id === requestedFindingId)?.case_id ??
-      (activeFinding?.result_id === requestedFindingId ? activeFinding.case_id : null)
-    : null;
-  const linkedCommercialSubgroupKey = productCommercialSubgroupKeyForCaseId(
-    commercialReviewLanes,
-    linkedFindingCaseId,
-  );
-  const waitingForLinkedFinding = Boolean(
-    requestedFindingId && !linkedFindingCaseId && !requestedFindingLookupComplete,
-  );
-  const selectedCommercialSubgroupKey =
-    commercialReviewLanes.some(({ subgroup }) =>
-      subgroup.key === requestedCommercialSubgroupKey
-    )
-      ? requestedCommercialSubgroupKey
-      : linkedCommercialSubgroupKey ?? (
-          waitingForLinkedFinding ? null : commercialReviewLanes[0]?.subgroup.key ?? null
-        );
+  const selectedCommercialSubgroupKey = commercialReviewLanes.some(({ subgroup }) =>
+    subgroup.key === requestedCommercialSubgroupKey
+  ) ? requestedCommercialSubgroupKey : null;
   const selectedCommercialSubgroup = commercialReviewLanes.find(({ subgroup }) =>
     subgroup.key === selectedCommercialSubgroupKey
   )?.subgroup ?? null;
@@ -452,21 +434,6 @@ export default function ProductLab() {
   }, [batchFindings, selectedCommercialSubgroup]);
 
   useEffect(() => {
-    if (
-      !selectedCommercialSubgroupKey ||
-      requestedCommercialSubgroupKey === selectedCommercialSubgroupKey
-    ) return;
-    const next = new URLSearchParams(searchParams);
-    next.set("offer", selectedCommercialSubgroupKey);
-    setSearchParams(next, { replace: true });
-  }, [
-    requestedCommercialSubgroupKey,
-    searchParams,
-    selectedCommercialSubgroupKey,
-    setSearchParams,
-  ]);
-
-  useEffect(() => {
     const nextScope = selectedGroupRequestId && selectedCommercialSubgroupKey
       ? `${selectedGroupRequestId}:${selectedCommercialSubgroupKey}`
       : null;
@@ -478,9 +445,10 @@ export default function ProductLab() {
     setBatchNotice(null);
   }, [selectedCommercialSubgroupKey, selectedGroupRequestId]);
 
-  const selectCommercialReviewLane = useCallback((subgroupKey: string) => {
+  const selectCommercialReviewLane = useCallback((subgroupKey: string | null) => {
     const next = new URLSearchParams(searchParams);
-    next.set("offer", subgroupKey);
+    if (subgroupKey) next.set("offer", subgroupKey);
+    else next.delete("offer");
     next.delete("finding");
     next.delete("panel");
     setActiveFinding(null);
@@ -617,26 +585,21 @@ export default function ProductLab() {
 
   useEffect(() => {
     if (!requestedFindingId) {
-      setRequestedFindingLookupComplete(false);
       return;
     }
     if (activeFinding?.result_id === requestedFindingId) {
-      setRequestedFindingLookupComplete(true);
       return;
     }
     let alive = true;
-    setRequestedFindingLookupComplete(false);
     void getMonitoringFinding(requestedFindingId)
       .then(({ finding }) => {
         if (alive) {
           setActiveFinding(finding);
-          setRequestedFindingLookupComplete(true);
         }
       })
       .catch((caught: unknown) => {
         if (alive) {
           setBatchNotice(`Unable to open the linked listing. ${messageFor(caught)}`);
-          setRequestedFindingLookupComplete(true);
         }
       });
     return () => {

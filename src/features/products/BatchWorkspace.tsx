@@ -52,7 +52,7 @@ export function BatchWorkspace({
   selectingSameProduct: boolean;
   onBack: () => void;
   onFilterChange: (filter: ReviewBucket) => void;
-  onCommercialSubgroupChange: (subgroupKey: string) => void;
+  onCommercialSubgroupChange: (subgroupKey: string | null) => void;
   onToggleFinding: (resultId: string) => void;
   onSetFindingsSelected: (resultIds: string[], selected: boolean) => void;
   onOpenFinding: (finding: IpReviewFinding) => void;
@@ -135,45 +135,6 @@ export function BatchWorkspace({
         </div>
       </div>
 
-      {commercialReviewLanes.length > 0 && (
-        <div className="border-b border-stone-200 bg-white px-4 py-3 sm:px-7">
-          <div className="flex items-center gap-3">
-            <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.12em] text-stone-400">
-              Offer
-            </span>
-            <div
-              className="flex min-w-0 items-center gap-1 overflow-x-auto"
-              role="tablist"
-              aria-label="Commercial offer variants"
-            >
-              {commercialReviewLanes.map(({ subgroup, findingCount }) => {
-                const selected = subgroup.key === selectedCommercialSubgroupKey;
-                return (
-                  <button
-                    key={subgroup.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    title={commercialReviewLaneLabel(subgroup)}
-                    onClick={() => onCommercialSubgroupChange(subgroup.key)}
-                    className={`inline-flex h-7 max-w-[260px] shrink-0 items-center gap-1.5 rounded-md px-2 text-[10px] font-medium transition ${
-                      selected
-                        ? "bg-violet-100 text-violet-900"
-                        : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-                    }`}
-                  >
-                    <span className="truncate">{commercialReviewLaneLabel(subgroup)}</span>
-                    <span className={selected ? "text-violet-500" : "text-stone-400"}>
-                      {findingCount}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="border-b border-stone-200 bg-[#faf9f7] px-4 py-3 sm:px-7">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-1 overflow-x-auto" role="tablist" aria-label="Listing recommendations">
@@ -220,6 +181,48 @@ export function BatchWorkspace({
       )}
 
       <div className="flex-1 px-4 py-4 sm:px-7">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          {commercialReviewLanes.length > 0 && (
+            <div className="flex min-w-0 items-center gap-1 overflow-x-auto py-1 -my-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="Filter listings by size">
+              {[
+                { key: null, label: "All sizes", count: group.triage_member_count ?? 0 },
+                ...commercialReviewLanes.map(({ subgroup, findingCount }) => ({
+                  key: subgroup.key,
+                  label: commercialReviewLaneLabel(subgroup),
+                  count: findingCount,
+                })),
+              ].map(({ key, label, count }) => {
+                const selected = key === selectedCommercialSubgroupKey;
+                return (
+                  <button
+                    key={key ?? "all"}
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={Boolean(batchProgress)}
+                    onClick={() => onCommercialSubgroupChange(key)}
+                    className={`inline-flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[10px] font-medium outline-none transition-[background-color,color,box-shadow,transform] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none ${
+                      selected
+                        ? "bg-stone-100 text-stone-900 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]"
+                        : "bg-transparent text-stone-500 hover:bg-stone-50 hover:text-stone-800"
+                    }`}
+                  >
+                    {label}
+                    <span className={`text-[9px] tabular-nums transition-colors duration-150 motion-reduce:transition-none ${
+                      selected ? "text-stone-500" : "text-stone-400"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <p className="shrink-0 text-[10px] tabular-nums text-stone-400" aria-live="polite">
+            {loading && findings == null
+              ? "Loading listings…"
+              : `${visibleFindings.length} ${visibleFindings.length === 1 ? "listing" : "listings"}`}
+          </p>
+        </div>
         {error && findings == null ? (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</div>
         ) : loading && findings == null ? (
@@ -232,8 +235,10 @@ export function BatchWorkspace({
         ) : visibleFindings.length === 0 ? (
           <QuietState
             icon={<Check size={18} />}
-            title={filter === "all" ? "Batch complete" : "Nothing in this category"}
-            detail={filter === "all"
+            title={selectedCommercialSubgroupKey ? "No matching listings" : filter === "all" ? "Batch complete" : "Nothing in this category"}
+            detail={selectedCommercialSubgroupKey
+              ? "Choose another size or recommendation to see more listings."
+              : filter === "all"
               ? "There are no pending listings left in this product group."
               : "Choose another recommendation to keep processing."}
           />
