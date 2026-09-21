@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
@@ -20,6 +21,8 @@ import { useActiveIp } from "../context/ActiveIpContext";
 import { monitoringPlatformLabel } from "../lib/platforms";
 import { sellerProfilePath } from "../lib/sellers";
 import { SellerListings } from "../features/sellers/SellerListings";
+import { SellerFindingPanel } from "../features/sellers/SellerFindingPanel";
+import { useSellerNavigation } from "../features/sellers/useSellerNavigation";
 import { SellerSales } from "../features/sellers/SellerSales";
 import { formatAgo, formatMoney } from "../components/monitoring/board/utils";
 import "../features/sellers/sellers.css";
@@ -50,10 +53,13 @@ export default function Sellers() {
   const { actingTenantId } = useAuth();
   const { ips, activeIpId, selectIp, loading: loadingIps } = useActiveIp();
   const [params, setParams] = useSearchParams();
+  const [, selectSeller] = useSellerNavigation();
   const status = sellerListStatus(params.get("status"));
   const query = params.get("q") ?? "";
   const platform = params.get("platform") ?? "";
   const allIps = params.get("scope") === "all";
+  const findingId = params.get("finding");
+  const findingSeller = params.get("seller");
   const effectiveIpId = allIps ? null : activeIpId;
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [page, setPage] = useState<MonitoringSellersPage | null>(null);
@@ -129,12 +135,16 @@ export default function Sellers() {
   }
 
   function updateIp(value: string) {
+    const next = new URLSearchParams(params);
     if (value === "all") {
-      updateParam("scope", "all");
-      return;
+      next.set("scope", "all");
+      next.delete("ip_id");
+    } else {
+      selectIp(value);
+      next.delete("scope");
+      next.set("ip_id", value);
     }
-    selectIp(value);
-    updateParam("scope", null);
+    setParams(next);
   }
 
   async function loadMore() {
@@ -274,6 +284,20 @@ export default function Sellers() {
           </>
         )}
       </div>
+      {/* Shared tasks remain accessible when their seller is filtered out or on a later page. */}
+      {findingId && (loading || !page?.sellers.some((seller) => seller.seller_key === findingSeller)) && createPortal(
+        <SellerFindingPanel
+          key={findingId}
+          findingId={findingId}
+          onClose={() => selectSeller(null)}
+          onResolved={() => {
+            selectSeller(null);
+            void refreshSellerSummaries();
+          }}
+          onFindingChange={() => void refreshSellerSummaries()}
+        />,
+        document.querySelector(".app-shell") ?? document.body,
+      )}
     </div>
   );
 }
@@ -315,7 +339,12 @@ function SellerRow({ seller, ipId, listStatus, onChanged }: {
   listStatus: MonitoringSellerListStatus;
   onChanged: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [params, selectSeller] = useSellerNavigation();
+  const expanded = params.get("seller") === seller.seller_key;
+  const findingId = expanded ? params.get("finding") : null;
+  function toggleExpanded() {
+    selectSeller(expanded ? null : seller.seller_key);
+  }
   const listingsId = useId();
   const initialStatus = listStatus === "all" ? "all" : "open";
   const href = withQuery(sellerProfilePath(seller.seller_key) ?? "/monitoring/tasks", {
@@ -335,12 +364,12 @@ function SellerRow({ seller, ipId, listStatus, onChanged }: {
         onClick={(event) => {
           if (!(event.target instanceof Element) || event.target.closest("a, button, input, select, textarea, summary")) return;
           if (window.getSelection()?.toString()) return;
-          setExpanded((value) => !value);
+          toggleExpanded();
         }}
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
           event.preventDefault();
-          setExpanded((value) => !value);
+          toggleExpanded();
         }}
       >
         <td className="seller-identity">
@@ -375,7 +404,7 @@ function SellerRow({ seller, ipId, listStatus, onChanged }: {
           </div>
         </td>
         <td className="seller-open" data-label="Open listings">
-          <button type="button" aria-expanded={expanded} aria-controls={listingsId} onClick={() => setExpanded((value) => !value)} aria-label={`Listings from ${seller.seller_name}`}>
+          <button type="button" aria-expanded={expanded} aria-controls={listingsId} onClick={toggleExpanded} aria-label={`Listings from ${seller.seller_name}`}>
             {seller.open_listing_count.toLocaleString()}
           </button>
           {returned && <span className="seller-returned">{seller.returned_listing_count} returned</span>}
@@ -388,7 +417,7 @@ function SellerRow({ seller, ipId, listStatus, onChanged }: {
           <time dateTime={seller.latest_found_at} title={seller.latest_found_at}>{formatAgo(seller.latest_found_at) ?? "Unknown"}</time>
         </td>
         <td className="seller-action">
-          <button type="button" aria-expanded={expanded} aria-controls={listingsId} onClick={() => setExpanded((value) => !value)} aria-label={`${expanded ? "Collapse" : "Expand"} listings from ${seller.seller_name}`}>
+          <button type="button" aria-expanded={expanded} aria-controls={listingsId} onClick={toggleExpanded} aria-label={`${expanded ? "Collapse" : "Expand"} listings from ${seller.seller_name}`}>
             <span>{expanded ? "Hide listings" : "Show listings"}</span><ChevronRight size={16} aria-hidden />
           </button>
         </td>
@@ -397,7 +426,8 @@ function SellerRow({ seller, ipId, listStatus, onChanged }: {
         <td colSpan={6} id={listingsId}>
           {expanded && (
             <div className="seller-expanded">
-              <SellerListings sellerKey={seller.seller_key} sellerName={seller.seller_name} ipId={ipId} initialStatus={initialStatus} onChanged={onChanged} />
+              <SellerListings sellerKey={seller.seller_key} sellerName={seller.seller_name} ipId={ipId} initialStatus={initialStatus} onChanged={onChanged}
+                activeFindingId={findingId} onActiveFindingChange={(value) => selectSeller(seller.seller_key, value, ipId)} />
             </div>
           )}
         </td>
