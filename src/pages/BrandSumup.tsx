@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowRight, DollarSign, Globe2, SearchCheck, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Bar, BarChart, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import BrandMark from "../components/BrandMark";
+import BrandCountryMap from "../components/BrandCountryMap";
 import { getPublicBrandSumup, type PublicBrandSumup } from "../api";
 
 const fmtNumber = new Intl.NumberFormat("en-US");
@@ -72,6 +73,7 @@ export default function BrandSumup() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8">
         <KpiGrid data={data} />
         <ValueSummary data={data} />
+        <BrandCountryMap countries={data.countries} />
         {data.totals.analyzed_count === 0 ? (
           <EmptyState />
         ) : (

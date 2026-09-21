@@ -64,10 +64,19 @@ export async function submitPublicIpIntake(input: {
 
 // --- Public brand sum-up pages ---
 
+export interface PublicBrandSumupCountry {
+  country: string;
+  analyzed_count: number;
+  to_takedown_count: number;
+  infringement_percentage: number;
+}
+
 export interface PublicBrandSumup {
   tenant: { name: string; slug: string };
   ip: { name: string; slug: string };
   generated_at: string;
+  /** Optional during rollout of the country aggregation API. */
+  countries?: PublicBrandSumupCountry[];
   totals: {
     analyzed_count: number;
     triaged_count: number;
