@@ -1,4 +1,5 @@
-import { ArrowLeft, Check, Link2, LoaderCircle, Settings2, Square } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Link2, LoaderCircle, Settings2, Square } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { PersistedProductGroup, ProductGroupCommercialSubgroup } from "../../api/products";
 import type { IpReviewFinding } from "../../api/reviews";
 import { BatchDecisionButton } from "./BatchDecisionButton";
@@ -18,6 +19,7 @@ import { recommendedBatchActionForSelection } from "./reviewDecisions";
 
 export function BatchWorkspace({
   group,
+  ipId,
   findings,
   commercialReviewLanes,
   selectedCommercialSubgroupKey,
@@ -40,6 +42,7 @@ export function BatchWorkspace({
   onDismissNotice,
 }: {
   group: PersistedProductGroup;
+  ipId: string;
   findings: IpReviewFinding[] | null;
   commercialReviewLanes: ProductCommercialReviewLane<ProductGroupCommercialSubgroup>[];
   selectedCommercialSubgroupKey: string | null;
@@ -62,6 +65,11 @@ export function BatchWorkspace({
   onDismissNotice: () => void;
 }) {
   const status = productStatus(group);
+  const taskParams = new URLSearchParams({
+    ip_id: ipId,
+    [group.canonical_product_id ? "catalog_product_id" : "product_group_id"]:
+      group.canonical_product_id ?? group.id,
+  });
   const listingCount = findings?.length ?? group.triage_member_count ?? 0;
   const counts = new Map<ReviewBucket, number>([["all", findings?.length ?? 0]]);
   for (const finding of findings ?? []) {
@@ -91,7 +99,7 @@ export function BatchWorkspace({
           <ArrowLeft size={14} />
           Product groups
         </button>
-        <div className="flex items-start gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <div className="size-14 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-stone-100 sm:size-16">
           {representativeImage(group) ? (
             <img src={representativeImage(group)!} alt="" className="h-full w-full object-cover" />
@@ -113,7 +121,7 @@ export function BatchWorkspace({
               {listingCount} {listingCount === 1 ? "listing" : "listings"} in this batch
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="ml-auto flex w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto">
             <button
               type="button"
               disabled={selectingSameProduct}
@@ -131,6 +139,14 @@ export function BatchWorkspace({
               <Settings2 size={11} />
               Group settings
             </button>
+            <Link
+              to={`/monitoring/tasks?${taskParams}`}
+              aria-label={`View tasks for ${productName(group)}`}
+              title={`View tasks for ${productName(group)}`}
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-500"
+            >
+              <ArrowUpRight size={14} aria-hidden="true" />
+            </Link>
           </div>
         </div>
       </div>

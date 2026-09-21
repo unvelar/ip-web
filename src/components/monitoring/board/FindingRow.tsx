@@ -1,231 +1,90 @@
+import { ImageOff } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { IpReviewFinding } from "../../../api";
 import { sellerProfilePath } from "../../../lib/sellers";
-import { ActionabilityBadge } from "./ActionabilityBadge";
-import { AssigneeAvatar } from "./AssigneeAvatar";
-import {
-  marketQuantity,
-  actionabilityMeta,
-  compactListingTitle,
-  estimatedMarket,
-  findingChips,
-  findingStatusBadge,
-  formatAgo,
-  formatMoney,
-  tableImageUrls,
-} from "./utils";
+import { actionabilityMeta, compactListingTitle, findingPlatformLabel, formatMoney, hasReviewAnalysis, statusBadge, tableImageUrls } from "./utils";
 
-function FindingTableThumbnail({
-  urls,
-  title,
-}: {
-  urls: string[];
-  title: string;
-}) {
-  const [idx, setIdx] = useState(0);
-  const src = urls[idx];
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
-  if (!src) {
-    return (
-      <div
-        className="h-12 w-12 min-w-12 rounded-md bg-stone-100 border border-stone-200"
-        aria-label="No listing image"
-      />
-    );
-  }
-
+function FindingTableThumbnail({ urls, title }: { urls: string[]; title: string }) {
+  const [index, setIndex] = useState(0);
+  const src = urls[index];
+  if (!src) return (
+    <span className="monitoring-listing-thumbnail" role="img" aria-label="No listing image">
+      <ImageOff size={18} aria-hidden="true" className="text-stone-300" />
+    </span>
+  );
   return (
-    <a
-      href={src}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      className="block h-12 w-12 min-w-12 rounded-md overflow-hidden border border-stone-200 bg-stone-100 hover:border-stone-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
-      title="Open listing image"
-    >
-      <img
-        src={src}
-        alt={title ? `${title} listing image` : "Listing image"}
-        className="block h-full w-full object-cover"
-        loading="lazy"
-        decoding="async"
-        referrerPolicy="no-referrer"
-        onError={() => setIdx((current) => current + 1)}
-      />
+    <a href={src} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}
+      className="monitoring-listing-thumbnail focus-visible:outline-2 focus-visible:outline-stone-500"
+      title="Open listing image">
+      <img src={src} alt={`${title} listing image`} className="h-full w-full object-contain"
+        loading="lazy" decoding="async" referrerPolicy="no-referrer"
+        onError={() => setIndex((current) => current + 1)} />
     </a>
   );
 }
 
-/** The enclosing row owns selection and inspector activation. */
-export function FindingRow({
-  f,
-  active,
-  showIp,
-}: {
-  f: IpReviewFinding;
-  active: boolean;
-  showIp?: boolean;
-}) {
-  const priority = f.enforcement_priority;
-  const thumbUrls = tableImageUrls(f);
-  const market = estimatedMarket(f);
-  const sb = findingStatusBadge(f);
-  const foundAgo = formatAgo(f.found_at) ?? "—";
-  const updatedAgo = formatAgo(f.updated_at) ?? "—";
-  const checkedAgo = formatAgo(f.last_checked_at);
-  const title = compactListingTitle(f);
-  const sellerLine = f.seller_name || "—";
-  const sellerTarget = sellerProfilePath(f.seller_key);
-  // Show the USD-normalized price so the Price column reads monotonically when
-  // sorted (the sort key is USD across mixed currencies). Native price + est.
-  // market live in the tooltip.
-  const priceUsd =
-    f.price_value_usd != null ? formatMoney(Number(f.price_value_usd), "USD") : null;
-  const priceText = priceUsd ?? f.price ?? null;
-  const chips = findingChips(f, showIp);
+function suggestedAction(f: IpReviewFinding) {
   const actionability = actionabilityMeta(f.actionability);
+  const outcome = f.manual_candidate_outcome ?? f.suggested_review_outcome;
+  // Actionability incorporates seller licenses and resale evidence. Keep those
+  // safeguards ahead of a candidate bucket, and describe actions rather than
+  // presenting a model's infringement assessment as an established fact.
+  switch (actionability.key) {
+    case "licensed_seller": return { label: "Licensed seller", reason: actionability.reason };
+    case "allowed_resale": return { label: "Second hand", reason: actionability.reason };
+    case "send_takedown": return { label: "Takedown recommended", reason: actionability.reason };
+    case "false_positive": return { label: "Different product", reason: actionability.reason };
+    default:
+      return outcome === "do_not_pursue"
+        ? { label: "Do not pursue", reason: f.suggested_review_reason || actionability.reason }
+        : { label: "Needs review", reason: actionability.reason };
+  }
+}
 
-  return (
-    <>
-      {/* Review priority — this is the exact value used by the sortable column. */}
-      <td className="py-1 px-2 align-middle whitespace-nowrap">
-        <span className="inline-flex items-center gap-1.5">
-          <span
-            className={`text-[10px] ${active ? "text-blue-600" : "text-stone-300"}`}
-            aria-hidden
-          >
-            ▸
-          </span>
-          <span
-            className="text-[10px] font-semibold tabular-nums rounded px-1 py-0.5 bg-stone-100 text-stone-500"
-            title="Enforcement priority"
-          >
-            {Number.isFinite(priority) ? `${Math.round(priority * 100)}%` : "—"}
-          </span>
-        </span>
-      </td>
+/** The enclosing row owns selection and inspector activation. */
+export function FindingRow({ f, active, showIp, showStatus }: { f: IpReviewFinding; active: boolean; showIp?: boolean; showStatus?: boolean }) {
+  const title = compactListingTitle(f);
+  const images = tableImageUrls(f);
+  const seller = f.seller_name?.trim() || "Unknown seller";
+  const sellerTarget = sellerProfilePath(f.seller_key);
+  const platform = findingPlatformLabel(f);
+  const recommendation = suggestedAction(f);
+  const status = f.dismissed_at ? "Dismissed"
+    : (!f.ready_for_review || !hasReviewAnalysis(f)) && (f.review_status ?? "pending") === "pending"
+      ? "Preparing" : statusBadge(f.review_status).label;
+  const price = f.price_value_usd == null ? null : Number(f.price_value_usd);
+  const hasUsdPrice = price != null && Number.isFinite(price) && price >= 0;
+  const nativePrice = f.price || (f.price_value != null && Number.isFinite(Number(f.price_value)) && f.price_currency
+    ? formatMoney(Number(f.price_value), f.price_currency) : null);
+  const priceTooltip = [
+    nativePrice ? `Listed ${nativePrice}` : null,
+    hasUsdPrice ? "Price in USD" : "USD price unavailable",
+  ].filter(Boolean).join(" · ");
 
-      {/* Thumbnail — fixed square so table layout cannot collapse the image. */}
-      <td className="py-1.5 px-2 align-middle w-16">
-        <FindingTableThumbnail urls={thumbUrls} title={title} />
-      </td>
-
-      {/* Keep the title separate from the labelled review context. */}
-      <td className="py-2 px-2 align-middle max-w-0 w-full">
-        <div className="min-w-0 space-y-1.5">
-          <div className="font-semibold text-[13px] text-stone-900 truncate" title={title}>
-            {title}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
-            <ActionabilityBadge
-              label={actionability.label}
-              reason={actionability.reason}
-              source={f.actionability?.reason_category === "manual" ? "Reviewer suggestion" : "AI suggestion"}
-              className="shrink-0 gap-0.5"
-              badgeClassName={`px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none ${actionability.cls}`}
-              iconClassName="h-3 w-3"
-              iconSize={11}
-            />
-            {f.manual_candidate_outcome && (
-              <span
-                className="shrink-0 px-1 py-0.5 rounded text-[9px] font-bold uppercase leading-none bg-amber-100 text-amber-700"
-                title="Manually moved during grouped triage"
-              >
-                Manually grouped
-              </span>
-            )}
-            {f.assigned_to_account_id && (
-              <span className="shrink-0 md:hidden">
-                <AssigneeAvatar
-                  accountId={f.assigned_to_account_id}
-                  displayName={f.assignee_display_name}
-                  email={f.assignee_email}
-                  pictureUrl={f.assignee_picture_url}
-                  size={18}
-                />
-              </span>
-            )}
-            {chips.slice(0, 3).map((chip) => (
-              <span
-                key={chip.key}
-                className="inline-flex min-w-0 max-w-full items-baseline gap-1 rounded bg-stone-100 px-1.5 py-0.5 leading-tight text-stone-600"
-                title={chip.title}
-              >
-                <span className="shrink-0 text-stone-500">{chip.label}:</span>
-                <span className="truncate font-semibold">{chip.value}</span>
-              </span>
-            ))}
+  return <>
+    <td className="monitoring-listing-cell">
+      <div className="monitoring-listing-main" data-active={active || undefined}>
+        <FindingTableThumbnail key={images.join("|")} urls={images} title={title} />
+        <div className="monitoring-listing-copy">
+          <span className="monitoring-listing-title" title={title}>{title}</span>
+          <div className="monitoring-listing-meta">
+            {sellerTarget ? <Link to={sellerTarget} onClick={(event) => event.stopPropagation()}
+              className="hover:text-stone-900 hover:underline focus-visible:outline-2 focus-visible:outline-stone-500">{seller}</Link> : <span>{seller}</span>}
+            <span aria-hidden="true"> · </span><span>{platform}</span>
+            {showIp && f.ip_name && <><span aria-hidden="true"> · </span><span>{f.ip_name}</span></>}
+            {showStatus && <><span aria-hidden="true"> · </span><span>{status}</span></>}
           </div>
         </div>
-      </td>
-
-      {/* Assignee — a compact ownership signal, matching issue-list patterns. */}
-      <td className="hidden w-16 px-2 py-1 align-middle md:table-cell">
-        <AssigneeAvatar
-          accountId={f.assigned_to_account_id}
-          displayName={f.assignee_display_name}
-          email={f.assignee_email}
-          pictureUrl={f.assignee_picture_url}
-          size={22}
-        />
-      </td>
-
-      {/* Seller. */}
-      <td className="hidden md:table-cell py-1 px-2 align-middle max-w-[10rem] truncate text-[12px] text-stone-600">
-        {sellerTarget ? (
-          <Link
-            to={sellerTarget}
-            onClick={(event) => event.stopPropagation()}
-            className="font-medium text-stone-700 hover:text-blue-700 hover:underline"
-          >
-            {sellerLine}
-          </Link>
-        ) : sellerLine}
-      </td>
-
-      {/* Platform. */}
-      <td className="hidden lg:table-cell py-1 px-2 align-middle whitespace-nowrap text-[12px] text-stone-600">
-        {f.domain}
-      </td>
-
-      {/* Status. */}
-      <td className="hidden sm:table-cell py-1 px-2 align-middle">
-        <span
-          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${sb.cls}`}
-        >
-          {sb.label}
-        </span>
-      </td>
-
-      {/* Price — listing price; tooltip carries the estimated unlicensed market. */}
-      <td
-        className="hidden md:table-cell py-1 px-2 align-middle text-right whitespace-nowrap text-[12px] font-semibold tabular-nums text-stone-800"
-        title={
-          [
-            f.price ? `Listed ${f.price}` : null,
-            market
-              ? `Est. market ${formatMoney(market.value, market.currency)} (unit × qty ${marketQuantity(f)})`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ") || "No structured price yet"
-        }
-      >
-        {priceText ?? <span className="text-stone-300">—</span>}
-      </td>
-
-      {/* Updated — reviewer-facing activity timestamp; tooltip carries context. */}
-      <td
-        className="py-1 px-2 align-middle text-right whitespace-nowrap text-[11px] text-stone-500 tabular-nums"
-        title={[
-          f.updated_at ? `Updated ${new Date(f.updated_at).toLocaleString()}` : null,
-          `Found ${foundAgo}`,
-          checkedAgo ? `Last checked ${checkedAgo}` : null,
-        ].filter(Boolean).join(" · ")}
-      >
-        {updatedAgo}
-      </td>
-    </>
-  );
+      </div>
+    </td>
+    <td className="monitoring-listing-price" title={priceTooltip}>
+      {hasUsdPrice ? usd.format(price) : <span aria-label="USD price unavailable">—</span>}
+    </td>
+    <td className="monitoring-listing-assessment" title={recommendation.reason}>
+      {recommendation.label}
+    </td>
+  </>;
 }
