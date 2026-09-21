@@ -16,7 +16,7 @@ import {
   SummaryMetric,
 } from "../features/firstScan/FirstScanResults";
 import { FirstScanSetupNotice } from "../features/firstScan/FirstScanSetupNotice";
-import { formatUpdateTime } from "../features/firstScan/presentation";
+import { formatUpdateTime, SHOW_FIRST_SCAN_SYSTEM_WARNINGS } from "../features/firstScan/presentation";
 import { useFirstScanFeed } from "../features/firstScan/useFirstScanFeed";
 
 export default function MonitoringFirstScan() {
@@ -40,6 +40,7 @@ export default function MonitoringFirstScan() {
 
   const { snapshot, totals, ipId } = feed;
   const retrySourceCount = snapshot.sources.filter((source) => source.state === "retry_needed").length;
+  const showRetryWarning = SHOW_FIRST_SCAN_SYSTEM_WARNINGS && retrySourceCount > 0;
   const preparingSourceCount = snapshot.sources.filter(
     (source) => source.state === "setup_processing" || source.state === "connecting",
   ).length;
@@ -68,13 +69,13 @@ export default function MonitoringFirstScan() {
         </div>
       </header>
 
-      {feed.error && (
+      {SHOW_FIRST_SCAN_SYSTEM_WARNINGS && feed.error && (
         <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <AlertCircle className="h-4 w-4 shrink-0" /> Some live progress is temporarily unavailable. {feed.error}
         </div>
       )}
 
-      {snapshot.onboarding && (
+      {SHOW_FIRST_SCAN_SYSTEM_WARNINGS && snapshot.onboarding && (
         <FirstScanSetupNotice
           onboarding={snapshot.onboarding}
           sources={snapshot.sources}
@@ -86,14 +87,14 @@ export default function MonitoringFirstScan() {
         <SummaryMetric
           label="Websites"
           value={`${totals.connected}/${totals.websites}`}
-          detail={retrySourceCount > 0
+          detail={showRetryWarning
             ? `${retrySourceCount} needs retry`
             : preparingSourceCount > 0
               ? `${preparingSourceCount} preparing`
               : "connected"}
           icon={<Globe2 className="h-4 w-4" />}
-          attention={retrySourceCount > 0}
-          warning={retrySourceCount === 0 && preparingSourceCount > 0}
+          attention={showRetryWarning}
+          warning={!showRetryWarning && preparingSourceCount > 0}
         />
         <SummaryMetric label="Listings found" value={totals.discovered} detail="stable rows" icon={<Search className="h-4 w-4" />} />
         <SummaryMetric label="Processing" value={totals.processing} detail="metadata filling" icon={<LoaderCircle className="h-4 w-4" />} />
