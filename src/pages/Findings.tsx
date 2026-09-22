@@ -105,6 +105,12 @@ export function MonitoringInboxView() {
           limit,
         });
         if (reqSeq.current !== seq) return;
+        if (q.country && page.facets.country !== q.country) {
+          setFindings([]);
+          setFacets(null);
+          setNextCursor(null);
+          throw new Error("Country filtering is not available yet. Clear the country filter to view results.");
+        }
         if (q.source && !page.facets.sources) {
           throw new Error("Source filtering is not available yet. Clear the source filter to view all results.");
         }
@@ -412,6 +418,7 @@ export function MonitoringInboxView() {
       {err && <div className="monitoring-workspace-notice text-sm text-red-600">
         {err}
         {(filters.min_price_usd != null || filters.max_price_usd != null) && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ min_price_usd: null, max_price_usd: null })}>Clear price filter</button>}
+        {filters.country && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ country: null })}>Clear country filter</button>}
         {filters.source && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ source: null, platform: null })}>Clear source filter</button>}
       </div>}
       {linkedErr && (

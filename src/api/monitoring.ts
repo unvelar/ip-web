@@ -290,6 +290,7 @@ export interface MonitoringSourceFacet {
 
 /** Full-tenant facet counts returned alongside every findings page. */
 export interface MonitoringFacets {
+  country?: string | null;
   /** Price bounds ignore the active range. Absence means API support is unavailable. */
   price_usd?: { min: number | null; max: number | null; missing: number };
   /** Absent until the API supports source grouping. */
@@ -319,6 +320,7 @@ export type MonitoringFindingRowsPage = Pick<
 >;
 
 export interface MonitoringFindingsQuery {
+  country?: string | null;
   min_price_usd?: number | null;
   max_price_usd?: number | null;
   source?: string | null;
@@ -372,6 +374,7 @@ function monitoringFindingsParams(
   if (opts.max_price_usd != null) params.set("max_price_usd", formatPriceBound(opts.max_price_usd));
   if (opts.source)       params.set("source", opts.source);
   if (opts.platform)     params.set("platform", opts.platform);
+  if (opts.country)      params.set("country", opts.country);
   if (opts.seller)       params.set("seller", opts.seller);
   if (opts.query)        params.set("q", opts.query);
   if (opts.assignee)     params.set("assignee", opts.assignee);

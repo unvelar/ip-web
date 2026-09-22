@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowRight, DollarSign, Globe2, SearchCheck, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Bar, BarChart, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { brandCountryTasksPath } from "../lib/brandSummaryNavigation";
 import { useAuth } from "../context/AuthContext";
 import BrandMark from "../components/BrandMark";
 import BrandCountryMap from "../components/BrandCountryMap";
@@ -22,7 +23,7 @@ const TOOLTIP_STYLE = {
 } as const;
 
 export default function BrandSumup() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, actingTenantId, switchTenant } = useAuth();
   const { tenantName = "", ipName = "" } = useParams();
   const [data, setData] = useState<PublicBrandSumup | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,6 +71,17 @@ export default function BrandSumup() {
     );
   }
 
+  const openCountry = data.workspace ? (country: string) => {
+    const workspace = data.workspace!;
+    const path = brandCountryTasksPath(workspace.ip_id, country);
+    if (user?.role === "admin" && actingTenantId !== workspace.tenant_id) {
+      switchTenant(workspace.tenant_id, path);
+    } else {
+      // Mount the workspace with this IP selected, even if another IP was active.
+      window.location.assign(path);
+    }
+  } : undefined;
+
   return (
     <BrandSumupShell>
       {user?.role === "admin" && data.ip.public_summary_enabled === false && (
@@ -81,7 +93,7 @@ export default function BrandSumup() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8">
         <KpiGrid data={data} />
         <ValueSummary data={data} />
-        <BrandCountryMap countries={data.countries} />
+        <BrandCountryMap countries={data.countries} onOpenCountry={openCountry} />
         {data.totals.analyzed_count === 0 ? (
           <EmptyState />
         ) : (

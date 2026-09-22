@@ -4,6 +4,7 @@ import { formatPriceBound, parsePriceBound } from "./priceRange";
 /** Single source of truth for the inbox filter set, read from / written to
  *  the URL so refresh + share + KPI deep-links survive. */
 export interface InboxFilters {
+  country?: string | null;
   status: MonitoringStatusFilter | null;
   priority: MonitoringPriorityBand | null;
   ip_id: string | null;
@@ -57,6 +58,7 @@ export function parseFilters(params: URLSearchParams): InboxFilters {
     catalog_product_id: params.get("catalog_product_id"),
     source: params.get("source"),
     platform: params.get("platform"),
+    country: params.get("country")?.trim() || null,
     match_basis: ["text", "text_only", "visual", "both"].includes(params.get("match_basis") ?? "") ? params.get("match_basis") as InboxFilters["match_basis"] : null,
     protected_term_id: params.get("protected_term_id"),
     seller: seller && seller.trim() ? seller.trim() : null,
@@ -112,6 +114,7 @@ export function writeFilters(base: URLSearchParams, f: InboxFilters): URLSearchP
   setOrDel("min_price_usd", f.min_price_usd == null ? null : formatPriceBound(f.min_price_usd));
   setOrDel("max_price_usd", f.max_price_usd == null ? null : formatPriceBound(f.max_price_usd));
   setOrDel("platform", f.platform);
+  setOrDel("country", f.country ?? null);
   setOrDel("match_basis", f.match_basis ?? null);
   setOrDel("protected_term_id", f.protected_term_id ?? null);
   setOrDel("seller", f.seller);

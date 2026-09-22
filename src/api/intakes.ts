@@ -72,6 +72,7 @@ export interface PublicBrandSumupCountry {
 }
 
 export interface PublicBrandSumup {
+  workspace?: { tenant_id: string; ip_id: string } | null;
   tenant: { name: string; slug: string };
   ip: { name: string; slug: string; public_summary_enabled?: boolean };
   generated_at: string;

@@ -1071,11 +1071,11 @@ export function MonitoringBoard({
     selectionReviewRef.current?.focus({ preventScroll: true });
   }, [reviewingSelection]);
 
-  const hasActiveFilters = Boolean(filters.query || filters.product_group_id || filters.catalog_product_id ||
+  const hasActiveFilters = Boolean(filters.country || filters.query || filters.product_group_id || filters.catalog_product_id ||
     filters.source || filters.platform || filters.seller || filters.assignee || filters.priority ||
     filters.candidate_outcome || filters.dismissal_reason || filters.match_basis || filters.protected_term_id ||
     filters.min_price_usd != null || filters.max_price_usd != null);
-  const clearFilters = () => onFiltersChange({ query: null, product_group_id: null, catalog_product_id: null,
+  const clearFilters = () => onFiltersChange({ country: null, query: null, product_group_id: null, catalog_product_id: null,
     source: null, platform: null, seller: null, assignee: null, priority: null, candidate_outcome: null,
     dismissal_reason: null, min_price_usd: null, max_price_usd: null, match_basis: null, protected_term_id: null });
 

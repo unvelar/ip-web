@@ -33,7 +33,15 @@ function countryName(country: string) {
   return shape ? COUNTRIES.find((item) => item.code === shape.code)?.name ?? shape.name : country;
 }
 
-export default function BrandCountryMap({ countries }: { countries?: PublicBrandSumupCountry[] }) {
+export default function BrandCountryMap({ countries, onOpenCountry }: {
+  countries?: PublicBrandSumupCountry[];
+  onOpenCountry?: (country: string) => void;
+}) {
+  function activateCountry(country: string) {
+    setHovered(null);
+    setSelection(country);
+    onOpenCountry?.(country);
+  }
   const [metric, setMetric] = useState<Metric>("products");
   const [selection, setSelection] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -89,11 +97,11 @@ export default function BrandCountryMap({ countries }: { countries?: PublicBrand
                   className={row ? "cursor-pointer transition-colors focus:outline-none focus:stroke-stone-950 focus:stroke-2" : undefined}
                   onMouseEnter={() => setHovered(row?.country ?? null)}
                   onFocus={() => row && setSelection(row.country)}
-                  onClick={() => row && setSelection(row.country)}
+                  onClick={() => row && activateCountry(row.country)}
                   onKeyDown={(event) => {
                     if (row && (event.key === "Enter" || event.key === " ")) {
                       event.preventDefault();
-                      setSelection(row.country);
+                      activateCountry(row.country);
                     }
                   }}>
                   <title>{row ? `${countryName(row.country)} · ${number.format(row.analyzed_count)} products · ${percent(row.infringement_percentage)} infringement` : `${shape.name} · No data`}</title>
@@ -139,7 +147,7 @@ export default function BrandCountryMap({ countries }: { countries?: PublicBrand
               <tbody>{rows.map((row) => <tr key={row.country} className={`border-t border-stone-100 ${selected?.country === row.country ? "bg-blue-50/70" : ""}`}>
                 <th scope="row" className="px-5 py-3 text-left font-semibold text-stone-700">
                   <button type="button" className="text-left hover:underline focus-visible:outline-2 focus-visible:outline-blue-600" aria-pressed={selected?.country === row.country}
-                    onClick={() => { setHovered(null); setSelection(row.country); }}>{countryName(row.country)}</button>
+                    onClick={() => activateCountry(row.country)}>{countryName(row.country)}</button>
                 </th>
                 <td className="px-2 py-3 text-right tabular-nums text-stone-600">{number.format(row.analyzed_count)}</td>
                 <td className="pr-5 py-3 text-right font-bold tabular-nums text-red-700">{percent(row.infringement_percentage)}</td>

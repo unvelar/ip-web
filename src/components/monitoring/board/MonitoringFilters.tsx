@@ -173,14 +173,15 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
   const activeSourceLabel = activeSource ? sourceLabel(activeSource) : filters.source?.replace(/^(search|domain):/, "") ?? "Source";
   const clear = () => {
     setSearch("");
-    onChange({ query: null, product_group_id: null, catalog_product_id: null, source: null, platform: null, min_price_usd: null, max_price_usd: null, assignee: null, seller: null, priority: null, candidate_outcome: null, dismissal_reason: null, match_basis: null, protected_term_id: null });
+    onChange({ country: null, query: null, product_group_id: null, catalog_product_id: null, source: null, platform: null, min_price_usd: null, max_price_usd: null, assignee: null, seller: null, priority: null, candidate_outcome: null, dismissal_reason: null, match_basis: null, protected_term_id: null });
     setPanel(null);
   };
-  const chips: Array<{ key: string; label: string; edit: () => void; remove: () => void }> = filters.query
+  const chips: Array<{ key: string; label: string; edit?: () => void; remove: () => void }> = filters.query
     ? [{ key: "search", label: `Search: ${filters.query}`, edit: () => setPanel(null), remove: () => { setSearch(""); onChange({ query: null }); } }] : [];
   if (hasProduct) chips.push({ key: "product", label: `${filters.catalog_product_id ? "Product" : "Visual group"}: ${selectedProductLabel}`, edit: () => setPanel("product"), remove: () => onChange({ catalog_product_id: null, product_group_id: null }) });
   if (hasPrice) chips.push({ key: "price", label: `Price: ${priceLabel} USD`, edit: () => setPanel("price"), remove: () => onChange({ min_price_usd: null, max_price_usd: null }) });
   if (filters.source) chips.push({ key: "source", label: `Found via: ${activeSourceLabel}`, edit: () => setPanel("source"), remove: () => onChange({ source: null, platform: null }) });
+  if (filters.country) chips.push({ key: "country", label: `Country: ${filters.country === "Unknown" ? "Unknown location" : filters.country}`, remove: () => onChange({ country: null }) });
   if (filters.platform) chips.push({ key: "website", label: `Website: ${filters.platform}`, edit: () => setPanel("source"), remove: () => onChange({ platform: null }) });
   if (filters.assignee) chips.push({ key: "assignee", label: `Assignee: ${filters.assignee === "unassigned" ? "Unassigned" : members.find((member) => member.id === filters.assignee)?.display_name ?? members.find((member) => member.id === filters.assignee)?.email ?? "Selected member"}`, edit: () => setPanel("more"), remove: () => onChange({ assignee: null }) });
   if (filters.candidate_outcome) chips.push({ key: "outcome", label: `Suggested: ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`, edit: () => setPanel("more"), remove: () => onChange({ candidate_outcome: null }) });
@@ -245,7 +246,7 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
       </div>
     </div>
     {chips.length > 0 && <div className="monitoring-active-filters" aria-label="Active filters">
-      {chips.map((chip) => <span className="monitoring-filter-chip" key={chip.key}><button type="button" className="truncate" aria-label={`Edit ${chip.label} filter`} onClick={() => { chip.edit(); if (chip.key === "search") searchRef.current?.focus(); }} title={chip.label}>{chip.label}</button><button type="button" aria-label={`Remove ${chip.label} filter`} onClick={chip.remove}><X size={12} aria-hidden /></button></span>)}
+      {chips.map((chip) => <span className="monitoring-filter-chip" key={chip.key}>{chip.edit ? <button type="button" className="truncate" aria-label={`Edit ${chip.label} filter`} onClick={() => { chip.edit?.(); if (chip.key === "search") searchRef.current?.focus(); }} title={chip.label}>{chip.label}</button> : <span className="truncate">{chip.label}</span>}<button type="button" aria-label={`Remove ${chip.label} filter`} onClick={chip.remove}><X size={12} aria-hidden /></button></span>)}
       <button type="button" className="monitoring-clear-filters" onClick={clear}>Clear filters</button>
     </div>}
   </section>;

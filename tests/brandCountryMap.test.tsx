@@ -64,3 +64,18 @@ test("production country codes and ISO country names map to readable country lab
   await act(async () => korea.click());
   expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain('South Korea');
 });
+
+
+test("table and keyboard map activation open tasks using the original API country", async () => {
+  const opened: string[] = [];
+  const countries = [country("Korea, Republic of", 2, 1), country("Unknown", 1, 0)];
+  const container = await render(countries);
+  await act(async () => root?.render(<BrandCountryMap countries={countries} onOpenCountry={(value) => opened.push(value)} />));
+  const korea = Array.from(container.querySelectorAll("tbody button")).find(button => button.textContent === "South Korea")!;
+  await act(async () => (korea as HTMLButtonElement).click());
+  const shape = container.querySelector<SVGElement>('svg [role="button"]')!;
+  await act(async () => shape.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  const unknown = Array.from(container.querySelectorAll("tbody button")).find(button => button.textContent === "Unknown location")!;
+  await act(async () => (unknown as HTMLButtonElement).click());
+  expect(opened).toEqual(["Korea, Republic of", "Korea, Republic of", "Unknown"]);
+});
