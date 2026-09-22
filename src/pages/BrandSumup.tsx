@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowRight, DollarSign, Globe2, SearchCheck, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Bar, BarChart, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useAuth } from "../context/AuthContext";
 import BrandMark from "../components/BrandMark";
 import BrandCountryMap from "../components/BrandCountryMap";
 import { getPublicBrandSumup, type PublicBrandSumup } from "../api";
@@ -21,12 +22,14 @@ const TOOLTIP_STYLE = {
 } as const;
 
 export default function BrandSumup() {
+  const { user, loading: authLoading } = useAuth();
   const { tenantName = "", ipName = "" } = useParams();
   const [data, setData] = useState<PublicBrandSumup | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
   useEffect(() => {
+    if (authLoading) return;
     let alive = true;
     getPublicBrandSumup(tenantName, ipName)
       .then((sumup) => {
@@ -45,9 +48,9 @@ export default function BrandSumup() {
     return () => {
       alive = false;
     };
-  }, [tenantName, ipName]);
+  }, [tenantName, ipName, authLoading, user?.id, user?.role]);
 
-  if (loading) return <BrandSumupShell><BrandSumupSkeleton /></BrandSumupShell>;
+  if (authLoading || loading) return <BrandSumupShell><BrandSumupSkeleton /></BrandSumupShell>;
 
   if (err || !data) {
     return (
@@ -69,6 +72,11 @@ export default function BrandSumup() {
 
   return (
     <BrandSumupShell>
+      {user?.role === "admin" && data.ip.public_summary_enabled === false && (
+        <p role="status" className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-center text-sm text-amber-900">
+          Admin preview · This summary is not published.
+        </p>
+      )}
       <Hero data={data} />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8">
         <KpiGrid data={data} />

@@ -73,7 +73,7 @@ export interface PublicBrandSumupCountry {
 
 export interface PublicBrandSumup {
   tenant: { name: string; slug: string };
-  ip: { name: string; slug: string };
+  ip: { name: string; slug: string; public_summary_enabled?: boolean };
   generated_at: string;
   /** Optional during rollout of the country aggregation API. */
   countries?: PublicBrandSumupCountry[];
@@ -104,15 +104,10 @@ export interface PublicBrandSumup {
 }
 
 export async function getPublicBrandSumup(tenantName: string, ipName: string) {
-  const res = await fetch(
-    `${API}/api/brand-sumups/${encodeURIComponent(tenantName)}/${encodeURIComponent(ipName)}`,
+  return request<PublicBrandSumup>(
+    `/api/brand-sumups/${encodeURIComponent(tenantName)}/${encodeURIComponent(ipName)}`,
     { cache: "no-store" },
   );
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
-  }
-  return res.json() as Promise<PublicBrandSumup>;
 }
 
 export type PublicIpIntakeStatus = "pending" | "converted" | "rejected";
