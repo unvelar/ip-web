@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw, Search } from "lucide-react";
+import { ArrowUpRight, RefreshCw, Search } from "lucide-react";
 import {
   listIpMonitoringPlatforms,
   addIpMonitoringPlatform,
@@ -17,11 +17,9 @@ import {
   type OpenWebSearchConfig,
 } from "../../api";
 import { COUNTRIES, countryLabel } from "../../lib/countries";
-import { KNOWN_PLATFORMS, monitoringPlatformOption } from "../../lib/platforms";
-import {
-  sourceSetupPresentation,
-  type MonitoringSourceSetupStatus,
-} from "./platformSetupStatus";
+import { monitoringPlatformOption } from "../../lib/platforms";
+import { MonitoringSources } from "./MonitoringSources";
+import type { WebsiteOption } from "../../lib/websiteCatalog";
 
 type ActiveMonitoringFrequency = Exclude<MonitoringFrequency, "off">;
 
@@ -70,12 +68,6 @@ function uniqueScopes(scopes: string[]) {
     out.push(scope);
   }
   return out;
-}
-
-function providerLabel(provider: string) {
-  return provider
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function openWebConfig(source?: MonitoredDomain | null): OpenWebSearchConfig {
@@ -158,6 +150,9 @@ export function PlatformsPanel({
   const [newDomain, setNewDomain] = useState("");
   const [newCountry, setNewCountry] = useState("");
   const [adding, setAdding] = useState(false);
+  const [sourceBusy, setSourceBusy] = useState<string | null>(null);
+  const [loadingPlatforms, setLoadingPlatforms] = useState(true);
+  const [platformsReady, setPlatformsReady] = useState(false);
   const [openWebScopes, setOpenWebScopes] = useState("");
   const [savingOpenWeb, setSavingOpenWeb] = useState(false);
   const [savingFrequency, setSavingFrequency] = useState<MonitoringFrequency | null>(null);
@@ -169,11 +164,14 @@ export function PlatformsPanel({
     try {
       const { platforms } = await listIpMonitoringPlatforms(ipId);
       setPlatforms(platforms);
+      setPlatformsReady(true);
       const web = platforms.find((p) => p.source_type === "web_search");
       const cfg = openWebConfig(web);
       setOpenWebScopes((cfg.search_scopes ?? []).join("\n"));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingPlatforms(false);
     }
   }, [ipId]);
 
@@ -191,17 +189,18 @@ export function PlatformsPanel({
     return () => window.cancelAnimationFrame(frame);
   }, [platforms]);
 
-  async function add() {
-    const d = newDomain.trim();
-    if (!d || adding) return;
+  async function add(source?: WebsiteOption) {
+    const d = source?.value ?? newDomain.trim();
+    if (!d || adding || sourceBusy || !platformsReady) return;
+    setSourceBusy(source?.key ?? "custom");
     setAdding(true);
     setErr("");
     try {
       await addIpMonitoringPlatform(
         ipId,
         d,
-        newCountry || null,
-        monitoringPlatformOption(d)?.searchUrlTemplate,
+        source ? null : newCountry || null,
+        source?.search_url_template ?? monitoringPlatformOption(d)?.searchUrlTemplate,
       );
       setNewDomain("");
       setNewCountry("");
@@ -211,37 +210,53 @@ export function PlatformsPanel({
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setAdding(false);
+      setSourceBusy(null);
     }
   }
 
   async function changeCountry(p: MonitoredDomain, country: string) {
+    if (sourceBusy) return;
+    setSourceBusy(p.id);
+    setErr("");
     try {
       await setIpMonitoringPlatformCountry(ipId, p.id, country || null);
       await loadPlatforms();
       onPlatformsChanged?.();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSourceBusy(null);
     }
   }
 
   async function toggle(p: MonitoredDomain) {
+    if (sourceBusy) return;
+    setSourceBusy(p.id);
+    setErr("");
     try {
       await setIpMonitoringPlatformEnabled(ipId, p.id, !p.enabled);
       await loadPlatforms();
       onPlatformsChanged?.();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSourceBusy(null);
     }
   }
 
   async function remove(p: MonitoredDomain) {
     if (!confirm(`Stop monitoring ${platformLabel(p)}?`)) return;
+    if (sourceBusy) return;
+    setSourceBusy(p.id);
+    setErr("");
     try {
       await removeIpMonitoringPlatform(ipId, p.id);
       await loadPlatforms();
       onPlatformsChanged?.();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSourceBusy(null);
     }
   }
 
@@ -325,218 +340,65 @@ export function PlatformsPanel({
   }
 
   async function toggleOpenWeb(source: MonitoredDomain) {
+    if (savingOpenWeb) return;
+    setSavingOpenWeb(true);
     try {
       await updateIpOpenWebSearch(ipId, source.id, { enabled: !source.enabled });
       await loadPlatforms();
       onPlatformsChanged?.();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingOpenWeb(false);
     }
   }
 
-  const domainPlatforms = platforms.filter((p) => (p.source_type ?? "domain") === "domain");
-  const openWebSource = platforms.find((p) => p.source_type === "web_search") ?? null;
+  const openWebSource = platforms.find(p => p.source_type === "web_search") ?? null;
+  const savedScopes = openWebConfig(openWebSource).search_scopes ?? [];
+  const effectiveScopes = openWebSource ? (savedScopes.length ? savedScopes : DEFAULT_OPEN_WEB_SCOPES) : [];
+  const busy = sourceBusy ?? refreshingPlatformId ?? (refreshing ? "all" : savingOpenWeb ? openWebSource?.id ?? "open-web" : null);
 
   return (
-    <div className="@container rounded-xl border border-stone-200 bg-white px-5 py-4 space-y-3">
-      <div className="flex flex-col items-start justify-between gap-3 @[42rem]:flex-row @[42rem]:items-center">
-        <div className="min-w-0 flex-1">
-          <label className="text-xs font-medium text-stone-400 uppercase tracking-wider">Monitoring</label>
-        </div>
-        <div className="flex max-w-full items-center gap-2 shrink-0 flex-wrap justify-start @[42rem]:justify-end">
-          <div role="group" aria-label="Automatic monitoring" className="flex items-center gap-3">
-            <span className="text-xs font-medium text-stone-600">Automatic monitoring</span>
-            <button
-              type="button"
-              role="switch"
-              aria-label="Automatic monitoring"
-              aria-checked={monitoringOn}
-              disabled={savingFrequency !== null}
-              onClick={() => void changeFrequency(monitoringOn ? "off" : resumeFrequency)}
-              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:ring-offset-2 disabled:opacity-50 ${monitoringOn ? "bg-stone-900" : "bg-stone-300"}`}
-            >
-              <span aria-hidden="true" className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${monitoringOn ? "translate-x-4" : "translate-x-0.5"}`} />
-            </button>
-            {savingFrequency !== null ? (
-              <span role="status" className="inline-flex items-center gap-1 text-xs text-stone-500">
-                <LoaderCircle size={12} className="animate-spin" aria-hidden="true" /> Saving…
-              </span>
-            ) : (
-              <span className="text-xs text-stone-500">{monitoringOn ? "On" : "Off"}</span>
-            )}
-            {monitoringOn && (
-              <select
-                aria-label="Monitoring frequency"
-                value={currentFrequency}
-                disabled={savingFrequency !== null}
-                onChange={(event) => {
-                  const frequency = event.target.value;
-                  if (isMonitoringFrequency(frequency) && frequency !== "off") void changeFrequency(frequency);
-                }}
-                className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-medium text-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-50"
-              >
-                {FREQUENCY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            )}
-          </div>
-          <Link
-            to={`/ips/${ipId}/audit`}
-            className="text-xs text-blue-700 hover:underline"
-          >
-            Audit log →
-          </Link>
-          <button
-            onClick={refreshNow}
-            disabled={refreshing || platforms.length === 0}
-            className="px-3 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-semibold disabled:opacity-50"
-          >
-            {refreshing ? "Refreshing…" : "Refresh now"}
+    <section className="monitoring-sources-panel" aria-label="Monitoring source settings">
+      <div className="ms-header">
+        <div className="ms-heading"><h3>Monitoring sources</h3><p>Choose where we look for your IP.</p></div>
+        <div className="ms-header-actions">
+          <Link to={`/ips/${ipId}/audit`} className="ms-audit">History<ArrowUpRight size={12} aria-hidden="true" /></Link>
+          <button type="button" className="ms-run-all" onClick={() => void refreshNow()} disabled={!!busy || platforms.length === 0 || !hasKeywords}>
+            <RefreshCw size={13} className={refreshing ? "ms-spin" : ""} aria-hidden="true" />{refreshing ? "Starting…" : "Run now"}
           </button>
         </div>
       </div>
-
-      {!hasKeywords && (
-        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          Add monitoring keywords first — the scrape needs search terms.
+      <div className="ms-schedule" role="group" aria-label="Automatic monitoring">
+        <div className="ms-schedule-label"><span className="ms-live-dot" data-on={monitoringOn} /><span>Automatic monitoring</span></div>
+        <div className="ms-schedule-controls">
+          {monitoringOn && <select aria-label="Monitoring frequency" value={currentFrequency} disabled={savingFrequency !== null}
+            onChange={event => {
+              const frequency = event.target.value;
+              if (isMonitoringFrequency(frequency) && frequency !== "off") void changeFrequency(frequency);
+            }}>{FREQUENCY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>}
+          <span className="ms-schedule-status">{savingFrequency !== null ? "Saving…" : monitoringOn ? "On" : "Off"}</span>
+          <button type="button" role="switch" aria-label="Automatic monitoring" aria-checked={monitoringOn}
+            disabled={savingFrequency !== null} className="ms-toggle" onClick={() => void changeFrequency(monitoringOn ? "off" : resumeFrequency)}><span /></button>
         </div>
-      )}
-
-      {err && <div role="alert" className="text-xs text-red-600">{err}</div>}
-
-      <div className="pt-1">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div>
-            <h3 className="text-xs font-semibold text-stone-700">Specific platforms</h3>
-            <p className="text-[11px] text-stone-400">Direct monitoring on known marketplaces and domains.</p>
-          </div>
-        </div>
-      {domainPlatforms.length === 0 ? (
-        <div className="text-xs text-stone-400 italic">No platforms yet — add one below.</div>
-      ) : (
-        <div className="divide-y divide-stone-100 border border-stone-100 rounded-lg">
-          {domainPlatforms.map((p) => {
-            const label = platformLabel(p);
-            const apiProvider = p.api_route ? providerLabel(p.api_route.provider) : null;
-            const setupStatus: MonitoringSourceSetupStatus = p.setup_status ?? (
-              p.recipe ? "ready" : "processing"
-            );
-            const setup = p.enabled ? sourceSetupPresentation(setupStatus) : null;
-            const setupBadgeClass = setup?.tone === "attention"
-              ? "border-rose-200 bg-rose-100 text-rose-700"
-              : setup?.tone === "processing"
-                ? "border-blue-200 bg-blue-50 text-blue-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700";
-            const SetupIcon = setup?.tone === "attention"
-              ? AlertTriangle
-              : setup?.tone === "processing"
-                ? LoaderCircle
-                : CheckCircle2;
-            return (
-              <div
-                key={p.id}
-                id={`monitoring-source-${p.id}`}
-                className={`ip-source-row flex scroll-mt-24 items-center gap-3 px-3 py-2 text-xs target:ring-2 target:ring-inset target:ring-amber-400 ${
-                  setup?.tone === "attention" ? "bg-rose-50/60" : ""
-                }`}
-              >
-                <button
-                  onClick={() => toggle(p)}
-                  title={p.enabled ? "Enabled — click to pause" : "Paused — click to enable"}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
-                    p.enabled ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-500"
-                  }`}
-                >
-                  {p.enabled ? "On" : "Off"}
-                </button>
-                <div className="ip-source-identity flex-1 min-w-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-stone-700 truncate" title={label}>
-                      {label}
-                    </span>
-                    {setup && (
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0 ${setupBadgeClass}`}
-                        title={setup.detail}
-                      >
-                        <SetupIcon
-                          className={`size-3 ${setup.tone === "processing" ? "animate-spin" : ""}`}
-                          aria-hidden="true"
-                        />
-                        {setup.label}
-                      </span>
-                    )}
-                  </div>
-                  {setup && setup.tone !== "ready" && (
-                    <p className={setup.tone === "attention" ? "text-rose-600 mt-0.5" : "text-blue-600 mt-0.5"}>
-                      {setup.detail}
-                    </p>
-                  )}
-                  {p.api_route?.mode === "required" && (
-                    <p className={`mt-0.5 text-[11px] ${p.api_route.configured ? "text-sky-700" : "text-rose-600"}`}>
-                      {p.api_route.configured
-                        ? `${apiProvider} API is the primary source`
-                        : `${apiProvider} API configuration is incomplete`}
-                    </p>
-                  )}
-                  {p.api_route?.mode === "shadow" && p.api_route.configured && (
-                    <p className="mt-0.5 text-[11px] text-stone-500">
-                      Browser scan with {apiProvider} API comparison
-                    </p>
-                  )}
-                </div>
-                <select
-                  value={p.country ?? ""}
-                  onChange={(e) => void changeCountry(p, e.target.value)}
-                  title="See the platform as a shopper in this country would"
-                  className="ip-source-country shrink-0 px-1.5 py-0.5 rounded-md border border-stone-200 bg-white text-[11px] text-stone-600 max-w-[9rem]"
-                >
-                  <option value="">🌐 Anywhere</option>
-                  {COUNTRIES.map((cn) => (
-                    <option key={cn.code} value={cn.code}>
-                      {countryLabel(cn.code)}
-                    </option>
-                  ))}
-                </select>
-                <span className="ip-source-time text-stone-400 shrink-0">
-                  {p.last_run_at ? `last run ${new Date(p.last_run_at).toLocaleDateString()}` : "never run"}
-                </span>
-                <button
-                  onClick={() => void refreshPlatform(p)}
-                  disabled={refreshing || refreshingPlatformId !== null || !p.enabled || !hasKeywords}
-                  className="grid size-7 place-items-center rounded-md border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-300 disabled:opacity-40 disabled:hover:text-stone-500 disabled:hover:border-stone-200 shrink-0"
-                  title={
-                    !hasKeywords
-                      ? "Add monitoring keywords before refreshing"
-                      : p.enabled
-                        ? "Refresh this platform"
-                        : "Enable this platform before refreshing"
-                  }
-                >
-                  <RefreshCw
-                    className={`size-3.5 ${refreshingPlatformId === p.id ? "animate-spin" : ""}`}
-                    aria-hidden="true"
-                  />
-                  <span className="sr-only">Refresh {label}</span>
-                </button>
-                <button
-                  onClick={() => remove(p)}
-                  className="text-stone-400 hover:text-red-600 font-bold shrink-0"
-                  title="Remove"
-                >
-                  ×
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
       </div>
-
+      {!hasKeywords && <div className="ms-message">Add monitoring keywords above to start searching.</div>}
+      {err && <div role="alert" className="ms-message ms-error">{err}
+        {!platformsReady && <button type="button" onClick={() => void loadPlatforms()}>Retry</button>}</div>}
+      <MonitoringSources key={ipId} platforms={platforms} patterns={effectiveScopes} monitoringOn={monitoringOn}
+        hasKeywords={hasKeywords && platformsReady} busy={busy} loading={loadingPlatforms}
+        onAdd={source => void add(source)} onToggle={platform => void toggle(platform)}
+        onRemove={platform => void remove(platform)} onRefresh={platform => void refreshPlatform(platform)}
+        onCountryChange={(platform, country) => void changeCountry(platform, country)}
+        onPreparePattern={pattern => setOpenWebScopes(current => uniqueScopes([
+          ...(current.trim() ? current.split(/\r?\n/) : DEFAULT_OPEN_WEB_SCOPES), pattern,
+        ]).join("\n"))}
+        renderCustomSource={() => (
       <div className="flex items-end gap-2 flex-wrap">
         <div className="flex flex-col flex-1 min-w-[12rem]">
           <span className="text-[10px] text-stone-400 uppercase tracking-wide">Platform URL or domain</span>
           <input
-            list="known-platforms"
+            aria-label="Platform URL or domain"
             value={newDomain}
             onChange={(e) => setNewDomain(e.target.value)}
             onKeyDown={(e) => {
@@ -548,11 +410,6 @@ export function PlatformsPanel({
             placeholder="etsy.com or https://www.etsy.com/search?q=…"
             className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs w-full"
           />
-          <datalist id="known-platforms">
-            {KNOWN_PLATFORMS.map((p) => (
-              <option key={p} value={p} />
-            ))}
-          </datalist>
         </div>
         <div className="flex flex-col">
           <span className="text-[10px] text-stone-400 uppercase tracking-wide">Target country (optional)</span>
@@ -571,26 +428,29 @@ export function PlatformsPanel({
           </select>
         </div>
         <button
-          onClick={add}
-          disabled={!newDomain.trim() || adding}
+          onClick={() => void add()}
+          disabled={!newDomain.trim() || adding || !platformsReady}
           className="px-3 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-semibold disabled:opacity-50"
         >
           {adding ? "Adding…" : "Add platform"}
         </button>
       </div>
 
-      <div className="border-t border-stone-100 pt-4 space-y-3">
+        )}
+        renderOpenWeb={() => (
+      <div className="ms-web-editor space-y-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h3 className="text-xs font-semibold text-stone-700">Open web search</h3>
             <p className="text-[11px] text-stone-400">
-              Globally enabled search engines use this IP's keywords automatically, then findings are gated more strictly.
+              Use your IP’s keywords to search across the web.
             </p>
           </div>
           {openWebSource && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => void toggleOpenWeb(openWebSource)}
+                disabled={savingOpenWeb}
                 className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                   openWebSource.enabled ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-500"
                 }`}
@@ -616,6 +476,7 @@ export function PlatformsPanel({
         <label className="block space-y-1">
           <span className="text-[10px] text-stone-400 uppercase tracking-wide">Domain patterns (optional)</span>
           <textarea
+            id={`open-web-patterns-${ipId}`}
             value={openWebScopes}
             onChange={(e) => setOpenWebScopes(e.target.value)}
             rows={4}
@@ -631,13 +492,15 @@ export function PlatformsPanel({
           </div>
           <button
             onClick={() => void saveOpenWeb()}
-            disabled={savingOpenWeb || !hasKeywords}
+            disabled={savingOpenWeb || !hasKeywords || !platformsReady}
             className="px-3 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-semibold disabled:opacity-50"
           >
             {savingOpenWeb ? "Saving…" : openWebSource ? "Save search" : "Add open web search"}
           </button>
         </div>
       </div>
-    </div>
+        )}
+      />
+    </section>
   );
 }
