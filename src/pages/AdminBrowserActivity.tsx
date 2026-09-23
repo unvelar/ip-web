@@ -210,7 +210,8 @@ function CaptureViewer({capture,onClose}: {capture:Capture;onClose:()=>void}) {
     void getCapture(capture.id,controller.signal).then(result=>{if(!controller.signal.aborted)setUrl(result.url);}).catch(reason=>{if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:"Capture unavailable");});
     return ()=>{controller.abort();dialog?.close();};
   },[capture.id]);
-  return <dialog ref={ref} className="ba-viewer" aria-labelledby="ba-capture-title" onClose={onClose} onClick={event=>{if(event.target===event.currentTarget)onClose();}}>
+  // Effect replay can reopen the dialog before its queued cleanup close event.
+  return <dialog ref={ref} className="ba-viewer" aria-labelledby="ba-capture-title" onClose={event=>{if(!event.currentTarget.open)onClose();}} onClick={event=>{if(event.target===event.currentTarget)onClose();}}>
     <div><header><div><h2 id="ba-capture-title">{capture.label}</h2><p>{workerName(capture.worker_id)} · {fullTime(capture.occurred_at)}</p></div><button autoFocus onClick={onClose} aria-label="Close capture"><X size={20}/></button></header>
       {error?<p className="ba-viewer-message" role="alert">{error}</p>:url?<img src={url} alt={`${capture.label}, captured at ${fullTime(capture.occurred_at)}`} onError={()=>setError("This capture could not be loaded. Close and reopen it to retry.")}/>:<p className="ba-viewer-message">Loading capture…</p>}
       {capture.url&&<p className="ba-viewer-url">{capture.url}</p>}
