@@ -147,6 +147,7 @@ function WorkerTile({worker,selected,onClick,showHost=true}: {worker: ActivityWo
 
 function JobCard({job,open,compact,onToggle,onWorker,onCapture}: {job: ActivityJob; open: boolean; compact: boolean; onToggle: ()=>void; onWorker: (id:string)=>void; onCapture: (capture:Capture)=>void}) {
   const url=job.latest_event.url || job.target_url;
+  const elapsed=duration(job);
   return <article className="ba-job admin-card" data-state={job.state}>
     <header><span className="ba-job-icon">{job.state==="succeeded"?<Check size={18}/>:job.state==="failed"||job.state==="unknown"?<AlertCircle size={18}/>:<Globe2 size={18}/>}</span>
       <div className="ba-job-identity"><button className="ba-worker-name" onClick={()=>job.worker_id&&onWorker(job.worker_id)} disabled={!job.worker_id} title={job.worker_id ?? undefined}>{workerName(job.worker_id)}</button><span>{jobType(job.type)} · {job.tenant_name || "System"}</span></div>
@@ -156,7 +157,7 @@ function JobCard({job,open,compact,onToggle,onWorker,onCapture}: {job: ActivityJ
       <p className="ba-outcome">{outcome(job)}</p>
       {!compact && job.captures.length>0 && <div className="ba-captures">{job.captures.map(item=><CaptureThumb key={item.id} capture={item} onClick={()=>onCapture(item)}/>)}</div>}
     </div>
-    <footer><span><Clock3 size={12}/><span title="Duration of the latest attempt">{duration(job)}</span> · {job.attempts} {job.attempts===1?"attempt":"attempts"}<span className="ba-job-id" title={job.id}>Job {job.id.slice(0,8)}</span></span><button aria-expanded={open} onClick={onToggle}>{open?"Close timeline":"View timeline"}<ChevronRight className={open?"ba-rotate":""} size={14}/></button></footer>
+    <footer><span>{elapsed&&<><Clock3 size={12}/><span title="Duration of the latest attempt">{elapsed}</span><span aria-hidden="true">·</span></>}{job.attempts} {job.attempts===1?"attempt":"attempts"}<span className="ba-job-id" title={job.id}>Job {job.id.slice(0,8)}</span></span><button aria-expanded={open} onClick={onToggle}>{open?"Close timeline":"View timeline"}<ChevronRight className={open?"ba-rotate":""} size={14}/></button></footer>
     {open&&<JobTimeline job={job} onCapture={onCapture}/>}
   </article>;
 }
