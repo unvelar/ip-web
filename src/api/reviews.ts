@@ -493,6 +493,7 @@ export interface IpFirstScanResult {
   source_name: string | null;
   keyword: string | null;
   run_status: string;
+  previous_result?: boolean;
   run_error: string | null;
   score_job_status: string | null;
   score_job_error: string | null;
@@ -543,6 +544,13 @@ export interface IpFirstScanTotals {
 
 export interface IpFirstScanResultsPage {
   results: IpFirstScanResult[];
+  source_coverage?: Array<{
+    source_id: string;
+    keyword: string | null;
+    status: "complete" | "partial" | "unknown";
+    checked_at: string;
+    previous_checked_at: string | null;
+  }>;
   source_totals: Array<IpFirstScanTotals & { source_id: string; source_domain: string; source_name: string | null }>;
   filter_totals: IpFirstScanTotals;
   total: number;

@@ -12,7 +12,7 @@ import {
   Search,
   Store,
 } from "lucide-react";
-import type { IpFirstScanResult, IpFirstScanResultStage } from "../../api";
+import type { IpFirstScanResult, IpFirstScanResultStage, IpFirstScanResultsPage } from "../../api";
 import {
   FIRST_SCAN_ACTIVE_RESULT_STAGES,
   firstScanResultImage,
@@ -49,6 +49,7 @@ export function FirstScanResults({
   ipId,
   sources,
   results,
+  coverage = [],
   allResultCount,
   totals,
   resultFilterTotals,
@@ -67,6 +68,7 @@ export function FirstScanResults({
   ipId: string;
   sources: FirstScanSourceProgress[];
   results: IpFirstScanResult[];
+  coverage?: IpFirstScanResultsPage["source_coverage"];
   allResultCount: number;
   totals: FirstScanTotals;
   resultFilterTotals: FirstScanResultTotals;
@@ -82,6 +84,8 @@ export function FirstScanResults({
   onResultFilterChange: (value: ResultFilter) => void;
   onSourceFilterChange: (value: string) => void;
 }) {
+  const partial = coverage.filter(item => item.status === "partial" && (sourceFilter === "all" || item.source_id === sourceFilter));
+  const partialSources = new Set(partial.map(item => item.source_id)).size;
   return (
     <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
       <div className="flex items-center gap-2 overflow-x-auto border-b border-stone-100 px-3 py-2">
@@ -111,6 +115,16 @@ export function FirstScanResults({
           <input value={query} maxLength={500} onChange={(event) => onQueryChange(event.target.value)} aria-label="Search all listings" placeholder="Search all listings, sellers, or keywords" className="h-8 w-full rounded-lg border border-stone-200 bg-stone-50 pl-8 pr-3 text-xs text-stone-800 outline-none transition focus:border-stone-400 focus:bg-white" />
         </label>
       </div>
+
+      {partialSources > 0 && (
+        <div role="status" className="flex items-start gap-2 border-b border-amber-100 bg-amber-50/70 px-4 py-3 text-xs text-amber-900">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <p>
+            Search coverage is incomplete for {sourceFilter === "all" ? `${partialSources} website${partialSources === 1 ? "" : "s"}` : "this website"}. More listings may be available.
+            {partial.some(item => item.previous_checked_at) && " Results from an earlier scan are retained and dated below."}
+          </p>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1120px] table-fixed text-left">
@@ -172,7 +186,9 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
           <div className="min-w-0">
             <p className="truncate text-[13px] font-semibold text-stone-900" title={title}>{title}</p>
             <a href={result.page_url} target="_blank" rel="noreferrer" className="mt-1 block truncate text-[11px] text-stone-400 hover:text-stone-700" title={result.page_url}>{compactUrl(result.page_url)}</a>
-            <p className="mt-1 text-[10px] text-stone-400">Found {formatRelativeTime(result.discovered_at)}</p>
+            <p className={`mt-1 text-[10px] ${result.previous_result ? "text-amber-700" : "text-stone-400"}`} title={new Date(result.discovered_at).toLocaleString()}>
+              {result.previous_result ? "Earlier scan · found " : "Found "}{formatRelativeTime(result.discovered_at)}
+            </p>
           </div>
         </div>
       </td>

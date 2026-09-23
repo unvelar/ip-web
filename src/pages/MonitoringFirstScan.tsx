@@ -105,6 +105,7 @@ export default function MonitoringFirstScan() {
         ipId={ipId}
         sources={snapshot.sources}
         results={feed.visibleResults}
+        coverage={snapshot.page?.source_coverage}
         allResultCount={totals.discovered}
         totals={totals}
         resultFilterTotals={feed.resultFilterTotals}
