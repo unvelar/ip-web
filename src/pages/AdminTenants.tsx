@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
-  Building2,
   ChevronDown,
-  LogIn,
   Loader2,
   Plus,
   RefreshCw,
@@ -18,8 +17,10 @@ import {
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { SimulatedLoginPanel } from "../features/auth/SimulatedLoginPanel";
+import { listTenantMonitoringSummaries, type TenantMonitoringSummary } from "../api/tenantMonitoring";
+import { TenantMonitoringStats } from "../features/adminMonitoring/TenantMonitoringStats";
 
-import { AdminPage, AdminSectionHeading } from "../components/admin/AdminPage";
+import "./AdminTenants.css";
 
 const TENANTS_CHANGED_EVENT = "unvelar:tenants-changed";
 
@@ -33,10 +34,36 @@ export default function AdminTenants() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [monitoring, setMonitoring] = useState<Map<string, TenantMonitoringSummary>>(new Map());
+  const [monitoringLoading, setMonitoringLoading] = useState(true);
+  const [monitoringError, setMonitoringError] = useState("");
 
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (tenants.length === 0) return;
+    const controller = new AbortController();
+    setMonitoring(new Map());
+    setMonitoringLoading(true);
+    setMonitoringError("");
+    void listTenantMonitoringSummaries(controller.signal).then((summaries) => {
+      if (controller.signal.aborted) return;
+      const byTenant = new Map(summaries.map((summary) => [summary.tenant_id, summary]));
+      setMonitoring(byTenant);
+      if (tenants.some((tenant) => !byTenant.has(tenant.id))) {
+        setMonitoringError("Monitoring details are unavailable for some tenants. Refresh to retry.");
+      }
+    }).catch(() => {
+      if (!controller.signal.aborted) {
+        setMonitoringError("Monitoring details could not be loaded. Refresh to retry.");
+      }
+    }).finally(() => {
+      if (!controller.signal.aborted) setMonitoringLoading(false);
+    });
+    return () => controller.abort();
+  }, [tenants]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -126,127 +153,98 @@ export default function AdminTenants() {
   }
 
   return (
-    <AdminPage section="tenants" title="Tenants" description="Manage workspaces and review tenant accounts."
-      actions={<button type="button" onClick={() => void load()} disabled={loading} className="admin-button" aria-label="Refresh tenants"><RefreshCw size={14} className={loading ? "animate-spin" : ""} aria-hidden="true" />Refresh</button>}
-    >
-      {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+    <div className="tenant-page">
+      <header className="tenant-page-header">
+        <Link to="/admin" className="tenant-breadcrumb">Admin</Link>
+        <h1>Tenants</h1>
+        <p>Workspaces and their monitoring activity.</p>
+      </header>
 
-      {success && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          {success}
-        </div>
-      )}
+      {error && <div role="alert" className="tenant-notice tenant-notice-error">{error}</div>}
+      {success && <div role="status" className="tenant-notice">{success}</div>}
 
-      <section className="admin-card overflow-hidden">
-        <div className="admin-card-header admin-toolbar">
-          <div className="flex-1 text-xs text-stone-500">
-            {loading ? "Loading" : `${filtered.length.toLocaleString()} of ${tenants.length.toLocaleString()} tenants`}
-          </div>
-          <label className="relative sm:w-72">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search tenants"
-              aria-label="Search tenants"
-              className="h-9 w-full rounded-md border border-stone-200 bg-white pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
-            />
+      <section className="tenant-roster" aria-label="Tenants">
+        <div className="tenant-toolbar">
+          <label className="tenant-search">
+            <Search size={15} aria-hidden="true" />
+            <input aria-label="Search tenants" value={query}
+              onChange={(event) => setQuery(event.target.value)} placeholder="Search tenants…" />
           </label>
+          <span className="tenant-count">
+            {loading ? "Loading…" : query.trim()
+              ? `${filtered.length.toLocaleString()} of ${tenants.length.toLocaleString()}`
+              : `${tenants.length.toLocaleString()} tenants`}
+          </span>
+          <button type="button" onClick={() => void load()} disabled={loading}
+            className="tenant-icon-button" title="Refresh tenants" aria-label="Refresh tenants">
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+          </button>
+        </div>
+
+        {monitoringError && <div role="status" className="tenant-monitoring-notice">{monitoringError}</div>}
+
+        <div className="tenant-columns" aria-hidden="true">
+          <span>Workspace</span>
+          <div className="tenant-monitoring-columns"><span>Tasks <small>(completed / total)</small></span><span>Last monitoring</span></div>
+          <span />
         </div>
 
         {loading ? (
-          <div className="h-56 flex items-center justify-center text-stone-400">
-            <Loader2 size={22} className="animate-spin" />
-          </div>
+          <div className="tenant-empty" role="status"><Loader2 size={18} className="animate-spin" /><span>Loading tenants…</span></div>
         ) : filtered.length === 0 ? (
-          <div className="h-56 flex items-center justify-center text-sm text-stone-400">
-            No tenants
-          </div>
+          <div className="tenant-empty">{query.trim() ? "No tenants match your search." : "No tenants yet."}</div>
         ) : (
-          <div className="divide-y divide-stone-100">
-            {filtered.map((tenant) => {
-              return (
-                <div key={tenant.id} className="px-4 py-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Building2 size={16} className="shrink-0 text-stone-400" />
-                      <h2 className="text-sm font-semibold text-stone-900 truncate">{tenantLabel(tenant)}</h2>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
-                      {tenant.public_slug && <span>/{tenant.public_slug}</span>}
-                      {tenant.email_domain && <span>{tenant.email_domain}</span>}
-                      <span>{formatDate(tenant.created_at)}</span>
-                    </div>
-                    <div className="mt-1 font-mono text-[11px] text-stone-400 truncate">{tenant.id}</div>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={Boolean(deletingId)}
-                    onClick={() => void handleRemove(tenant)}
-                    title="Delete tenant and all related tenant data"
-                    className="admin-button admin-button-danger justify-self-start"
-                  >
-                    {deletingId === tenant.id ? (
-                      <Loader2 size={15} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={15} />
+          <ul className="tenant-rows">
+            {filtered.map((tenant) => (
+              <li key={tenant.id} className="tenant-row">
+                <div className="tenant-identity">
+                  <h2 title={`${tenantLabel(tenant)} · ${tenant.id}`}>{tenantLabel(tenant)}</h2>
+                  <div className="tenant-metadata">
+                    {(tenant.public_slug || tenant.email_domain) && (
+                      <span title={tenant.email_domain ?? undefined}>{tenant.public_slug ? `/${tenant.public_slug}` : tenant.email_domain}</span>
                     )}
-                    Delete
-                  </button>
+                    <span className="tenant-created">Joined {formatDate(tenant.created_at)}</span>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+                <TenantMonitoringStats summary={monitoring.get(tenant.id)} loading={monitoringLoading} />
+                <button type="button" disabled={Boolean(deletingId)}
+                  onClick={() => void handleRemove(tenant)}
+                  title={`Delete ${tenantLabel(tenant)}`} aria-label={`Delete ${tenantLabel(tenant)}`}
+                  className="tenant-icon-button tenant-delete">
+                  {deletingId === tenant.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
-      <details className="admin-disclosure">
-        <summary><Plus size={17} aria-hidden="true" /><span>Create tenant<small>Add a workspace for a new customer</small></span><ChevronDown size={16} aria-hidden="true" /></summary>
-        <section>
-          <AdminSectionHeading title="New tenant" description="Create a workspace with its own IPs and monitoring." />
-          <form onSubmit={(event) => void handleCreate(event)} className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <label className="flex-1">
-              <span className="block text-xs font-bold text-stone-500 mb-1.5">Tenant name</span>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                maxLength={160}
-                className="h-10 w-full rounded-md border border-stone-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={!name.trim() || creating}
-              className="sm:self-end h-10 px-4 rounded-md bg-stone-900 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 hover:bg-stone-800 disabled:opacity-45"
-            >
-              {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-              Create
+
+      <div className="tenant-tools">
+        <details className="tenant-disclosure">
+          <summary><Plus size={15} /><span>Create tenant</span><ChevronDown size={14} className="tenant-disclosure-chevron" /></summary>
+          <form onSubmit={(event) => void handleCreate(event)} className="tenant-create-form">
+            <label><span>Tenant name</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={160} /></label>
+            <button type="submit" disabled={!name.trim() || creating} className="tenant-create-button">
+              {creating && <Loader2 size={14} className="animate-spin" />}Create tenant
             </button>
           </form>
-        </section>
-      </details>
-      <details className="admin-disclosure">
-        <summary><LogIn size={17} aria-hidden="true" /><span>Simulate successful login<small>Open a customer's onboarding flow in a separate tab</small></span><ChevronDown size={16} aria-hidden="true" /></summary>
-        <SimulatedLoginPanel
-          onError={setError}
-          onStarted={async () => {
-            await load();
-            window.dispatchEvent(new Event(TENANTS_CHANGED_EVENT));
-          }}
-        />
-      </details>
-    </AdminPage>
+        </details>
+        <details className="tenant-disclosure">
+          <summary><span>Simulate successful login</span><ChevronDown size={14} className="tenant-disclosure-chevron" /></summary>
+          <div className="tenant-login-panel">
+            <SimulatedLoginPanel onError={setError} onStarted={async () => {
+              await load();
+              window.dispatchEvent(new Event(TENANTS_CHANGED_EVENT));
+            }} />
+          </div>
+        </details>
+      </div>
+    </div>
   );
 }
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+    month: "short", day: "numeric", year: "numeric",
   }).format(new Date(value));
 }
