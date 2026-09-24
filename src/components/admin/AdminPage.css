@@ -106,6 +106,30 @@
 .admin-live-dot { width: 6px; height: 6px; border-radius: 50%; background: #37937b; }
 .admin-monitoring > section, .admin-monitoring > .admin-card { margin-top: 0; }
 .admin-monitoring { display: flex; flex-direction: column; gap: 18px; }
+.admin-monitoring-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.admin-monitoring-metric { min-width: 0; padding: 15px 16px; }
+.admin-monitoring-content { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .85fr); align-items: start; gap: 18px; }
+.admin-monitoring-content > * { min-width: 0; }
+.admin-monitoring-queue-table { width: 100%; border-collapse: collapse; }
+.admin-monitoring-queue-table thead { background: #fafaf9; color: #78716c; }
+.admin-monitoring-queue-table th, .admin-monitoring-queue-table td { padding: 10px 12px; border-bottom: 1px solid #f1efed; text-align: right; vertical-align: middle; }
+.admin-monitoring-queue-table thead th { font-size: 10px; font-weight: 600; white-space: nowrap; }
+.admin-monitoring-queue-table :is(th, td):first-child { padding-left: 16px; text-align: left; }
+.admin-monitoring-queue-table :is(th, td):last-child { padding-right: 16px; }
+.admin-monitoring-queue-table tbody tr:last-child > * { border-bottom: 0; }
+.admin-monitoring-queue-table tbody tr.is-unserved { background: #fff8f7; }
+.admin-monitoring-warning { border-radius: 5px; background: #fef2f2; padding: 1px 5px; color: #b34242; font-size: 9px; font-weight: 600; }
+.admin-monitoring-methods > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; cursor: pointer; color: #57534e; font-size: 11px; font-weight: 600; list-style: none; }
+.admin-monitoring-methods > summary::-webkit-details-marker { display: none; }
+.admin-monitoring-methods > summary::after { content: "+"; color: #78716c; font-size: 15px; font-weight: 400; }
+.admin-monitoring-methods[open] > summary::after { content: "−"; }
+.admin-monitoring-methods > summary span { margin-left: auto; color: #a8a29e; font-size: 10px; font-weight: 400; }
+.admin-monitoring-methods table { border-collapse: collapse; }
+.admin-monitoring-methods th, .admin-monitoring-methods td { padding: 8px 12px; border-top: 1px solid #f1efed; text-align: right; white-space: nowrap; }
+.admin-monitoring-methods thead th { background: #fafaf9; color: #78716c; font-size: 10px; font-weight: 500; }
+.admin-monitoring-methods :is(th, td):first-child { padding-left: 16px; text-align: left; }
+.admin-monitoring-methods :is(th, td):last-child { padding-right: 16px; }
+.admin-monitoring-methods tbody th { color: #57534e; font-weight: 500; }
 .admin-monitoring > section > .border-b { padding: 16px 20px; }
 .admin-monitoring-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; }
 .admin-monitoring-metrics > * { min-width: 0; }
@@ -124,6 +148,7 @@
 .admin-detail-fields { display: flex; flex-direction: column; gap: 18px; margin-top: 20px; }
 .admin-detail-fields label { font-size: 12px; font-weight: 500; }
 @media (max-width: 1100px) { .admin-page-header { flex-wrap: wrap; } }
+@media (max-width: 1000px) { .admin-monitoring-content { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 900px) { .admin-page { padding: 24px; } .admin-intake-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) {
   .admin-page { padding: 20px 16px 40px; }
@@ -147,6 +172,9 @@
   .admin-routing-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 12px; gap: 8px; }
   .admin-routing-table td { padding: 0; }
   .admin-route-job { grid-column: 1 / -1; }
+  .admin-monitoring-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .admin-monitoring-metric { padding: 12px; }
+  .admin-monitoring-queue-table th, .admin-monitoring-queue-table td { padding-top: 9px; padding-bottom: 9px; }
   .admin-monitoring-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-danger { align-items: flex-start; flex-direction: column; }
 }

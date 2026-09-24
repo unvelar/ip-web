@@ -362,6 +362,17 @@ export interface AdminMonitoringOverview {
   runs: AdminMonitoringRunActivity[];
 }
 
+export type AdminMonitoringStatus = Pick<AdminMonitoringOverview,
+  "generated_at" | "window_hours" | "scrape_requests" | "queue" | "worker_demand"
+> & {
+  summary: Pick<AdminMonitoringOverview["summary"],
+    "queued_jobs" | "deferred_jobs" | "paused_jobs" | "scheduled_jobs"
+    | "queued_units" | "running_jobs"
+  > & {
+    workers: Pick<AdminMonitoringOverview["summary"]["workers"], "busy" | "idle" | "starting">;
+  };
+};
+
 export interface AdminMonitoringJob {
   scrape?: AdminMonitoringScrapeEvidence | null;
   id: string;
@@ -611,6 +622,28 @@ export async function getAdminMonitoringOverview(opts: {
     throw new Error("The server has not provided complete worker and queue status yet. This page will retry automatically.");
   }
   return overview;
+}
+
+export async function getAdminMonitoringStatus(opts: {
+  windowHours?: 1 | 6 | 24 | 72 | 168;
+  signal?: AbortSignal;
+} = {}) {
+  const qs = new URLSearchParams({ view: "summary" });
+  if (opts.windowHours) qs.set("window_hours", String(opts.windowHours));
+  const status = await request<AdminMonitoringStatus>(`/api/admin/monitoring/overview?${qs}`, {
+    signal: opts.signal,
+  });
+  if (!Number.isFinite(status.summary.queued_jobs)
+    || !Number.isFinite(status.summary.running_jobs)
+    || !Number.isFinite(status.summary.workers.busy)
+    || !Number.isFinite(status.summary.workers.idle)
+    || !Number.isFinite(status.summary.workers.starting)
+    || !Array.isArray(status.worker_demand)
+    || status.worker_demand.some(row => !isAdminMonitoringWorkerKind(row.kind))
+    || status.queue.some(queue => !isAdminMonitoringWorkerKind(queue.worker_kind) || !queue.worker_capacity)) {
+    throw new Error("The server has not provided complete worker and queue status yet. This page will retry automatically.");
+  }
+  return status;
 }
 
 export async function getAdminMonitoringRun(runId: string, signal?: AbortSignal) {
