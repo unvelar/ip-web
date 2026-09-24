@@ -31,9 +31,10 @@ test("completed monitoring exposes the exact timestamp and a localized date with
   const html = renderToStaticMarkup(<TenantMonitoringStats loading={false} summary={{
     tenant_id: "tenant-a", task_count: 200, pending_task_count: 123, last_monitored_at: "2026-09-22T14:30:00Z",
   }} />);
-  expect(html).toContain(">123<");
+  expect(html).toContain(">77<span");
   expect(html).toContain(">/200<");
-  expect(html).toContain("123 awaiting triage out of 200 total tasks");
+  expect(html).toContain("77 completed out of 200 total tasks");
+  expect(html).not.toContain("awaiting");
   expect(html).toContain(">Tasks<");
   expect(html).toContain('dateTime="2026-09-22T14:30:00Z"');
   expect(html).toContain("2026");

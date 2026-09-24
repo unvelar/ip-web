@@ -185,7 +185,7 @@ export default function AdminTenants() {
 
         <div className="tenant-columns" aria-hidden="true">
           <span>Workspace</span>
-          <div className="tenant-monitoring-columns"><span>Tasks</span><span>Last monitoring</span></div>
+          <div className="tenant-monitoring-columns"><span>Tasks <small>(completed / total)</small></span><span>Last monitoring</span></div>
           <span />
         </div>
 

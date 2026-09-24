@@ -31,7 +31,8 @@
 .tenant-page button:focus-visible, .tenant-disclosure summary:focus-visible { outline: 2px solid #a8a29e; outline-offset: 3px; }
 .tenant-columns, .tenant-row { display: grid; grid-template-columns: minmax(0, 1fr) 350px 32px; column-gap: 24px; align-items: center; padding-inline: 20px; }
 .tenant-columns { min-height: 36px; border-block: 1px solid var(--tenant-line); background: #fcfcfb; color: var(--tenant-muted); font-size: 11px; }
-.tenant-monitoring-columns, .tenant-monitoring-stats { display: grid; grid-template-columns: 106px minmax(0, 1fr); gap: 20px; }
+.tenant-monitoring-columns, .tenant-monitoring-stats { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; }
+.tenant-monitoring-columns small { color: #aaa49d; font-size: 10px; font-weight: 400; }
 .tenant-rows { list-style: none; margin: 0; padding: 0; }
 .tenant-row { min-height: 78px; padding-block: 17px; transition: background 150ms ease; }
 .tenant-row + .tenant-row { border-top: 1px solid #f0eeeb; }
@@ -45,7 +46,7 @@
 .tenant-stat-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .tenant-stat-value { margin: 0; color: #625e58; font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .tenant-stat-count { color: #393632; font-size: 13px; font-weight: 500; }
-.tenant-task-total { color: #85817c; font-weight: 400; }
+.tenant-task-total { color: #625e58; font-weight: 500; }
 .tenant-stat-muted { color: #96918a; font-size: 12px; font-weight: 400; }
 .tenant-delete { color: #aaa49d; }
 .tenant-delete:hover { background: #fff1ef; color: #c3483b; }
@@ -76,7 +77,7 @@
 .tenant-login-panel input:focus-visible { outline: 2px solid #a8a29e; outline-offset: 2px; box-shadow: none; border-color: #a8a29e; }
 @media (max-width: 1100px) {
   .tenant-columns, .tenant-row { grid-template-columns: minmax(0, 1fr) 300px 32px; gap: 16px; }
-  .tenant-monitoring-columns, .tenant-monitoring-stats { grid-template-columns: 90px minmax(0, 1fr); gap: 16px; }
+  .tenant-monitoring-columns, .tenant-monitoring-stats { grid-template-columns: 150px minmax(0, 1fr); gap: 16px; }
 }
 @media (max-width: 760px) {
   .tenant-page { padding: 28px 16px 48px; }
