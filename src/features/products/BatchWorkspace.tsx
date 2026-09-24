@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowUpRight, Check, Link2, LoaderCircle, Settings2, Square 
 import { Link } from "react-router-dom";
 import type { PersistedProductGroup, ProductGroupCommercialSubgroup } from "../../api/products";
 import type { IpReviewFinding } from "../../api/reviews";
-import { BatchDecisionButton } from "./BatchDecisionButton";
+import { ListingDecisionBar } from "../../components/monitoring/board/ListingDecisionBar";
 import { BatchListingCard } from "./BatchListingCard";
 import type { ReviewBucket } from "./labDomain";
 import {
@@ -274,34 +274,13 @@ export function BatchWorkspace({
         )}
       </div>
 
-      {selectedFindings.length > 0 && (
-        <div className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-2.5 shadow-[0_-12px_28px_-24px_rgba(28,25,23,0.8)] backdrop-blur sm:px-7">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="shrink-0 border-r border-stone-200 pr-2">
-              <p className="whitespace-nowrap text-[10px] font-semibold text-stone-700">
-                {selectedFindings.length} selected
-              </p>
-            </div>
-            {batchProgress ? (
-              <span className="inline-flex items-center gap-2 text-[11px] text-stone-500">
-                <LoaderCircle size={13} className="animate-spin" />
-                Processing {batchProgress.done}/{batchProgress.total}
-              </span>
-            ) : (
-              <div className="min-w-0 flex-1 overflow-x-auto pb-0.5">
-                <div className="flex min-w-max items-center gap-1">
-                  <BatchDecisionButton label="Takedown" primary={recommendedAction === "send"} onClick={() => onBatchAction("send")} />
-                  <BatchDecisionButton label="Different product" primary={recommendedAction === "false_positive"} onClick={() => onBatchAction("false_positive")} />
-                  <BatchDecisionButton label="Second hand" primary={recommendedAction === "second_hand"} onClick={() => onBatchAction("second_hand")} />
-                  <BatchDecisionButton label="Do not pursue" onClick={() => onBatchAction("do_not_pursue")} />
-                  <BatchDecisionButton label="Allow product" onClick={() => onBatchAction("allow_product")} />
-                  <BatchDecisionButton label="Review" primary={recommendedAction === "review"} onClick={() => onBatchAction("review")} />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <ListingDecisionBar
+        selectedCount={selectedFindings.length}
+        actions={["send", "false_positive", "second_hand", "do_not_pursue", "allow_product", "review"] as const}
+        recommendedAction={recommendedAction}
+        progress={batchProgress}
+        onAction={onBatchAction}
+      />
     </div>
   );
 }

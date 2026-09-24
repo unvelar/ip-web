@@ -11,10 +11,10 @@ import {
   type MonitoringSellerSort,
   type MonitoringSellerStatus,
 } from "../../api";
-import { listingAvailabilityMeta } from "../../lib/listingAvailability";
+import { sellerListingAvailability } from "./sellerListingAvailability";
 import { compactListingTitle, findingStatusBadge, formatAgo, formatMoney, tableImageUrls } from "../../components/monitoring/board/utils";
 
-import { SellerListingActions } from "./SellerListingActions";
+import { ListingDecisionBar } from "../../components/monitoring/board/ListingDecisionBar";
 import { BatchConfirmModal } from "../../components/monitoring/board/batch";
 import { BatchResultNotice } from "../../components/monitoring/board/BatchResultNotice";
 import type { BatchAction, BatchResult } from "../../components/monitoring/board/batchUtils";
@@ -41,21 +41,20 @@ type FilterControl = {
   onFiltersChange?: undefined;
 };
 
-type SellerListingsProps = {
-  sellerKey: string;
-  sellerName?: string;
-  ipId: string | null;
-  onChanged?: () => void;
-  renderHeader?: (profile: MonitoringSellerProfilePage) => ReactNode;
+type FindingControl = {
   activeFindingId?: string | null;
   onActiveFindingChange?: (resultId: string | null) => void;
 };
 
-export function SellerListings({ initialStatus = "open", filters, onFiltersChange, onIpChange, ...props }: SellerListingsProps & FilterControl & {
+export function SellerListings({ sellerKey, sellerName, ipId, initialStatus = "open", onChanged, filters, onFiltersChange, onIpChange, renderHeader, activeFindingId, onActiveFindingChange }: {
+  sellerKey: string;
+  sellerName?: string;
+  ipId: string | null;
   initialStatus?: MonitoringSellerStatus;
+  onChanged?: () => void;
   onIpChange?: (ipId: string | null) => void;
-}) {
-  const { sellerKey, ipId } = props;
+  renderHeader?: (profile: MonitoringSellerProfilePage) => ReactNode;
+} & FilterControl & FindingControl) {
   const [localFilters, setLocalFilters] = useState<SellerListingFilters>({ status: initialStatus, availability: null, sort: "found_desc" });
   const { status, availability, sort } = filters ?? localFilters;
   const scope = JSON.stringify([sellerKey, ipId, status, availability, sort]);
@@ -76,8 +75,8 @@ export function SellerListings({ initialStatus = "open", filters, onFiltersChang
         <select disabled={busy} aria-label="Listing availability" value={availability ?? ""} onChange={(event) => changeFilters({ status, availability: (event.target.value || null) as MonitoringSellerAvailability | null, sort })}>
           <option value="">Any availability</option>
           <option value="available">Available</option>
-          <option value="blocked">Availability check blocked</option>
-          <option value="unknown">Availability unknown</option>
+          <option value="blocked">Couldn’t verify</option>
+          <option value="unknown">Not yet verified</option>
           <option value="unavailable">Unavailable</option>
         </select>
         <select disabled={busy} aria-label="Sort seller listings" value={sort} onChange={(event) => changeFilters({ status, availability, sort: event.target.value as MonitoringSellerSort })}>
@@ -96,24 +95,40 @@ export function SellerListings({ initialStatus = "open", filters, onFiltersChang
     </div>
   );
 
-  // A new filter gets its own request lifetime, including pagination.
   return (
-    <SellerListingResults
-      {...props}
-      key={scope}
-      status={status}
-      availability={availability}
-      sort={sort}
-      onLoaded={rememberIps}
-      filterToolbar={filterToolbar}
-    />
+    <>
+      {/* A new filter gets its own request lifetime, including pagination. */}
+      <SellerListingResults
+        key={scope}
+        sellerKey={sellerKey}
+        sellerName={sellerName}
+        activeFindingId={activeFindingId}
+        onActiveFindingChange={onActiveFindingChange}
+        renderHeader={renderHeader}
+        onLoaded={rememberIps}
+        filterToolbar={filterToolbar}
+        onChanged={onChanged}
+        ipId={ipId}
+        status={status}
+        availability={availability || null}
+        sort={sort}
+      />
+    </>
   );
 }
 
-function SellerListingResults({ sellerKey, sellerName, ipId, status, availability, sort, onChanged, filterToolbar, renderHeader, onLoaded, activeFindingId, onActiveFindingChange }: SellerListingsProps & SellerListingFilters & {
+function SellerListingResults({ sellerKey, sellerName, ipId, status, availability, sort, onChanged, filterToolbar, renderHeader, onLoaded, activeFindingId, onActiveFindingChange }: {
+  sellerKey: string;
+  ipId: string | null;
+  status: MonitoringSellerStatus;
+  availability: MonitoringSellerAvailability | null;
+  sort: MonitoringSellerSort;
+  sellerName?: string;
   filterToolbar: (busy: boolean) => ReactNode;
+  onChanged?: () => void;
+  renderHeader?: (profile: MonitoringSellerProfilePage) => ReactNode;
   onLoaded: (profile: MonitoringSellerProfilePage) => void;
-}) {
+} & FindingControl) {
   const [localFindingId, setLocalFindingId] = useState<string | null>(null);
   const findingId = activeFindingId === undefined ? localFindingId : activeFindingId;
   const openFinding = onActiveFindingChange ?? setLocalFindingId;
@@ -149,30 +164,24 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
     });
   }
 
-  async function refreshLoaded(savedChanges = false) {
+  async function refreshLoaded() {
     const controller = requestController.current;
     if (!controller || controller.signal.aborted) return;
-    setNeedsRefresh(true);
-    if (savedChanges) onChanged?.();
-    try {
-      const targetCount = page?.findings.length ?? 10;
-      let refreshed: MonitoringSellerProfilePage | null = null;
-      do {
-        const next: MonitoringSellerProfilePage = await getMonitoringSellerProfile(sellerKey, {
-          ip_id: ipId, status, availability, sort, limit: 10,
-          cursor: refreshed?.next_cursor, signal: controller.signal,
-        });
-        if (controller.signal.aborted) return;
-        refreshed = refreshed ? { ...next, findings: [...refreshed.findings, ...next.findings] } : next;
-      } while (refreshed.next_cursor && refreshed.findings.length < targetCount);
-      setPage(refreshed);
-      onLoaded(refreshed);
-      setSelected((current) => new Set(refreshed.findings.filter((finding) => current.has(finding.result_id) && isSelectable(finding)).map((finding) => finding.result_id)));
-      setNeedsRefresh(false);
-      setError("");
-    } catch {
-      if (!controller.signal.aborted) setError("Changes saved, but listings could not be refreshed. Try again to reload their current state.");
-    }
+    const targetCount = page?.findings.length ?? 10;
+    let refreshed: MonitoringSellerProfilePage | null = null;
+    do {
+      const next: MonitoringSellerProfilePage = await getMonitoringSellerProfile(sellerKey, {
+        ip_id: ipId, status, availability, sort, limit: 10,
+        cursor: refreshed?.next_cursor, signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      refreshed = refreshed ? { ...next, findings: [...refreshed.findings, ...next.findings] } : next;
+    } while (refreshed.next_cursor && refreshed.findings.length < targetCount);
+    setPage(refreshed);
+    onLoaded(refreshed);
+    setSelected((current) => new Set(refreshed.findings.filter((finding) => current.has(finding.result_id) && isSelectable(finding)).map((finding) => finding.result_id)));
+    setNeedsRefresh(false);
+    setError("");
   }
 
   async function retryRead() {
@@ -181,11 +190,28 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
       return;
     }
     if (actionPending.current) return;
+    const controller = requestController.current;
+    if (!controller || controller.signal.aborted) return;
     actionPending.current = true;
     setProgress({ done: 0, total: 0 });
-    await refreshLoaded();
-    actionPending.current = false;
-    setProgress(null);
+    try { await refreshLoaded(); }
+    catch (caught: unknown) {
+      if (!requestController.current?.signal.aborted) setError(caught instanceof Error ? caught.message : "Unable to refresh listings.");
+    } finally {
+      actionPending.current = false;
+      if (!controller.signal.aborted) setProgress(null);
+    }
+  }
+
+  async function refreshAfterInspectorChange() {
+    const controller = requestController.current;
+    if (!controller || controller.signal.aborted) return;
+    setNeedsRefresh(true);
+    onChanged?.();
+    try { await refreshLoaded(); }
+    catch {
+      if (!controller.signal.aborted) setError("Changes saved, but listings could not be refreshed. Try again to reload their current state.");
+    }
   }
 
   async function runAction(action: BatchAction, decisionReason?: string, associationScopes?: TakedownFeedbackAssociationScope[]) {
@@ -205,7 +231,12 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
       if (outcome.processed.size > 0) {
         // Do not offer acknowledged successes again if the subsequent read fails.
         setPage((current) => current ? { ...current, findings: current.findings.filter((finding) => !outcome.processed.has(finding.result_id)) } : current);
-        await refreshLoaded(true);
+        setNeedsRefresh(true);
+        onChanged?.();
+        try { await refreshLoaded(); }
+        catch {
+          if (!controller.signal.aborted) setError("Actions saved, but listings could not be refreshed. Try again to reload their current state.");
+        }
       }
     } catch (caught: unknown) {
       if (!controller.signal.aborted) setResult(`Could not complete the action. ${caught instanceof Error ? caught.message : "Please try again."}`);
@@ -263,7 +294,8 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
           <div className="seller-toolbar-filters" inert={selectedFindings.length > 0 || Boolean(progress)} aria-hidden={selectedFindings.length > 0 || Boolean(progress)}>
             {filterToolbar(Boolean(progress))}
           </div>
-          <SellerListingActions
+          <ListingDecisionBar
+            placement="toolbar"
             selectedCount={selectedFindings.length}
             primaryAction={primaryAction}
             actions={needsRefresh ? [] : availableActions}
@@ -317,9 +349,9 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
           onClose={() => openFinding(null)}
           onResolved={() => {
             openFinding(null);
-            void refreshLoaded(true);
+            void refreshAfterInspectorChange();
           }}
-          onFindingChange={() => void refreshLoaded(true)}
+          onFindingChange={() => void refreshAfterInspectorChange()}
         />,
         // Escape the seller table's clipping while retaining shell overlay offsets.
         document.querySelector(".app-shell") ?? document.body,
@@ -334,7 +366,7 @@ function SellerListingRow({ finding, showIp, selected, disabled, onSelect, onOpe
   const title = compactListingTitle(finding);
   const image = tableImageUrls(finding)[0];
   const status = findingStatusBadge(finding);
-  const availability = listingAvailabilityMeta(finding.availability);
+  const availability = sellerListingAvailability(finding.availability);
   const price = finding.price_value_usd != null ? formatMoney(Number(finding.price_value_usd), "USD") : finding.price;
 
   return (
