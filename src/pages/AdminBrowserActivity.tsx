@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlertCircle, ArrowDown, ArrowLeft, Check, ChevronRight, Clock3, Globe2, ImageOff, LayoutGrid, List, LoaderCircle, Monitor, Pause, Play, RefreshCw, Search, X } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowLeft, Check, ChevronRight, Clock3, Globe2, ImageOff, LayoutGrid, List, LoaderCircle, Monitor, Pause, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
 import { AdminPage } from "../components/admin/AdminPage";
 import { ADMIN_JOB_COPY } from "../features/adminMonitoring/monitoringJobs";
 import { useBrowserActivity } from "../features/browserActivity/useBrowserActivity";
 import { getCapture, getHistory, getWorkers, type ActivityEvent, type ActivityJob, type ActivityWorker, type Capture, type JobHistory, type JobState, type WorkerKind, type WorkerSnapshot, type WorkerState } from "../features/browserActivity/api";
 import "../features/browserActivity/browserActivity.css";
+import { WorkerSettings } from "../features/browserActivity/WorkerSettings";
 
 const STATES: Record<JobState,string> = {running:"Running",unknown:"Outcome unknown",succeeded:"Succeeded",failed:"Failed",cancelled:"Cancelled",held:"On hold",retry_scheduled:"Retry scheduled",queued:"Queued"};
 const WORKERS: Record<WorkerState,string> = {active:"Working",ready:"Ready",draining:"Draining",offline:"Offline",starting:"Starting"};
@@ -50,6 +51,7 @@ export default function AdminBrowserActivity() {
   const [inspecting,setInspecting]=useState<string | null>(null);
   const [capture,setCapture]=useState<Capture | null>(null);
   const [compact,setCompact]=useState(false);
+  const [managing,setManaging]=useState<ActivityWorker | null>(null);
   const [workers,setWorkers]=useState<WorkerSnapshot | null>(null);
   const [workerError,setWorkerError]=useState<string | null>(null);
   const [fleetQuery,setFleetQuery]=useState("");
@@ -132,27 +134,31 @@ export default function AdminBrowserActivity() {
       {feed.loading?<div className="admin-card admin-empty"><LoaderCircle className="ba-spin" size={22}/><strong>Loading browser activity</strong></div>:feed.jobs.length===0 && !feed.error?<div className="admin-card admin-empty"><Monitor size={28}/><strong>{attention?"No jobs need attention":"No activity in this view yet"}</strong><p>{worker||query||attention?"Try another worker, search, or time period.":"Browser jobs will appear here when a worker starts them."}</p></div>:feed.jobs.map(job=><JobCard key={job.id} job={job} compact={compact} open={inspecting===job.id} onToggle={()=>setInspecting(inspecting===job.id?null:job.id)} onWorker={chooseWorker} onCapture={setCapture}/>)}
       {!feed.loading && <div className="ba-footer"><span>Page events kept for 7 days. Times are local.</span><div>{feed.historical&&<button className="admin-button" onClick={resume}><ArrowLeft size={13}/>Latest jobs</button>}{feed.next&&<button className="admin-button" onClick={()=>{setInspecting(null);feed.older();window.scrollTo({top:0,behavior:"instant"});}}>Earlier jobs<ChevronRight size={13}/></button>}</div></div>}
     </main><aside className="ba-rail"><div className="ba-rail-title"><h2>Working now</h2><button onClick={()=>showFleet("registered")}>View fleet<ChevronRight size={13}/></button></div>
-      {workerError?<div className="ba-muted" role="alert">Worker status is unavailable. <button onClick={()=>setWorkerRevision(value=>value+1)}>Retry</button></div>:!workers||workerLoadedKey!==workerKey?<p className="ba-muted">Loading workers…</p>:workers.workers.length===0?<p className="ba-muted">No registered workers are processing jobs.</p>:workers.workers.slice(0,8).map(item=><WorkerTile key={item.id} worker={item} selected={item.id===worker} onClick={()=>chooseWorker(item.id)}/>)}
+      {workerError?<div className="ba-muted" role="alert">Worker status is unavailable. <button onClick={()=>setWorkerRevision(value=>value+1)}>Retry</button></div>:!workers||workerLoadedKey!==workerKey?<p className="ba-muted">Loading workers…</p>:workers.workers.length===0?<p className="ba-muted">No registered workers are processing jobs.</p>:workers.workers.slice(0,8).map(item=><WorkerTile key={item.id} worker={item} onSettings={()=>setManaging(item)} selected={item.id===worker} onClick={()=>chooseWorker(item.id)}/>)}
       <p className="ba-rail-note">One card follows each job through every attempt. Open a card to see page visits, captures, and failure reasons.</p>
     </aside></div>:<>
       {fleetKind==="on_demand"&&<p className="ba-muted">Tasks start as needed and leave this view when they finish. Their jobs and outcomes stay in the feed.</p>}
-      <div className="ba-fleet" aria-busy={workerLoadedKey!==workerKey}>{[...machines].map(([host,slots])=>slots.length===1?<WorkerTile key={host} worker={slots[0]} onClick={()=>chooseWorker(slots[0].id)}/>:<section className="ba-machine" key={host}><h2>{host}<small>{slots.length} {fleetKind==="on_demand"?"tasks":"workers"} on this page</small></h2><div className="ba-machine-grid">{slots.map(item=><WorkerTile key={item.id} worker={item} showHost={false} onClick={()=>chooseWorker(item.id)}/>)}</div></section>)}</div>
+      <div className="ba-fleet" aria-busy={workerLoadedKey!==workerKey}>{[...machines].map(([host,slots])=>slots.length===1?<WorkerTile key={host} worker={slots[0]} onSettings={()=>setManaging(slots[0])} onClick={()=>chooseWorker(slots[0].id)}/>:<section className="ba-machine" key={host}><h2>{host}<small>{slots.length} {fleetKind==="on_demand"?"tasks":"workers"} on this page</small></h2><div className="ba-machine-grid">{slots.map(item=><WorkerTile key={item.id} worker={item} onSettings={()=>setManaging(item)} showHost={false} onClick={()=>chooseWorker(item.id)}/>)}</div></section>)}</div>
       {workers?.workers.length===0 && workerLoadedKey===workerKey && <div className="admin-empty admin-card"><Monitor size={26}/><strong>{fleetKind==="on_demand"?"No on-demand tasks match this view":"No workers match this view"}</strong></div>}
       <div className="ba-footer"><span>{workers?.workers.length ?? 0} {fleetKind==="on_demand"?"tasks":"workers"} on this page · {fleetKind==="on_demand"?`${workers?.on_demand?.total ?? 0} active tasks`:`${total} registered workers seen in 14 days`} · Updated every 15 seconds</span><div><button className="admin-button" disabled={!workerPages.length || workerLoadedKey!==workerKey} onClick={()=>{setWorkerBefore(workerPages.at(-1));setWorkerPages(pages=>pages.slice(0,-1));}}><ArrowLeft size={13}/>Previous</button><button className="admin-button" disabled={!workers?.next_cursor || workerLoadedKey!==workerKey} onClick={()=>{if(workers?.next_cursor){setWorkerPages(pages=>[...pages,workerBefore]);setWorkerBefore(workers.next_cursor);}}}>Next<ChevronRight size={13}/></button></div></div>
     </>}
+    {managing&&<WorkerSettings worker={workers?.workers.find(item=>item.id===managing.id) ?? managing} onClose={()=>setManaging(null)} onSaved={()=>setWorkerRevision(value=>value+1)}/>}
     {capture&&<CaptureViewer capture={capture} onClose={()=>setCapture(null)}/>}
   </AdminPage>;
 }
 
-function WorkerTile({worker,selected,onClick,showHost=true}: {worker: ActivityWorker; selected?: boolean; onClick: ()=>void; showHost?: boolean}) {
-  return <button className={`ba-worker${selected?" is-selected":""}`} onClick={onClick}>
-    <div className="ba-worker-top"><span className="ba-worker-icon"><Monitor size={17}/></span><strong title={worker.id}>{worker.kind==="on_demand"?`${providerName(worker.scrape_provider)} task`:workerName(worker.id)}</strong><i className="ba-dot" data-state={worker.state}/></div>
+function WorkerTile({worker,selected,onClick,onSettings,showHost=true}: {worker: ActivityWorker; selected?: boolean; onClick: ()=>void; onSettings?: ()=>void; showHost?: boolean}) {
+  const active=worker.active_jobs ?? [];
+  return <article className={`ba-worker${selected?" is-selected":""}`}>
+    <div className="ba-worker-top"><span className="ba-worker-icon"><Monitor size={17}/></span><strong title={worker.id}>{worker.kind==="on_demand"?`${providerName(worker.scrape_provider)} task`:workerName(worker.id)}</strong><i className="ba-dot" data-state={worker.state}/>
+      {worker.kind!=="on_demand"&&onSettings&&<button className="ba-worker-settings" onClick={onSettings} aria-label={`Settings for ${worker.hostname || worker.id}`}><Settings2 size={15}/></button>}</div>
     {worker.kind!=="on_demand"&&showHost&&worker.hostname&&worker.hostname!==worker.id&&<small className="ba-worker-host" title={worker.hostname}>{worker.hostname}</small>}
-    <div className="ba-worker-state"><span>{WORKERS[worker.state]}</span><small>{worker.kind==="on_demand"?worker.current_job_id?`Job ${worker.current_job_id.slice(0,8)}`:"Awaiting job":worker.pool || worker.provider}</small></div>
-    <p>{worker.state==="offline"?`Last heartbeat ${worker.last_heartbeat_at?fullTime(worker.last_heartbeat_at):"unavailable"}`:worker.domain || (worker.job_type?jobType(worker.job_type):"Waiting for a job")}</p>
+    <div className="ba-worker-state"><span>{WORKERS[worker.state]}</span><small>{worker.kind==="on_demand"?worker.current_job_id?`Job ${worker.current_job_id.slice(0,8)}`:"Awaiting job":`${active.length || (worker.current_job_id?1:0)} / ${worker.max_parallel_jobs ?? 1} jobs`}</small></div>
+    <p>{worker.state==="offline"?`Last heartbeat ${worker.last_heartbeat_at?fullTime(worker.last_heartbeat_at):"unavailable"}`:active.length?active.map(job=>job.domain==="*"?"Multiple websites":job.domain || jobType(job.type)).join(", "):worker.domain || (worker.job_type?jobType(worker.job_type):"Waiting for a job")}</p>
+    {worker.resources?.memory_limited&&<small className="ba-reason">Waiting for available RAM</small>}
     {!worker.activity_version&&<small className="ba-muted">Page activity requires a worker update</small>}
-    <span className="ba-worker-link">{worker.kind==="on_demand"?"View task activity":"Follow worker"}<ChevronRight size={12}/></span>
-  </button>;
+    <button className="ba-worker-link" onClick={onClick}>{worker.kind==="on_demand"?"View task activity":"Follow worker"}<ChevronRight size={12}/></button>
+  </article>;
 }
 
 function JobCard({job,open,compact,onToggle,onWorker,onCapture}: {job: ActivityJob; open: boolean; compact: boolean; onToggle: ()=>void; onWorker: (id:string)=>void; onCapture: (capture:Capture)=>void}) {

@@ -25,6 +25,15 @@ export type ActivityWorker = {
   kind: WorkerKind; scrape_provider: string | null;
   last_heartbeat_at: string | null; current_job_id: string | null; job_type: string | null;
   domain: string | null; current_action: string | null; activity_version: string | null;
+  max_parallel_jobs?: number; concurrency_version?: string | null;
+  active_jobs?: {id: string; type: string; domain: string | null; started_at: string | null}[];
+  resources?: {total_bytes: number; available_bytes: number; process_tree_rss_bytes: number | null;
+    reserve_bytes: number; memory_limited: boolean} | null;
+};
+export type LoginSession = {
+  id: string; domain: string; country: string; status: string; status_detail: string | null;
+  pause_requested_at: string | null; last_checked_at: string | null; busy: boolean;
+  resume_check_job_id: string | null; verification_status: string | null;
 };
 export type JobSnapshot = {jobs: ActivityJob[]; cursor: string; next_cursor: string | null; as_of: string};
 export type WorkerSnapshot = {
@@ -53,6 +62,12 @@ export const getWorkers = (query="", state="", before?: string, signal?: AbortSi
 export const getHistory = (id: string, before?: string, signal?: AbortSignal) =>
   request<JobHistory>(`${root}/jobs/${id}?${params({before})}`,{signal});
 export const getCapture = (id: string, signal?: AbortSignal) => request<{url:string}>(`${root}/captures/${id}`,{signal});
+export const saveWorkerCapacity = (id: string, max: number) => request<{id:string;max_parallel_jobs:number}>(
+  `${root}/workers/${encodeURIComponent(id)}/settings`,{method:"PATCH",body:JSON.stringify({max_parallel_jobs:max})});
+export const getLoginSessions = (id: string, signal?: AbortSignal) => request<{sessions:LoginSession[]}>(
+  `${root}/workers/${encodeURIComponent(id)}/sessions`,{signal});
+export const loginSessionAction = (worker: string, session: string, action: "pause" | "verify") => request<{ok:true}>(
+  `${root}/workers/${encodeURIComponent(worker)}/sessions/${session}/action`,{method:"POST",body:JSON.stringify({action})});
 
 /** Bearer-authenticated SSE. Authentication stays in headers on every reconnect. */
 export async function streamActivity(after: string, signal: AbortSignal, onChange: (value: ActivityChange)=>void, onLive: ()=>void) {
