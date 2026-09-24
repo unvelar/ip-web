@@ -59,7 +59,7 @@ export function WorkerSettings({worker,onClose,onSaved}: {worker:ActivityWorker;
         <button className="admin-button" disabled={!supported||!valid||Boolean(busy)||max===savedLimit} onClick={()=>void save()}>
           {busy==="capacity"?<LoaderCircle size={14} className="ba-spin"/>:null}Save capacity</button></div>
       {!supported?<p className="ba-reason">Update this worker before enabling parallel jobs.</p>:
-        <p className="ba-muted">{worker.active_jobs?.length ?? (worker.current_job_id?1:0)} jobs running. Lowering the limit takes effect as jobs finish.</p>}
+        <p className="ba-muted">Running jobs: {worker.active_jobs?.length ?? (worker.current_job_id?1:0)}. Lowering the limit takes effect as jobs finish.</p>}
       {ram&&<div className="ba-memory"><div><span>Total RAM</span><strong>{gib(ram.total_bytes)}</strong></div>
         <div><span>Available RAM</span><strong>{gib(ram.available_bytes)}</strong></div>
         <div><span>Worker processes</span><strong>{ram.process_tree_rss_bytes===null?"Unavailable":gib(ram.process_tree_rss_bytes)}</strong></div></div>}
