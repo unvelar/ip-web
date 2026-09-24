@@ -18,7 +18,7 @@ export type ActivityJob = {
   target_url: string | null; run_id: string | null; attempts: number; max_attempts: number; latest_attempt_id: string;
   error: string | null; hold_reason: string | null; available_at: string; started_at: string | null;
   completed_at: string | null; last_activity_at: string; cursor: string; latest_event: ActivityPayload;
-  result: {candidates: number | null; unavailable: boolean}; captures: Capture[];
+  result: {candidates: number | null; unavailable: boolean; setup_outcome?: "resolved" | "needs_inference" | "no_recipe" | null}; captures: Capture[];
 };
 export type ActivityWorker = {
   id: string; hostname: string | null; state: WorkerState; provider: string; pool: string;

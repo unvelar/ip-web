@@ -35,6 +35,8 @@ body:has(.ba-stats) { min-width:0; }
 .ba-job > header { display:flex; align-items:center; gap:11px; padding:17px 20px 0; }
 .ba-job-icon { width:36px; height:36px; display:grid; place-items:center; border:1px solid #e7e5e4; border-radius:10px; color:#8f8881; background:#fafaf9; flex-shrink:0; }
 .ba-job[data-state=succeeded] .ba-job-icon { background:#f2f8f4; color:#438065; border-color:#e0ece3; }
+.ba-job[data-state=captured] .ba-job-icon { background:#f0f5f9; color:#51718e; border-color:#dde7ef; }
+.ba-job[data-state=unresolved] .ba-job-icon { background:#fcf4e7; color:#997236; border-color:#eee1c9; }
 .ba-job[data-state=failed] .ba-job-icon { background:#fcf1ef; color:#b05d51; border-color:#f3dfdc; }
 .ba-job-identity { display:flex; flex-direction:column; min-width:0; flex:1; }
 .ba-worker-name { text-align:left; font-weight:550; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -43,10 +45,10 @@ body:has(.ba-stats) { min-width:0; }
 .ba-job-state { display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
 .ba-job-state time { font-variant-numeric:tabular-nums; color:#a8a29e; font-size:10px; }
 .ba-status { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:5px; font-size:10px; font-weight:500; color:#78716c; background:#f4f3f1; white-space:nowrap; }
-.ba-status[data-state=running] { background:#f0f5f9; color:#51718e; }
+.ba-status[data-state=running], .ba-status[data-state=captured] { background:#f0f5f9; color:#51718e; }
 .ba-status[data-state=succeeded] { background:#edf6f0; color:#3c7c59; }
 .ba-status[data-state=failed] { background:#fbefed; color:#ad574c; }
-.ba-status[data-state=unknown], .ba-status[data-state=held], .ba-status[data-state=retry_scheduled] { background:#fcf4e7; color:#997236; }
+.ba-status[data-state=unknown], .ba-status[data-state=held], .ba-status[data-state=retry_scheduled], .ba-status[data-state=unresolved] { background:#fcf4e7; color:#997236; }
 .ba-job-content { padding:17px 20px 16px; }
 .ba-job-content h2 { font-size:14px; line-height:1.5; font-weight:550; letter-spacing:-.15px; overflow-wrap:anywhere; }
 .ba-url { display:flex; gap:6px; align-items:center; color:#8c857f; font-size:11px; margin-top:5px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }

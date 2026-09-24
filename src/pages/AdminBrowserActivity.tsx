@@ -22,7 +22,17 @@ function duration(job: ActivityJob) {
   const seconds=Math.max(0,Math.floor(((job.completed_at?Date.parse(job.completed_at):Date.now())-Date.parse(job.started_at))/1000));
   return seconds>=3600?`${Math.floor(seconds/3600)}h ${Math.floor(seconds%3600/60)}m`:seconds>=60?`${Math.floor(seconds/60)}m ${seconds%60}s`:`${seconds}s`;
 }
+function jobStatus(job: ActivityJob) {
+  if(job.state==="succeeded") {
+    if(job.result.setup_outcome==="needs_inference") return {state:"captured",label:"Captured for analysis"};
+    if(job.result.setup_outcome==="no_recipe") return {state:"unresolved",label:"Setup unresolved"};
+    if(job.attempts>1) return {state:job.state,label:"Succeeded after retry"};
+  }
+  return {state:job.state,label:STATES[job.state]};
+}
 function outcome(job: ActivityJob) {
+  if(job.state==="succeeded" && job.result.setup_outcome==="needs_inference") return "Page captured and handed off for search setup analysis.";
+  if(job.state==="succeeded" && job.result.setup_outcome==="no_recipe") return "No usable search setup was found.";
   switch(job.state) {
     case "unknown":return "Heartbeat lost. Waiting for the lease check to confirm what happened.";
     case "failed":return job.error || "The job failed without a reported reason.";
@@ -164,10 +174,11 @@ function WorkerTile({worker,selected,onClick,onSettings,showHost=true}: {worker:
 function JobCard({job,open,compact,onToggle,onWorker,onCapture}: {job: ActivityJob; open: boolean; compact: boolean; onToggle: ()=>void; onWorker: (id:string)=>void; onCapture: (capture:Capture)=>void}) {
   const url=job.latest_event.url || job.target_url;
   const elapsed=duration(job);
-  return <article className="ba-job admin-card" data-state={job.state}>
-    <header><span className="ba-job-icon">{job.state==="succeeded"?<Check size={18}/>:job.state==="failed"||job.state==="unknown"?<AlertCircle size={18}/>:<Globe2 size={18}/>}</span>
+  const status=jobStatus(job);
+  return <article className="ba-job admin-card" data-state={status.state}>
+    <header><span className="ba-job-icon">{status.state==="succeeded"?<Check size={18}/>:status.state==="failed"||status.state==="unknown"||status.state==="unresolved"?<AlertCircle size={18}/>:<Globe2 size={18}/>}</span>
       <div className="ba-job-identity"><button className="ba-worker-name" onClick={()=>job.worker_id&&onWorker(job.worker_id)} disabled={!job.worker_id} title={job.worker_id ?? undefined}>{workerName(job.worker_id)}</button><span>{jobType(job.type)} · {job.tenant_name || "System"}</span></div>
-      <div className="ba-job-state"><span className="ba-status" data-state={job.state}>{job.state==="succeeded"&&job.attempts>1?"Succeeded after retry":STATES[job.state]}</span><time dateTime={job.last_activity_at} title={fullTime(job.last_activity_at)}>{time(job.last_activity_at)}</time></div>
+      <div className="ba-job-state"><span className="ba-status" data-state={status.state}>{status.label}</span><time dateTime={job.last_activity_at} title={fullTime(job.last_activity_at)}>{time(job.last_activity_at)}</time></div>
     </header>
     <div className="ba-job-content"><h2>{job.keyword || job.domain || jobType(job.type)}</h2>{url&&<p className="ba-url" title={url}><Globe2 size={12}/>{url}</p>}
       <p className="ba-outcome">{outcome(job)}</p>
