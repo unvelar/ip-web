@@ -7,6 +7,7 @@ import { useBrowserActivity } from "../features/browserActivity/useBrowserActivi
 import { getCapture, getHistory, getWorkers, type ActivityEvent, type ActivityJob, type ActivityWorker, type Capture, type JobHistory, type JobState, type WorkerKind, type WorkerSnapshot, type WorkerState } from "../features/browserActivity/api";
 import "../features/browserActivity/browserActivity.css";
 import { WorkerSettings } from "../features/browserActivity/WorkerSettings";
+import { ListingCapturePreview, ListingPhotoViewer, type ListingPhotoSelection } from "../features/browserActivity/ListingCapturePreview";
 
 const STATES: Record<JobState,string> = {running:"Running",unknown:"Outcome unknown",succeeded:"Succeeded",failed:"Failed",cancelled:"Cancelled",held:"On hold",retry_scheduled:"Retry scheduled",queued:"Queued"};
 const WORKERS: Record<WorkerState,string> = {active:"Working",ready:"Ready",draining:"Draining",offline:"Offline",starting:"Starting"};
@@ -24,14 +25,14 @@ function duration(job: ActivityJob) {
 }
 function jobStatus(job: ActivityJob) {
   if(job.state==="succeeded") {
-    if(job.result.setup_outcome==="needs_inference") return {state:"captured",label:"Captured for analysis"};
+    if(job.result.setup_outcome==="needs_inference") return {state:"captured",label:"Homepage captured"};
     if(job.result.setup_outcome==="no_recipe") return {state:"unresolved",label:"Setup unresolved"};
     if(job.attempts>1) return {state:job.state,label:"Succeeded after retry"};
   }
   return {state:job.state,label:STATES[job.state]};
 }
 function outcome(job: ActivityJob) {
-  if(job.state==="succeeded" && job.result.setup_outcome==="needs_inference") return "Page captured and handed off for search setup analysis.";
+  if(job.state==="succeeded" && job.result.setup_outcome==="needs_inference") return "Homepage capture for search setup. The keyword above is the search being prepared.";
   if(job.state==="succeeded" && job.result.setup_outcome==="no_recipe") return "No usable search setup was found.";
   switch(job.state) {
     case "unknown":return "Heartbeat lost. Waiting for the lease check to confirm what happened.";
@@ -60,6 +61,8 @@ export default function AdminBrowserActivity() {
   const feedStart=useRef<HTMLDivElement>(null);
   const [inspecting,setInspecting]=useState<string | null>(null);
   const [capture,setCapture]=useState<Capture | null>(null);
+  const [listingPhoto,setListingPhoto]=useState<ListingPhotoSelection | null>(null);
+  const viewingImage=Boolean(capture || listingPhoto);
   const [compact,setCompact]=useState(false);
   const [managing,setManaging]=useState<ActivityWorker | null>(null);
   const [workers,setWorkers]=useState<WorkerSnapshot | null>(null);
@@ -73,8 +76,9 @@ export default function AdminBrowserActivity() {
   const [workerLoadedKey,setWorkerLoadedKey]=useState("");
   const workerKey=JSON.stringify([view,fleetKind,fleetQuery,fleetState,workerBefore]);
   const worker=params.get("worker") ?? "", attention=params.get("attention")==="true";
+  const listings=params.get("listings")==="true";
   const hours=[1,24,168].includes(Number(params.get("hours")))?Number(params.get("hours")):24;
-  const feed=useBrowserActivity({worker,attention,hours,query:params.get("q") ?? ""},paused || scrolled || Boolean(inspecting) || Boolean(capture) || view==="fleet");
+  const feed=useBrowserActivity({worker,attention,listings,hours,query:params.get("q") ?? ""},paused || scrolled || Boolean(inspecting) || viewingImage || view==="fleet");
   useEffect(()=>{
     const onScroll=()=>setScrolled(Boolean(feedStart.current && feedStart.current.getBoundingClientRect().top < -60));
     window.addEventListener("scroll",onScroll,{passive:true});
@@ -106,11 +110,11 @@ export default function AdminBrowserActivity() {
   const total=Object.values(workers?.counts ?? {}).reduce((sum,count)=>sum+(count ?? 0),0);
   const machines=new Map<string,ActivityWorker[]>();
   for(const item of workers?.workers ?? []) {const host=item.kind==="on_demand"?providerName(item.scrape_provider):item.hostname || item.id;machines.set(host,[...(machines.get(host) ?? []),item]);}
-  const viewingPaused=paused || scrolled || Boolean(inspecting) || Boolean(capture) || feed.historical;
+  const viewingPaused=paused || scrolled || Boolean(inspecting) || viewingImage || feed.historical;
 
   return <AdminPage section="browser-activity" title="Browser activity" description="A live view of the pages, captures, and outcomes across your browser workers." wide
     actions={<><span className="ba-connection" data-state={feed.connection} role="status"><i />{feed.connection==="live"?"Connected":feed.connection==="connecting"?"Connecting":feed.connection==="reconnecting"?"Reconnecting":"Disconnected"}</span>
-      <button className="admin-button" onClick={()=>viewingPaused?resume():setPaused(true)} disabled={Boolean(capture)}>{viewingPaused?<Play size={14}/>:<Pause size={14}/>} {viewingPaused?"Resume feed":"Pause feed"}</button></>}>
+      <button className="admin-button" onClick={()=>viewingPaused?resume():setPaused(true)} disabled={viewingImage}>{viewingPaused?<Play size={14}/>:<Pause size={14}/>} {viewingPaused?"Resume feed":"Pause feed"}</button></>}>
     <div className="ba-stats admin-card" aria-label="Browser worker counts">
       <button onClick={()=>showFleet("registered")}><span>Registered workers</span><strong>{workers?total.toLocaleString():"…"}</strong><small>{workers?.counts.starting?`${workers.counts.starting} starting · `:""}Seen in the last 14 days</small></button>
       {(["active","ready","draining","offline"] as WorkerState[]).map(state=><button key={state} onClick={()=>showFleet("registered",state)}>
@@ -127,8 +131,9 @@ export default function AdminBrowserActivity() {
       {view==="feed"?<>
         <label className="admin-search"><Search size={14}/><input value={query} onChange={event=>{feed.clearPage();setQuery(event.target.value);}} placeholder="Search domain, tenant, keyword, or job…" aria-label="Search activity"/></label>
         <button className="admin-button ba-attention" aria-pressed={attention} onClick={()=>setFilter("attention",attention?"":"true")}><AlertCircle size={14}/>Needs attention</button>
+        <button className="admin-button ba-listing-filter" aria-pressed={listings} onClick={()=>setFilter("listings",listings?"":"true")}>Listing captures</button>
         <label className="ba-select"><span className="sr-only">Activity period</span><select value={hours} onChange={event=>setFilter("hours",event.target.value)}><option value={1}>Last hour</option><option value={24}>Last 24 hours</option><option value={168}>Last 7 days</option></select></label>
-        <button className="admin-icon-button" title={compact?"Show screenshots":"Compact view"} aria-label={compact?"Show screenshots":"Compact view"} aria-pressed={compact} onClick={()=>setCompact(!compact)}>{compact?<Monitor size={15}/>:<List size={15}/>}</button>
+        <button className="admin-icon-button" title={compact?"Show images":"Compact view"} aria-label={compact?"Show images":"Compact view"} aria-pressed={compact} onClick={()=>setCompact(!compact)}>{compact?<Monitor size={15}/>:<List size={15}/>}</button>
       </>:<>
         <label className="ba-select"><span className="sr-only">Fleet type</span><select value={fleetKind} onChange={event=>showFleet(event.target.value as WorkerKind)}><option value="registered">Registered workers</option><option value="on_demand">On-demand tasks</option></select></label>
         <label className="admin-search"><Search size={14}/><input value={fleetQuery} onChange={event=>{setFleetQuery(event.target.value);setWorkerBefore(undefined);setWorkerPages([]);}} placeholder="Find a worker or host…" aria-label="Search workers"/></label>
@@ -138,10 +143,10 @@ export default function AdminBrowserActivity() {
     {workerError && <div className="admin-notice" role="alert">Worker status could not be refreshed.{workers?` Last updated ${time(workers.as_of)}.`:""} <button onClick={()=>setWorkerRevision(value=>value+1)}>Try again</button></div>}
     {worker && view==="feed" && <div className="ba-filter"><Monitor size={14}/>Following <strong title={worker}>{workerName(worker)}</strong><button onClick={()=>setFilter("worker","")} aria-label="Show all workers"><X size={14}/></button></div>}
     {view==="feed"?<div className="ba-layout"><main className="ba-feed" aria-label="Browser job activity">
-      <div className="ba-feed-heading" ref={feedStart}><span>{feed.historical?"Earlier jobs":attention?"Jobs needing attention":"Latest jobs"}</span><span>{feed.asOf?`Updated ${time(feed.asOf)}`:feed.loading?"Loading activity":"No activity snapshot"}</span></div>
+      <div className="ba-feed-heading" ref={feedStart}><span>{feed.historical?"Earlier jobs":attention?"Jobs needing attention":listings?"Listing captures":"Latest jobs"}</span><span>{feed.asOf?`Updated ${time(feed.asOf)}`:feed.loading?"Loading activity":"No activity snapshot"}</span></div>
       {feed.error && <div className="admin-notice" role="alert">{feed.error} <button onClick={feed.refresh}>Try again</button></div>}
-      {(feed.pending>0 || viewingPaused) && <div className="ba-updates" role="status"><span>{inspecting?"Feed paused while you inspect a job.":feed.historical?"Viewing earlier jobs.":scrolled?"Feed paused while you browse earlier activity.":viewingPaused?"Feed paused.":"New activity is ready."} {feed.pending>0?`${feed.pending>500?"Many":feed.pending} updated ${feed.pending===1?"job":"jobs"}.`:""}</span><button onClick={resume} disabled={Boolean(capture)}><ArrowDown size={14}/>{feed.pending>0?"Show updates":"Back to live"}</button></div>}
-      {feed.loading?<div className="admin-card admin-empty"><LoaderCircle className="ba-spin" size={22}/><strong>Loading browser activity</strong></div>:feed.jobs.length===0 && !feed.error?<div className="admin-card admin-empty"><Monitor size={28}/><strong>{attention?"No jobs need attention":"No activity in this view yet"}</strong><p>{worker||query||attention?"Try another worker, search, or time period.":"Browser jobs will appear here when a worker starts them."}</p></div>:feed.jobs.map(job=><JobCard key={job.id} job={job} compact={compact} open={inspecting===job.id} onToggle={()=>setInspecting(inspecting===job.id?null:job.id)} onWorker={chooseWorker} onCapture={setCapture}/>)}
+      {(feed.pending>0 || viewingPaused) && <div className="ba-updates" role="status"><span>{inspecting?"Feed paused while you inspect a job.":feed.historical?"Viewing earlier jobs.":scrolled?"Feed paused while you browse earlier activity.":viewingPaused?"Feed paused.":"New activity is ready."} {feed.pending>0?`${feed.pending>500?"Many":feed.pending} updated ${feed.pending===1?"job":"jobs"}.`:""}</span><button onClick={resume} disabled={viewingImage}><ArrowDown size={14}/>{feed.pending>0?"Show updates":"Back to live"}</button></div>}
+      {feed.loading?<div className="admin-card admin-empty"><LoaderCircle className="ba-spin" size={22}/><strong>Loading browser activity</strong></div>:feed.jobs.length===0 && !feed.error?<div className="admin-card admin-empty"><Monitor size={28}/><strong>{attention?"No jobs need attention":"No activity in this view yet"}</strong><p>{worker||query||attention||listings?"Try another worker, search, or time period.":"Browser jobs will appear here when a worker starts them."}</p></div>:feed.jobs.map(job=><JobCard key={job.id} job={job} compact={compact} open={inspecting===job.id} onToggle={()=>setInspecting(inspecting===job.id?null:job.id)} onWorker={chooseWorker} onCapture={setCapture} onPhoto={setListingPhoto}/>)}
       {!feed.loading && <div className="ba-footer"><span>Page events kept for 7 days. Times are local.</span><div>{feed.historical&&<button className="admin-button" onClick={resume}><ArrowLeft size={13}/>Latest jobs</button>}{feed.next&&<button className="admin-button" onClick={()=>{setInspecting(null);feed.older();window.scrollTo({top:0,behavior:"instant"});}}>Earlier jobs<ChevronRight size={13}/></button>}</div></div>}
     </main><aside className="ba-rail"><div className="ba-rail-title"><h2>Working now</h2><button onClick={()=>showFleet("registered")}>View fleet<ChevronRight size={13}/></button></div>
       {workerError?<div className="ba-muted" role="alert">Worker status is unavailable. <button onClick={()=>setWorkerRevision(value=>value+1)}>Retry</button></div>:!workers||workerLoadedKey!==workerKey?<p className="ba-muted">Loading workers…</p>:workers.workers.length===0?<p className="ba-muted">No registered workers are processing jobs.</p>:workers.workers.slice(0,8).map(item=><WorkerTile key={item.id} worker={item} onSettings={()=>setManaging(item)} selected={item.id===worker} onClick={()=>chooseWorker(item.id)}/>)}
@@ -154,6 +159,7 @@ export default function AdminBrowserActivity() {
     </>}
     {managing&&<WorkerSettings worker={workers?.workers.find(item=>item.id===managing.id) ?? managing} onClose={()=>setManaging(null)} onSaved={()=>setWorkerRevision(value=>value+1)}/>}
     {capture&&<CaptureViewer capture={capture} onClose={()=>setCapture(null)}/>}
+    {listingPhoto&&<ListingPhotoViewer selection={listingPhoto} onClose={()=>setListingPhoto(null)}/>}
   </AdminPage>;
 }
 
@@ -171,7 +177,7 @@ function WorkerTile({worker,selected,onClick,onSettings,showHost=true}: {worker:
   </article>;
 }
 
-function JobCard({job,open,compact,onToggle,onWorker,onCapture}: {job: ActivityJob; open: boolean; compact: boolean; onToggle: ()=>void; onWorker: (id:string)=>void; onCapture: (capture:Capture)=>void}) {
+function JobCard({job,open,compact,onToggle,onWorker,onCapture,onPhoto}: {job: ActivityJob; open: boolean; compact: boolean; onToggle: ()=>void; onWorker: (id:string)=>void; onCapture: (capture:Capture)=>void; onPhoto:(selection:ListingPhotoSelection)=>void}) {
   const url=job.latest_event.url || job.target_url;
   const elapsed=duration(job);
   const status=jobStatus(job);
@@ -183,9 +189,11 @@ function JobCard({job,open,compact,onToggle,onWorker,onCapture}: {job: ActivityJ
     <div className="ba-job-content"><h2>{job.keyword || job.domain || jobType(job.type)}</h2>{url&&<p className="ba-url" title={url}><Globe2 size={12}/>{url}</p>}
       <p className="ba-outcome">{outcome(job)}</p>
       {!compact && job.captures.length>0 && <div className="ba-captures">{job.captures.map(item=><CaptureThumb key={item.id} capture={item} onClick={()=>onCapture(item)}/>)}</div>}
+      {!compact && job.listing_capture && <ListingCapturePreview capture={job.listing_capture} onPhoto={onPhoto}/>}
+      {compact && job.listing_capture && <button className="ba-photo-link" onClick={()=>onPhoto({capture:job.listing_capture!,index:0})}>{job.listing_capture.image_urls.length} product {job.listing_capture.image_urls.length===1?"photo":"photos"} captured<ChevronRight size={13}/></button>}
     </div>
     <footer><span>{elapsed&&<><Clock3 size={12}/><span title="Duration of the latest attempt">{elapsed}</span><span aria-hidden="true">·</span></>}{job.attempts} {job.attempts===1?"attempt":"attempts"}<span className="ba-job-id" title={job.id}>Job {job.id.slice(0,8)}</span></span><button aria-expanded={open} onClick={onToggle}>{open?"Close timeline":"View timeline"}<ChevronRight className={open?"ba-rotate":""} size={14}/></button></footer>
-    {open&&<JobTimeline job={job} onCapture={onCapture}/>}
+    {open&&<JobTimeline job={job} onCapture={onCapture} onPhoto={onPhoto}/>}
   </article>;
 }
 
@@ -198,7 +206,7 @@ function CaptureThumb({capture,onClick}: {capture: Capture; onClick: ()=>void}) 
   </button>;
 }
 
-function JobTimeline({job,onCapture}: {job: ActivityJob; onCapture:(capture:Capture)=>void}) {
+function JobTimeline({job,onCapture,onPhoto}: {job: ActivityJob; onCapture:(capture:Capture)=>void; onPhoto:(selection:ListingPhotoSelection)=>void}) {
   const [history,setHistory]=useState<JobHistory | null>(null),[error,setError]=useState<string | null>(null);
   const [before,setBefore]=useState<string>(),[revision,setRevision]=useState(0);
   useEffect(()=>{
@@ -220,11 +228,12 @@ function JobTimeline({job,onCapture}: {job: ActivityJob; onCapture:(capture:Capt
           <p className="ba-attempt-meta" title={attempt.worker_instance_id ?? ""}>{workerName(attempt.worker_instance_id)} · {fullTime(attempt.started_at)}<span title={`Immutable attempt ${attempt.id}`}>#{attempt.id}</span></p>
           {attempt.error&&<p className="ba-reason">{attempt.error}</p>}
           {captures.length>0&&<div className="ba-captures">{captures.map(item=><CaptureThumb key={item.id} capture={item} onClick={()=>onCapture(item)}/>)}</div>}
+          {history?.listing_capture?.attempt_id===attempt.id&&<ListingCapturePreview capture={history.listing_capture} onPhoto={onPhoto}/>}
           <ol>{events.map(renderEvent)}</ol>{events.length===0&&<p className="ba-muted">No page events in this portion of the retained timeline.</p>}
         </div>;
       })}
       {orphaned.length>0&&<div className="ba-attempt"><h3>Earlier activity</h3><ol>{orphaned.map(renderEvent)}</ol></div>}
-      <div className="ba-timeline-bottom"><small>Page events: 7 days. Captures: 72 hours, or 7 days for failures.</small><div>{before&&<button onClick={()=>setBefore(undefined)}>Latest events</button>}{history?.next_cursor&&<button onClick={()=>setBefore(history.next_cursor!)}>Earlier events<ChevronRight size={12}/></button>}</div></div>
+      <div className="ba-timeline-bottom"><small>Page events: 7 days. Page screenshots: 72 hours, or 7 days for failures.</small><div>{before&&<button onClick={()=>setBefore(undefined)}>Latest events</button>}{history?.next_cursor&&<button onClick={()=>setBefore(history.next_cursor!)}>Earlier events<ChevronRight size={12}/></button>}</div></div>
     </>}
   </section>;
 }

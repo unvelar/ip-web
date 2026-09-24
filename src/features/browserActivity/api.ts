@@ -7,6 +7,10 @@ export type Capture = {
   id: string; job_id: string; attempt_id: string; worker_id: string; occurred_at: string;
   url: string | null; label: string; status: "ready" | "expired" | "uploading"; thumbnail_url: string | null;
 };
+export type ListingCapture = {
+  job_id: string; attempt_id: string; worker_id: string; captured_at: string;
+  page_url: string; title: string | null; image_urls: string[]; text_captured: boolean | null;
+};
 export type ActivityPayload = {
   label?: string | null; url?: string | null; domain?: string | null; kind?: string;
   occurred_at?: string; status?: string; late?: boolean; count?: number | null; capture_id?: string;
@@ -19,6 +23,7 @@ export type ActivityJob = {
   error: string | null; hold_reason: string | null; available_at: string; started_at: string | null;
   completed_at: string | null; last_activity_at: string; cursor: string; latest_event: ActivityPayload;
   result: {candidates: number | null; unavailable: boolean; setup_outcome?: "resolved" | "needs_inference" | "no_recipe" | null}; captures: Capture[];
+  listing_capture?: ListingCapture | null;
 };
 export type ActivityWorker = {
   id: string; hostname: string | null; state: WorkerState; provider: string; pool: string;
@@ -45,8 +50,8 @@ export type ActivityEvent = {
   sequence: number | null; kind: string; occurred_at: string; received_at: string; payload: ActivityPayload;
 };
 export type Attempt = {id: string; attempt_number: number; worker_instance_id: string | null; status: string; error: string | null; started_at: string; completed_at: string | null};
-export type JobHistory = {events: ActivityEvent[]; attempts: Attempt[]; captures: Capture[]; next_cursor: string | null; retained_days: number};
-export type Filters = {worker: string; query: string; attention: boolean; hours: number};
+export type JobHistory = {events: ActivityEvent[]; attempts: Attempt[]; captures: Capture[]; listing_capture?: ListingCapture | null; next_cursor: string | null; retained_days: number};
+export type Filters = {worker: string; query: string; attention: boolean; listings?: boolean; hours: number};
 export type ActivityChange = {cursor: string; job_ids: string[]; reset: boolean};
 
 const root = "/api/admin/browser-activity";
