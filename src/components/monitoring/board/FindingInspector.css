@@ -204,12 +204,12 @@
 }
 .finding-inspector-footer .finding-action-buttons button:not(:disabled):active { transform: scale(.97); }
 .finding-inspector-footer .finding-action-buttons .recommended-action {
-  background: #292524;
+  background: #2563eb;
   color: #fff;
-  box-shadow: 0 1px 2px #29252420, inset 0 1px 0 #ffffff18;
+  box-shadow: 0 0 0 2px #2563eb20, inset 0 1px 0 #ffffff18;
   animation: none;
 }
-.finding-inspector-footer .finding-action-buttons .recommended-action:hover { background: #44403c; }
+.finding-inspector-footer .finding-action-buttons .recommended-action:hover { background: #1d4ed8; }
 
 .finding-action-popover { position: relative; }
 .finding-action-popover > button { display: inline-flex; align-items: center; gap: 8px; }
@@ -247,7 +247,7 @@
 .finding-action-options > div { display: flex; flex-direction: column; width: 100%; }
 .finding-action-popover:last-child .finding-action-options { left: auto; right: 0; transform-origin: bottom right; }
 .finding-inspector-footer .finding-action-options button:hover { background: #f5f5f4; }
-.finding-inspector-footer .finding-action-options button.recommended-action:hover { background: #44403c; }
+.finding-inspector-footer .finding-action-options button.recommended-action:hover { background: #1d4ed8; }
 @keyframes finding-action-options-arrive {
   from { opacity: 0; transform: translateY(4px) scale(.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
