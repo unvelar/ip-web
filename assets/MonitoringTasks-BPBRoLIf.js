@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-BNXgjE-j.js";import{MonitoringInboxView as t}from"./Findings-Cl0BpJeG.js";var n=e();function r(){return(0,n.jsx)(`div`,{className:`monitoring-task-page`,children:(0,n.jsx)(t,{})})}export{r as default};
