@@ -6,6 +6,10 @@ body:has(.ba-stats) { min-width:0; }
 .ba-stats span { display:flex; align-items:center; gap:7px; color:#78716c; font-size:11px; }
 .ba-stats strong { font-size:27px; font-weight:550; letter-spacing:-1px; margin:3px 0; }
 .ba-stats small { font-size:10px; color:#a8a29e; }
+.ba-on-demand { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:0 2px; color:#78716c; font-size:11px; }
+.ba-on-demand > div { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.ba-on-demand strong { font-weight:500; color:#57534e; }
+.ba-provider { padding:3px 7px; border-radius:5px; background:#f0eeeb; font-size:10px; }
 .ba-dot, .ba-connection i { width:6px; height:6px; border-radius:50%; display:inline-block; flex-shrink:0; background:#a8a29e; }
 .ba-dot[data-state=active], .ba-connection[data-state=live] i { background:#388b70; }
 .ba-dot[data-state=ready] { background:#7eaa92; }

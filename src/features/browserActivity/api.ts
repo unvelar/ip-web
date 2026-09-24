@@ -1,6 +1,7 @@
 import { API, ApiError, authHeaders, request } from "../../api/transport";
 
 export type WorkerState = "active" | "ready" | "offline" | "draining" | "starting";
+export type WorkerKind = "registered" | "on_demand";
 export type JobState = "running" | "unknown" | "succeeded" | "failed" | "cancelled" | "held" | "retry_scheduled" | "queued";
 export type Capture = {
   id: string; job_id: string; attempt_id: string; worker_id: string; occurred_at: string;
@@ -21,11 +22,15 @@ export type ActivityJob = {
 };
 export type ActivityWorker = {
   id: string; hostname: string | null; state: WorkerState; provider: string; pool: string;
+  kind: WorkerKind; scrape_provider: string | null;
   last_heartbeat_at: string | null; current_job_id: string | null; job_type: string | null;
   domain: string | null; current_action: string | null; activity_version: string | null;
 };
 export type JobSnapshot = {jobs: ActivityJob[]; cursor: string; next_cursor: string | null; as_of: string};
-export type WorkerSnapshot = {workers: ActivityWorker[]; counts: Partial<Record<WorkerState,number>>; next_cursor: string | null; as_of: string};
+export type WorkerSnapshot = {
+  workers: ActivityWorker[]; counts: Partial<Record<WorkerState,number>>; next_cursor: string | null; as_of: string;
+  on_demand: {total: number; providers: {provider: string; total: number; counts: Partial<Record<WorkerState,number>>}[]};
+};
 export type ActivityEvent = {
   cursor: string; event_id: string; attempt_id: string | null; worker_id: string | null;
   sequence: number | null; kind: string; occurred_at: string; received_at: string; payload: ActivityPayload;
@@ -43,8 +48,8 @@ function params(values: Record<string,string | number | boolean | undefined>) {
 }
 export const getJobs = (filters: Filters, options: {before?: string; ids?: string[]; signal?: AbortSignal} = {}) =>
   request<JobSnapshot>(`${root}/jobs?${params({...filters,before:options.before,ids:options.ids?.join(","),limit:60})}`,{signal:options.signal});
-export const getWorkers = (query="", state="", before?: string, signal?: AbortSignal) =>
-  request<WorkerSnapshot>(`${root}/workers?${params({query,state,before,limit:48})}`,{signal});
+export const getWorkers = (query="", state="", before?: string, signal?: AbortSignal, kind: WorkerKind="registered") =>
+  request<WorkerSnapshot>(`${root}/workers?${params({query,state,before,kind,limit:48})}`,{signal});
 export const getHistory = (id: string, before?: string, signal?: AbortSignal) =>
   request<JobHistory>(`${root}/jobs/${id}?${params({before})}`,{signal});
 export const getCapture = (id: string, signal?: AbortSignal) => request<{url:string}>(`${root}/captures/${id}`,{signal});

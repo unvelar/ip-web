@@ -4,7 +4,7 @@ import { AlertCircle, ArrowDown, ArrowLeft, Check, ChevronRight, Clock3, Globe2,
 import { AdminPage } from "../components/admin/AdminPage";
 import { ADMIN_JOB_COPY } from "../features/adminMonitoring/monitoringJobs";
 import { useBrowserActivity } from "../features/browserActivity/useBrowserActivity";
-import { getCapture, getHistory, getWorkers, type ActivityEvent, type ActivityJob, type ActivityWorker, type Capture, type JobHistory, type JobState, type WorkerSnapshot, type WorkerState } from "../features/browserActivity/api";
+import { getCapture, getHistory, getWorkers, type ActivityEvent, type ActivityJob, type ActivityWorker, type Capture, type JobHistory, type JobState, type WorkerKind, type WorkerSnapshot, type WorkerState } from "../features/browserActivity/api";
 import "../features/browserActivity/browserActivity.css";
 
 const STATES: Record<JobState,string> = {running:"Running",unknown:"Outcome unknown",succeeded:"Succeeded",failed:"Failed",cancelled:"Cancelled",held:"On hold",retry_scheduled:"Retry scheduled",queued:"Queued"};
@@ -15,6 +15,7 @@ function jobType(type: string) {return ADMIN_JOB_COPY[type]?.label ?? EXTRA_TYPE
 function time(value: string | null | undefined) {return value?new Date(value).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"No timestamp";}
 function fullTime(value: string) {return new Date(value).toLocaleString();}
 function workerName(id: string | null) {return !id?"Worker unassigned":id.length>36?`${id.slice(0,16)}…${id.slice(-12)}`:id;}
+function providerName(provider: string | null) {return provider==="scrapedo"?"Scrape.do":provider==="scrapfly"?"Scrapfly":provider || "Managed scraping";}
 function duration(job: ActivityJob) {
   if(!job.started_at) return null;
   const seconds=Math.max(0,Math.floor(((job.completed_at?Date.parse(job.completed_at):Date.now())-Date.parse(job.started_at))/1000));
@@ -53,11 +54,12 @@ export default function AdminBrowserActivity() {
   const [workerError,setWorkerError]=useState<string | null>(null);
   const [fleetQuery,setFleetQuery]=useState("");
   const [fleetState,setFleetState]=useState("");
+  const [fleetKind,setFleetKind]=useState<WorkerKind>("registered");
   const [workerBefore,setWorkerBefore]=useState<string>();
   const [workerPages,setWorkerPages]=useState<(string | undefined)[]>([]);
   const [workerRevision,setWorkerRevision]=useState(0);
   const [workerLoadedKey,setWorkerLoadedKey]=useState("");
-  const workerKey=JSON.stringify([view,fleetQuery,fleetState,workerBefore]);
+  const workerKey=JSON.stringify([view,fleetKind,fleetQuery,fleetState,workerBefore]);
   const worker=params.get("worker") ?? "", attention=params.get("attention")==="true";
   const hours=[1,24,168].includes(Number(params.get("hours")))?Number(params.get("hours")):24;
   const feed=useBrowserActivity({worker,attention,hours,query:params.get("q") ?? ""},paused || scrolled || Boolean(inspecting) || Boolean(capture) || view==="fleet");
@@ -79,28 +81,34 @@ export default function AdminBrowserActivity() {
     const controller=new AbortController();let running=false;
     const load=async()=>{
       if(running)return;running=true;
-      try {const result=await getWorkers(view==="fleet"?fleetQuery:"",view==="fleet"?fleetState:"active",view==="fleet"?workerBefore:undefined,controller.signal);if(!controller.signal.aborted){setWorkers(result);setWorkerError(null);setWorkerLoadedKey(workerKey);}}
+      try {const result=await getWorkers(view==="fleet"?fleetQuery:"",view==="fleet"?fleetState:"active",view==="fleet"?workerBefore:undefined,controller.signal,view==="fleet"?fleetKind:"registered");if(!controller.signal.aborted){setWorkers(result);setWorkerError(null);setWorkerLoadedKey(workerKey);}}
       catch(error){if(!controller.signal.aborted)setWorkerError(error instanceof Error?error.message:"Workers could not be loaded");}
       finally {running=false;}
     };
     const initial=window.setTimeout(()=>void load(),250),timer=window.setInterval(()=>void load(),15_000);
     return ()=>{controller.abort();window.clearTimeout(initial);window.clearInterval(timer);};
-  },[fleetQuery,fleetState,workerBefore,workerRevision,view,workerKey]);
+  },[fleetKind,fleetQuery,fleetState,workerBefore,workerRevision,view,workerKey]);
+  const showFleet=(kind: WorkerKind,state="")=>{setView("fleet");setFleetKind(kind);setFleetQuery("");setFleetState(state);setWorkerBefore(undefined);setWorkerPages([]);};
   const chooseWorker=(id: string)=>{setFilter("worker",id);setView("feed");setScrolled(false);window.scrollTo({top:0,behavior:"instant"});};
   const resume=()=>{setPaused(false);setScrolled(false);setInspecting(null);feed.refresh();window.scrollTo({top:0,behavior:"instant"});};
   const total=Object.values(workers?.counts ?? {}).reduce((sum,count)=>sum+(count ?? 0),0);
   const machines=new Map<string,ActivityWorker[]>();
-  for(const item of workers?.workers ?? []) {const host=item.hostname || item.id;machines.set(host,[...(machines.get(host) ?? []),item]);}
+  for(const item of workers?.workers ?? []) {const host=item.kind==="on_demand"?providerName(item.scrape_provider):item.hostname || item.id;machines.set(host,[...(machines.get(host) ?? []),item]);}
   const viewingPaused=paused || scrolled || Boolean(inspecting) || Boolean(capture) || feed.historical;
 
   return <AdminPage section="browser-activity" title="Browser activity" description="A live view of the pages, captures, and outcomes across your browser workers." wide
     actions={<><span className="ba-connection" data-state={feed.connection} role="status"><i />{feed.connection==="live"?"Connected":feed.connection==="connecting"?"Connecting":feed.connection==="reconnecting"?"Reconnecting":"Disconnected"}</span>
       <button className="admin-button" onClick={()=>viewingPaused?resume():setPaused(true)} disabled={Boolean(capture)}>{viewingPaused?<Play size={14}/>:<Pause size={14}/>} {viewingPaused?"Resume feed":"Pause feed"}</button></>}>
     <div className="ba-stats admin-card" aria-label="Browser worker counts">
-      <div><span>Workers seen in 14 days</span><strong>{workers?total.toLocaleString():"…"}</strong><small>{workers?.counts.starting?`${workers.counts.starting} starting · `:""}Updated every 15 seconds</small></div>
-      {(["active","ready","draining","offline"] as WorkerState[]).map(state=><button key={state} onClick={()=>{setView("fleet");setFleetState(state);setWorkerBefore(undefined);setWorkerPages([]);}}>
+      <button onClick={()=>showFleet("registered")}><span>Registered workers</span><strong>{workers?total.toLocaleString():"…"}</strong><small>{workers?.counts.starting?`${workers.counts.starting} starting · `:""}Seen in the last 14 days</small></button>
+      {(["active","ready","draining","offline"] as WorkerState[]).map(state=><button key={state} onClick={()=>showFleet("registered",state)}>
         <span><i className="ba-dot" data-state={state}/>{WORKERS[state]}</span><strong>{workers?(workers.counts[state] ?? 0).toLocaleString():"…"}</strong><small>{state==="active"?"Jobs in progress":state==="ready"?"Available for work":state==="draining"?"Finishing current work":"Heartbeat missing"}</small>
       </button>)}
+    </div>
+    <div className="ba-on-demand" aria-label="On-demand scraping capacity">
+      <div><strong>On-demand scraping</strong><span>{workers?.on_demand?workers.on_demand.total===0?"No tasks running":`${workers.on_demand.total} active ${workers.on_demand.total===1?"task":"tasks"}`:"Loading capacity…"}</span>
+        {workers?.on_demand?.providers.map(provider=><span className="ba-provider" key={provider.provider}>{providerName(provider.provider)} · {provider.total}</span>)}</div>
+      <button className="admin-button" onClick={()=>showFleet("on_demand")}>View tasks<ChevronRight size={13}/></button>
     </div>
     <div className="ba-toolbar">
       <div className="ba-segment" aria-label="Activity view"><button aria-pressed={view==="feed"} onClick={()=>setView("feed")}><List size={14}/>Feed</button><button aria-pressed={view==="fleet"} onClick={()=>setView("fleet")}><LayoutGrid size={14}/>Fleet</button></div>
@@ -110,8 +118,9 @@ export default function AdminBrowserActivity() {
         <label className="ba-select"><span className="sr-only">Activity period</span><select value={hours} onChange={event=>setFilter("hours",event.target.value)}><option value={1}>Last hour</option><option value={24}>Last 24 hours</option><option value={168}>Last 7 days</option></select></label>
         <button className="admin-icon-button" title={compact?"Show screenshots":"Compact view"} aria-label={compact?"Show screenshots":"Compact view"} aria-pressed={compact} onClick={()=>setCompact(!compact)}>{compact?<Monitor size={15}/>:<List size={15}/>}</button>
       </>:<>
+        <label className="ba-select"><span className="sr-only">Fleet type</span><select value={fleetKind} onChange={event=>showFleet(event.target.value as WorkerKind)}><option value="registered">Registered workers</option><option value="on_demand">On-demand tasks</option></select></label>
         <label className="admin-search"><Search size={14}/><input value={fleetQuery} onChange={event=>{setFleetQuery(event.target.value);setWorkerBefore(undefined);setWorkerPages([]);}} placeholder="Find a worker or host…" aria-label="Search workers"/></label>
-        <label className="ba-select"><span className="sr-only">Worker state</span><select value={fleetState} onChange={event=>{setFleetState(event.target.value);setWorkerBefore(undefined);setWorkerPages([]);}}><option value="">All states</option>{Object.entries(WORKERS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="ba-select"><span className="sr-only">Worker state</span><select value={fleetState} onChange={event=>{setFleetState(event.target.value);setWorkerBefore(undefined);setWorkerPages([]);}}><option value="">All states</option>{Object.entries(WORKERS).filter(([value])=>fleetKind==="registered"||value!=="offline").map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       </>}
     </div>
     {workerError && <div className="admin-notice" role="alert">Worker status could not be refreshed.{workers?` Last updated ${time(workers.as_of)}.`:""} <button onClick={()=>setWorkerRevision(value=>value+1)}>Try again</button></div>}
@@ -122,13 +131,14 @@ export default function AdminBrowserActivity() {
       {(feed.pending>0 || viewingPaused) && <div className="ba-updates" role="status"><span>{inspecting?"Feed paused while you inspect a job.":feed.historical?"Viewing earlier jobs.":scrolled?"Feed paused while you browse earlier activity.":viewingPaused?"Feed paused.":"New activity is ready."} {feed.pending>0?`${feed.pending>500?"Many":feed.pending} updated ${feed.pending===1?"job":"jobs"}.`:""}</span><button onClick={resume} disabled={Boolean(capture)}><ArrowDown size={14}/>{feed.pending>0?"Show updates":"Back to live"}</button></div>}
       {feed.loading?<div className="admin-card admin-empty"><LoaderCircle className="ba-spin" size={22}/><strong>Loading browser activity</strong></div>:feed.jobs.length===0 && !feed.error?<div className="admin-card admin-empty"><Monitor size={28}/><strong>{attention?"No jobs need attention":"No activity in this view yet"}</strong><p>{worker||query||attention?"Try another worker, search, or time period.":"Browser jobs will appear here when a worker starts them."}</p></div>:feed.jobs.map(job=><JobCard key={job.id} job={job} compact={compact} open={inspecting===job.id} onToggle={()=>setInspecting(inspecting===job.id?null:job.id)} onWorker={chooseWorker} onCapture={setCapture}/>)}
       {!feed.loading && <div className="ba-footer"><span>Page events kept for 7 days. Times are local.</span><div>{feed.historical&&<button className="admin-button" onClick={resume}><ArrowLeft size={13}/>Latest jobs</button>}{feed.next&&<button className="admin-button" onClick={()=>{setInspecting(null);feed.older();window.scrollTo({top:0,behavior:"instant"});}}>Earlier jobs<ChevronRight size={13}/></button>}</div></div>}
-    </main><aside className="ba-rail"><div className="ba-rail-title"><h2>Working now</h2><button onClick={()=>{setView("fleet");setFleetQuery("");setFleetState("");setWorkerBefore(undefined);setWorkerPages([]);}}>View fleet<ChevronRight size={13}/></button></div>
-      {workerError?<div className="ba-muted" role="alert">Worker status is unavailable. <button onClick={()=>setWorkerRevision(value=>value+1)}>Retry</button></div>:!workers||workerLoadedKey!==workerKey?<p className="ba-muted">Loading workers…</p>:workers.workers.length===0?<p className="ba-muted">No workers are processing jobs.</p>:workers.workers.slice(0,8).map(item=><WorkerTile key={item.id} worker={item} selected={item.id===worker} onClick={()=>chooseWorker(item.id)}/>)}
+    </main><aside className="ba-rail"><div className="ba-rail-title"><h2>Working now</h2><button onClick={()=>showFleet("registered")}>View fleet<ChevronRight size={13}/></button></div>
+      {workerError?<div className="ba-muted" role="alert">Worker status is unavailable. <button onClick={()=>setWorkerRevision(value=>value+1)}>Retry</button></div>:!workers||workerLoadedKey!==workerKey?<p className="ba-muted">Loading workers…</p>:workers.workers.length===0?<p className="ba-muted">No registered workers are processing jobs.</p>:workers.workers.slice(0,8).map(item=><WorkerTile key={item.id} worker={item} selected={item.id===worker} onClick={()=>chooseWorker(item.id)}/>)}
       <p className="ba-rail-note">One card follows each job through every attempt. Open a card to see page visits, captures, and failure reasons.</p>
     </aside></div>:<>
-      <div className="ba-fleet" aria-busy={workerLoadedKey!==workerKey}>{[...machines].map(([host,slots])=>slots.length===1?<WorkerTile key={host} worker={slots[0]} onClick={()=>chooseWorker(slots[0].id)}/>:<section className="ba-machine" key={host}><h2>{host}<small>{slots.length} workers on this page</small></h2><div className="ba-machine-grid">{slots.map(item=><WorkerTile key={item.id} worker={item} showHost={false} onClick={()=>chooseWorker(item.id)}/>)}</div></section>)}</div>
-      {workers?.workers.length===0 && <div className="admin-empty admin-card"><Monitor size={26}/><strong>No workers match this view</strong></div>}
-      <div className="ba-footer"><span>{workers?.workers.length ?? 0} workers on this page · {total} seen in 14 days</span><div><button className="admin-button" disabled={!workerPages.length || workerLoadedKey!==workerKey} onClick={()=>{setWorkerBefore(workerPages.at(-1));setWorkerPages(pages=>pages.slice(0,-1));}}><ArrowLeft size={13}/>Previous</button><button className="admin-button" disabled={!workers?.next_cursor || workerLoadedKey!==workerKey} onClick={()=>{if(workers?.next_cursor){setWorkerPages(pages=>[...pages,workerBefore]);setWorkerBefore(workers.next_cursor);}}}>Next<ChevronRight size={13}/></button></div></div>
+      {fleetKind==="on_demand"&&<p className="ba-muted">Tasks start as needed and leave this view when they finish. Their jobs and outcomes stay in the feed.</p>}
+      <div className="ba-fleet" aria-busy={workerLoadedKey!==workerKey}>{[...machines].map(([host,slots])=>slots.length===1?<WorkerTile key={host} worker={slots[0]} onClick={()=>chooseWorker(slots[0].id)}/>:<section className="ba-machine" key={host}><h2>{host}<small>{slots.length} {fleetKind==="on_demand"?"tasks":"workers"} on this page</small></h2><div className="ba-machine-grid">{slots.map(item=><WorkerTile key={item.id} worker={item} showHost={false} onClick={()=>chooseWorker(item.id)}/>)}</div></section>)}</div>
+      {workers?.workers.length===0 && workerLoadedKey===workerKey && <div className="admin-empty admin-card"><Monitor size={26}/><strong>{fleetKind==="on_demand"?"No on-demand tasks match this view":"No workers match this view"}</strong></div>}
+      <div className="ba-footer"><span>{workers?.workers.length ?? 0} {fleetKind==="on_demand"?"tasks":"workers"} on this page · {fleetKind==="on_demand"?`${workers?.on_demand?.total ?? 0} active tasks`:`${total} registered workers seen in 14 days`} · Updated every 15 seconds</span><div><button className="admin-button" disabled={!workerPages.length || workerLoadedKey!==workerKey} onClick={()=>{setWorkerBefore(workerPages.at(-1));setWorkerPages(pages=>pages.slice(0,-1));}}><ArrowLeft size={13}/>Previous</button><button className="admin-button" disabled={!workers?.next_cursor || workerLoadedKey!==workerKey} onClick={()=>{if(workers?.next_cursor){setWorkerPages(pages=>[...pages,workerBefore]);setWorkerBefore(workers.next_cursor);}}}>Next<ChevronRight size={13}/></button></div></div>
     </>}
     {capture&&<CaptureViewer capture={capture} onClose={()=>setCapture(null)}/>}
   </AdminPage>;
@@ -136,12 +146,12 @@ export default function AdminBrowserActivity() {
 
 function WorkerTile({worker,selected,onClick,showHost=true}: {worker: ActivityWorker; selected?: boolean; onClick: ()=>void; showHost?: boolean}) {
   return <button className={`ba-worker${selected?" is-selected":""}`} onClick={onClick}>
-    <div className="ba-worker-top"><span className="ba-worker-icon"><Monitor size={17}/></span><strong title={worker.id}>{workerName(worker.id)}</strong><i className="ba-dot" data-state={worker.state}/></div>
-    {showHost&&worker.hostname&&worker.hostname!==worker.id&&<small className="ba-worker-host" title={worker.hostname}>{worker.hostname}</small>}
-    <div className="ba-worker-state"><span>{WORKERS[worker.state]}</span><small>{worker.pool || worker.provider}</small></div>
+    <div className="ba-worker-top"><span className="ba-worker-icon"><Monitor size={17}/></span><strong title={worker.id}>{worker.kind==="on_demand"?`${providerName(worker.scrape_provider)} task`:workerName(worker.id)}</strong><i className="ba-dot" data-state={worker.state}/></div>
+    {worker.kind!=="on_demand"&&showHost&&worker.hostname&&worker.hostname!==worker.id&&<small className="ba-worker-host" title={worker.hostname}>{worker.hostname}</small>}
+    <div className="ba-worker-state"><span>{WORKERS[worker.state]}</span><small>{worker.kind==="on_demand"?worker.current_job_id?`Job ${worker.current_job_id.slice(0,8)}`:"Awaiting job":worker.pool || worker.provider}</small></div>
     <p>{worker.state==="offline"?`Last heartbeat ${worker.last_heartbeat_at?fullTime(worker.last_heartbeat_at):"unavailable"}`:worker.domain || (worker.job_type?jobType(worker.job_type):"Waiting for a job")}</p>
     {!worker.activity_version&&<small className="ba-muted">Page activity requires a worker update</small>}
-    <span className="ba-worker-link">Follow worker<ChevronRight size={12}/></span>
+    <span className="ba-worker-link">{worker.kind==="on_demand"?"View task activity":"Follow worker"}<ChevronRight size={12}/></span>
   </button>;
 }
 
