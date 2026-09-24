@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-BSTOboPp.js";import{MonitoringInboxView as t}from"./Findings-DzPKyAPN.js";var n=e();function r(){return(0,n.jsx)(`div`,{className:`monitoring-task-page`,children:(0,n.jsx)(t,{})})}export{r as default};
