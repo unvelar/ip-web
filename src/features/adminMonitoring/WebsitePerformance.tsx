@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useState } from "react";
-import { AlertCircle, ChevronDown, ChevronRight, LoaderCircle, Search } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronRight, ExternalLink, LoaderCircle, Search } from "lucide-react";
 import { getAdminMonitoringRun, type AdminMonitoringRunDetail } from "../../api/admin";
 import { getWebsiteDiscovery, getWebsiteDiscoveryRuns, type WebsiteDiscoveryList,
   type WebsiteDiscoveryRun, type WebsiteDiscoveryRuns } from "../../api/websiteDiscovery";
 import { AdminMonitoringRunDetailPanel } from "./AdminMonitoringRunDetail";
 import { CoverageBadge } from "./DiscoveryRunEvidence";
+import { recordedSearchUrl } from "./discoveryUrls";
 import "./WebsitePerformance.css";
 
 const number = (value: number | null | undefined) => value == null ? "Unknown" : value.toLocaleString();
@@ -100,7 +101,9 @@ function WebsiteRuns({ domain, windowHours, asOf, query }: { domain: string; win
         <tr className={selected === run.run_id ? "is-selected" : ""}>
           <th scope="row"><button type="button" aria-expanded={selected === run.run_id} onClick={() => setSelected(selected === run.run_id ? null : run.run_id)}>
             {selected === run.run_id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{run.keyword}
-          </button><span className="discovery-run-context">{run.ip_name ?? "IP unavailable"} · {run.tenant_name}</span><span className="discovery-run-context">{run.status}{run.country ? ` · Configured country: ${run.country.toUpperCase()}` : ""}</span></th>
+          </button><span className="discovery-run-context">{run.ip_name ?? "IP unavailable"} · {run.tenant_name}</span><span className="discovery-run-context">{run.status}{run.country ? ` · Configured country: ${run.country.toUpperCase()}` : ""}</span>
+            <SearchLink evidence={run.discovery} />
+          </th>
           <td><CoverageBadge coverage={run.discovery.coverage} active={["pending", "in_progress"].includes(run.scrape_status ?? "")} /></td>
           <td>{number(run.discovery.listings?.found ?? run.discovery.coverage?.unique_listings)}<YieldComparison run={run} previous={data.runs.slice(index + 1)} /></td>
           <td>{number(run.discovery.listings?.admitted)}</td><td>{number(run.stored)}</td><td>{number(run.evaluated)}</td><td>{number(run.findings)}</td>
@@ -127,6 +130,11 @@ export function YieldComparison({ run, previous }: { run: WebsiteDiscoveryRun; p
   return <span className={`discovery-comparison${dropped ? " discovery-caution" : ""}`} title="Compared with the prior complete search on this page using the same keyword, source and extraction recipe. Inventory changes can also change yield.">
     {dropped ? "Yield drop · " : ""}{number(count)} previously
   </span>;
+}
+
+function SearchLink({ evidence }: { evidence: WebsiteDiscoveryRun["discovery"] }) {
+  const url = recordedSearchUrl(evidence);
+  return url ? <a className="discovery-run-search-link" href={url} target="_blank" rel="noreferrer" title={url}>Open search <ExternalLink size={11} aria-hidden="true" /></a> : null;
 }
 
 function RunDetails({ id, refreshAt }: { id: string; refreshAt: string }) {

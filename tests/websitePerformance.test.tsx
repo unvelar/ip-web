@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { discoveryFixture, websitesFixture, runsFixture, runDetailFixture } from "./fixtures/websiteDiscovery";
 import { CoverageBadge, DiscoveryRunEvidence } from "../src/features/adminMonitoring/DiscoveryRunEvidence";
 import { WebsitePerformance, YieldComparison } from "../src/features/adminMonitoring/WebsitePerformance";
+import { recordedSearchLinks, recordedSearchUrl } from "../src/features/adminMonitoring/discoveryUrls";
 
 const happy = new Window({ url: "http://localhost:5173" });
 Object.assign(globalThis, { window: happy, document: happy.document, navigator: happy.navigator,
@@ -29,6 +30,24 @@ test("yield comparisons require complete searches with the same source, keyword 
   expect(renderToStaticMarkup(<YieldComparison run={current} previous={[prior]} />)).toContain("Yield drop");
   expect(renderToStaticMarkup(<YieldComparison run={runsFixture.runs[0]} previous={[prior]} />)).toBe("");
   expect(renderToStaticMarkup(<YieldComparison run={current} previous={[{ ...prior, keyword: "different" }]} />)).toBe("");
+});
+
+test("zero-result searches expose exact recorded URLs without presenting unvisited continuations as visited", () => {
+  const search = 'https://shop.example/search?q=face%20cream&filter=used';
+  const evidence = { ...discoveryFixture, listings: { found: 0, admitted: 0, filtered: 0, unverified: 0 }, pages: [], items: [],
+    coverage: { ...discoveryFixture.coverage!, search_url: search, last_requested_url: search + '&page=2',
+      last_visited_url: search + '&page=1', unique_listings: 0, pages: 0 } };
+  const links = recordedSearchLinks(evidence);
+  expect(recordedSearchUrl(evidence)).toBe(search);
+  expect(links.find(link => link.url.endsWith('page=2'))?.visited).toBe(false);
+  expect(links.find(link => link.url.endsWith('page=1'))?.visited).toBe(true);
+  const html = renderToStaticMarkup(<DiscoveryRunEvidence evidence={evidence} />);
+  expect(html).toContain('q=face%20cream&amp;filter=used');
+  expect(html).toContain('target="_blank"');
+  expect(html).toContain('Last visited page');
+  expect(recordedSearchLinks({ ...evidence, coverage: null }, ['javascript:alert(1)', 'https://shop.example/?q=%5Bredacted%5D'])).toEqual([]);
+  expect(renderToStaticMarkup(<DiscoveryRunEvidence evidence={undefined} />)).toContain('No search URL was recorded');
+  expect(recordedSearchLinks(discoveryFixture)[0].visited).toBe(true);
 });
 
 test("website to keyword to rejected-listing evidence is navigable without triggering work", async () => {

@@ -13,6 +13,7 @@ export interface DiscoveryEvidence {
     version: 1; status: "complete" | "partial"; stop_reason: string; pages: number;
     unique_listings: number; missing_cards: number; resume_url: string | null;
     recipe_digest: string; last_page?: DiscoveryPage;
+    search_url?: string; last_requested_url?: string; last_visited_url?: string;
   } | null;
   screening: {
     policy_version: string; harvested: number; admitted: number; rejected: number; inspected: number;
@@ -79,6 +80,7 @@ export function isDiscoveryEvidence(value: unknown): value is DiscoveryEvidence 
     || !["complete", "partial"].includes(String(coverage.status)) || !isText(coverage.stop_reason)
     || !hasCounts(coverage, ["pages", "unique_listings", "missing_cards"])
     || !isNullableText(coverage.resume_url) || !isText(coverage.recipe_digest)
+    || !["search_url", "last_requested_url", "last_visited_url"].every(key => coverage[key] === undefined || isText(coverage[key]))
     || (coverage.last_page !== undefined && !isPage(coverage.last_page)))) return false;
   if (screening !== null && (!isRecord(screening) || !isText(screening.policy_version)
     || !hasCounts(screening, ["harvested", "admitted", "rejected", "inspected"])

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertCircle, ExternalLink, Image as ImageIcon, Search } from "lucide-react";
 import type { DiscoveryEvidence, DiscoveryPage } from "../../api/websiteDiscovery";
+import { recordedSearchLinks } from "./discoveryUrls";
 import "./WebsitePerformance.css";
 
 const number = (value: number | null | undefined) => value == null ? "Unknown" : value.toLocaleString();
@@ -44,7 +45,7 @@ export function CoverageBadge({ coverage, active = false }: { coverage: Discover
   </span>;
 }
 
-export function DiscoveryRunEvidence({ evidence, active = false }: { evidence: DiscoveryEvidence | undefined; active?: boolean }) {
+export function DiscoveryRunEvidence({ evidence, active = false, pageUrls = [] }: { evidence: DiscoveryEvidence | undefined; active?: boolean; pageUrls?: string[] }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(30);
@@ -57,6 +58,7 @@ export function DiscoveryRunEvidence({ evidence, active = false }: { evidence: D
     return [...counts].sort((a, b) => b[1] - a[1]);
   }, [evidence?.items]);
   const coverage = evidence?.coverage;
+  const searchLinks = recordedSearchLinks(evidence, pageUrls);
   const listings = evidence?.listings;
   const lastPage = coverage?.last_page;
   const pages = evidence?.pages ?? [];
@@ -81,6 +83,17 @@ export function DiscoveryRunEvidence({ evidence, active = false }: { evidence: D
       <Fact label="Filtered out" value={listings?.filtered} />
       <Fact label="Unverified" value={listings?.unverified} warning={(listings?.unverified ?? 0) > 0} />
       <Fact label="Descriptions checked" value={evidence?.screening?.inspected} />
+    </div>
+    <div className="discovery-search-pages" aria-label="Recorded search URLs">
+      <h4>Search pages</h4>
+      {searchLinks.length > 0 ? <>
+        <p>Open the recorded URL to compare the website's results with this run. The website may have changed since the search.</p>
+        {searchLinks.map(link => <div className="discovery-search-page" key={link.url}>
+          <span>{link.label} · {link.visited ? "Visited" : "Requested"}</span>
+          <Url href={link.url}>{link.url}</Url>
+        </div>)}
+        <p>Some websites keep searches on the same URL. If no search appears, enter this run's keyword on the website.</p>
+      </> : <p>No search URL was recorded for this run.</p>}
     </div>
     {!listings && evidence?.screening && <p className="discovery-note">The historical audit records {number(evidence.screening.harvested)} extractor candidates and {number(evidence.screening.admitted)} admissions. Unique listing totals cannot be reconstructed from these counters.</p>}
     {(listings?.unverified ?? 0) > 0 && <p className="discovery-warning">Unverified listings were not admitted to matching. Missing description evidence is not proof that a listing is irrelevant.</p>}

@@ -156,7 +156,7 @@ export function AdminMonitoringRunDetailPanel({
         <RunFact label="Live detail" value={refreshing ? "Refreshing now" : `Updated ${formatRelative(detail.generated_at)}`} live />
       </div>
 
-      <DiscoveryRunEvidence evidence={detail.discovery} active={detail.jobs.some(job => job.type === "monitor_scrape" && ["pending", "in_progress"].includes(job.status))} />
+      <DiscoveryRunEvidence evidence={detail.discovery} pageUrls={detail.pages.flatMap(page => page.url ? [page.url] : [])} active={detail.jobs.some(job => job.type === "monitor_scrape" && ["pending", "in_progress"].includes(job.status))} />
 
       {detail.jobs.some((job) => supportsScrapeMethod(job.type)) && (
         <section className="border-b border-stone-200 px-4 py-4">
