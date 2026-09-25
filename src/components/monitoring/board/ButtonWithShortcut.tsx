@@ -18,15 +18,18 @@ export function ButtonWithShortcut({
   label,
   shortcut,
   dark = false,
+  leadingIcon,
 }: {
   label: string;
   shortcut: string;
   dark?: boolean;
+  leadingIcon?: ReactNode;
 }) {
   return (
     <span className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
-      <ShortcutKey value={shortcut} dark={dark} />
+      {leadingIcon ? <><span className="sr-only">{shortcut}</span>{leadingIcon}</> : <ShortcutKey value={shortcut} dark={dark} />}
       <span>{label}</span>
     </span>
   );
 }
+import type { ReactNode } from "react";

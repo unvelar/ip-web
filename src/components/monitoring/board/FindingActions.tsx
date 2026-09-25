@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Sparkles } from "lucide-react";
 import { ComposeModal, ConfirmSendModal } from "../../TakedownPanel";
 import {
   addIpLicense,
@@ -220,16 +221,19 @@ export function FindingActions({
       className={actionClass(action)}
       aria-label={actionAriaLabel(action, label)}
       aria-keyshortcuts={recommendedAction === action ? `Enter ${shortcut}` : shortcut}
-      data-recommended-action={recommendedAction === action ? "Recommended" : undefined}
+      data-recommended-action={recommendedAction === action ? "true" : undefined}
     >
       {isDismissing ? (
         "Working…"
       ) : (
-        <ButtonWithShortcut
-          label={label}
-          shortcut={shortcut}
-          dark={recommendedAction === action}
-        />
+        <>
+          <ButtonWithShortcut
+            label={label}
+            shortcut={shortcut}
+            dark={recommendedAction === action}
+            leadingIcon={recommendedAction === action ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
+          />
+        </>
       )}
     </button>
   );
@@ -296,10 +300,6 @@ export function FindingActions({
     "Shortcut 4: original packaging or an empty box only",
     "4",
   );
-  const textClearanceButtons = f.protected_term_assessment?.outcome === "matched" ? <>
-    <button type="button" className={ghostStone} disabled={actionPending} onClick={() => onDismiss("false_positive", "compatibility_only")}>Compatibility only</button>
-    <button type="button" className={ghostStone} disabled={actionPending} onClick={() => onDismiss("false_positive", "unrelated_mention")}>Unrelated mention</button>
-  </> : null;
   const needsReviewBtn = (
     <button
       key="review"
@@ -327,16 +327,19 @@ export function FindingActions({
       className={actionClass("review")}
       aria-label={actionAriaLabel("review", "Review")}
       aria-keyshortcuts={recommendedAction === "review" ? "Enter R" : "R"}
-      data-recommended-action={recommendedAction === "review" ? "Recommended" : undefined}
+      data-recommended-action={recommendedAction === "review" ? "true" : undefined}
     >
       {busy === "review" ? (
         "Working..."
       ) : (
-        <ButtonWithShortcut
-          label="Review"
-          shortcut="R"
-          dark={recommendedAction === "review"}
-        />
+        <>
+          <ButtonWithShortcut
+            label="Review"
+            shortcut="R"
+            dark={recommendedAction === "review"}
+            leadingIcon={recommendedAction === "review" ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
+          />
+        </>
       )}
     </button>
   );
@@ -377,8 +380,9 @@ export function FindingActions({
       }
       aria-label={actionAriaLabel("license", "Mark as licensed seller")}
       aria-keyshortcuts={recommendedAction === "license" ? "Enter" : undefined}
-      data-recommended-action={recommendedAction === "license" ? "Recommended" : undefined}
+      data-recommended-action={recommendedAction === "license" ? "true" : undefined}
     >
+      {recommendedAction === "license" && <Sparkles className="recommended-action-icon" aria-hidden="true" />}
       {licensing ? "Marking…" : compact ? "Mark as licensed seller" : "License seller"}
     </button>
   ) : null;
@@ -409,7 +413,6 @@ export function FindingActions({
     {secondHandBtn}
     {f.offer_subject === "packaging_only" && packagingOnlyBtn}
     {dontPursueBtn}
-    {textClearanceButtons}
   </>;
   const dismissButtons = grouped ? (
     <FindingActionPopover label="Dismiss" description="Choose why this listing should be closed."
@@ -438,7 +441,7 @@ export function FindingActions({
     buttons = (
       <>
         {dismissButtons}
-        {!grouped && f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
+        {!grouped && allowProductBtn}
         {needsReviewBtn}
         <button
           type="button"
@@ -453,12 +456,13 @@ export function FindingActions({
           className={actionClass("send_takedown")}
           aria-label={actionAriaLabel("send_takedown", "Takedown")}
           aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
-          data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
+          data-recommended-action={recommendedAction === "send_takedown" ? "true" : undefined}
         >
           <ButtonWithShortcut
             label={directSending ? "Processing…" : "Takedown"}
             shortcut="T"
             dark={recommendedAction === "send_takedown"}
+            leadingIcon={recommendedAction === "send_takedown" ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
           />
         </button>
       </>
@@ -468,7 +472,7 @@ export function FindingActions({
     buttons = (
       <>
         {dismissButtons}
-        {!grouped && f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
+        {!grouped && allowProductBtn}
         <button
           type="button"
           disabled={!f.case_id || actionPending}
@@ -482,12 +486,13 @@ export function FindingActions({
           className={actionClass("send_takedown")}
           aria-label={actionAriaLabel("send_takedown", "Takedown")}
           aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
-          data-recommended-action={recommendedAction === "send_takedown" ? "Recommended" : undefined}
+          data-recommended-action={recommendedAction === "send_takedown" ? "true" : undefined}
         >
           <ButtonWithShortcut
             label={directSending ? "Processing…" : "Takedown"}
             shortcut="T"
             dark={recommendedAction === "send_takedown"}
+            leadingIcon={recommendedAction === "send_takedown" ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
           />
         </button>
       </>
@@ -502,7 +507,7 @@ export function FindingActions({
     buttons = (
       <>
         {dismissButtons}
-        {!grouped && f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
+        {!grouped && allowProductBtn}
         <button
           type="button"
           disabled={!f.case_id || actionPending}
@@ -597,7 +602,7 @@ export function FindingActions({
         {grouped && !sellerLicensed && ["pending", "review", "takedown_pending"].includes(state) && (
           <FindingActionPopover label="More actions" description="Allow product and License seller also affect future findings."
             disabled={actionPending} recommended={recommendedAction === "license"}>
-            {f.protected_term_assessment?.outcome !== "matched" && allowProductBtn}
+            {allowProductBtn}
             {utilityButtons}
           </FindingActionPopover>
         )}

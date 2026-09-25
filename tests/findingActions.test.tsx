@@ -194,21 +194,6 @@ describe("Grouped finding decisions", () => {
 });
 
 describe("FindingActions allow product", () => {
-  test("text evidence offers scoped compatibility feedback without an image allowance", () => {
-    const { container } = renderActions({ item: finding({
-      similarity_score: null,
-      protected_term_assessment: {
-        policy_version: 'protected-terms-v1', configuration_revision: 1, outcome: 'matched',
-        listing: { title: 'Ducati logo decals', description: '', page_url: 'https://example.com/decal',
-          captured_at: '2026-09-17T12:00:00Z', source: 'product_json_ld' }, decisions: [],
-      },
-    }) });
-    expect([...container.querySelectorAll('button')].some((candidate) => candidate.textContent === 'Allow product')).toBe(false);
-    act(() => button(container, 'Compatibility only').click());
-    expect(dismiss).toHaveBeenCalledWith('false_positive', 'compatibility_only');
-    expect(allowProductImage).not.toHaveBeenCalled();
-  });
-
   test("requires a reviewer reason even when takedown matches the recommendation", () => {
     const { container } = renderActions({
       item: finding({ actionability: { key: "send_takedown", reason: "Recommended" } }),

@@ -169,9 +169,19 @@ body {
   row-gap: 4px;
 }
 
+.finding-action-buttons .recommended-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Keep the recommendation explicit, including inside action menus. */
 .finding-action-buttons .recommended-action::before {
   display: none;
 }
+
+.recommended-action-icon { width: 13px; height: 13px; flex: 0 0 auto; }
 
 .finding-action-utilities:has(.recommended-action) {
   padding-top: 12px;
