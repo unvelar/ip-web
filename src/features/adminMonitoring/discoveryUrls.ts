@@ -25,7 +25,8 @@ export function recordedSearchLinks(evidence: DiscoveryEvidence | undefined, pag
   add(coverage?.search_url, "Search URL", false);
   add(coverage?.last_requested_url, "Last requested page", false);
   add(evidence?.pages[0]?.url, "First recorded results page", true);
-  for (const url of pageUrls) add(url, "Recorded discovery page", true);
+  // Legacy page audits can include failed requests without a loaded document.
+  for (const url of pageUrls) add(url, "Recorded discovery URL", false);
   add(coverage?.last_page?.url, "Last observed results page", true);
   add(coverage?.last_visited_url, "Last visited page", true);
   return [...links.values()];

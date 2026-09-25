@@ -48,6 +48,7 @@ test("zero-result searches expose exact recorded URLs without presenting unvisit
   expect(recordedSearchLinks({ ...evidence, coverage: null }, ['javascript:alert(1)', 'https://shop.example/?q=%5Bredacted%5D'])).toEqual([]);
   expect(renderToStaticMarkup(<DiscoveryRunEvidence evidence={undefined} />)).toContain('No search URL was recorded');
   expect(recordedSearchLinks(discoveryFixture)[0].visited).toBe(true);
+  expect(recordedSearchLinks(undefined, [search])[0].visited).toBe(false);
 });
 
 test("website to keyword to rejected-listing evidence is navigable without triggering work", async () => {
