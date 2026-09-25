@@ -1,5 +1,7 @@
 import { computeRuntimeSettingsPatchBody } from "../computeRuntimeSettings";
 import { API, authHeaders, request } from "./transport";
+import { isDiscoveryEvidence } from "./websiteDiscovery";
+import { requireResponse } from "./validation";
 
 // --- Admin (unified cross-source IP catalog management) ---
 
@@ -569,6 +571,7 @@ export interface AdminMonitoringCandidate {
 }
 
 export interface AdminMonitoringRunDetail {
+  discovery?: import("./websiteDiscovery").DiscoveryEvidence;
   generated_at: string;
   run: Omit<AdminMonitoringRunActivity, "jobs" | "operation">;
   jobs: AdminMonitoringJob[];
@@ -651,6 +654,7 @@ export async function getAdminMonitoringRun(runId: string, signal?: AbortSignal)
     `/api/admin/monitoring/runs/${encodeURIComponent(runId)}`,
     { signal },
   );
+  requireResponse(detail.discovery === undefined || isDiscoveryEvidence(detail.discovery), "search evidence response");
   if (detail.jobs.some(job => !isAdminMonitoringWorkerKind(job.worker_kind))
     || detail.candidates.some(candidate => Object.values(candidate.jobs).flat().some(job => !isAdminMonitoringWorkerKind(job.worker_kind)))) {
     throw new Error("Worker details are still updating. This page will retry automatically.");

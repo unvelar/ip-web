@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { DiscoveryRunEvidence } from "./DiscoveryRunEvidence";
 import { CaptureAttemptDetails } from "./CaptureAttemptDetails";
 import { JobScrapeMethodBadge } from "./ScrapeMethodBadge";
 import { workPauseReason, workStateLabel, WORK_STATE_COPY } from "./workState";
@@ -154,6 +155,8 @@ export function AdminMonitoringRunDetailPanel({
         <RunFact label="Candidate decisions" value={`${detail.candidates.length} linked, ${detail.unmatched_candidate_audits.length} unlinked`} />
         <RunFact label="Live detail" value={refreshing ? "Refreshing now" : `Updated ${formatRelative(detail.generated_at)}`} live />
       </div>
+
+      <DiscoveryRunEvidence evidence={detail.discovery} active={detail.jobs.some(job => job.type === "monitor_scrape" && ["pending", "in_progress"].includes(job.status))} />
 
       {detail.jobs.some((job) => supportsScrapeMethod(job.type)) && (
         <section className="border-b border-stone-200 px-4 py-4">

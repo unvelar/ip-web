@@ -15,6 +15,7 @@ import { AdminPage } from "../components/admin/AdminPage";
 import { ADMIN_JOB_COPY } from "../features/adminMonitoring/monitoringJobs";
 import { WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
 import { useAdminMonitoringStatus, type AdminMonitoringWindow } from "../features/adminMonitoring/useAdminMonitoringStatus";
+import { WebsitePerformance } from "../features/adminMonitoring/WebsitePerformance";
 
 const number = (value: number) => value.toLocaleString();
 const percentage = (value: number | null | undefined) => value == null ? "No data" : `${value.toFixed(1)}%`;
@@ -159,6 +160,7 @@ export default function AdminMonitoring() {
               />
             </div>
           </div>
+          <WebsitePerformance key={monitor.windowHours} windowHours={monitor.windowHours} asOf={monitor.status.generated_at} />
         </div>
       )}
     </AdminPage>
