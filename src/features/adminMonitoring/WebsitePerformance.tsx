@@ -41,7 +41,7 @@ export function WebsitePerformance({ windowHours, asOf }: { windowHours: number;
       {loading && <LoaderCircle className="animate-spin" size={15} aria-label="Updating website performance" />}
     </div>
     <div className="discovery-toolbar">
-      <p>{data ? `${number(data.total)} websites` : "Keyword search history"} · Last {windowHours < 24 ? `${windowHours} hours` : `${windowHours / 24} ${windowHours === 24 ? "day" : "days"}`}</p>
+      <p>{data ? `${number(data.total)} ${data.total === 1 ? "website" : "websites"}` : "Keyword search history"} · Last {windowHours < 24 ? `${windowHours} hours` : `${windowHours / 24} ${windowHours === 24 ? "day" : "days"}`}</p>
       <label className="discovery-search"><Search size={14} aria-hidden="true" /><input value={query} onChange={event => { setQuery(event.target.value); setOffset(0); setSelected(null); setData(null); }} type="search" placeholder="Website, keyword, IP or tenant" aria-label="Find website searches" /></label>
     </div>
     {error && <div role="alert" className="discovery-warning"><AlertCircle size={15} /><span>{error} {data && "The table shows the last loaded data."}</span><button type="button" onClick={() => setRetry(n => n + 1)}>Retry</button></div>}
