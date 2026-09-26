@@ -181,7 +181,7 @@ function SetupRecovery({ recovery }: { recovery: NonNullable<AdminMonitoringStat
         <div className="mt-2 max-h-80 overflow-auto divide-y divide-stone-100">
           {recovery.sources.map(source => (
             <div key={source.source_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <Link to={`/ips/${encodeURIComponent(source.ip_id)}#monitoring-source-${source.source_id}`} className="font-medium text-stone-800 hover:underline">{source.ip_name} · {source.label}</Link>
+              <Link to={`/admin/ips/${encodeURIComponent(source.ip_id)}`} className="font-medium text-stone-800 hover:underline">{source.ip_name} · {source.label}</Link>
               <span className={source.state === "due" || source.state === "needed" || source.state === "blocked" ? "text-amber-800" : "text-stone-500"}>{recoveryLabel(source)}</span>
             </div>
           ))}
