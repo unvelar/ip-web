@@ -48,11 +48,13 @@ describe("FirstScanSetupNotice", () => {
     };
     const render = (status: IpOnboardingStatus) => renderToStaticMarkup(createElement(MemoryRouter, null,
       createElement(FirstScanSetupNotice, { onboarding: status, sources, ipId: "ip-1" })));
-    const html = render({ ...onboarding, state: "delayed", title: "Monitoring limited, retry scheduled", recovery });
+    const html = render({ ...onboarding, state: "delayed", title: "Monitoring limited, retry scheduled",
+      message: "Automatic retries are scheduled and existing results remain available.", recovery });
     expect(html).toContain("Next automatic retry:");
     expect(html).toContain("Website retry details (1)");
     expect(html).not.toContain("needs a system retry");
-    const paused = render({ ...onboarding, state: "paused", title: "Monitoring is off", recovery: {
+    const paused = render({ ...onboarding, state: "paused", title: "Monitoring is off",
+      message: "Automatic scans and retries are off.", recovery: {
       ...recovery, enabled: false, scheduled: 0, off: 1, next_retry_at: null,
       sources: [{ ...recovery.sources[0], state: "off", next_retry_at: null }],
     } });
