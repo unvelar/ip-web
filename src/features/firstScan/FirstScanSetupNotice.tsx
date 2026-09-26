@@ -1,8 +1,10 @@
-import { AlertTriangle, ArrowRight, LoaderCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock3, LoaderCircle, PauseCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { IpOnboardingStatus } from "../../api";
 import type { FirstScanSourceProgress } from "../../lib/firstScanProgress";
 import { readableDomain } from "./presentation";
+import { MonitoringRecoveryDetails } from "../../components/monitoring/MonitoringRecovery";
+import { retryTime } from "../../components/monitoring/recoveryPresentation";
 
 function sourceLabel(source: FirstScanSourceProgress) {
   return source.source.display_name?.trim() || readableDomain(source.source.domain);
@@ -26,7 +28,27 @@ export function FirstScanSetupNotice({
   const incompleteSources = sources.filter(
     (source) => sourceStatuses.get(source.source.id) !== "ready",
   );
-  if (incompleteSources.length === 0) return null;
+  if (incompleteSources.length === 0 && onboarding.state !== "paused") return null;
+
+  if (onboarding.recovery) {
+    const paused = !onboarding.recovery.enabled;
+    const attention = onboarding.state === "needs_attention" || onboarding.customer_action_required;
+    const Icon = paused ? PauseCircle : attention ? AlertTriangle : Clock3;
+    return (
+      <section className={`mt-4 rounded-xl border px-4 py-3 ${paused ? "border-stone-200 bg-stone-50" : attention ? "border-rose-200 bg-rose-50" : "border-amber-200 bg-amber-50"}`} aria-label="Monitoring recovery" aria-live="polite">
+        <div className="flex items-start gap-3">
+          <Icon className="mt-0.5 h-5 w-5 shrink-0 text-stone-600" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-bold text-stone-950">{onboarding.title}</h2>
+            <p className="mt-1 text-xs leading-5 text-stone-700">{onboarding.message}</p>
+            {onboarding.recovery.next_retry_at && <p className="mt-1 text-xs font-semibold text-stone-700">Next automatic retry: {retryTime(onboarding.recovery.next_retry_at)}</p>}
+          </div>
+          <Link to={`/ips/${encodeURIComponent(ipId)}#monitoring`} className="shrink-0 text-xs font-semibold text-stone-700 underline">View setup</Link>
+        </div>
+        <MonitoringRecoveryDetails sources={onboarding.recovery.sources} />
+      </section>
+    );
+  }
 
   const retrySources = incompleteSources.filter(
     (source) => sourceStatuses.get(source.source.id) === "retry_needed",

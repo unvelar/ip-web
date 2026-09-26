@@ -49,6 +49,7 @@ export type IpOnboardingState =
   | "processing"
   | "delayed"
   | "active"
+  | "paused"
   | "needs_attention";
 
 export type IpOnboardingCheckStatus =
@@ -63,6 +64,21 @@ export type MonitoringSourceSetupStatus =
   | "processing"
   | "retry_needed";
 
+export interface MonitoringSourceRecovery {
+  source_id: string;
+  label: string;
+  state: "ready" | "processing" | "scheduled" | "due" | "off" | "blocked" | "needed";
+  next_retry_at: string | null;
+  reason: string | null;
+}
+
+export interface MonitoringRecovery {
+  scheduled: number; due: number; processing: number;
+  off: number; blocked: number; needed: number;
+  next_retry_at: string | null;
+  sources: MonitoringSourceRecovery[];
+}
+
 export interface IpOnboardingStatus {
   state: IpOnboardingState;
   customer_action_required: boolean;
@@ -74,6 +90,7 @@ export interface IpOnboardingStatus {
     status: IpOnboardingCheckStatus;
     detail: string;
   }>;
+  recovery?: MonitoringRecovery & { enabled: boolean };
   progress: {
     reference_images: {
       total: number;

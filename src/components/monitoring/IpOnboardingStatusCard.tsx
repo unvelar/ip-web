@@ -6,6 +6,7 @@ import {
   CircleDashed,
   Clock3,
   LoaderCircle,
+  PauseCircle,
   TriangleAlert,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -15,12 +16,18 @@ import type {
   IpOnboardingState,
   IpOnboardingStatus,
 } from "../../api";
+import { MonitoringRecoveryDetails } from "./MonitoringRecovery";
+import { retryTime } from "./recoveryPresentation";
 
 const stateStyles: Record<IpOnboardingState, {
   container: string;
   icon: string;
   badge: string;
 }> = {
+  paused: {
+    container: "border-stone-200 bg-stone-50", icon: "text-stone-500",
+    badge: "border-stone-200 bg-white text-stone-600",
+  },
   setup_required: {
     container: "border-amber-200 bg-amber-50/70",
     icon: "text-amber-700",
@@ -51,6 +58,7 @@ const stateStyles: Record<IpOnboardingState, {
 function StateIcon({ state }: { state: IpOnboardingState }) {
   const className = `h-5 w-5 ${stateStyles[state].icon}`;
   if (state === "active") return <CheckCircle2 className={className} aria-hidden="true" />;
+  if (state === "paused") return <PauseCircle className={className} aria-hidden="true" />;
   if (state === "processing") {
     return <LoaderCircle className={`${className} animate-spin`} aria-hidden="true" />;
   }
@@ -80,11 +88,13 @@ function CheckIcon({ status }: { status: IpOnboardingCheckStatus }) {
 function StatusSummaryLink({
   href,
   title,
+  detail,
   icon,
   containerClass,
 }: {
   href: string;
   title: string;
+  detail?: string;
   icon: ReactNode;
   containerClass: string;
 }) {
@@ -100,6 +110,7 @@ function StatusSummaryLink({
           Monitoring status
         </p>
         <p className="truncate text-sm font-bold text-stone-900">{title}</p>
+        {detail && <p className="mt-0.5 text-xs text-stone-600">{detail}</p>}
       </div>
       <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-stone-600 transition group-hover:text-stone-950">
         View live scan
@@ -173,6 +184,7 @@ export function IpOnboardingStatusCard({
       <StatusSummaryLink
         href={summaryHref}
         title={status.title}
+        detail={status.recovery?.next_retry_at ? `Next automatic retry: ${retryTime(status.recovery.next_retry_at)}` : undefined}
         icon={<StateIcon state={status.state} />}
         containerClass={styles.container}
       />
@@ -200,6 +212,7 @@ export function IpOnboardingStatusCard({
         </div>
       </div>
 
+      {status.recovery && <MonitoringRecoveryDetails sources={status.recovery.sources} />}
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {status.checks.map((check) => (
           <div key={check.key} className="flex items-start gap-2 rounded-lg border border-black/5 bg-white/70 px-3 py-2.5">

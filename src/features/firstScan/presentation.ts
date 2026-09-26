@@ -1,9 +1,6 @@
 import type { IpFirstScanResultStage } from "../../api";
 import type { FirstScanSourceState } from "../../lib/firstScanProgress";
 
-// Temporary demo mute. Restore to true after the demo; feed errors and source states remain intact.
-export const SHOW_FIRST_SCAN_SYSTEM_WARNINGS = false;
-
 export const SOURCE_STATE_COPY: Record<FirstScanSourceState, { label: string; detail: string }> = {
   connecting: { label: "Connecting", detail: "Preparing this website" },
   setup_processing: { label: "Preparing", detail: "Website setup is still running" },

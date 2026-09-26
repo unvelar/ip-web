@@ -16,6 +16,7 @@ import { ADMIN_JOB_COPY } from "../features/adminMonitoring/monitoringJobs";
 import { WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
 import { useAdminMonitoringStatus, type AdminMonitoringWindow } from "../features/adminMonitoring/useAdminMonitoringStatus";
 import { WebsitePerformance } from "../features/adminMonitoring/WebsitePerformance";
+import { recoveryLabel } from "../components/monitoring/recoveryPresentation";
 
 const number = (value: number) => value.toLocaleString();
 const percentage = (value: number | null | undefined) => value == null ? "No data" : `${value.toFixed(1)}%`;
@@ -144,6 +145,7 @@ export default function AdminMonitoring() {
             />
           </section>
 
+          {monitor.status.setup_recovery && <SetupRecovery recovery={monitor.status.setup_recovery} />}
           <div className="admin-monitoring-content">
             <QueueHealth queues={monitor.status.queue} />
             <div className="flex min-w-0 flex-col gap-[18px]">
@@ -164,6 +166,28 @@ export default function AdminMonitoring() {
         </div>
       )}
     </AdminPage>
+  );
+}
+
+function SetupRecovery({ recovery }: { recovery: NonNullable<AdminMonitoringStatus["setup_recovery"]> }) {
+  if (!recovery.sources.length) return null;
+  return (
+    <section className="admin-card p-4" aria-label="Website setup recovery">
+      <h2 className="text-sm font-bold text-stone-900">Website setup recovery</h2>
+      <p className="mt-1 text-xs text-stone-600">{recovery.scheduled} scheduled · {recovery.due} due · {recovery.processing} queued or running · {recovery.off} paused with monitoring off · {recovery.blocked + recovery.needed} need attention</p>
+      <p className="mt-1 text-xs text-stone-500">Scheduled retries enter the job queue when their retry time arrives. An empty queue does not mean every website is connected.</p>
+      <details className="mt-3 text-xs">
+        <summary className="cursor-pointer font-semibold text-stone-700">View websites ({recovery.sources.length})</summary>
+        <div className="mt-2 max-h-80 overflow-auto divide-y divide-stone-100">
+          {recovery.sources.map(source => (
+            <div key={source.source_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <Link to={`/ips/${encodeURIComponent(source.ip_id)}#monitoring-source-${source.source_id}`} className="font-medium text-stone-800 hover:underline">{source.ip_name} · {source.label}</Link>
+              <span className={source.state === "due" || source.state === "needed" || source.state === "blocked" ? "text-amber-800" : "text-stone-500"}>{recoveryLabel(source)}</span>
+            </div>
+          ))}
+        </div>
+      </details>
+    </section>
   );
 }
 

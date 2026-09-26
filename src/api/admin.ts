@@ -323,6 +323,9 @@ export function getScrapePipelineDomain(domain: string, windowHours: number, asO
 }
 
 export interface AdminMonitoringOverview {
+  setup_recovery?: Omit<import("./registry").MonitoringRecovery, "sources"> & {
+    sources: Array<import("./registry").MonitoringSourceRecovery & { ip_id: string; ip_name: string }>;
+  };
   scrape_requests?: {
     pipeline?: ScrapePipelineStats;
     as_of: string; since: string; first_recorded_at: string | null;
@@ -365,7 +368,7 @@ export interface AdminMonitoringOverview {
 }
 
 export type AdminMonitoringStatus = Pick<AdminMonitoringOverview,
-  "generated_at" | "window_hours" | "scrape_requests" | "queue" | "worker_demand"
+  "generated_at" | "window_hours" | "scrape_requests" | "queue" | "worker_demand" | "setup_recovery"
 > & {
   summary: Pick<AdminMonitoringOverview["summary"],
     "queued_jobs" | "deferred_jobs" | "paused_jobs" | "scheduled_jobs"

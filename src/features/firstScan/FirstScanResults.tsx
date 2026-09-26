@@ -12,7 +12,7 @@ import {
   Search,
   Store,
 } from "lucide-react";
-import type { IpFirstScanResult, IpFirstScanResultStage, IpFirstScanResultsPage } from "../../api";
+import type { IpFirstScanResult, IpFirstScanResultStage, IpFirstScanResultsPage, MonitoringSourceRecovery } from "../../api";
 import {
   FIRST_SCAN_ACTIVE_RESULT_STAGES,
   firstScanResultImage,
@@ -25,7 +25,6 @@ import type { ResultFilter } from "./useFirstScanFeed";
 import {
   ACCESS_BLOCKED_RESULT_COPY,
   RESULT_STATE_COPY,
-  SHOW_FIRST_SCAN_SYSTEM_WARNINGS,
   SOURCE_STATE_COPY,
   compactUrl,
   formatRelativeTime,
@@ -48,6 +47,7 @@ export interface FirstScanTotals {
 export function FirstScanResults({
   ipId,
   sources,
+  recovery = [],
   results,
   coverage = [],
   allResultCount,
@@ -67,6 +67,7 @@ export function FirstScanResults({
 }: {
   ipId: string;
   sources: FirstScanSourceProgress[];
+  recovery?: MonitoringSourceRecovery[];
   results: IpFirstScanResult[];
   coverage?: IpFirstScanResultsPage["source_coverage"];
   allResultCount: number;
@@ -98,6 +99,7 @@ export function FirstScanResults({
             name={source.source.display_name?.trim() || readableDomain(source.source.domain)}
             count={source.discovered}
             state={source.state}
+            recovery={recovery.find(item => item.source_id === source.source.id)}
           />
         ))}
       </div>
@@ -263,16 +265,18 @@ function MetadataValue({ value, icon, pending, strong = false }: { value: string
   );
 }
 
-function SourceFilterButton({ active, onClick, name, count, state }: { active: boolean; onClick: () => void; name: string; count: number; state?: FirstScanSourceState }) {
-  const needsRetry = SHOW_FIRST_SCAN_SYSTEM_WARNINGS && state === "retry_needed";
-  const hasSourceError = state === "failed" || state === "retry_needed";
-  const setupProcessing = state === "setup_processing";
+function SourceFilterButton({ active, onClick, name, count, state, recovery }: { active: boolean; onClick: () => void; name: string; count: number; state?: FirstScanSourceState; recovery?: MonitoringSourceRecovery }) {
+  const automaticRetry = recovery?.state === "scheduled" || recovery?.state === "due";
+  const paused = recovery?.state === "off";
+  const needsRetry = state === "retry_needed" && !automaticRetry && !paused;
+  const hasSourceError = state === "failed" || needsRetry;
+  const setupProcessing = state === "setup_processing" || automaticRetry;
   return (
     <button type="button" onClick={onClick} className={`flex shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${active ? "border-stone-300 bg-stone-900 text-white" : needsRetry ? "border-rose-200 bg-rose-50 text-rose-800 hover:border-rose-300" : setupProcessing ? "border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"}`}>
-      {state && <span className={`h-1.5 w-1.5 rounded-full ${hasSourceError ? SHOW_FIRST_SCAN_SYSTEM_WARNINGS ? "bg-red-500" : "bg-stone-400" : setupProcessing ? "bg-amber-500" : state === "ready" ? "bg-emerald-500" : "bg-blue-500"}`} />}
+      {state && <span className={`h-1.5 w-1.5 rounded-full ${hasSourceError ? "bg-red-500" : setupProcessing ? "bg-amber-500" : state === "ready" ? "bg-emerald-500" : "bg-blue-500"}`} />}
       <span className="font-semibold">{name}</span>
       <span className={`rounded px-1.5 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : needsRetry ? "bg-rose-100 font-semibold text-rose-700" : setupProcessing ? "bg-amber-100 font-semibold text-amber-800" : "bg-stone-100 tabular-nums text-stone-500"}`}>
-        {needsRetry ? "Retry needed" : setupProcessing ? "Preparing" : count}
+        {paused ? "Paused" : automaticRetry ? recovery.state === "due" ? "Retry due" : "Retry scheduled" : needsRetry ? "Retry needed" : setupProcessing ? "Preparing" : count}
       </span>
     </button>
   );
@@ -288,8 +292,7 @@ function ResultFilterButton({ label, count, value, active, onChange }: { label: 
 }
 
 function ResultEmptyState({ hasAnyResults, sources }: { hasAnyResults: boolean; sources: FirstScanSourceProgress[] }) {
-  const activeSource = sources.find((source) => source.state !== "ready" && source.state !== "failed"
-    && (SHOW_FIRST_SCAN_SYSTEM_WARNINGS || source.state !== "retry_needed"));
+  const activeSource = sources.find((source) => source.state !== "ready" && source.state !== "failed");
   return (
     <div className="flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center">
       {hasAnyResults ? <Search className="h-5 w-5 text-stone-300" /> : <LoaderCircle className="h-5 w-5 animate-spin text-blue-500" />}

@@ -16,7 +16,7 @@ import {
   SummaryMetric,
 } from "../features/firstScan/FirstScanResults";
 import { FirstScanSetupNotice } from "../features/firstScan/FirstScanSetupNotice";
-import { formatUpdateTime, SHOW_FIRST_SCAN_SYSTEM_WARNINGS } from "../features/firstScan/presentation";
+import { formatUpdateTime } from "../features/firstScan/presentation";
 import { useFirstScanFeed } from "../features/firstScan/useFirstScanFeed";
 
 export default function MonitoringFirstScan() {
@@ -40,7 +40,7 @@ export default function MonitoringFirstScan() {
 
   const { snapshot, totals, ipId } = feed;
   const retrySourceCount = snapshot.sources.filter((source) => source.state === "retry_needed").length;
-  const showRetryWarning = SHOW_FIRST_SCAN_SYSTEM_WARNINGS && retrySourceCount > 0;
+  const showRetryWarning = retrySourceCount > 0;
   const preparingSourceCount = snapshot.sources.filter(
     (source) => source.state === "setup_processing" || source.state === "connecting",
   ).length;
@@ -69,13 +69,13 @@ export default function MonitoringFirstScan() {
         </div>
       </header>
 
-      {SHOW_FIRST_SCAN_SYSTEM_WARNINGS && feed.error && (
+      {feed.error && (
         <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <AlertCircle className="h-4 w-4 shrink-0" /> Some live progress is temporarily unavailable. {feed.error}
         </div>
       )}
 
-      {SHOW_FIRST_SCAN_SYSTEM_WARNINGS && snapshot.onboarding && (
+      {snapshot.onboarding && (
         <FirstScanSetupNotice
           onboarding={snapshot.onboarding}
           sources={snapshot.sources}
@@ -83,27 +83,28 @@ export default function MonitoringFirstScan() {
         />
       )}
 
-      <section className="mt-4 grid overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:grid-cols-4">
+      <section className="mt-4 grid overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:grid-cols-2 lg:grid-cols-5">
         <SummaryMetric
           label="Websites"
           value={`${totals.connected}/${totals.websites}`}
           detail={showRetryWarning
-            ? `${retrySourceCount} needs retry`
+            ? snapshot.onboarding?.recovery?.enabled === false ? `${retrySourceCount} paused` : `${retrySourceCount} limited`
             : preparingSourceCount > 0
               ? `${preparingSourceCount} preparing`
               : "connected"}
           icon={<Globe2 className="h-4 w-4" />}
-          attention={showRetryWarning}
-          warning={!showRetryWarning && preparingSourceCount > 0}
+          warning={showRetryWarning || preparingSourceCount > 0}
         />
         <SummaryMetric label="Listings found" value={totals.discovered} detail="stable rows" icon={<Search className="h-4 w-4" />} />
         <SummaryMetric label="Processing" value={totals.processing} detail="metadata filling" icon={<LoaderCircle className="h-4 w-4" />} />
         <SummaryMetric label="Ready for triage" value={totals.ready} detail={`${totals.filtered} screened out`} icon={<Check className="h-4 w-4" />} accent={totals.ready > 0} />
+        <SummaryMetric label="Failed listings" value={totals.failed} detail="processing stopped" icon={<AlertCircle className="h-4 w-4" />} attention={totals.failed > 0} />
       </section>
 
       <FirstScanResults
         ipId={ipId}
         sources={snapshot.sources}
+        recovery={snapshot.onboarding?.recovery?.sources}
         results={feed.visibleResults}
         coverage={snapshot.page?.source_coverage}
         allResultCount={totals.discovered}
@@ -130,7 +131,7 @@ export default function MonitoringFirstScan() {
       )}
 
       <footer className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
-        <span>You can leave this page. Monitoring continues in the background.</span>
+        <span>{snapshot.onboarding?.recovery?.enabled === false ? "Monitoring is off. Existing results remain available." : "You can leave this page. Monitoring continues in the background."}</span>
         <Link to={`/monitoring/tasks?ip_id=${encodeURIComponent(ipId)}&status=all`} className="inline-flex items-center gap-1 font-semibold text-stone-700 hover:text-stone-950">
           View all monitoring tasks <ChevronRight className="h-3.5 w-3.5" />
         </Link>
