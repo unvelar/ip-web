@@ -20,6 +20,7 @@ import {
 import { useActiveIp } from "../../context/ActiveIpContext";
 import {
   FIRST_SCAN_ACTIVE_RESULT_STAGES,
+  isFirstScanSourceConnected,
   summarizeFirstScanSource,
   type FirstScanSourceProgress,
 } from "../../lib/firstScanProgress";
@@ -215,9 +216,7 @@ export function useFirstScanFeed(requestedIpId: string | null) {
     const sources = snapshot?.sources ?? [];
     return {
       websites: sources.length,
-      connected: sources.filter(({ state }) =>
-        state !== "connecting" && state !== "setup_processing" && state !== "retry_needed",
-      ).length,
+      connected: sources.filter(isFirstScanSourceConnected).length,
       discovered: sources.reduce((total, source) => total + source.discovered, 0),
       processing: sources.reduce((total, source) => total + source.preparing, 0),
       ready: sources.reduce((total, source) => total + source.ready, 0),

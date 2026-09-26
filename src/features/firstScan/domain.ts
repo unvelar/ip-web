@@ -44,6 +44,13 @@ const ACTIVE_RUN_STATUSES = new Set([
 
 const FAILED_RUN_STATUSES = new Set(["failed", "error", "cancelled"]);
 
+export function isFirstScanSourceConnected({ source, state }: FirstScanSourceProgress): boolean {
+  // Setup/retry state may describe another keyword on an already connected site.
+  // Only the server can validate the saved recipe; old responses keep their
+  // existing conservative count until the new connection field is available.
+  return source.connected ?? !["connecting", "setup_processing", "retry_needed"].includes(state);
+}
+
 export function isActiveMonitoringRun(status: string): boolean {
   return ACTIVE_RUN_STATUSES.has(status.trim().toLowerCase());
 }

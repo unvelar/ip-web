@@ -29,6 +29,8 @@ export interface MonitoredDomain {
   } | null;
   /** Customer-facing readiness for this source's scrape setup. */
   setup_status?: MonitoringSourceSetupStatus;
+  /** At least one currently validated search route or configured API connection. */
+  connected?: boolean;
   last_run_at: string | null;
   enabled: boolean;
   zero_yield_streak: number;

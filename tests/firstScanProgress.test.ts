@@ -8,6 +8,7 @@ import type {
 } from "../src/api";
 import {
   firstScanResultMetadata,
+  isFirstScanSourceConnected,
   latestRunsByKeyword,
   summarizeFirstScanSource,
 } from "../src/lib/firstScanProgress";
@@ -117,6 +118,16 @@ function result(overrides: Partial<IpFirstScanResult> = {}): IpFirstScanResult {
 }
 
 describe("first scan progress", () => {
+  test("counts a validated connection while preserving its outstanding retry status", () => {
+    for (const setup_status of ['processing', 'retry_needed'] as const) {
+      const summary = summarizeFirstScanSource({ ...source, setup_status, connected: true }, [], findingsPage({}));
+      expect(isFirstScanSourceConnected(summary)).toBe(true);
+      expect(summary.state).toBe(setup_status === 'processing' ? 'setup_processing' : 'retry_needed');
+      expect(isFirstScanSourceConnected({ ...summary, source: { ...source, connected: false } })).toBe(false);
+      expect(isFirstScanSourceConnected({ ...summary, source })).toBe(false);
+    }
+  });
+
   test("uses complete source totals even when only one page or no rows for that source are loaded", () => {
     for (const rows of [[], [result({ stage: "ready" })]]) {
       const summary = summarizeFirstScanSource(source, [], findingsPage({}), rows, true, {

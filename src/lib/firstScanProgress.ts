@@ -3,6 +3,7 @@ export {
   firstScanResultImage,
   firstScanResultMetadata,
   isActiveMonitoringRun,
+  isFirstScanSourceConnected,
   latestRunsByKeyword,
   listingImage,
   summarizeFirstScanSource,
