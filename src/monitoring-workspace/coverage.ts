@@ -1,4 +1,4 @@
-import type { Coverage, Source } from './api';
+import type { Coverage, Source } from './contracts';
 
 export function countrySources(value: Coverage, country: string, source: string): Coverage {
   if (!value.markets.some(market => market.country === country)) throw new Error('Choose the country before its marketplaces.');

@@ -19,6 +19,7 @@ import {
   Store,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { getMonitoringSetupCapabilities } from "../api/monitoringWorkspace";
 import "./AppShell.css";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
@@ -74,6 +75,12 @@ export default function AppShell() {
 function AppShellContent() {
   const { user, logout, actingTenantId, isActingAsOther, switchTenant } = useAuth();
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [setupAvailable, setSetupAvailable] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void getMonitoringSetupCapabilities().then(value => { if (active) setSetupAvailable(value.workspace); }).catch(() => { if (active) setSetupAvailable(false); });
+    return () => { active = false; };
+  }, [actingTenantId]);
 
   // Load the tenant roster once for the admin "operate as any tenant" switcher.
   useEffect(() => {
@@ -272,6 +279,13 @@ function AppShellContent() {
             active={pathname === "/monitoring/products" || pathname.startsWith("/monitoring/products/")}
             collapsed={collapsed}
           />
+          {setupAvailable && <NavItem
+            to="/monitoring/setup"
+            icon={<SettingsIcon size={18} />}
+            label="Monitoring setup"
+            active={pathname === "/monitoring/setup"}
+            collapsed={collapsed}
+          />}
         </NavGroup>
 
         </nav>
@@ -330,7 +344,7 @@ function AppShellContent() {
           <span className="hidden text-sm font-bold tracking-tight sm:inline">Unvelar</span>
         </Link>
         <div className="ml-auto flex items-center gap-1.5">
-          <TopbarIpSelector active={isActive("/ips")} />
+          {pathname === "/monitoring/setup" ? <span className="text-xs text-stone-500">Company monitoring setup</span> : <TopbarIpSelector active={isActive("/ips")} />}
           <NotificationBell count={notificationCount} active={isActive("/inbox")} />
         </div>
       </div>
@@ -382,7 +396,7 @@ function AppShellContent() {
             className="shell-desktop-topbar hidden lg:flex sticky z-20 h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
             style={{ top: `var(${APP_SHELL_BANNER_HEIGHT_VAR})` }}
           >
-            <TopbarIpSelector active={isActive("/ips")} />
+            {pathname === "/monitoring/setup" ? <span className="text-xs text-stone-500">Company monitoring setup</span> : <TopbarIpSelector active={isActive("/ips")} />}
             <div className="ml-1 h-[18px] w-px bg-stone-200" aria-hidden />
             <NotificationBell count={notificationCount} active={isActive("/inbox")} />
           </div>

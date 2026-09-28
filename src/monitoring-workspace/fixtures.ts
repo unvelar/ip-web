@@ -1,4 +1,4 @@
-import type { Brand, Workspace } from './api';
+import type { Brand, Workspace } from './contracts';
 
 export const exampleCompanies = [
   { id: 'giardini', name: 'Giardini di Toscana', email: 'editor@giardini.example' },

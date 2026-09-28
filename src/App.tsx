@@ -23,6 +23,8 @@ const MonitoringNew = lazy(() => import("./pages/MonitoringNew"));
 const Sellers = lazy(() => import("./pages/Sellers"));
 const SellerProfile = lazy(() => import("./pages/SellerProfile"));
 const Monitors = lazy(() => import("./pages/Monitors"));
+const MonitoringSetup = lazy(() => import("./pages/MonitoringSetup"));
+const AdminMarketplaces = lazy(() => import("./pages/AdminMarketplaces"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const BrandsCatalog = lazy(() => import("./pages/BrandsCatalog"));
 const DesignsCatalog = lazy(() => import("./pages/DesignsCatalog"));
@@ -175,6 +177,7 @@ export default function App() {
           <Route path="/monitoring/products-v2" element={<ProductLabV2Redirect />} />
           <Route path="/monitoring/new" element={<MonitoringNew />} />
           <Route path="/monitoring/settings" element={<Monitors />} />
+          <Route path="/monitoring/setup" element={<MonitoringSetup />} />
           <Route path="/clearance/tasks" element={<ClearanceTasks />} />
           <Route path="/clearance/tasks/:id" element={<IpReviewDetail />} />
           <Route path="/clearance/new" element={<ClearanceReviewNew />} />
@@ -199,6 +202,7 @@ export default function App() {
           <Route path="/admin/intakes" element={<AdminIntakes />} />
           <Route path="/admin/tenants" element={<AdminTenants />} />
           <Route path="/admin/monitoring" element={<AdminMonitoring />} />
+          <Route path="/admin/marketplaces" element={<AdminMarketplaces />} />
           <Route path="/admin/browser-activity" element={<AdminBrowserActivity />} />
           <Route path="/admin/ips" element={<AdminCatalog />} />
           <Route path="/admin/ips/:id" element={<AdminIpDetail />} />

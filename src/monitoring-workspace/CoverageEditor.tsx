@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { faAmazon, faEbay, faEtsy, faFacebookF, faGoogle, faShopify } from '@fortawesome/free-brands-svg-icons';
 import { COUNTRIES, flagEmoji } from '../lib/countries';
-import type { Coverage, Source } from './api';
+import type { Coverage, Source } from './contracts';
 import { countrySources, sourcesForCountry } from './coverage';
 
 // Font Awesome Free 6.7.2 brand SVGs (CC BY 4.0); package retains attribution.

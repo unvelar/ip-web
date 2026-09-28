@@ -1,7 +1,15 @@
-# Connected monitoring draft editor
+# Monitoring setup: website and isolated development
 
-The new iteration is available at `http://localhost:5173/monitoring-workspace.html`.
-It is a development entry, excluded from the production build. The earlier
+The website includes authenticated `/monitoring/setup` and admin-only
+`/admin/marketplaces` routes. They reuse the editor components through the normal
+session/acting-company API transport; the company setup ignores the legacy working-IP
+filter. Setup navigation is shown only when the API advertises it for that company.
+The admin page explains when its API is not enabled. Static route entries are generated
+for both URLs, so direct links and refreshes work on GitHub Pages.
+
+The isolated iteration remains at `http://localhost:5173/monitoring-workspace.html`.
+Its development entry, local client and synthetic fixtures stay outside the production
+bundle. Styles are scoped to the editor. The earlier
 `dev:monitoring-sandbox` command remains a separate, memory-only visual prototype.
 
 Start the backend's dedicated sandbox from its root:
@@ -55,17 +63,17 @@ services; platforms without a bundled icon use a consistent monogram. No externa
 image request is made. Country/storefront evidence URLs are stored in the backend
 catalog alongside review dates.
 
-The backend exposes only local draft/auth endpoints, with no jobs or activation.
+The dedicated sandbox backend exposes only draft/catalog/auth endpoints, with no jobs or activation.
 Its API/database network cannot reach the Internet. Vite's monitoring mode ignores
 `.env`, removes the normal API proxy, and limits browser connections with CSP.
 The dedicated client fixes the API to loopback port 53000, verifies `/ready`
 identifies the monitoring sandbox before signing in, and keeps tokens in memory.
-The normal production entry and authentication code are not changed.
+The website uses a separate adapter that reuses normal authentication; it never calls development login.
 
 Scope IDs identify draft items. They do not create companies, confirmed products
 or IP registrations in production. Existing canonical identities can be linked
 through the backend contract, with tenant checks, but mapping UI, activation,
-workers, catalog reconciliation and live rollout are subsequent work.
+workers and catalog reconciliation are subsequent work. Existing IPs/products are not guessed into brands or migrated on page load.
 
 Validation: frontend lint, focused workspace tests, TypeScript and production build;
 backend TypeScript, complete empty-database migrations through 126 and replay,
@@ -85,14 +93,13 @@ application console/network errors were observed during these checks.
 
 Earlier checks also covered creating/searching products, adding a brand, unsaved
 change protection and two-tab conflict recovery. The production output contains
-neither the new entry nor local client/fixtures/icons. Pushes skip deployment;
-no production migrations or monitoring runs are part of this iteration.
+neither the standalone development entry nor its local client/fixtures. Shared editors and bundled icons are now included through the website routes.
 
 ## Admin marketplace catalog
 
 On the local welcome screen, **Open catalog admin** opens Admin → Marketplace
 catalog using a separate synthetic local admin account. Company example accounts
-remain ordinary users. This UI is excluded from the production entry.
+remain ordinary users. The same editor is used in the website’s Admin → Marketplaces page.
 
 Admins can add or edit a marketplace's name, bundled logo choice, country
 storefronts and reference URLs, and sectors. The main domain is immutable after
@@ -106,7 +113,7 @@ brand selections are not automatically changed. Removing a country association
 leaves previously selected pairs visible for review. Products still inherit brand
 coverage; sectors do not influence classification or start jobs.
 
-The admin endpoints require an authenticated admin and the same local-only flag.
+The admin endpoints require an authenticated admin and the marketplace rollout flag (or the isolated local draft flag).
 Migration 127 adds per-marketplace revisions and audited change snapshots. Updates
 are atomic, duplicate retries converge, and stale edits return a conflict with the
 user's form retained. Catalog metadata does not establish scraper readiness.
@@ -118,3 +125,38 @@ for Italy and Peru with “Outdoor & sport,” found it through brand country/se
 filters, reloaded it, edited a storefront and checked unsaved-change protection.
 Desktop and 390 px forms had no horizontal overflow or application console errors.
 This synthetic sample remains in the local catalog for review.
+
+
+## Hosted rollout
+
+Deploy backend migrations 125–128 and the updated API before enabling either feature.
+`MONITORING_MARKETPLACE_ADMIN_ENABLED=true` enables the shared catalog editor for
+existing admins. Draft setup requires both `MONITORING_WORKSPACE_DRAFTS_ENABLED=true`
+and a comma-separated `MONITORING_WORKSPACE_TENANT_IDS` allowlist of company UUIDs.
+Hosted drafts stay unavailable with the old local flag alone. No wildcard is accepted.
+The session-only capabilities endpoint exposes availability for the effective company
+and admin role; API routes independently enforce it. Turning off either flag preserves
+saved data. The standalone sandbox remains local-only regardless of hosted rollout.
+
+Draft setup can save and preview plans. It cannot activate searches, create canonical
+products or replace existing live monitor configuration. The website labels this clearly
+and links to active monitors. Activation requires reviewed IP/brand/product mappings and
+a separate scheduler cutover; search origins must not become classification evidence.
+
+
+Website integration verification: production build/static entries, frontend lint and
+transport checks, backend type checking and isolated HTTP/database tests passed.
+Chrome in the Unvelar profile verified both authenticated website routes against the
+production API read-only, including disabled-feature states. A temporary isolated-data
+harness verified the exact embedded editors with the website CSS: admin list/modal,
+company/brand/product scopes, inherited coverage, navigation protection, and 390 px
+layout without horizontal overflow. No application errors were observed. The harness
+was removed afterward; it is not shipped.
+
+
+The Azure release on 2026-09-28 failed because the draft migrations assumed legacy
+`anon`/`authenticated` database roles existed. Backend migration 128 supplies missing
+NOLOGIN roles without privileges before the historical revocations, preserving all
+previous migration checksums. The sandbox no longer masks this prerequisite by
+creating roles during initialization. The repaired migration sequence and replay were
+verified on an isolated PostgreSQL instance initially containing neither role.

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { MarketplaceMark } from './CoverageEditor';
 import { countryLabel, flagEmoji } from '../lib/countries';
-import { DraftError, type AdminCatalog, type AdminMarketplace, type MarketplaceEdit, type workspaceClient } from './api';
+import { DraftError, type AdminCatalog, type AdminMarketplace, type MarketplaceEdit, type MarketplaceClient } from './contracts';
+import './workspace.css';
+import { useDraftNavigationGuard } from './useDraftNavigationGuard';
 
-type Client = ReturnType<typeof workspaceClient>;
 const blank = (): MarketplaceEdit => ({ key: null, expected_revision: 0, name: '', domain: '', logo_key: null, categories: [], markets: [] });
 const edit = (source: AdminMarketplace): MarketplaceEdit => ({ key: source.key, expected_revision: source.revision, name: source.name, domain: source.domain, logo_key: source.logo_key, categories: source.categories.map(item => item.key), markets: structuredClone(source.markets) });
 
-export default function MarketplaceAdmin({ client, onLeave }: { client: Client; onLeave: () => void }) {
+export default function MarketplaceAdmin({ client, onLeave, embedded = false }: { client: MarketplaceClient; onLeave?: () => void; embedded?: boolean }) {
+  const Content = embedded ? 'div' : 'main';
   const [catalog, setCatalog] = useState<AdminCatalog | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -27,7 +29,7 @@ export default function MarketplaceAdmin({ client, onLeave }: { client: Client; 
 
   useEffect(() => { let active = true; void client.catalog().then(value => { if (active) setCatalog(value); }).catch(err => { if (active) setError(err.message); }); return () => { active = false; }; }, [client]);
   useEffect(() => { if (form && !dialog.current?.open) dialog.current?.showModal(); }, [form]);
-  useEffect(() => { if (!dirty) return; const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
+  useDraftNavigationGuard(dirty);
   async function refresh() { setError(''); try { setCatalog(await client.catalog()); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } }
   function open(source?: AdminMarketplace) { const value = source ? edit(source) : blank(); setForm(value); setSavedForm(JSON.stringify(value)); setFormError(''); setSectorError(''); setSectorName(''); setConflict(false); setDiscarding(false); setMessage(''); }
   function close() { dialog.current?.close(); setForm(null); }
@@ -62,11 +64,11 @@ export default function MarketplaceAdmin({ client, onLeave }: { client: Client; 
     if (form) setForm({ ...form, markets: form.markets.map((market, i) => i === index ? { ...market, ...change } : market) });
   }
   const matches = catalog?.marketplaces.filter(source => `${source.name} ${source.domain}`.toLowerCase().includes(query.toLowerCase()) && (!country || source.markets.some(market => market.country === country)) && (!sector || source.categories.some(category => category.key === sector))) ?? [];
-  return <>
-    <div className="sandbox-banner"><strong>Local admin</strong><span>Shared sandbox catalog · No monitoring jobs run</span></div>
-    <div className="shell"><aside className="sidebar"><div className="wordmark">unvelar<span>®</span></div><span className="eyebrow">Admin</span><nav aria-label="Admin"><button aria-current="page">Marketplace catalog</button></nav><button className="secondary" onClick={onLeave}>Back to workspaces</button></aside>
-      <main><header className="topbar">Admin / Marketplace catalog</header><div className="page">
-        <div className="page-heading"><div><h1>Marketplaces</h1><p>Manage where companies can monitor, and the sectors each marketplace covers.</p></div><button className="primary" disabled={!catalog || busy} onClick={() => open()}>Add marketplace</button></div>
+  return <div className={`monitoring-workspace${embedded ? " embedded-catalog" : ""}`}>
+    {!embedded && <div className="sandbox-banner"><strong>Local admin</strong><span>Shared sandbox catalog · No monitoring jobs run</span></div>}
+    <div className="shell">{!embedded && <aside className="sidebar"><div className="wordmark">unvelar<span>®</span></div><span className="eyebrow">Admin</span><nav aria-label="Admin"><button aria-current="page">Marketplace catalog</button></nav><button className="secondary" onClick={onLeave}>Back to workspaces</button></aside>}
+      <Content className="workspace-content">{!embedded && <header className="topbar">Admin / Marketplace catalog</header>}<div className="page">
+        <div className="page-heading"><div>{!embedded && <><h1>Marketplaces</h1><p>Manage where companies can monitor, and the sectors each marketplace covers.</p></>}</div><button className="primary" disabled={!catalog || busy} onClick={() => open()}>Add marketplace</button></div>
         {error && <div className="error-box" role="alert">{error} <button className="text-button" onClick={refresh}>Retry catalog</button></div>}
         <div className="status" role="status">{message}</div>
         {!catalog ? !error && <p>Loading catalog…</p> : <>
@@ -75,7 +77,7 @@ export default function MarketplaceAdmin({ client, onLeave }: { client: Client; 
           {!matches.length && <p className="empty-state">No marketplaces match these filters.</p>}
           <p className="field-note">{matches.length} marketplaces · Catalog entries are shared across companies. Monitoring support remains unverified until a connector is validated.</p>
         </>}
-      </div></main>
+      </div></Content>
     </div>
     <dialog className="catalog-dialog" ref={dialog} aria-labelledby="marketplace-heading" onCancel={event => { event.preventDefault(); requestClose(); }}>
       {form && catalog && <form onSubmit={save}>
@@ -93,5 +95,5 @@ export default function MarketplaceAdmin({ client, onLeave }: { client: Client; 
         {discarding ? <div className="catalog-discard"><p>Discard unsaved marketplace changes?</p><div className="actions"><button type="button" className="secondary" onClick={() => setDiscarding(false)}>Keep editing</button><button type="button" className="primary" onClick={close}>Discard changes</button></div></div> : <div className="actions"><button type="button" className="secondary" disabled={busy} onClick={requestClose}>Cancel</button><button type="submit" className="primary" disabled={!dirty || busy || conflict}>{busy ? 'Saving…' : 'Save marketplace'}</button></div>}
       </form>}
     </dialog>
-  </>;
+  </div>;
 }
