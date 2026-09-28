@@ -6,7 +6,7 @@ import CoverageEditor from './CoverageEditor';
 import './workspace.css';
 import { useDraftNavigationGuard } from './useDraftNavigationGuard';
 
-export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false, tenantSwitcherLabel, localPreview = false }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean; tenantSwitcherLabel?: string; localPreview?: boolean }) {
+export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false, tenantSwitcherLabel }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean; tenantSwitcherLabel?: string }) {
   const Content = embedded ? 'div' : 'main';
   const [saved, setSaved] = useState<Draft>(loaded);
   const [document, setDocument] = useState(loaded.document);
@@ -55,7 +55,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     try {
       const result = await client.save(document, saved.revision);
       setSaved(result); setDocument(result.document); setConflict(false);
-      setMessage(`${localPreview ? 'Local changes' : 'Draft'} saved · Revision ${result.revision}. Monitoring has not been activated.`);
+      setMessage(`Draft saved · Revision ${result.revision}. Monitoring has not been activated.`);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); setConflict(err instanceof DraftError && err.status === 409); }
     finally { setBusy(false); }
   }
@@ -103,7 +103,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     {plan && plan.issues.length > 3 && <details className="more-issues"><summary>{plan.issues.length - 3} more items to review</summary>{plan.issues.slice(3).map(issue => <p className="notice" key={issue}>{issue}</p>)}</details>}
     {previewError && <p role="alert" className="notice">{previewError}</p>}
     <button className="secondary" disabled={!plan?.total_searches} onClick={() => previewDialog.current?.showModal()}>Preview searches</button>
-    <p className="field-note">{localPreview ? 'This is a local preview; saving does not run searches.' : 'Saving keeps a draft; it does not run searches.'}</p>
+    <p className="field-note">Saving keeps a draft; it does not run searches.</p>
   </aside>;
   return <div className={`monitoring-workspace tenant-workspace-editor${embedded ? " embedded-workspace" : ""}`}>
     {!embedded && <div className="sandbox-banner"><strong>Local development</strong><span>Saved in your sandbox database · No monitoring jobs run</span></div>}
@@ -111,7 +111,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       <Content className="workspace-content">
         <div className="page tenant-editor-page">
           {error && <div className="error-box" role="alert">{error}{conflict && <p>Your edits are still here. Copy any changes you want to keep, then <button className="text-button" disabled={busy} onClick={reload}>reload the saved draft</button>.</p>}</div>}
-          <div className="page-heading"><div><div className="eyebrow">Tenant · {tenantName}</div><h1>Monitoring</h1><p>Choose a brand or product to configure its monitoring.</p></div><div className="actions">{(!embedded || tenantSwitcherLabel) && <button className="secondary" disabled={busy} onClick={() => dirty ? leaveDialog.current?.showModal() : onLeave()}>{tenantSwitcherLabel ?? (localPreview ? 'Leave local workspace' : 'Switch tenant')}</button>}<button className="secondary" disabled={busy} onClick={() => openAdd('brand')}>+ Add brand</button></div></div>
+          <div className="page-heading"><div><div className="eyebrow">Tenant · {tenantName}</div><h1>Monitoring</h1><p>Choose a brand or product to configure its monitoring.</p></div><div className="actions">{(!embedded || tenantSwitcherLabel) && <button className="secondary" disabled={busy} onClick={() => dirty ? leaveDialog.current?.showModal() : onLeave()}>{tenantSwitcherLabel ?? 'Switch tenant'}</button>}<button className="secondary" disabled={busy} onClick={() => openAdd('brand')}>+ Add brand</button></div></div>
           <div className="scope-workspace">
             <ScopeNavigator brands={document.brands} tenantName={tenantName} brandId={brandId} productId={productId} disabled={busy} onSelect={selectScope} />
             <div className="scope-detail">
@@ -138,12 +138,12 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
           </div>{summary}</fieldset> : null}
             </div>
           </div>
-          <div className="savebar"><div><span>{dirty ? `Unsaved ${localPreview ? 'local ' : ''}changes` : `${localPreview ? 'Saved locally' : 'Saved draft'} · Revision ${saved.revision}`}</span><p className="field-note">{localPreview ? 'This local preview never starts monitoring jobs.' : 'Saved as a draft. Searches remain inactive.'}</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={!dirty || busy || conflict} onClick={save}>{busy ? 'Saving…' : localPreview ? 'Save locally' : 'Save draft'}</button></div></div>
+          <div className="savebar"><div><span>{dirty ? 'Unsaved changes' : `Saved draft · Revision ${saved.revision}`}</span><p className="field-note">Saved as a draft. Searches remain inactive.</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={!dirty || busy || conflict} onClick={save}>{busy ? 'Saving…' : 'Save draft'}</button></div></div>
           <div className="status" role="status">{message}</div>
         </div>
       </Content>
     </div>
-    <dialog ref={addDialog} aria-labelledby="add-heading"><h2 id="add-heading">Add {adding === 'brand' ? 'a brand' : adding === 'product' ? 'a product' : 'a reference material'}</h2><p>{adding === 'product' ? 'All products automatically use their brand’s countries, marketplaces and schedule. Add only the search phrases you want to run.' : adding === 'brand' ? 'Brands group products and provide shared monitoring coverage.' : 'Reference materials support review only. They never change search terms, coverage or categorization.'}</p><form onSubmit={add}><label htmlFor="new-name">{adding === 'brand' ? 'Brand' : adding === 'product' ? 'Product' : 'Reference'} name</label><input id="new-name" name="name" required maxLength={160} autoFocus />{adding === 'reference' ? <><label htmlFor="reference-kind">Type</label><select id="reference-kind" name="kind"><option value="image">Image</option><option value="document">Document</option></select><label htmlFor="reference-note">Note</label><textarea id="reference-note" name="note" rows={3} maxLength={500} /></> : <><label htmlFor="new-keywords">Search keywords · one per line</label><textarea id="new-keywords" name="keywords" rows={3} /></>}<div className="actions"><button type="button" className="secondary" onClick={() => addDialog.current?.close()}>Cancel</button><button type="submit" className="primary">{localPreview ? 'Add locally' : 'Add to draft'}</button></div></form></dialog>
+    <dialog ref={addDialog} aria-labelledby="add-heading"><h2 id="add-heading">Add {adding === 'brand' ? 'a brand' : adding === 'product' ? 'a product' : 'a reference material'}</h2><p>{adding === 'product' ? 'All products automatically use their brand’s countries, marketplaces and schedule. Add only the search phrases you want to run.' : adding === 'brand' ? 'Brands group products and provide shared monitoring coverage.' : 'Reference materials support review only. They never change search terms, coverage or categorization.'}</p><form onSubmit={add}><label htmlFor="new-name">{adding === 'brand' ? 'Brand' : adding === 'product' ? 'Product' : 'Reference'} name</label><input id="new-name" name="name" required maxLength={160} autoFocus />{adding === 'reference' ? <><label htmlFor="reference-kind">Type</label><select id="reference-kind" name="kind"><option value="image">Image</option><option value="document">Document</option></select><label htmlFor="reference-note">Note</label><textarea id="reference-note" name="note" rows={3} maxLength={500} /></> : <><label htmlFor="new-keywords">Search keywords · one per line</label><textarea id="new-keywords" name="keywords" rows={3} /></>}<div className="actions"><button type="button" className="secondary" onClick={() => addDialog.current?.close()}>Cancel</button><button type="submit" className="primary">Add to draft</button></div></form></dialog>
     <dialog ref={previewDialog} aria-labelledby="preview-heading"><div className="dialog-header"><h2 id="preview-heading">Requested searches · {plan?.total_searches ?? 0}</h2><button className="secondary" onClick={() => previewDialog.current?.close()}>Close</button></div><p>{plan?.coverage_notice}</p>{plan?.truncated && <p>Showing the first 500 searches.</p>}<div className="table-wrap"><table><thead><tr><th>Keyword</th><th>Website</th><th>Country</th><th>Schedule</th><th>Scope</th></tr></thead><tbody>{plan?.searches.map((item, i) => <tr key={i}><td>{item.keyword}</td><td>{item.source_name}<span className="preview-domain">{item.storefront_domain}</span></td><td>{countryLabel(item.country)}</td><td>{item.frequency}</td><td>{item.origins.map(origin => origin.name).join(", ")}</td></tr>)}</tbody></table></div></dialog>
     <dialog ref={leaveDialog} aria-labelledby="leave-heading"><h2 id="leave-heading">Keep your draft changes?</h2><p>Save before switching tenant, or discard the changes you have not saved.</p><div className="actions"><button className="secondary" onClick={() => leaveDialog.current?.close()}>Keep editing</button><button className="primary" onClick={onLeave}>Discard and switch</button></div></dialog>
   </div>;

@@ -1,20 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { monitoringSetupClient, getMonitoringSetupCapabilities } from '../api/monitoringWorkspace';
 import { useAuth } from '../context/AuthContext';
 import WorkspaceEditor from '../monitoring-workspace/WorkspaceEditor';
 import type { WorkspaceResponse } from '../monitoring-workspace/contracts';
-import { isLocalMonitoringPreview } from '../monitoring-workspace/localPreviewAvailability';
-
-// Vite removes this import and its sample credentials from production builds.
-const LocalPreview = import.meta.env.DEV ? lazy(() => import('../monitoring-workspace/LocalPreview')) : null;
 
 export default function MonitoringSetup() {
   const { actingTenantId } = useAuth();
-  const location = useLocation();
-  if (LocalPreview && isLocalMonitoringPreview(location.pathname, location.search, window.location.hostname, import.meta.env.DEV)) {
-    return <Suspense fallback={<p className="p-8" role="status">Opening local preview…</p>}><LocalPreview kind="workspace" /></Suspense>;
-  }
   return <TenantSetup key={actingTenantId} />;
 }
 

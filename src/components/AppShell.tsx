@@ -18,7 +18,6 @@ import {
   Store,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { isLocalMonitoringPreview } from "../monitoring-workspace/localPreviewAvailability";
 import "./AppShell.css";
 import TenantMenu from "./TenantMenu";
 import Avatar from "./Avatar";
@@ -100,8 +99,7 @@ function AppShellContent() {
   }, [user]);
 
   const actingTenant = tenants.find((t) => t.id === actingTenantId) ?? null;
-  const { pathname, hash, search } = useLocation();
-  const localPreview = isLocalMonitoringPreview(pathname, search, window.location.hostname, import.meta.env.DEV);
+  const { pathname, hash } = useLocation();
   const [monitoringCount, setMonitoringCount] = useState(0);
   const [returnedSellerCount, setReturnedSellerCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -311,7 +309,7 @@ function AppShellContent() {
   return (
     <div
       className="app-shell min-h-dvh bg-cream text-stone-900 font-[Inter,system-ui,sans-serif] [--app-shell-topbar-height:3rem] [--app-shell-banner-sticky-top:3rem] lg:fixed lg:inset-0 lg:overflow-hidden lg:[--app-shell-topbar-height:40px] lg:[--app-shell-banner-sticky-top:0px]"
-      style={appShellLayoutStyle(isActingAsOther || localPreview)}
+      style={appShellLayoutStyle(isActingAsOther)}
     >
       {/* Mobile topbar */}
       <div className="shell-mobile-topbar lg:hidden sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 flex items-center px-3 gap-3">
@@ -328,7 +326,7 @@ function AppShellContent() {
           <span className="hidden text-sm font-bold tracking-tight sm:inline">Unvelar</span>
         </Link>
         <div className="ml-auto flex items-center gap-1.5">
-          <TenantMenu key={`${pathname}${search}`} tenants={tenants} preview={localPreview} />
+          <TenantMenu key={pathname} tenants={tenants} />
           <NotificationBell count={notificationCount} active={isActive("/inbox")} />
         </div>
       </div>
@@ -368,7 +366,7 @@ function AppShellContent() {
 
         {/* Main */}
         <main className="flex-1 min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain">
-          {localPreview ? <div className="shell-tenant-banner sticky z-30 flex h-7 items-center gap-2 border-b border-sky-200 bg-sky-50 px-4 text-xs text-sky-900" style={{ top: `var(${APP_SHELL_BANNER_STICKY_TOP_VAR})` }}><span>Local development · Isolated workspace</span><Link className="ml-auto shrink-0 font-semibold underline underline-offset-2" to={pathname}>Exit preview</Link></div> : isActingAsOther && (
+          {isActingAsOther && (
             <ActingTenantBanner
               label={actingTenant ? tenantLabel(actingTenant) : (actingTenantId ?? "")}
               onReturn={() => user && switchTenant(user.tenant_id)}
@@ -379,7 +377,7 @@ function AppShellContent() {
             className="shell-desktop-topbar hidden lg:flex sticky z-20 h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
             style={{ top: `var(${APP_SHELL_BANNER_HEIGHT_VAR})` }}
           >
-            <TenantMenu key={`${pathname}${search}`} tenants={tenants} preview={localPreview} />
+            <TenantMenu key={pathname} tenants={tenants} />
             <div className="ml-1 h-[18px] w-px bg-stone-200" aria-hidden />
             <NotificationBell count={notificationCount} active={isActive("/inbox")} />
           </div>
