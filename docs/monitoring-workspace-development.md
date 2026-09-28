@@ -87,3 +87,34 @@ Earlier checks also covered creating/searching products, adding a brand, unsaved
 change protection and two-tab conflict recovery. The production output contains
 neither the new entry nor local client/fixtures/icons. Pushes skip deployment;
 no production migrations or monitoring runs are part of this iteration.
+
+## Admin marketplace catalog
+
+On the local welcome screen, **Open catalog admin** opens Admin → Marketplace
+catalog using a separate synthetic local admin account. Company example accounts
+remain ordinary users. This UI is excluded from the production entry.
+
+Admins can add or edit a marketplace's name, bundled logo choice, country
+storefronts and reference URLs, and sectors. The main domain is immutable after
+creation so saved monitoring references remain stable. New sectors can be created
+inline and are saved globally immediately. Country choices use the API's ISO
+country list; countries added to the catalog also appear in the brand selector.
+
+The list supports name/domain, country and sector filters. Changes are shared
+across companies and become available on reopening/reloading a workspace. Existing
+brand selections are not automatically changed. Removing a country association
+leaves previously selected pairs visible for review. Products still inherit brand
+coverage; sectors do not influence classification or start jobs.
+
+The admin endpoints require an authenticated admin and the same local-only flag.
+Migration 127 adds per-marketplace revisions and audited change snapshots. Updates
+are atomic, duplicate retries converge, and stale edits return a conflict with the
+user's form retained. Catalog metadata does not establish scraper readiness.
+
+Verified: API permission denial for company users, cross-company discovery,
+creation, editing, sector retries, save retries, concurrent conflict handling,
+audit entries and unchanged jobs/monitors. Chrome checks created “Sandbox Market”
+for Italy and Peru with “Outdoor & sport,” found it through brand country/sector
+filters, reloaded it, edited a storefront and checked unsaved-change protection.
+Desktop and 390 px forms had no horizontal overflow or application console errors.
+This synthetic sample remains in the local catalog for review.

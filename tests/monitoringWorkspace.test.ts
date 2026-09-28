@@ -62,3 +62,19 @@ test('company preview sends an explicit company scope', async () => {
   }) as typeof fetch;
   await workspaceClient('localhost').preview({ version: 3, brands: [] }, null, null);
 });
+
+test('local admin login still verifies isolation and catalog writes use the dedicated endpoints', async () => {
+  const calls: { url: string; body: unknown }[] = [];
+  globalThis.fetch = (async (url, init) => {
+    calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
+    return Response.json(String(url).endsWith('/ready') ? { sandbox: true } : { token: 'local-admin' });
+  }) as typeof fetch;
+  const client = workspaceClient('localhost');
+  await client.signIn('catalog-admin@unvelar.example', true);
+  await client.addSector('Outdoor');
+  await client.catalog();
+  expect(calls[0].url).toBe('http://localhost:53000/ready');
+  expect(calls[1].body).toEqual({ email: 'catalog-admin@unvelar.example', admin: true });
+  expect(calls[2]).toEqual({ url: 'http://localhost:53000/api/admin/monitoring-marketplaces/sectors', body: { name: 'Outdoor' } });
+  expect(calls[3].url).toBe('http://localhost:53000/api/admin/monitoring-marketplaces');
+});

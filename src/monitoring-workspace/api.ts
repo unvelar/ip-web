@@ -8,6 +8,9 @@ export type Source = { key: string; name: string; kind: string; domain: string; 
   categories: { key: string; name: string }[];
   markets: { country: string; storefront_domain: string; evidence_url: string }[];
 };
+export type AdminMarketplace = Source & { revision: number };
+export type AdminCatalog = { marketplaces: AdminMarketplace[]; categories: { key: string; name: string }[]; countries: { code: string; name: string }[] };
+export type MarketplaceEdit = { key: string | null; expected_revision: number; name: string; domain: string; logo_key: string | null; categories: string[]; markets: Source['markets'] };
 export type Draft = { document: Workspace; revision: number; updated_at: string | null };
 export type WorkspaceResponse = Draft & { company: { id: string; name: string }; sources: Source[] };
 export type Plan = {
@@ -39,12 +42,15 @@ export function workspaceClient(hostname: string) {
     return body as T;
   }
   return {
-    async signIn(email: string) {
+    async signIn(email: string, admin = false) {
       const ready = await request<{ sandbox: boolean }>('/ready');
       if (ready.sandbox !== true) throw new Error('This API is not the monitoring sandbox.');
-      const session = await request<{ token: string }>('/api/auth/dev', { method: 'POST', body: JSON.stringify({ email }) });
+      const session = await request<{ token: string }>('/api/auth/dev', { method: 'POST', body: JSON.stringify({ email, ...(admin ? { admin: true } : {}) }) });
       token = session.token;
     },
+    catalog: () => request<AdminCatalog>('/api/admin/monitoring-marketplaces'),
+    saveMarketplace: (value: MarketplaceEdit) => request<{ key: string; revision: number }>('/api/admin/monitoring-marketplaces', { method: 'PUT', body: JSON.stringify(value) }),
+    addSector: (name: string) => request<{ key: string; name: string }>('/api/admin/monitoring-marketplaces/sectors', { method: 'POST', body: JSON.stringify({ name }) }),
     load: () => request<WorkspaceResponse>('/api/monitoring-workspace'),
     save: (document: Workspace, revision: number) => request<Draft>('/api/monitoring-workspace', { method: 'PUT', body: JSON.stringify({ document, expected_revision: revision }) }),
     preview: (document: Workspace, brandId: string | null, productId: string | null, signal?: AbortSignal) => request<Plan>('/api/monitoring-workspace/preview', { method: 'POST', body: JSON.stringify({ document, brand_id: brandId, product_id: productId }), signal }),
