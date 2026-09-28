@@ -24,13 +24,32 @@ larger-catalog example. These use separate synthetic local tenants. Saved edits
 survive reloads and restarts; unsaved edits stay in memory and prompt before
 leaving. No production accounts or authentication tokens are used.
 
-The editor supports brand/product creation and naming, product search, keywords,
-website and country selection, shared/custom coverage, cadence, exact query
-preview, save/discard and stale-edit conflict handling. A brand coverage change
-shows the number of inheriting products it affects. The backend is the authority
-for normalization and preview. Brand terms are never silently inherited by a
-product. Incomplete configurations can be saved as drafts; preview explains what
-is missing. Source/country support is marked unverified until it can be validated.
+The scope selector follows **company → brand → product**. Entire company combines
+all explicit brand/product searches; brand-only targets its own keywords, and a
+product targets only its own keywords. Equivalent company searches are combined
+only when source, country, normalized phrase and schedule match; preview retains
+the originating scopes. No scope affects classification confidence.
+
+Coverage uses compact country tabs with flags. Select a country, then choose its
+marketplaces in a consistent table with local brand SVGs, storefront domains and
+category tags. Search, category and selected-only filters aid navigation without
+changing saved selections. Each country's choices are independent; a new country
+starts empty. Product coverage inherits from its brand until explicitly customized.
+The brand summary shows how many products inherit its changes.
+
+The backend stores country/category metadata in additive migration 126. This is
+an initial curated catalog, not proof of monitoring support or complete marketplace
+availability. Existing version-1 drafts upgrade without losing any requested pairs;
+unmapped saved choices remain visible for review. Backend preview remains the
+authority for normalization and the exact requested searches. Incomplete plans
+can be saved as drafts.
+
+Brand icons are supplied by [Font Awesome Free 6.7.2](https://fontawesome.com/),
+under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) for SVG icons.
+The dependency retains its attribution and license. Marks identify their respective
+services; platforms without a bundled icon use a consistent monogram. No external
+image request is made. Country/storefront evidence URLs are stored in the backend
+catalog alongside review dates.
 
 The backend exposes only local draft/auth endpoints, with no jobs or activation.
 Its API/database network cannot reach the Internet. Vite's monitoring mode ignores
@@ -44,16 +63,21 @@ or IP registrations in production. Existing canonical identities can be linked
 through the backend contract, with tenant checks, but mapping UI, activation,
 workers, catalog reconciliation and live rollout are subsequent work.
 
-Validation: frontend lint, 235 tests, TypeScript and production build; backend
-TypeScript, full empty-database migrations and replay, seven focused tests
-including real HTTP/database ownership, concurrency, retry and no-job checks.
-Unvelar Chrome checks covered saving/reloading product keywords and custom
-coverage, exact query preview with duplicate normalization, company switching,
-product search/creation, a conflicting save from two tabs, retaining local edits,
-and reloading the winning revision. Creating a second brand and unsaved-change
-protection were also checked. Desktop and 390 px layouts were inspected, with
-no horizontal overflow. Browser console warnings came from an unrelated extension;
-no application errors were observed. The expected 409 conflict was shown in the UI.
-The production output contains neither the new entry nor local client/fixtures.
-The pushes skip deployment; no production migrations or monitoring runs are part
-of this iteration.
+Validation: frontend lint, full test suite, TypeScript and production build;
+backend TypeScript, complete empty-database migrations through 126 and replay,
+and ten focused tests including real HTTP/database ownership, concurrency, retry,
+legacy upgrades, catalog metadata, scope union and no-job checks.
+
+Unvelar Chrome validation covered country-specific selection and persistence
+(Amazon selected for Italy, unselected for Spain), category filtering, local logos,
+company/brand/product scope switching, retained Bianco Latte custom coverage and
+Paula's Choice inherited coverage. Product preview contained only its three
+explicit phrases (18 searches); company preview combined those with the brand's
+ten requests for 28 total. Desktop and 390 px layouts were inspected without
+horizontal overflow. Browser logs contained unrelated extension warnings; no
+application console/network errors were observed during these checks.
+
+Earlier checks also covered creating/searching products, adding a brand, unsaved
+change protection and two-tab conflict recovery. The production output contains
+neither the new entry nor local client/fixtures/icons. Pushes skip deployment;
+no production migrations or monitoring runs are part of this iteration.

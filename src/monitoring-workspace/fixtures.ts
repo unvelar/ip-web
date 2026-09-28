@@ -9,7 +9,7 @@ export function exampleWorkspace(companyId: string): Workspace {
   const brand: Brand = {
     id: crypto.randomUUID(), name: paula ? 'Paula’s Choice' : 'Giardini di Toscana',
     keywords: paula ? ["paula's choice", 'paulas choice', '宝拉珍选'] : ['Giardini di Toscana', 'Giardini Toscana'],
-    coverage: { sources: ['domain:ebay.com', 'search:google'], countries: paula ? ['US', 'GB'] : ['IT', 'ES'], frequency: 'weekly' },
+    coverage: { markets: (paula ? ['US', 'GB'] : ['IT', 'ES']).map(country => ({ country, sources: ['domain:ebay.com', 'search:google'] })), frequency: 'weekly' },
     products: (paula ? [
       ['RESIST Youth-Extending Daily Hydrating Fluid', "paula's choice youth extending daily hydrating fluid"],
       ['SKIN PERFECTING 2% BHA Liquid Exfoliant', "paula's choice 2% bha"],
@@ -20,5 +20,5 @@ export function exampleWorkspace(companyId: string): Workspace {
       id: crypto.randomUUID(), name, keywords, coverage: null, catalog_product_id: null,
     })),
   };
-  return { version: 1, brands: [brand] };
+  return { version: 2, brands: [brand] };
 }

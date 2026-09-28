@@ -32,7 +32,7 @@ test('an API without the sandbox marker cannot receive a login', async () => {
 });
 test('saving sends the expected revision and surfaces conflicts without retrying', async () => {
   let count = 0;
-  const document: Workspace = { version: 1, brands: [] };
+  const document: Workspace = { version: 2, brands: [] };
   globalThis.fetch = (async (_url, init) => {
     count++;
     expect(JSON.parse(init?.body as string)).toEqual({ document, expected_revision: 4 });
@@ -41,4 +41,24 @@ test('saving sends the expected revision and surfaces conflicts without retrying
   try { await workspaceClient('localhost').save(document, 4); throw new Error('Expected a conflict'); }
   catch (err) { expect(err).toBeInstanceOf(DraftError); expect((err as DraftError).status).toBe(409); }
   expect(count).toBe(1);
+});
+
+test('country-first selection isolates edits and preserves uncataloged saved choices', async () => {
+  const { countrySources, sourcesForCountry } = await import('../src/monitoring-workspace/coverage');
+  const value = { frequency: 'weekly' as const, markets: [{ country: 'IT', sources: ['ebay'] }, { country: 'ES', sources: ['ebay'] }] };
+  const edited = countrySources(value, 'IT', 'ebay');
+  expect(edited.markets).toEqual([{ country: 'IT', sources: [] }, { country: 'ES', sources: ['ebay'] }]);
+  expect(value.markets[0].sources).toEqual(['ebay']);
+  const base = { name: 'Example', domain: 'example.test', logo_key: null, categories: [] };
+  const sources = [{ ...base, key: 'italy', kind: 'marketplace', markets: [{ country: 'IT', storefront_domain: 'example.it', evidence_url: 'https://example.test' }] }, { ...base, key: 'search', kind: 'search', markets: [] }];
+  expect(sourcesForCountry(sources, 'ES', []).map(source => source.key)).toEqual(['search']);
+  expect(sourcesForCountry(sources, 'ES', ['italy', 'retired']).map(source => source.key)).toEqual(['italy', 'search', 'retired']);
+});
+
+test('company preview sends an explicit company scope', async () => {
+  globalThis.fetch = (async (_url, init) => {
+    expect(JSON.parse(init?.body as string)).toEqual({ document: { version: 2, brands: [] }, brand_id: null, product_id: null });
+    return Response.json({});
+  }) as typeof fetch;
+  await workspaceClient('localhost').preview({ version: 2, brands: [] }, null, null);
 });

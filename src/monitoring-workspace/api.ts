@@ -1,16 +1,19 @@
 // This client deliberately does not import production transport/auth. Local
 // tokens live only in this page's memory and cannot replace a real user session.
-export type Coverage = { sources: string[]; countries: string[]; frequency: 'daily' | 'weekly' | 'monthly' };
+export type Coverage = { markets: { country: string; sources: string[] }[]; frequency: 'daily' | 'weekly' | 'monthly' };
 export type Product = { id: string; name: string; keywords: string[]; coverage: Coverage | null; catalog_product_id: string | null };
 export type Brand = { id: string; name: string; keywords: string[]; coverage: Coverage; products: Product[] };
-export type Workspace = { version: 1; brands: Brand[] };
-export type Source = { key: string; name: string; kind: string; domain: string };
+export type Workspace = { version: 2; brands: Brand[] };
+export type Source = { key: string; name: string; kind: string; domain: string; logo_key: string | null;
+  categories: { key: string; name: string }[];
+  markets: { country: string; storefront_domain: string; evidence_url: string }[];
+};
 export type Draft = { document: Workspace; revision: number; updated_at: string | null };
 export type WorkspaceResponse = Draft & { company: { id: string; name: string }; sources: Source[] };
 export type Plan = {
-  lifecycle: 'draft'; executable: false; inherited: boolean; effective_coverage: Coverage;
-  total_searches: number; truncated: boolean; affected_products: number; issues: string[]; coverage_notice: string;
-  searches: { keyword: string; source_key: string; source_name: string; country: string; coverage_status: 'unverified' }[];
+  lifecycle: 'draft'; executable: false; inherited: boolean; effective_coverage: Coverage | null;
+  total_searches: number; combined_searches: number; scope_count: number; countries: string[]; source_keys: string[]; truncated: boolean; affected_products: number; issues: string[]; coverage_notice: string;
+  searches: { keyword: string; source_key: string; source_name: string; country: string; frequency: Coverage['frequency']; storefront_domain: string | null; coverage_status: 'unverified'; origins: { brand_id: string; product_id: string | null; name: string }[] }[];
 };
 export class DraftError extends Error {
   status: number;
@@ -44,6 +47,6 @@ export function workspaceClient(hostname: string) {
     },
     load: () => request<WorkspaceResponse>('/api/monitoring-workspace'),
     save: (document: Workspace, revision: number) => request<Draft>('/api/monitoring-workspace', { method: 'PUT', body: JSON.stringify({ document, expected_revision: revision }) }),
-    preview: (document: Workspace, brandId: string, productId: string | null, signal?: AbortSignal) => request<Plan>('/api/monitoring-workspace/preview', { method: 'POST', body: JSON.stringify({ document, brand_id: brandId, product_id: productId }), signal }),
+    preview: (document: Workspace, brandId: string | null, productId: string | null, signal?: AbortSignal) => request<Plan>('/api/monitoring-workspace/preview', { method: 'POST', body: JSON.stringify({ document, brand_id: brandId, product_id: productId }), signal }),
   };
 }

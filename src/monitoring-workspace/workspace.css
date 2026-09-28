@@ -26,3 +26,67 @@ dialog form input { width:100%; }
 dialog form .actions { margin-top:20px; }
 :focus-visible { outline:2px solid #72634e; outline-offset:3px; }
 @media(max-width:680px) { .company-cards { grid-template-columns:1fr; } .company-name { margin-left:0; } .sidebar .brand-label { display:block; } }
+
+/* Country-first coverage: stable columns, compact controls and quiet selection. */
+.country-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:18px 0 10px; }
+.country-toolbar .field-heading { margin:0; }
+.country-toolbar select { min-height:34px; padding:5px 8px; font-size:12px; border-radius:4px; }
+.country-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px; }
+.country-tab { display:flex; border:1px solid #ded7cc; border-radius:4px; background:#fffefa; }
+.country-tab.active { background:#e9e3d8; border-color:#a99e8e; box-shadow:inset 0 -2px #686052; }
+.country-tab button { border:0; background:transparent; display:flex; align-items:center; gap:7px; padding:6px 8px; color:inherit; font-size:12px; min-height:34px; }
+.country-tab button > span:first-child { font-size:16px; }
+.country-tab .remove-country { padding:6px 7px; font-size:16px; color:#82796b; }
+.country-tab button:hover { background:#e4ddcf; }
+.country-count { font-size:10px; font-variant-numeric:tabular-nums; color:#6c655a; }
+.marketplace-heading { display:flex; align-items:center; justify-content:space-between; margin:12px 0; gap:10px; }
+.marketplace-heading h3 { font-size:13px; font-weight:600; margin:0; }
+.marketplace-heading > span { font-size:12px; color:#7a746b; }
+.marketplace-filters { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,150px) auto; gap:8px; margin-bottom:12px; align-items:center; }
+.marketplace-filters input[type=search],.marketplace-filters select { width:100%; min-width:0; min-height:34px; padding:6px 8px; font-size:12px; border-radius:4px; }
+.selected-only { display:flex; align-items:center; gap:4px; font-size:12px; white-space:nowrap; }
+.marketplace-table { border:1px solid #ded7cc; border-radius:4px; background:#fffefa; max-height:430px; overflow:auto; }
+.marketplace-table-head { display:grid; grid-template-columns:minmax(0,1fr) 140px; gap:12px; padding:8px 12px; font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:#82796d; border-bottom:1px solid #e4ddd2; background:#f2eee7; }
+.marketplace-row { display:grid; grid-template-columns:16px 32px minmax(0,1fr) 140px; gap:10px; align-items:center; padding:12px; border-bottom:1px solid #ebe5dc; min-height:68px; cursor:pointer; }
+.marketplace-row:last-child { border-bottom:0; }
+.marketplace-row:hover { background:#f7f3eb; }
+.marketplace-row.is-selected { background:#f1ece2; }
+.marketplace-row:has(input:disabled) { cursor:default; }
+.marketplace-row input { margin:0; }
+.marketplace-logo,.marketplace-monogram { display:flex; align-items:center; justify-content:center; width:32px; height:32px; }
+.marketplace-logo svg { width:29px; height:24px; fill:#49433a; }
+.marketplace-monogram { font-size:12px; font-weight:600; color:#756c5e; background:#eae4d9; border-radius:4px; }
+.marketplace-identity { display:grid; gap:2px; min-width:0; }
+.marketplace-identity strong { font-size:12px; font-weight:550; }
+.marketplace-identity > span { font-size:10px; color:#857b6c; overflow-wrap:anywhere; }
+.marketplace-identity em { display:block; font-style:normal; color:#8b6034; }
+.marketplace-genres { display:flex; flex-wrap:wrap; gap:4px; align-content:center; }
+.genre-tag { display:inline-block; border:1px solid #ded6c8; color:#776c5b; font-size:10px; padding:1px 5px; border-radius:3px; white-space:nowrap; }
+.marketplace-group-heading { background:#f2eee7; border-block:1px solid #e4ddd2; padding:7px 12px; font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:#82796d; }
+.coverage-empty,.marketplace-empty { padding:22px 12px; color:#847b6e; font-size:12px; }
+.company-overview { margin-bottom:30px; }
+.company-totals { display:flex; gap:30px; padding:24px 0; font-size:12px; color:#7a746b; }
+.company-totals strong { font-size:22px; font-weight:500; color:#302d29; margin-right:5px; }
+.brand-plan-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:20px 0; border-top:1px solid #e3ddd3; }
+.brand-plan-row strong { font-weight:550; }
+.brand-plan-row p { font-size:12px; margin-top:4px; }
+.brand-plan-row button { flex-shrink:0; }
+.summary > button { margin-top:16px; }
+.more-issues { font-size:12px; margin-top:12px; color:#805c2b; }
+.more-issues summary { cursor:pointer; }
+.preview-domain { display:block; font-size:10px; color:#82796d; }
+@media(max-width:680px) {
+ .country-toolbar select { font-size:14px; }
+ .country-tab button { min-height:40px; }
+ .marketplace-filters { grid-template-columns:minmax(0,1fr) auto; }
+ .marketplace-filters input[type=search] { grid-column:1 / -1; }
+ .marketplace-filters input[type=search],.marketplace-filters select { font-size:16px; min-height:40px; }
+ .marketplace-table-head { display:block; }
+ .marketplace-table-head span:last-child { display:none; }
+ .marketplace-row { grid-template-columns:16px 28px minmax(0,1fr); gap:8px; padding:10px; }
+ .marketplace-genres { grid-column:3; }
+ .marketplace-logo,.marketplace-monogram { width:28px; }
+ .marketplace-table { max-height:460px; }
+ .country-toolbar { align-items:center; }
+ .scope-bar select { min-width:0; max-width:100%; }
+}
