@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
   Home,
-  Library,
   Radar,
   Settings as SettingsIcon,
   Shield,
@@ -21,6 +20,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { isLocalMonitoringPreview } from "../monitoring-workspace/localPreviewAvailability";
 import "./AppShell.css";
+import TenantMenu from "./TenantMenu";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
 import {
@@ -32,7 +32,7 @@ import {
   type Tenant,
 } from "../api";
 import { CURRENT_BUILD_SHA, CURRENT_BUILD_TIME, buildAgo } from "../lib/buildInfo";
-import { ActiveIpProvider, useActiveIp } from "../context/ActiveIpContext";
+import { ActiveIpProvider } from "../context/ActiveIpContext";
 import {
   APP_SHELL_BANNER_HEIGHT_VAR,
   APP_SHELL_BANNER_STICKY_TOP_VAR,
@@ -61,8 +61,8 @@ const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
  *     ↳ Sellers      (badge = returned sellers with open listings)
  *     ↳ Product lab
  *
- * The working IP lives in the topbar as shared application context. Registry
- * management stays beside it rather than competing with day-to-day navigation.
+ * Tenant context and management share one topbar menu. The existing working-IP
+ * report filter stays inside that menu until canonical brand/product mapping exists.
  */
 export default function AppShell() {
   return (
@@ -274,13 +274,6 @@ function AppShellContent() {
             active={pathname === "/monitoring/products" || pathname.startsWith("/monitoring/products/")}
             collapsed={collapsed}
           />
-          <NavItem
-            to={localPreview ? "/monitoring/setup?preview=local" : "/monitoring/setup"}
-            icon={<SettingsIcon size={18} />}
-            label="Monitoring setup"
-            active={pathname === "/monitoring/setup"}
-            collapsed={collapsed}
-          />
         </NavGroup>
 
         </nav>
@@ -307,10 +300,6 @@ function AppShellContent() {
         {user && (
           <UserMenu
             user={user}
-            tenants={tenants}
-            actingTenantId={actingTenantId}
-            isActingAsOther={isActingAsOther}
-            onSwitchTenant={switchTenant}
             onLogout={logout}
             collapsed={collapsed}
           />
@@ -339,7 +328,7 @@ function AppShellContent() {
           <span className="hidden text-sm font-bold tracking-tight sm:inline">Unvelar</span>
         </Link>
         <div className="ml-auto flex items-center gap-1.5">
-          {localPreview ? <span className="text-xs text-stone-500">Sample data</span> : pathname === "/monitoring/setup" ? <span className="text-xs text-stone-500">Company monitoring setup</span> : <TopbarIpSelector active={isActive("/ips")} />}
+          <TenantMenu key={`${pathname}${search}`} tenants={tenants} preview={localPreview} />
           <NotificationBell count={notificationCount} active={isActive("/inbox")} />
         </div>
       </div>
@@ -385,13 +374,12 @@ function AppShellContent() {
               onReturn={() => user && switchTenant(user.tenant_id)}
             />
           )}
-          {/* Desktop topbar — the working IP is global application context.
-              Registry management stays beside it without competing in nav. */}
+          {/* Tenant context and its single management entry. */}
           <div
             className="shell-desktop-topbar hidden lg:flex sticky z-20 h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
             style={{ top: `var(${APP_SHELL_BANNER_HEIGHT_VAR})` }}
           >
-            {localPreview ? <span className="text-xs text-stone-500">Sample data</span> : pathname === "/monitoring/setup" ? <span className="text-xs text-stone-500">Company monitoring setup</span> : <TopbarIpSelector active={isActive("/ips")} />}
+            <TenantMenu key={`${pathname}${search}`} tenants={tenants} preview={localPreview} />
             <div className="ml-1 h-[18px] w-px bg-stone-200" aria-hidden />
             <NotificationBell count={notificationCount} active={isActive("/inbox")} />
           </div>
@@ -425,63 +413,6 @@ function NotificationBell({ count, active }: { count: number; active: boolean })
         </span>
       )}
     </Link>
-  );
-}
-
-function TopbarIpSelector({ active }: { active: boolean }) {
-  const { ips, activeIpId, loading, error, selectIp } = useActiveIp();
-  const manageCls = active
-    ? "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-stone-900 px-2.5 text-xs font-semibold text-white shadow-sm lg:h-[30px] lg:rounded-md lg:px-2"
-    : "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-semibold text-stone-700 shadow-sm hover:border-stone-400 hover:bg-stone-50 lg:h-[30px] lg:rounded-md lg:px-2";
-
-  return (
-    <div className="shell-ip-selector flex min-w-0 items-center gap-1.5">
-      <label
-        className="flex h-8 w-[124px] min-w-0 items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-2.5 text-stone-900 shadow-sm transition focus-within:border-stone-400 focus-within:ring-2 focus-within:ring-stone-200 sm:w-[208px] lg:h-[30px] lg:w-60 lg:rounded-md lg:px-2"
-        title={error ?? "Choose the IP you are working with"}
-      >
-        <Library size={15} className="hidden shrink-0 text-stone-500 sm:block" aria-hidden />
-        <span className="hidden shrink-0 text-[10px] font-bold uppercase tracking-wide text-stone-400 xl:inline">
-          Working IP
-        </span>
-        <span className="relative min-w-0 flex-1">
-          <select
-            value={activeIpId ?? ""}
-            onChange={(event) => selectIp(event.target.value)}
-            disabled={loading || ips.length === 0}
-            aria-label="Working intellectual property"
-            className="h-7 w-full appearance-none truncate bg-transparent pr-5 text-[11px] font-bold text-stone-800 outline-none disabled:cursor-not-allowed disabled:text-stone-400 sm:text-xs lg:h-[28px]"
-          >
-            {loading ? (
-              <option value="">Loading IPs…</option>
-            ) : ips.length === 0 ? (
-              <option value="">{error ? "IPs unavailable" : "No IPs yet"}</option>
-            ) : (
-              ips.map((ip) => (
-                <option key={ip.id} value={ip.id}>
-                  {ip.name}
-                </option>
-              ))
-            )}
-          </select>
-          <ChevronDown
-            size={13}
-            className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-stone-400"
-            aria-hidden
-          />
-        </span>
-      </label>
-
-      <Link
-        to="/ips"
-        className={`shell-manage-ips ${manageCls}`} data-active={active}
-        aria-label="Manage intellectual properties"
-        title="Manage IPs"
-      >
-        <SettingsIcon size={14} aria-hidden />
-        <span className="hidden xl:inline">Manage IPs</span>
-      </Link>
-    </div>
   );
 }
 
@@ -627,10 +558,6 @@ function ActingTenantBanner({ label, onReturn }: { label: string; onReturn: () =
 
 function UserMenu({
   user,
-  tenants,
-  actingTenantId,
-  isActingAsOther,
-  onSwitchTenant,
   onLogout,
   collapsed = false,
 }: {
@@ -640,16 +567,11 @@ function UserMenu({
     picture_url: string | null;
     role?: "user" | "admin";
   };
-  tenants: Tenant[];
-  actingTenantId: string | null;
-  isActingAsOther: boolean;
-  onSwitchTenant: (tenantId: string) => void;
   onLogout: () => Promise<void>;
   collapsed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const isAdmin = user.role === "admin";
 
   useEffect(() => {
     if (!open) return;
@@ -695,26 +617,6 @@ function UserMenu({
               <div className="text-xs text-stone-500 truncate">{user.email}</div>
             )}
           </div>
-          {isAdmin && (
-            <div className="px-3 py-2.5 border-b border-stone-100">
-              <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-1">
-                <Building2 size={12} /> Operate as tenant
-              </label>
-              <select
-                value={actingTenantId ?? ""}
-                onChange={(e) => onSwitchTenant(e.target.value)}
-                className={`w-full text-sm rounded-lg border px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 ${
-                  isActingAsOther ? "border-amber-400 text-amber-900" : "border-stone-300 text-stone-800"
-                }`}
-              >
-                {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {tenantLabel(t)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
           <button
             onClick={async () => {
               setOpen(false);

@@ -28,12 +28,12 @@ export default function LocalPreview({ kind }: { kind: 'workspace' | 'catalog' }
   }
   return <>
     <div className="monitoring-workspace"><div className="local-preview-toolbar">
-      <div><strong>{session ? `${session.data.company.name} · Sample company` : 'Local preview'}</strong><p>Sample data saved in the isolated local database. Production monitoring is unchanged.</p></div>
-      <Link to={kind === 'catalog' ? '/monitoring/setup?preview=local' : '/admin/marketplaces?preview=local'}>{kind === 'catalog' ? 'Preview company setup' : 'Preview marketplace catalog'} →</Link>
+      <div><strong>Local preview</strong><p>Sample data · Saved locally</p></div>
+      <Link to={kind === 'catalog' ? '/monitoring/setup?preview=local' : '/admin/marketplaces?preview=local'}>{kind === 'catalog' ? 'Preview tenant setup' : 'Preview marketplace catalog'} →</Link>
     </div></div>
-    {session ? <WorkspaceEditor client={session.client} loaded={session.data} embedded companySwitcherLabel="Switch sample company" onLeave={() => setSession(null)} /> : admin ? <MarketplaceAdmin client={admin} embedded /> : <div className="monitoring-workspace"><section className="local-preview-chooser">
+    {session ? <WorkspaceEditor client={session.client} loaded={session.data} embedded tenantSwitcherLabel="Switch sample tenant" onLeave={() => setSession(null)} /> : admin ? <MarketplaceAdmin client={admin} embedded /> : <div className="monitoring-workspace"><section className="local-preview-chooser">
       {error && <div className="error-box" role="alert"><p>Could not open the local preview. {error}</p><p className="field-note">The isolated monitoring API must be running on localhost:53000. Your website sign-in is unchanged.</p>{kind === 'catalog' && <button className="text-button" onClick={() => { setError(''); setAttempt(value => value + 1); }}>Try again</button>}</div>}
-      {kind === 'workspace' ? <><h1>Choose a sample company</h1><p>Try company, brand and product setup inside the website.</p><div className="company-cards">{exampleCompanies.map(company => <button className="company-card" key={company.id} disabled={busy} onClick={() => void open(company)}><strong>{company.name}</strong><span>{company.id === 'giardini' ? 'One focal product' : 'A broader product catalog'}</span><span>Open sample company →</span></button>)}</div>{busy && <p role="status">Opening sample company…</p>}</> : !error && <p role="status">Opening the local marketplace catalog…</p>}
+      {kind === 'workspace' ? <><h1>Choose a sample tenant</h1><p>Try tenant, brand and product setup inside the website.</p><div className="company-cards">{exampleCompanies.map(company => <button className="company-card" key={company.id} disabled={busy} onClick={() => void open(company)}><strong>{company.name}</strong><span>{company.id === 'giardini' ? 'One focal product' : 'A broader product catalog'}</span><span>Open sample tenant →</span></button>)}</div>{busy && <p role="status">Opening sample tenant…</p>}</> : !error && <p role="status">Opening the local marketplace catalog…</p>}
     </section></div>}
   </>;
 }

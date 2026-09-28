@@ -11,7 +11,7 @@ const LocalPreview = import.meta.env.DEV ? lazy(() => import('../monitoring-work
 export default function AdminMarketplaces() {
   const location = useLocation();
   const local = LocalPreview && isLocalMonitoringPreview(location.pathname, location.search, window.location.hostname, import.meta.env.DEV);
-  return <AdminPage section="marketplaces" title="Marketplaces" description="Manage marketplace websites, country storefronts and sectors shared across companies." wide>
+  return <AdminPage section="marketplaces" title="Marketplaces" description="Manage marketplace websites, country storefronts and sectors shared across tenants." wide>
     {local && LocalPreview ? <Suspense fallback={<p role="status">Opening local preview…</p>}><LocalPreview kind="catalog" /></Suspense> : <HostedCatalog />}
   </AdminPage>;
 }

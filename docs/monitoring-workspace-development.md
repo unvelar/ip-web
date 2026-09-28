@@ -3,16 +3,41 @@
 The website includes authenticated `/monitoring/setup` and admin-only
 `/admin/marketplaces` routes. They reuse the editor components through the normal
 session/acting-company API transport; the company setup ignores the legacy working-IP
-filter. **Monitoring setup** is always visible in the sidebar, the **Manage IPs**
-page header and Settings' monitoring section. The routes explain when their API is
-not enabled, rather than hiding the entry point. Static route entries are generated
-for both URLs, so direct links and refreshes work on GitHub Pages.
+filter. The single global entry is the top-right **Tenant** menu → **Manage tenant**.
+It replaces the separate working-IP dropdown and Manage IPs button. The existing
+working-IP report filter and admin tenant switcher now live inside this menu;
+no brand/product identities are inferred from legacy IP names. The account menu
+only handles the account. There is no setup link in the sidebar or general Settings.
+
+The tenant workspace has **Brands & products**, **IP assets**, and **Active
+monitoring** sections. The existing scheduled-runs control moved from general
+Settings into Active monitoring. Existing IP assets and live monitors remain
+reachable within this workspace, including when draft setup is not enabled.
+Static entries preserve all existing direct URLs and refresh behavior.
+
+Brands & products uses a searchable hierarchy: the tenant contains brands, and
+products are nested under their brand. Selecting an item opens its details beside
+the hierarchy. Search retains the parent brand, and large lists scroll independently.
+The tenant view combines searches; a brand shows its own keywords and coverage;
+a product shows its keywords and inherited coverage. Brand/product selection is
+immediate with visible keyboard focus, without decorative selection animations.
+This follows Emil Kowalski's advice on frequent interactions in his
+[design engineering reference](https://emilkowal.ski/skill).
+
+The unified entry was verified in Unvelar Chrome: Tenant → Manage tenant, all
+three workspace sections, the retained working-IP report selector, product search
+within Paula's Choice, brand/product inheritance, and unsaved edits preserved while
+changing scope. The tenant menu supports Tab and Escape with focus returned to its
+trigger. The 390 px layout has no horizontal overflow, and the mobile popover stays
+above the tenant status banner. The production-backed pages were read-only; local
+test edits were discarded. No application console or failed-resource errors were
+reported. All 243 existing tests, lint, type checks and production build passed.
 
 ## Preview inside the normal website
 
 Use the existing normal frontend at `http://localhost:5173` against
-`https://api.unvelar.com`. From **Monitoring setup**, click **Open local preview**,
-then choose a sample company. The direct links are:
+`https://api.unvelar.com`. Open the **Tenant** menu → **Manage tenant** → **Open local preview**,
+then choose a sample tenant. The direct links are:
 
 - `http://localhost:5173/monitoring/setup?preview=local`
 - `http://localhost:5173/admin/marketplaces?preview=local` (website admins)
@@ -20,7 +45,7 @@ then choose a sample company. The direct links are:
 The preview uses the same website layout and editor components, with a persistent
 sample-data banner and an **Exit preview** link. It uses synthetic local tenants;
 it does not copy the signed-in company's data or replace the website's authentication.
-The sample chooser preserves existing saved local edits. **Switch sample company**
+The sample chooser preserves existing saved local edits. **Switch sample tenant**
 protects unsaved changes. The toolbar links company setup and the sample catalog.
 The backend sandbox below must be running; no second frontend is needed.
 
@@ -29,8 +54,7 @@ on localhost or 127.0.0.1. The ordinary routes still use the authenticated produ
 API and its rollout checks. A production build removes the preview's dynamic import,
 local client and synthetic fixtures; the build script verifies these are absent.
 
-Verified in the Unvelar Chrome profile through the normal Manage IPs and Settings
-links: both sample companies open, Bianco Latte inherits brand coverage with 15
+Earlier preview verification in the Unvelar Chrome profile: both sample companies open, Bianco Latte inherits brand coverage with 15
 requested searches, switching samples protects unsaved edits, and the linked Admin
 catalog filters by country/sector and opens marketplace editing. Exiting restores
 the signed-in acting company. Desktop and 390 px preview layouts had no horizontal
@@ -64,7 +88,7 @@ larger-catalog example. These use separate synthetic local tenants. Saved edits
 survive reloads and restarts; unsaved edits stay in memory and prompt before
 leaving. No production accounts or authentication tokens are used.
 
-The scope selector follows **company → brand → product**. Entire company combines
+The hierarchy follows **tenant → brand → product**. The tenant view combines
 all explicit brand/product searches; brand-only targets its own keywords, and a
 product targets only its own keywords. Equivalent company searches are combined
 only when source, country, normalized phrase and schedule match; preview retains

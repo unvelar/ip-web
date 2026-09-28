@@ -1,15 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import MarketplaceConnections from "../components/MarketplaceConnections";
 import {
   listApiKeys,
   createApiKey,
   revokeApiKey,
-  getMonitoringSettings,
-  updateMonitoringSettings,
   type ApiKey,
-  type MonitoringSettings,
 } from "../api";
 
 const DOCS_URL = `${import.meta.env.VITE_API_URL || ""}/api/docs`;
@@ -83,8 +79,6 @@ export default function Settings() {
           Manage your workspace settings and API access.
         </p>
       </div>
-
-      <MonitoringSettingsSection />
 
       {user?.role === "admin" && <MarketplaceConnections />}
 
@@ -203,72 +197,6 @@ export default function Settings() {
         )}
       </section>
     </div>
-  );
-}
-
-// Tenant-global monitoring scheduler gate. Per-IP cadence lives with each
-// IP's monitoring settings.
-function MonitoringSettingsSection() {
-  const [settings, setSettings] = useState<MonitoringSettings | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    getMonitoringSettings()
-      .then(({ settings }) => alive && setSettings(settings))
-      .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
-    return () => { alive = false; };
-  }, []);
-
-  async function setEnabled(enabled: boolean) {
-    try {
-      const r = await updateMonitoringSettings({ enabled });
-      setSettings(r.settings);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-lg font-black text-stone-900 tracking-tight">Monitoring</h2>
-        <p className="mt-1 text-sm text-stone-500">
-          When enabled, the scheduler fans out runs for watched IP platforms.
-        </p>
-        <Link to="/monitoring/setup" className="mt-3 inline-flex text-sm font-semibold text-stone-900 underline underline-offset-4">Set up brands, products and coverage →</Link>
-      </div>
-
-      {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <div className="rounded-2xl border border-stone-200 bg-white p-5 space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-sm font-bold text-stone-900">Scheduled runs</div>
-            <div className="text-xs text-stone-500">
-              {settings?.monitoring_enabled
-                ? "Enabled — runs fire on schedule."
-                : "Disabled — runs only fire when triggered manually from an IP."}
-            </div>
-          </div>
-          <button
-            disabled={!settings}
-            onClick={() => setEnabled(!settings?.monitoring_enabled)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all disabled:opacity-50 ${
-              settings?.monitoring_enabled
-                ? "bg-stone-900 text-white"
-                : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-            }`}
-          >
-            {settings?.monitoring_enabled ? "On" : "Off"}
-          </button>
-        </div>
-      </div>
-    </section>
   );
 }
 

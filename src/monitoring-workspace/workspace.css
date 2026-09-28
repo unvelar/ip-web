@@ -159,3 +159,65 @@ dialog form .actions { margin-top:20px; }
 .monitoring-workspace .local-preview-toolbar a { text-decoration:underline; text-underline-offset:3px; }
 .monitoring-workspace .local-preview-chooser { max-width:950px; margin:auto; padding:32px 38px; }
 @media(max-width:680px) { .monitoring-workspace .local-preview-toolbar, .monitoring-workspace .local-preview-chooser { padding:20px; } }
+
+.monitoring-workspace {
+  .tenant-editor-page { max-width:1320px; padding-top:28px; }
+  .tenant-editor-page .page-heading { margin-bottom:24px; align-items:flex-start; }
+  .tenant-editor-page h1 { font-size:27px; letter-spacing:-.8px; }
+  .tenant-editor-page .page-heading p { font-size:13px; }
+  .tenant-editor-page .shell { display:block; }
+  .scope-workspace { display:grid; grid-template-columns:240px minmax(0,1fr); gap:32px; align-items:start; margin-bottom:24px; }
+  .scope-navigator { min-width:0; border-right:1px solid #e5e0d8; padding-right:20px; }
+  .scope-search { display:flex; align-items:center; position:relative; margin-bottom:16px; color:#8a8278; }
+  .scope-search > svg { position:absolute; left:10px; pointer-events:none; }
+  .scope-search input { width:100%; min-width:0; padding:8px 8px 8px 30px; font-size:12px; background:transparent; }
+  .scope-navigator ul { list-style:none; margin:0; padding:0; }
+  .scope-navigator nav { display:block; max-height:65vh; overflow-y:auto; scrollbar-width:thin; }
+  .scope-navigator button { min-height:36px; padding:8px; width:100%; align-items:center; justify-content:flex-start; gap:8px; border-radius:5px; font-size:12px; transition:none; }
+  .scope-navigator button:active { transform:none; }
+  .scope-navigator button svg { flex-shrink:0; }
+  .scope-navigator button span { min-width:0; text-align:left; overflow-wrap:anywhere; font-size:12px; }
+  .scope-navigator button strong { display:block; font-weight:550; }
+  .scope-navigator button small { font-size:10px; color:#8a8278; font-weight:400; }
+  .scope-navigator .scope-tenant { margin-bottom:16px; }
+  .scope-hierarchy-label { font-size:10px; color:#8a8278; margin:4px 8px 8px; }
+  .scope-brand-row { display:flex; align-items:center; }
+  .scope-navigator .scope-expand { width:24px; flex-shrink:0; padding:4px; justify-content:center; }
+  .scope-expand[aria-expanded=true] svg { transform:rotate(90deg); }
+  .scope-expand:disabled { opacity:0; }
+  .scope-navigator .scope-brand { flex:1; min-width:0; }
+  .scope-brand small { margin-left:auto; }
+  .scope-navigator .scope-products { margin-left:30px; border-left:1px solid #e5e0d8; padding-left:6px; }
+  .scope-no-results { padding:12px 8px; font-size:12px; }
+  .scope-detail { min-width:0; }
+  .scope-detail-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:22px; }
+  .scope-detail-heading h2 { font-size:21px; font-weight:550; line-height:1.3; overflow-wrap:anywhere; margin:6px 0; }
+  .scope-detail-heading p { font-size:12px; }
+  .scope-detail-heading > button { flex-shrink:0; }
+  .scope-breadcrumb { display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:11px; color:#8a8278; }
+  .scope-breadcrumb button { background:none; border:0; padding:0; text-decoration:underline; text-underline-offset:3px; }
+  .tenant-overview-title { font-size:14px; font-weight:550; margin:0; }
+  .scope-detail .editor-grid { grid-template-columns:minmax(0,1fr) 200px; gap:24px; }
+  .scope-detail .summary { padding:18px; background:#f3efe8; }
+  .scope-detail .summary .search-number { flex-wrap:wrap; }
+  .scope-detail .field-heading { margin-top:0; }
+  .local-preview-toolbar { max-width:1320px; padding-top:12px; padding-bottom:12px; font-size:11px; }
+  .local-preview-toolbar > div { display:flex; gap:10px; align-items:center; }
+  .local-preview-toolbar p { margin:0; }
+  .scope-navigator :is(button,input):focus-visible, .scope-breadcrumb button:focus-visible { outline:2px solid #9d9282; outline-offset:2px; }
+}
+.monitoring-workspace.tenant-workspace-editor .shell { display:block; min-height:0; }
+.monitoring-workspace.embedded-workspace .tenant-editor-page { max-width:1320px; }
+@media(max-width:1250px) {
+  .monitoring-workspace .scope-workspace { grid-template-columns:220px minmax(0,1fr); gap:24px; }
+  .monitoring-workspace .scope-detail .editor-grid { grid-template-columns:1fr; }
+  .monitoring-workspace .scope-detail .summary { margin-bottom:18px; }
+}
+@media(max-width:760px) {
+  .monitoring-workspace .scope-workspace { grid-template-columns:1fr; gap:24px; }
+  .monitoring-workspace .scope-navigator { border-right:0; border-bottom:1px solid #e5e0d8; padding:0 0 16px; }
+  .monitoring-workspace .scope-navigator nav { max-height:250px; }
+  .monitoring-workspace .scope-navigator input { font-size:16px; }
+  .monitoring-workspace .scope-navigator button { min-height:40px; }
+  .monitoring-workspace .scope-detail-heading { flex-wrap:wrap; }
+}
