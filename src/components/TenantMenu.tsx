@@ -4,7 +4,6 @@ import { ArrowRight, Building2, ChevronDown } from 'lucide-react';
 import { tenantLabel, type Tenant } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useActiveIp } from '../context/ActiveIpContext';
-import { localPreviewAvailable } from '../monitoring-workspace/localPreviewAvailability';
 
 /** One global entry for tenant context and its management workspace. */
 export default function TenantMenu({ tenants, preview }: { tenants: Tenant[]; preview: boolean }) {
@@ -15,9 +14,7 @@ export default function TenantMenu({ tenants, preview }: { tenants: Tenant[]; pr
   const id = useId();
   const tenant = tenants.find(value => value.id === actingTenantId);
   const name = preview ? 'Local workspace' : tenant ? tenantLabel(tenant) : 'Your tenant';
-  const managementUrl = preview || localPreviewAvailable(window.location.hostname, import.meta.env.DEV)
-    ? '/monitoring/setup?preview=local'
-    : '/monitoring/setup';
+  const managementUrl = preview ? '/monitoring/setup?preview=local' : '/monitoring/setup';
   return <div className="tenant-menu" onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }} onKeyDown={event => {
