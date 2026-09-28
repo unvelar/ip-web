@@ -4,6 +4,7 @@ import { ArrowRight, Building2, ChevronDown } from 'lucide-react';
 import { tenantLabel, type Tenant } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useActiveIp } from '../context/ActiveIpContext';
+import { localPreviewAvailable } from '../monitoring-workspace/localPreviewAvailability';
 
 /** One global entry for tenant context and its management workspace. */
 export default function TenantMenu({ tenants, preview }: { tenants: Tenant[]; preview: boolean }) {
@@ -14,6 +15,9 @@ export default function TenantMenu({ tenants, preview }: { tenants: Tenant[]; pr
   const id = useId();
   const tenant = tenants.find(value => value.id === actingTenantId);
   const name = preview ? 'Sample tenant' : tenant ? tenantLabel(tenant) : 'Your tenant';
+  const managementUrl = preview || localPreviewAvailable(window.location.hostname, import.meta.env.DEV)
+    ? '/monitoring/setup?preview=local'
+    : '/monitoring/setup';
   return <div className="tenant-menu" onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }} onKeyDown={event => {
@@ -26,7 +30,7 @@ export default function TenantMenu({ tenants, preview }: { tenants: Tenant[]; pr
       <div className="tenant-menu-dismiss" onPointerDown={() => setOpen(false)} aria-hidden />
       <div id={id} className="tenant-popover" role="region" aria-label="Tenant context">
         <div className="tenant-menu-heading"><span>{preview ? 'Local preview' : 'Tenant'}</span><strong>{name}</strong></div>
-        <Link className="tenant-manage-link" to={preview ? '/monitoring/setup?preview=local' : '/monitoring/setup'} onClick={() => setOpen(false)}><span><strong>Manage tenant</strong><small>Brands, products and monitoring</small></span><ArrowRight size={16} aria-hidden /></Link>
+        <Link className="tenant-manage-link" to={managementUrl} onClick={() => setOpen(false)}><span><strong>Manage monitoring</strong><small>Brands, products and coverage</small></span><ArrowRight size={16} aria-hidden /></Link>
         {!preview && <div className="tenant-menu-section">
           <label htmlFor={`${id}-ip`}>Working IP</label>
           <select id={`${id}-ip`} value={activeIpId ?? ''} disabled={loading || !ips.length} onChange={event => selectIp(event.target.value)}>

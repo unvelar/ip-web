@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { listTrademarks, type Trademark } from "../api/registry";
-import TenantWorkspaceNav from "../components/TenantWorkspaceNav";
 import BulkIngest from "../components/BulkIngest";
 import { publicSummaryUrlForIp } from "../lib/publicSummary";
 
@@ -53,12 +52,11 @@ export default function Registry() {
   }
 
   return (
-    <><TenantWorkspaceNav />
-    <div className="tenant-workspace-section space-y-10">
+    <div className="mx-auto max-w-6xl space-y-10 px-6 py-10">
       {/* Page header */}
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div className="min-w-0 flex-1">
-        <h1 className="text-2xl font-black text-stone-900 tracking-tight">IP assets</h1>
+        <h1 className="text-2xl font-black text-stone-900 tracking-tight">Intellectual properties</h1>
         <p className="mt-1 text-sm text-stone-500">
           Reference assets and registrations for this tenant.
         </p>
@@ -115,7 +113,7 @@ export default function Registry() {
           </div>
         )}
       </section>
-    </div></>
+    </div>
   );
 }
 

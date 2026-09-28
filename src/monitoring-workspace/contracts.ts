@@ -1,7 +1,8 @@
 export type Coverage = { markets: { country: string; sources: string[] }[]; frequency: 'daily' | 'weekly' | 'monthly' };
-export type Product = { id: string; name: string; keywords: string[]; coverage: null; catalog_product_id: string | null };
-export type Brand = { id: string; name: string; keywords: string[]; coverage: Coverage; products: Product[] };
-export type Workspace = { version: 3; brands: Brand[] };
+export type ReferenceMaterial = { id: string; name: string; kind: 'image' | 'document'; note: string };
+export type Product = { id: string; name: string; keywords: string[]; reference_materials: ReferenceMaterial[]; coverage: null; catalog_product_id: string | null };
+export type Brand = { id: string; name: string; keywords: string[]; reference_materials: ReferenceMaterial[]; coverage: Coverage; products: Product[] };
+export type Workspace = { version: 4; brands: Brand[] };
 export type Source = { key: string; name: string; kind: string; domain: string; logo_key: string | null;
   categories: { key: string; name: string }[];
   markets: { country: string; storefront_domain: string; evidence_url: string }[];

@@ -6,8 +6,6 @@ import {
   removeIpMonitoring,
   type MonitoredIpSummary,
 } from "../api";
-import TenantWorkspaceNav from "../components/TenantWorkspaceNav";
-import TenantMonitoringSettings from "../components/TenantMonitoringSettings";
 import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
 
 /**
@@ -35,8 +33,7 @@ export default function Monitors() {
   }, [load]);
 
   return (
-    <><TenantWorkspaceNav />
-    <div className="tenant-workspace-section space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-6 py-10">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-black text-stone-900 tracking-tight">Active monitoring</h1>
@@ -52,7 +49,6 @@ export default function Monitors() {
         </Link>
       </div>
 
-      <TenantMonitoringSettings />
       {err && <div className="text-sm text-red-600">{err}</div>}
 
       {!loaded ? (
@@ -75,7 +71,7 @@ export default function Monitors() {
           ))}
         </div>
       )}
-    </div></>
+    </div>
   );
 }
 

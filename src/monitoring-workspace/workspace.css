@@ -201,6 +201,12 @@ dialog form .actions { margin-top:20px; }
   .scope-detail .summary { padding:18px; background:#f3efe8; }
   .scope-detail .summary .search-number { flex-wrap:wrap; }
   .scope-detail .field-heading { margin-top:0; }
+  .reference-material-list { list-style:none; display:grid; gap:8px; margin:16px 0 0; padding:0; }
+  .reference-material-list li { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:10px; padding:10px 0; border-top:1px solid #e5e0d8; }
+  .reference-material-list li:first-child { border-top:0; padding-top:0; }
+  .reference-material-list strong { display:block; font-size:13px; overflow-wrap:anywhere; }
+  .reference-material-list p { margin:3px 0 0; color:#8a8278; font-size:12px; overflow-wrap:anywhere; }
+  .reference-material-kind { border:1px solid #d8d1c6; border-radius:999px; color:#6e665d; font-size:10px; line-height:1; padding:5px 7px; text-transform:uppercase; letter-spacing:.3px; }
   .local-preview-toolbar { max-width:1320px; padding-top:12px; padding-bottom:12px; font-size:11px; }
   .local-preview-toolbar > div { display:flex; gap:10px; align-items:center; }
   .local-preview-toolbar p { margin:0; }
@@ -220,4 +226,6 @@ dialog form .actions { margin-top:20px; }
   .monitoring-workspace .scope-navigator input { font-size:16px; }
   .monitoring-workspace .scope-navigator button { min-height:40px; }
   .monitoring-workspace .scope-detail-heading { flex-wrap:wrap; }
+  .monitoring-workspace .reference-material-list li { grid-template-columns:auto minmax(0,1fr); }
+  .monitoring-workspace .reference-material-list .text-button { grid-column:2; justify-self:start; }
 }
