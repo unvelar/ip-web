@@ -3,13 +3,45 @@
 The website includes authenticated `/monitoring/setup` and admin-only
 `/admin/marketplaces` routes. They reuse the editor components through the normal
 session/acting-company API transport; the company setup ignores the legacy working-IP
-filter. Setup navigation is shown only when the API advertises it for that company.
-The admin page explains when its API is not enabled. Static route entries are generated
+filter. **Monitoring setup** is always visible in the sidebar, the **Manage IPs**
+page header and Settings' monitoring section. The routes explain when their API is
+not enabled, rather than hiding the entry point. Static route entries are generated
 for both URLs, so direct links and refreshes work on GitHub Pages.
 
-The isolated iteration remains at `http://localhost:5173/monitoring-workspace.html`.
-Its development entry, local client and synthetic fixtures stay outside the production
-bundle. Styles are scoped to the editor. The earlier
+## Preview inside the normal website
+
+Use the existing normal frontend at `http://localhost:5173` against
+`https://api.unvelar.com`. From **Monitoring setup**, click **Open local preview**,
+then choose a sample company. The direct links are:
+
+- `http://localhost:5173/monitoring/setup?preview=local`
+- `http://localhost:5173/admin/marketplaces?preview=local` (website admins)
+
+The preview uses the same website layout and editor components, with a persistent
+sample-data banner and an **Exit preview** link. It uses synthetic local tenants;
+it does not copy the signed-in company's data or replace the website's authentication.
+The sample chooser preserves existing saved local edits. **Switch sample company**
+protects unsaved changes. The toolbar links company setup and the sample catalog.
+The backend sandbox below must be running; no second frontend is needed.
+
+This is explicit opt-in: the query parameter is accepted only in Vite development
+on localhost or 127.0.0.1. The ordinary routes still use the authenticated production
+API and its rollout checks. A production build removes the preview's dynamic import,
+local client and synthetic fixtures; the build script verifies these are absent.
+
+Verified in the Unvelar Chrome profile through the normal Manage IPs and Settings
+links: both sample companies open, Bianco Latte inherits brand coverage with 15
+requested searches, switching samples protects unsaved edits, and the linked Admin
+catalog filters by country/sector and opens marketplace editing. Exiting restores
+the signed-in acting company. Desktop and 390 px preview layouts had no horizontal
+overflow; no application console errors were observed (browser extension warnings
+were unrelated). Frontend lint, type checking, all 243 tests and the production
+build including the local-client exclusion check passed.
+
+## Standalone isolated development
+
+The separate entry remains at `http://localhost:5173/monitoring-workspace.html`
+when using the dedicated mode below. Styles are scoped to the editor. The earlier
 `dev:monitoring-sandbox` command remains a separate, memory-only visual prototype.
 
 Start the backend's dedicated sandbox from its root:
@@ -21,7 +53,7 @@ cd ..
 docker compose --env-file /dev/null -f api/docker-compose.monitoring.yml up -d
 ```
 
-Then, from this repository:
+For the standalone mode, stop the normal frontend first and run from this repository:
 
 ```sh
 bun run dev:monitoring-workspace
@@ -68,7 +100,9 @@ Its API/database network cannot reach the Internet. Vite's monitoring mode ignor
 `.env`, removes the normal API proxy, and limits browser connections with CSP.
 The dedicated client fixes the API to loopback port 53000, verifies `/ready`
 identifies the monitoring sandbox before signing in, and keeps tokens in memory.
-The website uses a separate adapter that reuses normal authentication; it never calls development login.
+Normal website routes use a separate adapter that reuses normal authentication.
+Only the explicit development preview uses synthetic login on the isolated loopback
+API. The website's real credentials and acting-company header never enter that client.
 
 Scope IDs identify draft items. They do not create companies, confirmed products
 or IP registrations in production. Existing canonical identities can be linked

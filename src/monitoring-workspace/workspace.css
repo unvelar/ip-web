@@ -153,3 +153,9 @@ dialog form .actions { margin-top:20px; }
 .monitoring-workspace dialog { margin:auto; }
 .monitoring-workspace .workspace-content { min-width:0; }
 .monitoring-workspace .catalog-section-heading h3 { font-weight:600; }
+
+.monitoring-workspace .local-preview-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; max-width:1170px; margin:auto; padding:20px 38px; border-bottom:1px solid #ded7cc; font-size:12px; }
+.monitoring-workspace .local-preview-toolbar p { margin-top:4px; }
+.monitoring-workspace .local-preview-toolbar a { text-decoration:underline; text-underline-offset:3px; }
+.monitoring-workspace .local-preview-chooser { max-width:950px; margin:auto; padding:32px 38px; }
+@media(max-width:680px) { .monitoring-workspace .local-preview-toolbar, .monitoring-workspace .local-preview-chooser { padding:20px; } }

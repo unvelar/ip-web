@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { assertLocalWorkspace, DraftError, workspaceClient, type WorkspaceResponse } from './api';
-import { exampleCompanies, exampleWorkspace } from './fixtures';
+import { assertLocalWorkspace, workspaceClient, type WorkspaceResponse } from './api';
+import { exampleCompanies } from './fixtures';
 import WorkspaceEditor from './WorkspaceEditor';
 import MarketplaceAdmin from './MarketplaceAdmin';
 import './workspace.css';
+import { openLocalCatalog, openLocalCompany } from './localSessions';
 
 type Client = ReturnType<typeof workspaceClient>;
 
@@ -16,21 +17,13 @@ export default function App() {
     setBusy(true); setError('');
     try {
       assertLocalWorkspace(location.hostname, import.meta.env.DEV, import.meta.env.MODE);
-      const client = workspaceClient(location.hostname);
-      await client.signIn(company.email);
-      let data = await client.load();
-      if (data.revision === 0) {
-        try { await client.save(exampleWorkspace(company.id), 0); }
-        catch (err) { if (!(err instanceof DraftError && err.status === 409)) throw err; }
-        data = await client.load();
-      }
-      setSession({ client, data: { ...data, company: { ...data.company, name: company.name } } });
+      setSession(await openLocalCompany(company, location.hostname));
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setBusy(false); }
   }
   async function openAdmin() {
     setBusy(true); setError('');
-    try { assertLocalWorkspace(location.hostname, import.meta.env.DEV, import.meta.env.MODE); const client = workspaceClient(location.hostname); await client.signIn('catalog-admin@unvelar.example', true); setAdmin(client); }
+    try { assertLocalWorkspace(location.hostname, import.meta.env.DEV, import.meta.env.MODE); setAdmin(await openLocalCatalog(location.hostname)); }
     catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setBusy(false); }
   }

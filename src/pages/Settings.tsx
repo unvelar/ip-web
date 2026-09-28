@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import MarketplaceConnections from "../components/MarketplaceConnections";
 import {
@@ -235,6 +236,7 @@ function MonitoringSettingsSection() {
         <p className="mt-1 text-sm text-stone-500">
           When enabled, the scheduler fans out runs for watched IP platforms.
         </p>
+        <Link to="/monitoring/setup" className="mt-3 inline-flex text-sm font-semibold text-stone-900 underline underline-offset-4">Set up brands, products and coverage →</Link>
       </div>
 
       {error && (

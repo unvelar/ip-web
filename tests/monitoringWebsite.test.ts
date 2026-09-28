@@ -31,7 +31,7 @@ test('website draft conflicts preserve their status and are never retried', asyn
   expect(calls).toBe(1);
 });
 
-test('rolling deployment hides unavailable setup but does not hide authentication or server failures', async () => {
+test('rolling deployment reports unavailable setup but does not hide authentication or server failures', async () => {
   globalThis.fetch = (async () => new Response('', { status: 404 })) as typeof fetch;
   expect(await getMonitoringSetupCapabilities()).toEqual({ workspace: false, marketplace_admin: false });
   globalThis.fetch = (async () => Response.json({ error: 'Sign in again' }, { status: 401 })) as typeof fetch;

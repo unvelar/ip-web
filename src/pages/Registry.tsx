@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Check, Copy, ExternalLink } from "lucide-react";
+import { ArrowRight, Check, Copy, ExternalLink } from "lucide-react";
 import { listTrademarks, type Trademark } from "../api/registry";
 import BulkIngest from "../components/BulkIngest";
 import { publicSummaryUrlForIp } from "../lib/publicSummary";
@@ -54,11 +54,14 @@ export default function Registry() {
   return (
     <div className="max-w-4xl mx-auto px-6 py-12 space-y-10">
       {/* Page header */}
-      <div>
+      <div className="flex flex-wrap items-start justify-between gap-5">
+        <div className="min-w-0 flex-1">
         <h1 className="text-2xl font-black text-stone-900 tracking-tight">Intellectual Properties</h1>
         <p className="mt-1 text-sm text-stone-500">
           Manage your intellectual property and the sources we monitor for infringements.
         </p>
+        </div>
+        <Link to="/monitoring/setup" className="inline-flex shrink-0 items-center gap-2 rounded-md bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-700">Monitoring setup <ArrowRight size={14} aria-hidden /></Link>
       </div>
 
       {/* Section 1 — bulk ingest */}

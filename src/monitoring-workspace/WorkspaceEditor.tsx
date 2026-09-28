@@ -5,7 +5,7 @@ import CoverageEditor from './CoverageEditor';
 import './workspace.css';
 import { useDraftNavigationGuard } from './useDraftNavigationGuard';
 
-export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean }) {
+export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false, companySwitcherLabel }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean; companySwitcherLabel?: string }) {
   const Content = embedded ? 'div' : 'main';
   const [saved, setSaved] = useState<Draft>(loaded);
   const [document, setDocument] = useState(loaded.document);
@@ -115,7 +115,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
           {error && <div className="error-box" role="alert">{error}{conflict && <p>Your edits are still here. Copy any changes you want to keep, then <button className="text-button" disabled={busy} onClick={reload}>reload the saved draft</button>.</p>}</div>}
           {embedded && <div className="workspace-draft-note"><strong>Monitoring setup · Draft</strong><p>Plan searches for this company. Saving here does not change active monitoring.</p><a href="/monitoring/settings">View active monitors →</a></div>}
           {embedded && <nav className="workspace-tabs" aria-label="Setup views"><button aria-current={page === 'monitoring' ? 'page' : undefined} onClick={() => setPage('monitoring')}>Setup</button><button aria-current={page === 'products' ? 'page' : undefined} onClick={() => setPage('products')}>Products ({products.length})</button></nav>}
-          <div className="page-heading"><div><div className="eyebrow">{brand?.name ?? companyName}</div><h1>{page === 'monitoring' ? 'Monitoring' : 'Products'}</h1><p>{page === 'monitoring' ? 'Choose what to look for, and where.' : 'Organize product searches and their coverage.'}</p></div><button className="secondary" disabled={busy} onClick={() => openAdd(brand ? 'product' : 'brand')}>{brand ? '+ Add product' : '+ Add brand'}</button></div>
+          <div className="page-heading"><div><div className="eyebrow">{brand?.name ?? companyName}</div><h1>{page === 'monitoring' ? 'Monitoring' : 'Products'}</h1><p>{page === 'monitoring' ? 'Choose what to look for, and where.' : 'Organize product searches and their coverage.'}</p></div><div className="actions">{embedded && companySwitcherLabel && <button className="secondary" disabled={busy} onClick={() => dirty ? leaveDialog.current?.showModal() : onLeave()}>{companySwitcherLabel}</button>}<button className="secondary" disabled={busy} onClick={() => openAdd(brand ? 'product' : 'brand')}>{brand ? '+ Add product' : '+ Add brand'}</button></div></div>
           <div className="scope-bar"><label htmlFor="scope">Scope</label><select id="scope" disabled={busy} value={productId ? `product:${brandId}:${productId}` : brandId ? `brand:${brandId}` : 'company'} onChange={event => {
             const [kind, owner, item] = event.target.value.split(':'); selectScope(kind === 'company' ? null : owner, kind === 'product' ? item : null);
           }}><option value="company">Entire company · All brands & products</option>{document.brands.map(item => <optgroup key={item.id} label={item.name}><option value={`brand:${item.id}`}>{item.name} · Brand only</option>{item.products.map(product => <option key={product.id} value={`product:${item.id}:${product.id}`}>↳ {product.name}</option>)}</optgroup>)}</select></div>
@@ -153,4 +153,3 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     <dialog ref={leaveDialog} aria-labelledby="leave-heading"><h2 id="leave-heading">Keep your draft changes?</h2><p>Save before switching company, or discard the changes you have not saved.</p><div className="actions"><button className="secondary" onClick={() => leaveDialog.current?.close()}>Keep editing</button><button className="primary" onClick={onLeave}>Discard and switch</button></div></dialog>
   </div>;
 }
-
