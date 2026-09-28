@@ -43,7 +43,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   }, [client, document, brandId, productId]);
 
   function updateDocument(next: Workspace) { setDocument(next); setPlan(null); setMessage(''); }
-  function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'reference_materials'>>) {
+  function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'reference_materials' | 'legacy_ip_ids'>>) {
     if (!brand) return;
     updateDocument({ ...document, brands: document.brands.map(item => item.id !== brand.id ? item : productId
       ? { ...item, products: item.products.map(product => product.id === productId ? { ...product, ...change } : product) }
@@ -79,11 +79,11 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     const keywords = String(form.get('keywords')).split('\n').filter(value => value.trim());
     const id = crypto.randomUUID();
     if (adding === 'brand') {
-      const item: Brand = { id, name, keywords, reference_materials: [], coverage: { markets: [], frequency: 'weekly' }, products: [] };
+      const item: Brand = { id, name, keywords, reference_materials: [], coverage: { markets: [], frequency: 'weekly' }, legacy_ip_ids: [], products: [] };
       updateDocument({ ...document, brands: [...document.brands, item] }); setBrandId(id); setProductId(null);
     } else if (brand) {
       if (adding === 'product') {
-        const item: Product = { id, name, keywords, reference_materials: [], coverage: null, catalog_product_id: null };
+        const item: Product = { id, name, keywords, reference_materials: [], coverage: null, catalog_product_id: null, legacy_ip_ids: [] };
         updateDocument({ ...document, brands: document.brands.map(b => b.id === brandId ? { ...b, products: [...b.products, item] } : b) }); setProductId(id);
       } else {
         const material: ReferenceMaterial = { id, name, kind: String(form.get('kind')) === 'document' ? 'document' : 'image', note: String(form.get('note')).trim() };
@@ -120,11 +120,12 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
             <h3 className="tenant-overview-title">Coverage overview</h3><p className="field-note">A combined view of every brand and product’s searches. Set coverage once per brand. Each product has its own keywords and automatically uses its brand’s coverage.</p>
             <div className="company-totals"><span><strong>{document.brands.length}</strong> {document.brands.length === 1 ? 'brand' : 'brands'}</span><span><strong>{products.length}</strong> {products.length === 1 ? 'product' : 'products'}</span></div>
             {document.brands.map(item => <div className="brand-plan-row" key={item.id}><div><strong>{item.name}</strong><p>{item.keywords.filter(Boolean).length} brand keywords · {item.products.length} {item.products.length === 1 ? 'product' : 'products'} · {item.coverage.markets.length} {item.coverage.markets.length === 1 ? 'country' : 'countries'}</p></div><button className="secondary" onClick={() => selectScope(item.id)} aria-label={`Edit ${item.name}`}>Edit brand</button></div>)}
-            {!document.brands.length && <p className="empty-state">Add a brand to start planning monitoring for this tenant.</p>}
+            {!document.brands.length && <div className="empty-state"><p>No brand has been confirmed for this tenant yet.</p><p>Start with the brand that owns the search terms and coverage. Add products only when they need their own search terms.</p><button className="primary" onClick={() => openAdd('brand')}>Set up a brand</button></div>}
           </section>{summary}</div> : brand && scope && coverage ? <fieldset disabled={busy} className="editor-grid"><legend className="visually-hidden">Monitoring draft editor</legend><div>
             <section className="panel"><label className="field-heading" htmlFor="scope-name">{productId ? 'Product name' : 'Brand name'}</label><input id="scope-name" className="full-width" maxLength={160} value={scope.name} onChange={event => updateScope({ name: event.target.value })} /></section>
             <section className="panel"><div className="section-heading"><div><h2>Search keywords</h2><p>{productId ? 'Phrases used to sell this product. Brand keywords are not added automatically.' : 'Only these brand phrases are searched. Choose the tenant to include product searches.'}</p></div></div><label className="visually-hidden" htmlFor="keywords">Search keywords, one per line</label><textarea id="keywords" rows={5} value={scope.keywords.join('\n')} onChange={event => updateScope({ keywords: event.target.value.split('\n') })} /><div className="field-note">One phrase per line. Each phrase is searched separately.</div></section>
             <section className="panel"><div className="section-heading"><div><h2>Reference materials</h2><p>Use visual or documentary references to review potential matches. They do not alter what is searched.</p></div><button className="secondary" type="button" disabled={busy} onClick={() => openAdd('reference')}>+ Add reference</button></div>{scope.reference_materials.length ? <ul className="reference-material-list">{scope.reference_materials.map(material => <li key={material.id}><span className="reference-material-kind">{material.kind === 'image' ? 'Image' : 'Document'}</span><div><strong>{material.name}</strong>{material.note && <p>{material.note}</p>}</div><button type="button" className="text-button" disabled={busy} onClick={() => updateScope({ reference_materials: scope.reference_materials.filter(item => item.id !== material.id) })}>Remove</button></li>)}</ul> : <p className="field-note">No reference materials yet.</p>}</section>
+            {loaded.legacy_ips.length > 0 && <section className="panel"><div className="section-heading"><div><h2>Existing IP records</h2><p>Link a previous IP record to this {productId ? 'product' : 'brand'} only after you confirm it belongs here. Its old configuration remains unchanged while this workspace is a draft.</p></div></div><div className="legacy-ip-list">{loaded.legacy_ips.map(ip => <label key={ip.id} className="legacy-ip-row"><input type="checkbox" checked={scope.legacy_ip_ids.includes(ip.id)} onChange={event => updateScope({ legacy_ip_ids: event.target.checked ? [...scope.legacy_ip_ids, ip.id] : scope.legacy_ip_ids.filter(id => id !== ip.id) })} /><span><strong>{ip.name}</strong><small>{ip.keywords.length} keywords · {ip.monitored_domains.filter(domain => domain.enabled).length} active sites · {ip.image_count} reference images</small></span></label>)}</div></section>}
             <section ref={coverageSection} tabIndex={-1} aria-label="Brand coverage" className="panel coverage-panel"><h2>Brand coverage</h2>
               {productId ? <>
                 <p className="field-note">This product automatically uses {brand.name}’s countries, marketplaces and schedule.</p>
