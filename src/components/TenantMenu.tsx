@@ -14,7 +14,7 @@ export default function TenantMenu({ tenants, preview }: { tenants: Tenant[]; pr
   const trigger = useRef<HTMLButtonElement>(null);
   const id = useId();
   const tenant = tenants.find(value => value.id === actingTenantId);
-  const name = preview ? 'Sample tenant' : tenant ? tenantLabel(tenant) : 'Your tenant';
+  const name = preview ? 'Local workspace' : tenant ? tenantLabel(tenant) : 'Your tenant';
   const managementUrl = preview || localPreviewAvailable(window.location.hostname, import.meta.env.DEV)
     ? '/monitoring/setup?preview=local'
     : '/monitoring/setup';

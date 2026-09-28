@@ -368,7 +368,7 @@ function AppShellContent() {
 
         {/* Main */}
         <main className="flex-1 min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain">
-          {localPreview ? <div className="shell-tenant-banner sticky z-30 flex h-7 items-center gap-2 border-b border-sky-200 bg-sky-50 px-4 text-xs text-sky-900" style={{ top: `var(${APP_SHELL_BANNER_STICKY_TOP_VAR})` }}><span>Local preview · Sample data</span><Link className="ml-auto shrink-0 font-semibold underline underline-offset-2" to={pathname}>Exit preview</Link></div> : isActingAsOther && (
+          {localPreview ? <div className="shell-tenant-banner sticky z-30 flex h-7 items-center gap-2 border-b border-sky-200 bg-sky-50 px-4 text-xs text-sky-900" style={{ top: `var(${APP_SHELL_BANNER_STICKY_TOP_VAR})` }}><span>Local development · Isolated workspace</span><Link className="ml-auto shrink-0 font-semibold underline underline-offset-2" to={pathname}>Exit preview</Link></div> : isActingAsOther && (
             <ActingTenantBanner
               label={actingTenant ? tenantLabel(actingTenant) : (actingTenantId ?? "")}
               onReturn={() => user && switchTenant(user.tenant_id)}
