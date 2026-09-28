@@ -20,5 +20,5 @@ export function exampleWorkspace(companyId: string): Workspace {
       id: crypto.randomUUID(), name, keywords, coverage: null, catalog_product_id: null,
     })),
   };
-  return { version: 2, brands: [brand] };
+  return { version: 3, brands: [brand] };
 }

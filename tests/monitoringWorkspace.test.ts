@@ -32,7 +32,7 @@ test('an API without the sandbox marker cannot receive a login', async () => {
 });
 test('saving sends the expected revision and surfaces conflicts without retrying', async () => {
   let count = 0;
-  const document: Workspace = { version: 2, brands: [] };
+  const document: Workspace = { version: 3, brands: [] };
   globalThis.fetch = (async (_url, init) => {
     count++;
     expect(JSON.parse(init?.body as string)).toEqual({ document, expected_revision: 4 });
@@ -57,8 +57,8 @@ test('country-first selection isolates edits and preserves uncataloged saved cho
 
 test('company preview sends an explicit company scope', async () => {
   globalThis.fetch = (async (_url, init) => {
-    expect(JSON.parse(init?.body as string)).toEqual({ document: { version: 2, brands: [] }, brand_id: null, product_id: null });
+    expect(JSON.parse(init?.body as string)).toEqual({ document: { version: 3, brands: [] }, brand_id: null, product_id: null });
     return Response.json({});
   }) as typeof fetch;
-  await workspaceClient('localhost').preview({ version: 2, brands: [] }, null, null);
+  await workspaceClient('localhost').preview({ version: 3, brands: [] }, null, null);
 });

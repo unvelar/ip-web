@@ -34,13 +34,17 @@ Coverage uses compact country tabs with flags. Select a country, then choose its
 marketplaces in a consistent table with local brand SVGs, storefront domains and
 category tags. Search, category and selected-only filters aid navigation without
 changing saved selections. Each country's choices are independent; a new country
-starts empty. Product coverage inherits from its brand until explicitly customized.
+starts empty. Coverage is configured only at the brand level; every product automatically inherits
+its countries, marketplaces and schedule. Products show a compact read-only
+summary and an “Edit brand coverage” link, with no inheritance toggle or overrides.
 The brand summary shows how many products inherit its changes.
 
 The backend stores country/category metadata in additive migration 126. This is
 an initial curated catalog, not proof of monitoring support or complete marketplace
-availability. Existing version-1 drafts upgrade without losing any requested pairs;
-unmapped saved choices remain visible for review. Backend preview remains the
+availability. Version-1 and version-2 drafts normalize to version 3 on read, keeping brand
+coverage and product keywords. Historical product overrides are ignored; changed
+saves persist automatic inheritance. Version-3 overrides are rejected by the API.
+Unmapped saved brand choices remain visible for review. Backend preview remains the
 authority for normalization and the exact requested searches. Incomplete plans
 can be saved as drafts.
 
@@ -63,17 +67,19 @@ or IP registrations in production. Existing canonical identities can be linked
 through the backend contract, with tenant checks, but mapping UI, activation,
 workers, catalog reconciliation and live rollout are subsequent work.
 
-Validation: frontend lint, full test suite, TypeScript and production build;
+Validation: frontend lint, focused workspace tests, TypeScript and production build;
 backend TypeScript, complete empty-database migrations through 126 and replay,
-and ten focused tests including real HTTP/database ownership, concurrency, retry,
+and eleven focused tests including real HTTP/database ownership, concurrency, retry,
 legacy upgrades, catalog metadata, scope union and no-job checks.
 
 Unvelar Chrome validation covered country-specific selection and persistence
 (Amazon selected for Italy, unselected for Spain), category filtering, local logos,
-company/brand/product scope switching, retained Bianco Latte custom coverage and
-Paula's Choice inherited coverage. Product preview contained only its three
-explicit phrases (18 searches); company preview combined those with the brand's
-ten requests for 28 total. Desktop and 390 px layouts were inspected without
+company/brand/product scope switching and automatic brand coverage for existing
+products, including Bianco Latte's historical override. Its three explicit phrases
+now use the brand's selected websites and weekly schedule (15 searches). Changing
+the brand to daily immediately updates the product summary. The product view has
+no coverage checkbox or editable marketplace controls; its edit link opens the
+brand coverage editor. Desktop and 390 px layouts were inspected without
 horizontal overflow. Browser logs contained unrelated extension warnings; no
 application console/network errors were observed during these checks.
 
