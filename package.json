@@ -6,6 +6,8 @@
   "scripts": {
     "assets:generate": "node scripts/generate-brand-assets.mjs",
     "dev": "node scripts/generate-brand-assets.mjs && vite",
+    "dev:monitoring-sandbox": "node experiments/monitoring-workspace/server.mjs",
+    "dev:monitoring-workspace": "vite --mode monitoring-workspace --host 127.0.0.1 --port 5173 --strictPort",
     "build": "node scripts/generate-brand-assets.mjs && tsc -b && vite build && node scripts/generate-static-route-entries.mjs",
     "lint": "eslint .",
     "preview": "vite preview",

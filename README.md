@@ -19,6 +19,12 @@ Validate authenticated routes through the Chrome extension in the **Unvelar**
 profile. Use the normal WorkOS sign-in flow. Production-backed validation is
 read-only unless the user explicitly authorizes a mutation. See [AGENTS.md](AGENTS.md).
 
+For the company/brand/product redesign, `bun run dev:monitoring-sandbox` starts a
+separate offline prototype on port 5173. It uses example data and blocks API
+connections. Stop it before running the regular frontend. See the
+[sandbox guide](experiments/monitoring-workspace/README.md) and
+[design and isolation proposal](docs/company-product-monitoring.md).
+
 ## Checks and deployment
 
 ```sh
@@ -68,3 +74,9 @@ captured immediately before the production build. Vite emits the same metadata
 in `build.json`; open tabs can detect a newer deployment and offer a reload.
 PR previews set `VITE_BASE_PATH` to their preview directory so assets and routes
 stay within the preview.
+
+## Connected monitoring workspace (local development)
+
+Use `bun run dev:monitoring-workspace` with the isolated backend sandbox to test
+saved company/brand/product monitoring drafts. See the
+[setup and scope](docs/monitoring-workspace-development.md).
