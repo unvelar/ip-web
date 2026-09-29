@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { countryLabel } from '../lib/countries';
 import { DraftError, type Brand, type Draft, type Plan, type Product, type ReferenceMaterial, type Workspace, type WorkspaceResponse, type WorkspaceClient } from './contracts';
 import ScopeNavigator from './ScopeNavigator';
@@ -6,6 +6,7 @@ import CoverageEditor from './CoverageEditor';
 import './workspace.css';
 import { useDraftNavigationGuard } from './useDraftNavigationGuard';
 import { coverageFromLegacy, mergeCoverage } from './legacyMigration';
+import { getTrademark } from '../api/registry';
 
 export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false, tenantSwitcherLabel }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean; tenantSwitcherLabel?: string }) {
   const Content = embedded ? 'div' : 'main';
@@ -19,6 +20,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [legacyImageFallbacks, setLegacyImageFallbacks] = useState<Record<string, { id: string; url: string; status: string }[]>>({});
   const [adding, setAdding] = useState<'brand' | 'product' | 'reference'>('product');
   const coverageSection = useRef<HTMLElement>(null);
   const addDialog = useRef<HTMLDialogElement>(null);
@@ -29,8 +31,8 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const coverage = brand?.coverage;
   const tenantName = loaded.company.name;
   const products = (brand ? [brand] : document.brands).flatMap(owner => owner.products.map(product => ({ ...product, brand: owner })));
-  const linkedLegacyIps = scope ? loaded.legacy_ips.filter(ip => scope.legacy_ip_ids.includes(ip.id)) : [];
-  const linkedLegacyImages = linkedLegacyIps.flatMap(ip => (ip.images ?? []).map(image => ({ ...image, ipName: ip.name })));
+  const linkedLegacyIps = useMemo(() => scope ? loaded.legacy_ips.filter(ip => scope.legacy_ip_ids.includes(ip.id)) : [], [loaded.legacy_ips, scope]);
+  const linkedLegacyImages = linkedLegacyIps.flatMap(ip => (ip.images ?? legacyImageFallbacks[ip.id] ?? []).map(image => ({ ...image, ipName: ip.name })));
   const dirty = JSON.stringify(document) !== JSON.stringify(saved.document);
 
   useDraftNavigationGuard(dirty);
@@ -44,6 +46,19 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     }, 180);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [client, document, brandId, productId]);
+
+  useEffect(() => {
+    const missing = linkedLegacyIps.filter(ip => ip.images === undefined && legacyImageFallbacks[ip.id] === undefined);
+    if (!missing.length) return;
+    const controller = new AbortController();
+    void Promise.all(missing.map(async ip => ({ ip, detail: await getTrademark(ip.id, controller.signal) }))).then(results => {
+      if (controller.signal.aborted) return;
+      setLegacyImageFallbacks(current => ({ ...current, ...Object.fromEntries(results.map(({ ip, detail }) => [ip.id,
+        detail.images.map(image => ({ id: image.id, url: image.url, status: image.status })),
+      ])) }));
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, [linkedLegacyIps, legacyImageFallbacks]);
 
   function updateDocument(next: Workspace) { setDocument(next); setPlan(null); setMessage(''); }
   function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'reference_materials' | 'legacy_ip_ids'>>) {
