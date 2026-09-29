@@ -147,10 +147,10 @@ export function FirstScanResults({
         </table>
       </div>
 
-      {results.length === 0 && <ResultEmptyState hasAnyResults={allResultCount > 0} sources={sources} />}
+      {results.length === 0 && <ResultEmptyState loading={refreshing} hasAnyResults={allResultCount > 0} sources={sources} />}
       <div className="flex items-center justify-between gap-3 border-t border-stone-200 px-4 py-3">
         <p className="text-xs tabular-nums text-stone-500" aria-live="polite">
-          Showing {results.length.toLocaleString()} of {filteredTotal.toLocaleString()} listings
+          {refreshing && results.length === 0 ? "Loading listings…" : `Showing ${results.length.toLocaleString()} of ${filteredTotal.toLocaleString()} listings`}
         </p>
         {hasMore && (
           <button type="button" onClick={onLoadMore} disabled={loadingMore || refreshing}
@@ -218,7 +218,7 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
           <span className="truncate text-[10px] font-medium uppercase tracking-wide text-stone-400">{readableMethod(result.match_method) || (active ? "Waiting" : "Not checked")}</span>
         </div>
         <p className="mt-1.5 truncate text-[11px] text-stone-500" title={result.vlm_reasoning ?? undefined}>
-          {result.matching_error ? "Match check incomplete" : result.vlm_verdict ? `${readableMethod(result.vlm_verdict)}${result.vlm_confidence !== null ? ` · ${Math.round(result.vlm_confidence * 100)}%` : ""}` : accessBlocked ? "Match found; page check blocked" : active ? "Automated checks pending" : "No match evidence"}
+          {result.matching_error ? "Match check incomplete" : result.vlm_verdict ? `${readableMethod(result.vlm_verdict)}${result.vlm_confidence !== null ? ` · ${Math.round(result.vlm_confidence * 100)}%` : ""}` : accessBlocked ? "Match found; page check blocked" : result.result_id ? "Match found" : active ? "Automated checks pending" : "No match evidence"}
         </p>
         {(result.matching_error || result.vlm_reasoning) && <p className="mt-1 line-clamp-2 text-[10px] text-stone-500" title={result.matching_error || result.vlm_reasoning || undefined}>
           {result.matching_error || result.vlm_reasoning}
@@ -299,14 +299,14 @@ function ResultFilterButton({ label, count, value, active, onChange }: { label: 
   );
 }
 
-function ResultEmptyState({ hasAnyResults, sources }: { hasAnyResults: boolean; sources: FirstScanSourceProgress[] }) {
+function ResultEmptyState({ loading, hasAnyResults, sources }: { loading: boolean; hasAnyResults: boolean; sources: FirstScanSourceProgress[] }) {
   const activeSource = sources.find((source) => source.state !== "ready" && source.state !== "failed");
   return (
     <div className="flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center">
-      {hasAnyResults ? <Search className="h-5 w-5 text-stone-300" /> : <LoaderCircle className="h-5 w-5 animate-spin text-blue-500" />}
-      <p className="mt-3 text-sm font-semibold text-stone-800">{hasAnyResults ? "No rows match these filters" : "Waiting for the first listing"}</p>
+      {hasAnyResults && !loading ? <Search className="h-5 w-5 text-stone-300" /> : <LoaderCircle className="h-5 w-5 animate-spin text-blue-500" />}
+      <p className="mt-3 text-sm font-semibold text-stone-800">{loading ? "Loading listings…" : hasAnyResults ? "No rows match these filters" : "Waiting for the first listing"}</p>
       <p className="mt-1 max-w-md text-xs leading-5 text-stone-500">
-        {hasAnyResults
+        {loading ? "Updating results for the selected filters." : hasAnyResults
           ? "Clear the search or select another pipeline stage."
           : activeSource
             ? `${SOURCE_STATE_COPY[activeSource.state].label}: ${activeSource.source.display_name || readableDomain(activeSource.source.domain)}. Rows appear here as soon as the scraper saves a result.`
