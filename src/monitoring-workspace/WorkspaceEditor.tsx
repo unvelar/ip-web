@@ -30,7 +30,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const tenantName = loaded.company.name;
   const products = (brand ? [brand] : document.brands).flatMap(owner => owner.products.map(product => ({ ...product, brand: owner })));
   const linkedLegacyIps = scope ? loaded.legacy_ips.filter(ip => scope.legacy_ip_ids.includes(ip.id)) : [];
-  const linkedLegacyImages = linkedLegacyIps.flatMap(ip => ip.images.map(image => ({ ...image, ipName: ip.name })));
+  const linkedLegacyImages = linkedLegacyIps.flatMap(ip => (ip.images ?? []).map(image => ({ ...image, ipName: ip.name })));
   const dirty = JSON.stringify(document) !== JSON.stringify(saved.document);
 
   useDraftNavigationGuard(dirty);
