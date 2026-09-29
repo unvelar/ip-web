@@ -34,6 +34,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const linkedLegacyIps = useMemo(() => scope ? loaded.legacy_ips.filter(ip => scope.legacy_ip_ids.includes(ip.id)) : [], [loaded.legacy_ips, scope]);
   const linkedLegacyImages = linkedLegacyIps.flatMap(ip => (ip.images ?? legacyImageFallbacks[ip.id] ?? []).map(image => ({ ...image, ipName: ip.name })));
   const dirty = JSON.stringify(document) !== JSON.stringify(saved.document);
+  const active = saved.revision > 0 && saved.active_revision === saved.revision;
 
   useDraftNavigationGuard(dirty);
 
@@ -84,12 +85,12 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       }),
     }) });
   }
-  async function save() {
+  async function activate() {
     setBusy(true); setError(''); setMessage('');
     try {
-      const result = await client.save(document, saved.revision);
+      const result = await client.activate(document, saved.revision);
       setSaved(result); setDocument(result.document); setConflict(false);
-      setMessage(`Draft saved · Revision ${result.revision}. Monitoring has not been activated.`);
+      setMessage(`Monitoring activated · Revision ${result.revision}. ${result.execution.scopes} scopes and ${result.execution.sources} sources are scheduled.`);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); setConflict(err instanceof DraftError && err.status === 409); }
     finally { setBusy(false); }
   }
@@ -98,7 +99,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     try {
       const result = await client.load(); setSaved(result); setDocument(result.document);
       setBrandId(null); setProductId(null); setPlan(null); setConflict(false);
-      setMessage('Latest saved draft loaded.');
+      setMessage('Latest monitoring configuration loaded.');
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setBusy(false); }
   }
@@ -137,7 +138,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     {plan && plan.issues.length > 3 && <details className="more-issues"><summary>{plan.issues.length - 3} more items to review</summary>{plan.issues.slice(3).map(issue => <p className="notice" key={issue}>{issue}</p>)}</details>}
     {previewError && <p role="alert" className="notice">{previewError}</p>}
     <button className="secondary" disabled={!plan?.total_searches} onClick={() => previewDialog.current?.showModal()}>Preview searches</button>
-    <p className="field-note">Saving keeps a draft; it does not run searches.</p>
+    <p className="field-note">Save and activate applies this plan to scheduled monitoring.</p>
   </aside>;
   return <div className={`monitoring-workspace tenant-workspace-editor${embedded ? " embedded-workspace" : ""}`}>
     {!embedded && <div className="sandbox-banner"><strong>Local development</strong><span>Saved in your sandbox database · No monitoring jobs run</span></div>}
@@ -162,7 +163,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
               {linkedLegacyImages.length > 0 && <div className="legacy-reference-grid" aria-label="Linked legacy reference images">{linkedLegacyImages.map(image => image.url ? <figure key={image.id}><img src={image.url} alt={`${image.ipName} reference`} loading="lazy" /><figcaption>{image.ipName}</figcaption></figure> : <div className="legacy-reference-unavailable" key={image.id}>Image unavailable</div>)}</div>}
               {scope.reference_materials.length ? <ul className="reference-material-list">{scope.reference_materials.map(material => <li key={material.id}><span className="reference-material-kind">{material.kind === 'image' ? 'Image' : 'Document'}</span><div><strong>{material.name}</strong>{material.note && <p>{material.note}</p>}</div><button type="button" className="text-button" disabled={busy} onClick={() => updateScope({ reference_materials: scope.reference_materials.filter(item => item.id !== material.id) })}>Remove</button></li>)}</ul> : linkedLegacyImages.length === 0 && <p className="field-note">No reference materials yet.</p>}
             </section>
-            {loaded.legacy_ips.length > 0 && <section className="panel"><div className="section-heading"><div><h2>Existing IP records</h2><p>Link a previous IP record to this {productId ? 'product' : 'brand'} only after you confirm it belongs here. Its queries, available site coverage and images are imported into this draft; the old record remains unchanged.</p></div></div><div className="legacy-ip-list">{loaded.legacy_ips.map(ip => <label key={ip.id} className="legacy-ip-row"><input type="checkbox" checked={scope.legacy_ip_ids.includes(ip.id)} onChange={event => toggleLegacyIp(ip.id, event.target.checked)} /><span><strong>{ip.name}</strong><small>{ip.keywords.length} keywords · {ip.monitored_domains.filter(domain => domain.enabled).length} active sites · {ip.image_count} reference images</small></span></label>)}</div></section>}
+            {loaded.legacy_ips.length > 0 && <section className="panel"><div className="section-heading"><div><h2>Existing IP records</h2><p>Link a previous IP record to this {productId ? 'product' : 'brand'} only after you confirm it belongs here. Its queries, coverage, images and monitoring history are preserved. Activation makes this {productId ? 'product' : 'brand'} its new monitoring configuration.</p></div></div><div className="legacy-ip-list">{loaded.legacy_ips.map(ip => <label key={ip.id} className="legacy-ip-row"><input type="checkbox" checked={scope.legacy_ip_ids.includes(ip.id)} onChange={event => toggleLegacyIp(ip.id, event.target.checked)} /><span><strong>{ip.name}</strong><small>{ip.keywords.length} keywords · {ip.monitored_domains.filter(domain => domain.enabled).length} active sites · {ip.image_count} reference images</small></span></label>)}</div></section>}
             <section ref={coverageSection} tabIndex={-1} aria-label="Brand coverage" className="panel coverage-panel"><h2>Brand coverage</h2>
               {productId ? <>
                 <p className="field-note">This product automatically uses {brand.name}’s countries, marketplaces and schedule.</p>
@@ -176,13 +177,13 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
           </div>{summary}</fieldset> : null}
             </div>
           </div>
-          <div className="savebar"><div><span>{dirty ? 'Unsaved changes' : `Saved draft · Revision ${saved.revision}`}</span><p className="field-note">Saved as a draft. Searches remain inactive.</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={!dirty || busy || conflict} onClick={save}>{busy ? 'Saving…' : 'Save draft'}</button></div></div>
+          <div className="savebar"><div><span>{dirty ? 'Unsaved changes' : active ? `Active · Revision ${saved.revision}` : `Ready to activate · Revision ${saved.revision}`}</span><p className="field-note">{active ? 'This configuration runs scheduled searches.' : 'Activate this configuration to start scheduled searches.'}</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={busy || conflict || document.brands.length === 0 || (!dirty && active)} onClick={activate}>{busy ? 'Activating…' : 'Save and activate'}</button></div></div>
           <div className="status" role="status">{message}</div>
         </div>
       </Content>
     </div>
-    <dialog ref={addDialog} aria-labelledby="add-heading"><h2 id="add-heading">Add {adding === 'brand' ? 'a brand' : adding === 'product' ? 'a product' : 'a reference material'}</h2><p>{adding === 'product' ? 'All products automatically use their brand’s countries, marketplaces and schedule. Add only the search phrases you want to run.' : adding === 'brand' ? 'Brands group products and provide shared monitoring coverage.' : 'Reference materials support review only. They never change search terms, coverage or categorization.'}</p><form onSubmit={add}><label htmlFor="new-name">{adding === 'brand' ? 'Brand' : adding === 'product' ? 'Product' : 'Reference'} name</label><input id="new-name" name="name" required maxLength={160} autoFocus />{adding === 'reference' ? <><label htmlFor="reference-kind">Type</label><select id="reference-kind" name="kind"><option value="image">Image</option><option value="document">Document</option></select><label htmlFor="reference-note">Note</label><textarea id="reference-note" name="note" rows={3} maxLength={500} /></> : <><label htmlFor="new-keywords">Search keywords · one per line</label><textarea id="new-keywords" name="keywords" rows={3} /></>}<div className="actions"><button type="button" className="secondary" onClick={() => addDialog.current?.close()}>Cancel</button><button type="submit" className="primary">Add to draft</button></div></form></dialog>
+    <dialog ref={addDialog} aria-labelledby="add-heading"><h2 id="add-heading">Add {adding === 'brand' ? 'a brand' : adding === 'product' ? 'a product' : 'a reference material'}</h2><p>{adding === 'product' ? 'All products automatically use their brand’s countries, marketplaces and schedule. Add only the search phrases you want to run.' : adding === 'brand' ? 'Brands group products and provide shared monitoring coverage.' : 'Reference materials support review only. They never change search terms, coverage or categorization.'}</p><form onSubmit={add}><label htmlFor="new-name">{adding === 'brand' ? 'Brand' : adding === 'product' ? 'Product' : 'Reference'} name</label><input id="new-name" name="name" required maxLength={160} autoFocus />{adding === 'reference' ? <><label htmlFor="reference-kind">Type</label><select id="reference-kind" name="kind"><option value="image">Image</option><option value="document">Document</option></select><label htmlFor="reference-note">Note</label><textarea id="reference-note" name="note" rows={3} maxLength={500} /></> : <><label htmlFor="new-keywords">Search keywords · one per line</label><textarea id="new-keywords" name="keywords" rows={3} /></>}<div className="actions"><button type="button" className="secondary" onClick={() => addDialog.current?.close()}>Cancel</button><button type="submit" className="primary">Add {adding === 'brand' ? 'brand' : adding === 'product' ? 'product' : 'reference'}</button></div></form></dialog>
     <dialog ref={previewDialog} aria-labelledby="preview-heading"><div className="dialog-header"><h2 id="preview-heading">Requested searches · {plan?.total_searches ?? 0}</h2><button className="secondary" onClick={() => previewDialog.current?.close()}>Close</button></div><p>{plan?.coverage_notice}</p>{plan?.truncated && <p>Showing the first 500 searches.</p>}<div className="table-wrap"><table><thead><tr><th>Keyword</th><th>Website</th><th>Country</th><th>Schedule</th><th>Scope</th></tr></thead><tbody>{plan?.searches.map((item, i) => <tr key={i}><td>{item.keyword}</td><td>{item.source_name}<span className="preview-domain">{item.storefront_domain}</span></td><td>{countryLabel(item.country)}</td><td>{item.frequency}</td><td>{item.origins.map(origin => origin.name).join(", ")}</td></tr>)}</tbody></table></div></dialog>
-    <dialog ref={leaveDialog} aria-labelledby="leave-heading"><h2 id="leave-heading">Keep your draft changes?</h2><p>Save before switching tenant, or discard the changes you have not saved.</p><div className="actions"><button className="secondary" onClick={() => leaveDialog.current?.close()}>Keep editing</button><button className="primary" onClick={onLeave}>Discard and switch</button></div></dialog>
+    <dialog ref={leaveDialog} aria-labelledby="leave-heading"><h2 id="leave-heading">Unsaved monitoring changes</h2><p>Return to the editor to activate these changes, or discard them and switch tenant.</p><div className="actions"><button className="secondary" onClick={() => leaveDialog.current?.close()}>Keep editing</button><button className="primary" onClick={onLeave}>Discard and switch</button></div></dialog>
   </div>;
 }

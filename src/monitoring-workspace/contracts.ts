@@ -10,7 +10,8 @@ export type Source = { key: string; name: string; kind: string; domain: string; 
 export type AdminMarketplace = Source & { revision: number };
 export type AdminCatalog = { marketplaces: AdminMarketplace[]; categories: { key: string; name: string }[]; countries: { code: string; name: string }[] };
 export type MarketplaceEdit = { key: string | null; expected_revision: number; name: string; domain: string; logo_key: string | null; categories: string[]; markets: Source['markets'] };
-export type Draft = { document: Workspace; revision: number; updated_at: string | null };
+export type Draft = { document: Workspace; revision: number; updated_at: string | null; active_revision: number | null; activated_at: string | null };
+export type Activation = Draft & { lifecycle: 'active'; executable: true; execution: { scopes: number; sources: number } };
 export type LegacyIp = { id: string; name: string; keywords: string[]; monitoring_frequency: 'daily' | 'weekly' | 'monthly' | 'off'; image_count: number; images?: { id: string; url: string; status: string }[]; monitored_domains: { id: string; name: string; domain: string; country: string | null; enabled: boolean }[] };
 export type WorkspaceResponse = Draft & { company: { id: string; name: string }; sources: Source[]; legacy_ips: LegacyIp[]; setup_state: 'required' | 'configured' };
 export type Plan = {
@@ -24,7 +25,7 @@ export class DraftError extends Error {
 }
 export interface WorkspaceClient {
   load(): Promise<WorkspaceResponse>;
-  save(document: Workspace, revision: number): Promise<Draft>;
+  activate(document: Workspace, revision: number): Promise<Activation>;
   preview(document: Workspace, brandId: string | null, productId: string | null, signal?: AbortSignal): Promise<Plan>;
 }
 export interface MarketplaceClient {

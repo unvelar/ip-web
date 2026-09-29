@@ -36,7 +36,7 @@ export default function CoverageEditor({ value, sources, disabled, onChange }: {
     return items.map(source => {
       const displayedCategories = [...source.categories].sort((a, b) => Number(b.key === genre) - Number(a.key === genre));
       const market = source.markets.find(item => item.country === country);
-      const missing = !market && source.kind !== 'search';
+      const missing = !market && source.kind !== 'search' && source.kind !== 'pattern';
       return <label className={`marketplace-row${selected.includes(source.key) ? ' is-selected' : ''}`} key={source.key}>
         <input type="checkbox" aria-label={`${source.name} in ${countries.find(item => item.code === country)?.name ?? country}`} checked={selected.includes(source.key)} disabled={disabled} onChange={() => onChange(countrySources(value, country, source.key))} />
         <MarketplaceMark source={source} />

@@ -23,10 +23,10 @@ test('website setup uses the signed-in session and selected company without a de
   expect(calls.some(url => url.includes(':53000') || url.endsWith('/auth/dev'))).toBe(false);
 });
 
-test('website draft conflicts preserve their status and are never retried', async () => {
+test('website activation conflicts preserve their status and are never retried', async () => {
   let calls = 0;
   globalThis.fetch = (async () => { calls++; return Response.json({ error: 'Another editor saved this draft' }, { status: 409 }); }) as typeof fetch;
-  try { await monitoringSetupClient.save({ version: 3, brands: [] }, 5); throw new Error('Expected conflict'); }
+  try { await monitoringSetupClient.activate({ version: 5, brands: [] }, 5); throw new Error('Expected conflict'); }
   catch (error) { expect(error).toBeInstanceOf(DraftError); expect((error as DraftError).status).toBe(409); }
   expect(calls).toBe(1);
 });

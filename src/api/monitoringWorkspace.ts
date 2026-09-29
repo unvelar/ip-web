@@ -28,7 +28,7 @@ async function setupRequest<T>(path: string, init?: RequestInit): Promise<T> {
 // development client is deliberately a separate adapter with no shared login.
 export const monitoringSetupClient: WorkspaceClient & MarketplaceClient = {
   load: () => setupRequest('/api/monitoring-workspace'),
-  save: (document, revision) => setupRequest('/api/monitoring-workspace', { method: 'PUT', body: JSON.stringify({ document, expected_revision: revision }) }),
+  activate: (document, revision) => setupRequest('/api/monitoring-workspace/activate', { method: 'POST', body: JSON.stringify({ document, expected_revision: revision }) }),
   preview: (document, brandId, productId, signal) => setupRequest('/api/monitoring-workspace/preview', { method: 'POST', body: JSON.stringify({ document, brand_id: brandId, product_id: productId }), signal }),
   catalog: () => setupRequest('/api/admin/monitoring-marketplaces'),
   saveMarketplace: value => setupRequest('/api/admin/monitoring-marketplaces', { method: 'PUT', body: JSON.stringify(value) }),
