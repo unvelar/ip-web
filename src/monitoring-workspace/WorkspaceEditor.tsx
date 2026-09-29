@@ -5,6 +5,7 @@ import ScopeNavigator from './ScopeNavigator';
 import CoverageEditor from './CoverageEditor';
 import './workspace.css';
 import { useDraftNavigationGuard } from './useDraftNavigationGuard';
+import { coverageFromLegacy, mergeCoverage } from './legacyMigration';
 
 export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false, tenantSwitcherLabel }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean; tenantSwitcherLabel?: string }) {
   const Content = embedded ? 'div' : 'main';
@@ -28,6 +29,8 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const coverage = brand?.coverage;
   const tenantName = loaded.company.name;
   const products = (brand ? [brand] : document.brands).flatMap(owner => owner.products.map(product => ({ ...product, brand: owner })));
+  const linkedLegacyIps = scope ? loaded.legacy_ips.filter(ip => scope.legacy_ip_ids.includes(ip.id)) : [];
+  const linkedLegacyImages = linkedLegacyIps.flatMap(ip => ip.images.map(image => ({ ...image, ipName: ip.name })));
   const dirty = JSON.stringify(document) !== JSON.stringify(saved.document);
 
   useDraftNavigationGuard(dirty);
@@ -50,6 +53,22 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       : { ...item, ...change }) });
   }
   function selectScope(brand: string | null, product: string | null = null) { setBrandId(brand); setProductId(product); setPlan(null); setPreviewError(''); }
+  function toggleLegacyIp(ipId: string, checked: boolean) {
+    if (!brand || !scope) return;
+    if (!checked) { updateScope({ legacy_ip_ids: scope.legacy_ip_ids.filter(id => id !== ipId) }); return; }
+    const legacy = loaded.legacy_ips.find(ip => ip.id === ipId);
+    if (!legacy) return;
+    const importedCoverage = coverageFromLegacy(legacy, loaded.sources);
+    updateDocument({ ...document, brands: document.brands.map(item => item.id !== brand.id ? item : {
+      ...item,
+      coverage: mergeCoverage(item.coverage, importedCoverage),
+      ...(productId ? { products: item.products.map(product => product.id === productId ? {
+        ...product, legacy_ip_ids: [...product.legacy_ip_ids, ipId], keywords: product.keywords.length ? product.keywords : legacy.keywords,
+      } : product) } : {
+        legacy_ip_ids: [...item.legacy_ip_ids, ipId], keywords: item.keywords.length ? item.keywords : legacy.keywords,
+      }),
+    }) });
+  }
   async function save() {
     setBusy(true); setError(''); setMessage('');
     try {
@@ -124,8 +143,11 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
           </section>{summary}</div> : brand && scope && coverage ? <fieldset disabled={busy} className="editor-grid"><legend className="visually-hidden">Monitoring draft editor</legend><div>
             <section className="panel"><label className="field-heading" htmlFor="scope-name">{productId ? 'Product name' : 'Brand name'}</label><input id="scope-name" className="full-width" maxLength={160} value={scope.name} onChange={event => updateScope({ name: event.target.value })} /></section>
             <section className="panel"><div className="section-heading"><div><h2>Search keywords</h2><p>{productId ? 'Phrases used to sell this product. Brand keywords are not added automatically.' : 'Only these brand phrases are searched. Choose the tenant to include product searches.'}</p></div></div><label className="visually-hidden" htmlFor="keywords">Search keywords, one per line</label><textarea id="keywords" rows={5} value={scope.keywords.join('\n')} onChange={event => updateScope({ keywords: event.target.value.split('\n') })} /><div className="field-note">One phrase per line. Each phrase is searched separately.</div></section>
-            <section className="panel"><div className="section-heading"><div><h2>Reference materials</h2><p>Use visual or documentary references to review potential matches. They do not alter what is searched.</p></div><button className="secondary" type="button" disabled={busy} onClick={() => openAdd('reference')}>+ Add reference</button></div>{scope.reference_materials.length ? <ul className="reference-material-list">{scope.reference_materials.map(material => <li key={material.id}><span className="reference-material-kind">{material.kind === 'image' ? 'Image' : 'Document'}</span><div><strong>{material.name}</strong>{material.note && <p>{material.note}</p>}</div><button type="button" className="text-button" disabled={busy} onClick={() => updateScope({ reference_materials: scope.reference_materials.filter(item => item.id !== material.id) })}>Remove</button></li>)}</ul> : <p className="field-note">No reference materials yet.</p>}</section>
-            {loaded.legacy_ips.length > 0 && <section className="panel"><div className="section-heading"><div><h2>Existing IP records</h2><p>Link a previous IP record to this {productId ? 'product' : 'brand'} only after you confirm it belongs here. Its old configuration remains unchanged while this workspace is a draft.</p></div></div><div className="legacy-ip-list">{loaded.legacy_ips.map(ip => <label key={ip.id} className="legacy-ip-row"><input type="checkbox" checked={scope.legacy_ip_ids.includes(ip.id)} onChange={event => updateScope({ legacy_ip_ids: event.target.checked ? [...scope.legacy_ip_ids, ip.id] : scope.legacy_ip_ids.filter(id => id !== ip.id) })} /><span><strong>{ip.name}</strong><small>{ip.keywords.length} keywords · {ip.monitored_domains.filter(domain => domain.enabled).length} active sites · {ip.image_count} reference images</small></span></label>)}</div></section>}
+            <section className="panel"><div className="section-heading"><div><h2>Reference materials</h2><p>Use visual or documentary references to review potential matches. They do not alter what is searched.</p></div><button className="secondary" type="button" disabled={busy} onClick={() => openAdd('reference')}>+ Add reference</button></div>
+              {linkedLegacyImages.length > 0 && <div className="legacy-reference-grid" aria-label="Linked legacy reference images">{linkedLegacyImages.map(image => image.url ? <figure key={image.id}><img src={image.url} alt={`${image.ipName} reference`} loading="lazy" /><figcaption>{image.ipName}</figcaption></figure> : <div className="legacy-reference-unavailable" key={image.id}>Image unavailable</div>)}</div>}
+              {scope.reference_materials.length ? <ul className="reference-material-list">{scope.reference_materials.map(material => <li key={material.id}><span className="reference-material-kind">{material.kind === 'image' ? 'Image' : 'Document'}</span><div><strong>{material.name}</strong>{material.note && <p>{material.note}</p>}</div><button type="button" className="text-button" disabled={busy} onClick={() => updateScope({ reference_materials: scope.reference_materials.filter(item => item.id !== material.id) })}>Remove</button></li>)}</ul> : linkedLegacyImages.length === 0 && <p className="field-note">No reference materials yet.</p>}
+            </section>
+            {loaded.legacy_ips.length > 0 && <section className="panel"><div className="section-heading"><div><h2>Existing IP records</h2><p>Link a previous IP record to this {productId ? 'product' : 'brand'} only after you confirm it belongs here. Its queries, available site coverage and images are imported into this draft; the old record remains unchanged.</p></div></div><div className="legacy-ip-list">{loaded.legacy_ips.map(ip => <label key={ip.id} className="legacy-ip-row"><input type="checkbox" checked={scope.legacy_ip_ids.includes(ip.id)} onChange={event => toggleLegacyIp(ip.id, event.target.checked)} /><span><strong>{ip.name}</strong><small>{ip.keywords.length} keywords · {ip.monitored_domains.filter(domain => domain.enabled).length} active sites · {ip.image_count} reference images</small></span></label>)}</div></section>}
             <section ref={coverageSection} tabIndex={-1} aria-label="Brand coverage" className="panel coverage-panel"><h2>Brand coverage</h2>
               {productId ? <>
                 <p className="field-note">This product automatically uses {brand.name}’s countries, marketplaces and schedule.</p>
