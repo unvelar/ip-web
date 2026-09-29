@@ -497,6 +497,7 @@ export interface IpFirstScanResult {
   run_error: string | null;
   score_job_status: string | null;
   score_job_error: string | null;
+  matching_error?: string | null;
   qualification_job_status: string | null;
   qualification_job_error: string | null;
   qualification_access_blocked: boolean;

@@ -165,7 +165,7 @@ export function FirstScanResults({
 }
 
 function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipId: string }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedImage, setFailedImage] = useState<string | null>(null);
   const image = firstScanResultImage(result);
   const title = result.listing_title || result.candidate_title || readableListingUrl(result.page_url);
   const progress = firstScanResultMetadata(result);
@@ -181,8 +181,13 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
       <td className="px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-stone-200 bg-stone-100">
-            {image && !imageFailed
-              ? <img src={image} alt="" className="h-full w-full object-cover" onError={() => setImageFailed(true)} />
+            {image && failedImage !== image
+              ? <img src={image} alt="" className="h-full w-full object-cover"
+                  onError={() => setFailedImage(image)}
+                  onLoad={event => {
+                    const { naturalWidth, naturalHeight } = event.currentTarget;
+                    if (Math.min(naturalWidth, naturalHeight) < 16) setFailedImage(image);
+                  }} />
               : <div className="flex h-full items-center justify-center text-stone-300">{active ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}</div>}
           </div>
           <div className="min-w-0">
@@ -210,11 +215,14 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
       <td className="px-3 py-2.5">
         <div className="flex items-baseline gap-2">
           <span className="text-sm font-black tabular-nums text-stone-800">{formatSimilarity(result.similarity_score)}</span>
-          <span className="truncate text-[10px] font-medium uppercase tracking-wide text-stone-400">{readableMethod(result.match_method) || "Waiting"}</span>
+          <span className="truncate text-[10px] font-medium uppercase tracking-wide text-stone-400">{readableMethod(result.match_method) || (active ? "Waiting" : "Not checked")}</span>
         </div>
         <p className="mt-1.5 truncate text-[11px] text-stone-500" title={result.vlm_reasoning ?? undefined}>
-          {result.vlm_verdict ? `${readableMethod(result.vlm_verdict)}${result.vlm_confidence !== null ? ` · ${Math.round(result.vlm_confidence * 100)}%` : ""}` : accessBlocked ? "Match found; page check blocked" : active ? "Automated checks pending" : "No match evidence"}
+          {result.matching_error ? "Match check incomplete" : result.vlm_verdict ? `${readableMethod(result.vlm_verdict)}${result.vlm_confidence !== null ? ` · ${Math.round(result.vlm_confidence * 100)}%` : ""}` : accessBlocked ? "Match found; page check blocked" : active ? "Automated checks pending" : "No match evidence"}
         </p>
+        {(result.matching_error || result.vlm_reasoning) && <p className="mt-1 line-clamp-2 text-[10px] text-stone-500" title={result.matching_error || result.vlm_reasoning || undefined}>
+          {result.matching_error || result.vlm_reasoning}
+        </p>}
       </td>
       <td className="px-3 py-2.5">
         <ResultStageBadge stage={result.stage} accessBlocked={accessBlocked} />
