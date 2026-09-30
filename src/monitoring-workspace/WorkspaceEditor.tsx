@@ -15,6 +15,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const [brandId, setBrandId] = useState<string | null>(null);
   const [productId, setProductId] = useState<string | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [activationPlan, setActivationPlan] = useState<Plan | null>(null);
   const [previewError, setPreviewError] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -47,6 +48,20 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     }, 180);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [client, document, brandId, productId]);
+
+  useEffect(() => {
+    if (!brandId && !productId) {
+      setActivationPlan(plan);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      void client.preview(document, null, null, controller.signal).then(result => {
+        if (!controller.signal.aborted) setActivationPlan(result);
+      }).catch(() => { if (!controller.signal.aborted) setActivationPlan(null); });
+    }, 180);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [client, document, brandId, productId, plan]);
 
   useEffect(() => {
     const missing = linkedLegacyIps.filter(ip => ip.images === undefined && legacyImageFallbacks[ip.id] === undefined);
@@ -140,6 +155,8 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     <button className="secondary" disabled={!plan?.total_searches} onClick={() => previewDialog.current?.showModal()}>Preview searches</button>
     <p className="field-note">Save and activate applies this plan to scheduled monitoring.</p>
   </aside>;
+  const activationIssue = activationPlan?.issues[0] ?? '';
+  const activationBlocked = !activationPlan || activationPlan.total_searches === 0 || activationPlan.issues.length > 0;
   return <div className={`monitoring-workspace tenant-workspace-editor${embedded ? " embedded-workspace" : ""}`}>
     {!embedded && <div className="sandbox-banner"><strong>Local development</strong><span>Saved in your sandbox database · No monitoring jobs run</span></div>}
     <div className="shell">
@@ -177,7 +194,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
           </div>{summary}</fieldset> : null}
             </div>
           </div>
-          <div className="savebar"><div><span>{dirty ? 'Unsaved changes' : active ? `Active · Revision ${saved.revision}` : `Ready to activate · Revision ${saved.revision}`}</span><p className="field-note">{active ? 'This configuration runs scheduled searches.' : 'Activate this configuration to start scheduled searches.'}</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={busy || conflict || document.brands.length === 0 || (!dirty && active)} onClick={activate}>{busy ? 'Activating…' : 'Save and activate'}</button></div></div>
+          <div className="savebar"><div><span>{dirty ? 'Unsaved changes' : active ? `Active · Revision ${saved.revision}` : activationBlocked ? 'Complete setup to activate' : `Ready to activate · Revision ${saved.revision}`}</span><p className="field-note">{activationIssue || (active ? 'This configuration runs scheduled searches.' : 'Activate this configuration to start scheduled searches.')}</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={busy || conflict || activationBlocked || (!dirty && active)} onClick={activate}>{busy ? 'Activating…' : 'Save and activate'}</button></div></div>
           <div className="status" role="status">{message}</div>
         </div>
       </Content>
