@@ -31,6 +31,29 @@ test('website activation conflicts preserve their status and are never retried',
   expect(calls).toBe(1);
 });
 
+test('reference upload sends multiple images for the selected scope without descriptive fields', async () => {
+  const scopeId = '11111111-1111-4111-8111-111111111111';
+  const files = [
+    new File(['front'], 'front.jpg', { type: 'image/jpeg' }),
+    new File(['side'], 'side.png', { type: 'image/png' }),
+  ];
+  globalThis.fetch = (async (input, init) => {
+    expect(new URL(String(input), 'https://api.example').pathname).toBe('/api/monitoring-workspace/reference-images');
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).has('Content-Type')).toBe(false);
+    const body = init?.body as FormData;
+    expect(body.get('scope_id')).toBe(scopeId);
+    expect((body.getAll('images') as File[]).map(file => file.name)).toEqual(['front.jpg', 'side.png']);
+    expect([...body.keys()].sort()).toEqual(['images', 'images', 'scope_id']);
+    return Response.json({ images: files.map((file, index) => ({
+      id: `${index + 1}1111111-1111-4111-8111-111111111111`, scope_id: scopeId,
+      original_filename: file.name, url: `https://images.example/${file.name}`,
+    })) });
+  }) as typeof fetch;
+  const uploaded = await monitoringSetupClient.uploadReferenceImages(scopeId, files);
+  expect(uploaded.map(image => image.original_filename)).toEqual(['front.jpg', 'side.png']);
+});
+
 test('rolling deployment reports unavailable setup but does not hide authentication or server failures', async () => {
   globalThis.fetch = (async () => new Response('', { status: 404 })) as typeof fetch;
   expect(await getMonitoringSetupCapabilities()).toEqual({ workspace: false, marketplace_admin: false });

@@ -1,5 +1,6 @@
 export type Coverage = { markets: { country: string; sources: string[] }[]; frequency: 'daily' | 'weekly' | 'monthly' };
 export type ReferenceMaterial = { id: string; name: string; kind: 'image' | 'document'; note: string };
+export type ReferenceImage = { id: string; scope_id: string; original_filename: string; url: string };
 export type Product = { id: string; name: string; keywords: string[]; reference_materials: ReferenceMaterial[]; coverage: null; catalog_product_id: string | null; legacy_ip_ids: string[] };
 export type Brand = { id: string; name: string; keywords: string[]; reference_materials: ReferenceMaterial[]; coverage: Coverage; legacy_ip_ids: string[]; products: Product[] };
 export type Workspace = { version: 5; brands: Brand[] };
@@ -13,7 +14,7 @@ export type MarketplaceEdit = { key: string | null; expected_revision: number; n
 export type Draft = { document: Workspace; revision: number; updated_at: string | null; active_revision: number | null; activated_at: string | null };
 export type Activation = Draft & { lifecycle: 'active'; executable: true; execution: { scopes: number; sources: number } };
 export type LegacyIp = { id: string; name: string; keywords: string[]; monitoring_frequency: 'daily' | 'weekly' | 'monthly' | 'off'; image_count: number; images?: { id: string; url: string; status: string }[]; monitored_domains: { id: string; name: string; domain: string; country: string | null; enabled: boolean }[] };
-export type WorkspaceResponse = Draft & { company: { id: string; name: string }; sources: Source[]; legacy_ips: LegacyIp[]; setup_state: 'required' | 'configured' };
+export type WorkspaceResponse = Draft & { company: { id: string; name: string }; sources: Source[]; legacy_ips: LegacyIp[]; reference_images: ReferenceImage[]; setup_state: 'required' | 'configured' };
 export type Plan = {
   lifecycle: 'draft'; executable: false; inherited: boolean; effective_coverage: Coverage | null;
   total_searches: number; combined_searches: number; scope_count: number; countries: string[]; source_keys: string[]; truncated: boolean; affected_products: number; issues: string[]; coverage_notice: string;
@@ -25,6 +26,7 @@ export class DraftError extends Error {
 }
 export interface WorkspaceClient {
   load(): Promise<WorkspaceResponse>;
+  uploadReferenceImages(scopeId: string, files: File[]): Promise<ReferenceImage[]>;
   activate(document: Workspace, revision: number): Promise<Activation>;
   preview(document: Workspace, brandId: string | null, productId: string | null, signal?: AbortSignal): Promise<Plan>;
 }

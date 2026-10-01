@@ -1,6 +1,6 @@
 import { ApiError, request } from './transport';
 import { requireResponse } from './validation';
-import { DraftError, type WorkspaceClient, type MarketplaceClient } from '../monitoring-workspace/contracts';
+import { DraftError, type ReferenceImage, type WorkspaceClient, type MarketplaceClient } from '../monitoring-workspace/contracts';
 
 export type MonitoringSetupCapabilities = { workspace: boolean; marketplace_admin: boolean };
 
@@ -28,6 +28,13 @@ async function setupRequest<T>(path: string, init?: RequestInit): Promise<T> {
 // development client is deliberately a separate adapter with no shared login.
 export const monitoringSetupClient: WorkspaceClient & MarketplaceClient = {
   load: () => setupRequest('/api/monitoring-workspace'),
+  uploadReferenceImages: async (scopeId, files) => {
+    const body = new FormData();
+    body.append('scope_id', scopeId);
+    for (const file of files) body.append('images', file);
+    const result = await setupRequest<{ images: ReferenceImage[] }>('/api/monitoring-workspace/reference-images', { method: 'POST', body });
+    return result.images;
+  },
   activate: (document, revision) => setupRequest('/api/monitoring-workspace/activate', { method: 'POST', body: JSON.stringify({ document, expected_revision: revision }) }),
   preview: (document, brandId, productId, signal) => setupRequest('/api/monitoring-workspace/preview', { method: 'POST', body: JSON.stringify({ document, brand_id: brandId, product_id: productId }), signal }),
   catalog: () => setupRequest('/api/admin/monitoring-marketplaces'),

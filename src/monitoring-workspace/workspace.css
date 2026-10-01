@@ -212,6 +212,11 @@ dialog form .actions { margin-top:20px; }
   .legacy-reference-grid img { display:block; width:100%; aspect-ratio:1; object-fit:cover; border:1px solid #ded7cc; border-radius:6px; background:#f3efe8; }
   .legacy-reference-grid figcaption { margin-top:5px; color:#6e665d; font-size:10px; overflow-wrap:anywhere; }
   .legacy-reference-unavailable { display:grid; place-items:center; min-height:112px; border:1px dashed #d8d1c6; border-radius:6px; color:#8a8278; font-size:11px; text-align:center; }
+  .workspace-reference-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); gap:10px; margin-top:16px; }
+  .workspace-reference-image { position:relative; margin:0; min-width:0; }
+  .workspace-reference-image img { display:block; width:100%; aspect-ratio:1; object-fit:cover; border:1px solid #ded7cc; border-radius:6px; background:#f3efe8; }
+  .workspace-reference-image button { position:absolute; right:6px; top:6px; border:1px solid #d8d1c6; border-radius:999px; background:rgba(255,255,255,.94); color:#5f574e; font-size:10px; line-height:1; padding:6px 8px; box-shadow:0 1px 4px rgba(35,31,27,.12); }
+  .workspace-reference-image button:hover { color:#9b1c1c; border-color:#d9aaa5; }
   .legacy-ip-list { display:grid; gap:0; margin-top:12px; }
   .legacy-ip-row { display:flex; align-items:flex-start; gap:10px; padding:11px 0; border-top:1px solid #e5e0d8; cursor:pointer; }
   .legacy-ip-row:first-child { border-top:0; }

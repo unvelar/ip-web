@@ -7,9 +7,10 @@ interface Props {
   multiple?: boolean;
   label?: string;
   compact?: boolean;
+  help?: string;
 }
 
-export default function ImageUploader({ onUpload, uploading, accept = "image/*", multiple = true, label = "Drop images here or click to browse", compact = false }: Props) {
+export default function ImageUploader({ onUpload, uploading, accept = "image/*", multiple = true, label = "Drop images here or click to browse", compact = false, help = "PNG, JPG, WebP, SVG up to 50MB" }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -62,7 +63,7 @@ export default function ImageUploader({ onUpload, uploading, accept = "image/*",
       <div className="space-y-2">
         <div className="text-stone-300 text-3xl">&#x2191;</div>
         <p className="text-sm text-stone-500 font-medium">{uploading ? "Uploading..." : label}</p>
-        <p className="text-xs text-stone-400">PNG, JPG, WebP, SVG up to 50MB</p>
+        <p className="text-xs text-stone-400">{help}</p>
       </div>
     </div>
   );
