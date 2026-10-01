@@ -25,9 +25,9 @@ export default function ScopeNavigator({ brands, tenantName, brandId, productId,
         return <li key={brand.id}>
           <div className="scope-brand-row">
             <button className="scope-expand" disabled={!brand.products.length || !!term} aria-expanded={open} aria-controls={`${id}-${brand.id}`} aria-label={`${open ? 'Collapse' : 'Expand'} ${brand.name} products`} onClick={() => setExpanded(value => ({ ...value, [brand.id]: !open }))}><ChevronRight size={13} aria-hidden /></button>
-            <button className="scope-brand" disabled={disabled} aria-current={brandId === brand.id && !productId ? 'page' : undefined} onClick={() => { setExpanded(value => ({ ...value, [brand.id]: true })); onSelect(brand.id); }}><Tag size={14} aria-hidden /><span>{brand.name}</span><small>{brand.products.length}</small></button>
+            <button className="scope-brand" disabled={disabled} aria-current={brandId === brand.id && !productId ? 'page' : undefined} onClick={() => { setExpanded(value => ({ ...value, [brand.id]: true })); onSelect(brand.id); }}><Tag size={14} aria-hidden /><span>{brand.name}</span><small className={`scope-state ${brand.monitoring_enabled ? 'is-on' : 'is-off'}`}>{brand.monitoring_enabled ? 'On' : 'Off'}</small></button>
           </div>
-          {open && <ul id={`${id}-${brand.id}`} className="scope-products">{products.map(product => <li key={product.id}><button disabled={disabled} aria-current={productId === product.id && brandId === brand.id ? 'page' : undefined} onClick={() => onSelect(brand.id, product.id)}><Package size={14} aria-hidden /><span>{product.name}</span></button></li>)}</ul>}
+          {open && <ul id={`${id}-${brand.id}`} className="scope-products">{products.map(product => <li key={product.id}><button disabled={disabled} aria-current={productId === product.id && brandId === brand.id ? 'page' : undefined} onClick={() => onSelect(brand.id, product.id)}><Package size={14} aria-hidden /><span>{product.name}</span><small className={`scope-state ${product.monitoring_enabled ? 'is-on' : 'is-off'}`}>{product.monitoring_enabled ? 'On' : 'Off'}</small></button></li>)}</ul>}
         </li>;
       })}</ul>
       {!matches.length && <p className="scope-no-results">{term ? 'No brands or products match.' : 'Add your first brand to get started.'}</p>}

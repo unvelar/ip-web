@@ -179,6 +179,9 @@ dialog form .actions { margin-top:20px; }
   .scope-navigator button span { min-width:0; text-align:left; overflow-wrap:anywhere; font-size:12px; }
   .scope-navigator button strong { display:block; font-weight:550; }
   .scope-navigator button small { font-size:10px; color:#8a8278; font-weight:400; }
+  .scope-navigator .scope-state { flex-shrink:0; margin-left:auto; border-radius:999px; padding:3px 6px; line-height:1; }
+  .scope-state.is-on { background:#e5eee5; color:#35613c; }
+  .scope-state.is-off { background:#ebe7e1; color:#766f66; }
   .scope-navigator .scope-tenant { margin-bottom:16px; }
   .scope-hierarchy-label { font-size:10px; color:#8a8278; margin:4px 8px 8px; }
   .scope-brand-row { display:flex; align-items:center; }
@@ -224,6 +227,21 @@ dialog form .actions { margin-top:20px; }
   .legacy-ip-row span { min-width:0; }
   .legacy-ip-row strong { display:block; font-size:12px; font-weight:550; }
   .legacy-ip-row small { display:block; margin-top:3px; color:#8a8278; font-size:11px; line-height:1.4; }
+  .legacy-ip-row.is-disabled { cursor:not-allowed; opacity:.58; }
+  .monitoring-control { display:flex; align-items:center; justify-content:space-between; gap:24px; border:1px solid #d8d1c6; border-radius:7px; padding:16px 18px; }
+  .monitoring-control.is-on { background:#f3f7f1; border-color:#c8d8c5; }
+  .monitoring-control.is-off { background:#f4f1ec; }
+  .monitoring-control h2 { margin:0 0 4px; font-size:14px; font-weight:600; }
+  .monitoring-control p { margin:0; max-width:600px; color:#706a62; font-size:12px; line-height:1.45; }
+  .monitoring-switch { display:flex; align-items:center; gap:9px; flex-shrink:0; cursor:pointer; }
+  .monitoring-switch input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+  .monitoring-switch > span { position:relative; width:38px; height:22px; border-radius:999px; background:#aaa39a; transition:background .15s ease; }
+  .monitoring-switch > span::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:white; box-shadow:0 1px 2px rgba(0,0,0,.22); transition:transform .15s ease; }
+  .monitoring-switch input:checked + span { background:#4f7454; }
+  .monitoring-switch input:checked + span::after { transform:translateX(16px); }
+  .monitoring-switch input:focus-visible + span { outline:2px solid #72634e; outline-offset:3px; }
+  .monitoring-switch strong { min-width:20px; font-size:12px; font-weight:600; }
+  .brand-plan-row .scope-state { display:inline-block; margin-left:8px; border-radius:999px; padding:3px 7px; font-size:10px; line-height:1; vertical-align:1px; }
   .local-preview-toolbar { max-width:1320px; padding-top:12px; padding-bottom:12px; font-size:11px; }
   .local-preview-toolbar > div { display:flex; gap:10px; align-items:center; }
   .local-preview-toolbar p { margin:0; }
@@ -243,6 +261,7 @@ dialog form .actions { margin-top:20px; }
   .monitoring-workspace .scope-navigator input { font-size:16px; }
   .monitoring-workspace .scope-navigator button { min-height:40px; }
   .monitoring-workspace .scope-detail-heading { flex-wrap:wrap; }
+  .monitoring-workspace .monitoring-control { align-items:flex-start; }
   .monitoring-workspace .reference-material-list li { grid-template-columns:auto minmax(0,1fr); }
   .monitoring-workspace .reference-material-list .text-button { grid-column:2; justify-self:start; }
 }
