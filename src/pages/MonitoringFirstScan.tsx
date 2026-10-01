@@ -96,7 +96,7 @@ export default function MonitoringFirstScan() {
           warning={showRetryWarning || preparingSourceCount > 0}
         />
         <SummaryMetric label="Listings found" value={totals.discovered} detail="stable rows" icon={<Search className="h-4 w-4" />} />
-        <SummaryMetric label="Processing" value={totals.processing} detail="metadata filling" icon={<LoaderCircle className="h-4 w-4" />} />
+        <SummaryMetric label="Pending" value={totals.processing} detail="waiting or processing" icon={<LoaderCircle className="h-4 w-4" />} />
         <SummaryMetric label="Ready for triage" value={totals.ready} detail={`${totals.filtered} screened out`} icon={<Check className="h-4 w-4" />} accent={totals.ready > 0} />
         <SummaryMetric label="Failed listings" value={totals.failed} detail="processing stopped" icon={<AlertCircle className="h-4 w-4" />} attention={totals.failed > 0} />
       </section>

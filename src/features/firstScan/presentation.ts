@@ -1,4 +1,4 @@
-import type { IpFirstScanResultStage } from "../../api";
+import type { IpFirstScanResult, IpFirstScanResultStage } from "../../api";
 import type { FirstScanSourceState } from "../../lib/firstScanProgress";
 
 export const SOURCE_STATE_COPY: Record<FirstScanSourceState, { label: string; detail: string }> = {
@@ -6,7 +6,7 @@ export const SOURCE_STATE_COPY: Record<FirstScanSourceState, { label: string; de
   setup_processing: { label: "Preparing", detail: "Website setup is still running" },
   waiting: { label: "Queued", detail: "Waiting for its first search" },
   scanning: { label: "Scanning", detail: "Looking for listings now" },
-  preparing: { label: "Processing", detail: "Filling listing metadata" },
+  preparing: { label: "Pending", detail: "Waiting for listing checks to finish" },
   ready: { label: "Ready", detail: "Latest results processed" },
   retry_needed: { label: "Retry needed", detail: "Website setup could not finish" },
   failed: { label: "Needs attention", detail: "A real job error was reported" },
@@ -19,6 +19,7 @@ export const RESULT_STATE_COPY: Record<IpFirstScanResultStage, { label: string; 
   enriching: { label: "Adding details", detail: "Reading seller, price, and location" },
   ready: { label: "Ready for triage", detail: "All required review data is available" },
   filtered: { label: "Not a match", detail: "Screened out by automated checks" },
+  cancelled: { label: "Cancelled", detail: "This scan was cancelled" },
   failed: { label: "Needs retry", detail: "Processing stopped with an error" },
 };
 
@@ -26,6 +27,36 @@ export const ACCESS_BLOCKED_RESULT_COPY = {
   label: "Page check blocked",
   detail: "The marketplace prevented us from verifying this listing",
 };
+
+export interface ResultPresentation {
+  label: string;
+  detail: string;
+  activity: "running" | "queued" | "paused" | "scheduled" | "blocked" | "finished";
+}
+
+/** A pipeline phase does not mean a worker has claimed its next job. */
+export function resultPresentation(result: IpFirstScanResult): ResultPresentation {
+  if (result.qualification_access_blocked) return { ...ACCESS_BLOCKED_RESULT_COPY, activity: "blocked" };
+  if (result.stage === "matching") {
+    switch (result.score_job_queue_state) {
+      case "paused":
+        return { label: "Paused", detail: "Waiting for matching to be resumed", activity: "paused" };
+      case "blocked":
+        return { label: "References needed", detail: "Matching will start when reference images are ready", activity: "blocked" };
+      case "scheduled":
+        return { label: "Scheduled", detail: "Waiting for the scheduled matching check", activity: "scheduled" };
+      case "ready":
+        return { label: "Queued", detail: "Waiting for a matching worker", activity: "queued" };
+    }
+    // Pending remains waiting when talking to an older API during rollout.
+    if (result.score_job_status === "pending") return { label: "Queued", detail: "Waiting for a matching worker", activity: "queued" };
+  }
+  return {
+    ...RESULT_STATE_COPY[result.stage],
+    activity: result.stage === "discovered" ? "queued"
+      : ["matching", "qualifying", "enriching"].includes(result.stage) ? "running" : "finished",
+  };
+}
 
 export function readableDomain(domain: string): string {
   return domain

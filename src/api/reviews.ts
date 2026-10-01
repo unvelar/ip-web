@@ -482,6 +482,7 @@ export type IpFirstScanResultStage =
   | "enriching"
   | "ready"
   | "filtered"
+  | "cancelled"
   | "failed";
 
 /** A stable listing row that gains metadata as the monitoring pipeline runs. */
@@ -497,6 +498,9 @@ export interface IpFirstScanResult {
   run_error: string | null;
   score_job_status: string | null;
   score_job_error: string | null;
+  score_job_queue_state?: "running" | "ready" | "paused" | "scheduled" | "blocked" | null;
+  score_job_hold_reason?: string | null;
+  score_job_available_at?: string | null;
   matching_error?: string | null;
   qualification_job_status: string | null;
   qualification_job_error: string | null;

@@ -34,6 +34,7 @@ describe("monitoringRunStageStatus", () => {
     const paused = { ...completedStage, completed_jobs: 0, deferred_jobs: 1, paused_jobs: 1 };
     expect(monitoringRunStageStatus(paused, "paused")).toBe("paused");
     expect(monitoringRunStageStatus({ ...paused, paused_jobs: 0, scheduled_jobs: 1 }, "scheduled")).toBe("scheduled");
+    expect(monitoringRunStageStatus({ ...paused, paused_jobs: 0, blocked_jobs: 1 }, "stalled")).toBe("blocked");
     expect(monitoringRunStageStatus({ ...paused, pending_jobs: 1 }, "queued")).toBe("queued");
     expect(monitoringRunStageStatus({ ...paused, in_progress_jobs: 1 }, "processing")).toBe("running");
   });

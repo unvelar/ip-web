@@ -42,6 +42,7 @@ const PIPELINE_STYLES: Record<string, string> = {
   cancelled: "text-stone-500",
   paused: "text-stone-600",
   scheduled: "text-violet-700",
+  blocked: "text-amber-700",
   score_queued: "text-blue-700",
   scoring: "text-blue-700",
   visual_queued: "text-violet-700",
@@ -523,7 +524,7 @@ function CandidateEvidence({ candidate }: { candidate: AdminMonitoringCandidate 
 }
 
 function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
-  const recoveringAccess = job.status === "pending" && job.queue_state !== "paused" && ((job.deferral_count ?? 0) > 0 || job.access_wait_only === true);
+  const recoveringAccess = job.status === "pending" && job.queue_state !== "paused" && job.queue_state !== "blocked" && ((job.deferral_count ?? 0) > 0 || job.access_wait_only === true);
   const coolingDown = recoveringAccess && job.access_cooling_down === true;
   const hasFailureDiagnostic = job.scrape?.steps.some(step => ["failed", "blocked"].includes(step.outcome ?? "") && step.diagnostics);
   return (
@@ -547,6 +548,7 @@ function JobTimelineRow({ job }: { job: AdminMonitoringJob }) {
           </p>
         )}
         {job.queue_state === "paused" && <p className="mt-1 rounded bg-stone-100 px-2 py-1 text-[10px] text-stone-600">{workPauseReason(job.hold_reason)}. Requires an explicit release.</p>}
+        {job.queue_state === "blocked" && <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-[10px] text-amber-800">Matching will start when reference images are ready.</p>}
         {job.queue_state === "scheduled" && !recoveringAccess && <p className="mt-1 text-[10px] text-violet-700">Scheduled after {formatTimestamp(job.available_at)}.</p>}
         {recoveringAccess ? (
           <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-[10px] leading-4 text-amber-800" title={job.error ?? undefined}>

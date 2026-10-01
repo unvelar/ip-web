@@ -85,6 +85,7 @@ export function compareFirstScanResults(left: IpFirstScanResult, right: IpFirstS
     ready: 4,
     failed: 5,
     filtered: 6,
+    cancelled: 7,
   };
   const byStage = rank[left.stage] - rank[right.stage];
   return byStage !== 0 ? byStage : Date.parse(right.discovered_at) - Date.parse(left.discovered_at);

@@ -262,11 +262,13 @@ function QueueRow({ stage }: { stage: AdminMonitoringQueueStage }) {
           {unserved > 0 && <span className="admin-monitoring-warning">No worker available</span>}
         </span>
         <span className="mt-0.5 block max-w-[330px] truncate text-[10px] font-normal text-stone-400" title={detail}>{detail}</span>
-        {(stage.paused_jobs > 0 || stage.scheduled_jobs > 0 || stage.pending_units > stage.pending_jobs) && (
+        {(stage.paused_jobs > 0 || stage.scheduled_jobs > 0 || (stage.blocked_jobs ?? 0) > 0 || stage.pending_units > stage.pending_jobs) && (
           <span className="mt-0.5 block text-[10px] font-normal text-stone-500">
-            {stage.paused_jobs > 0 && `${number(stage.paused_jobs)} paused`}
-            {stage.paused_jobs > 0 && stage.scheduled_jobs > 0 && " · "}
-            {stage.scheduled_jobs > 0 && `${number(stage.scheduled_jobs)} scheduled`}
+            {[
+              stage.paused_jobs > 0 ? `${number(stage.paused_jobs)} paused` : null,
+              stage.scheduled_jobs > 0 ? `${number(stage.scheduled_jobs)} scheduled` : null,
+              (stage.blocked_jobs ?? 0) > 0 ? `${number(stage.blocked_jobs!)} waiting for references` : null,
+            ].filter(Boolean).join(" · ")}
             {stage.pending_units > stage.pending_jobs && ` · ${number(stage.pending_units)} pending units`}
           </span>
         )}
@@ -326,6 +328,9 @@ function WorkerDemandRow({ row }: { row: AdminMonitoringWorkerDemand }) {
           {row.oldest_queued_at && ` · oldest ${formatRelative(row.oldest_queued_at)}`}
         </p>
         {unserved && <p className="mt-1 text-[10px] font-semibold text-red-700">{number(row.unserved_ready_jobs)} jobs have no matching worker online.</p>}
+        {(row.blocked_jobs ?? 0) > 0 && <p className="mt-1 text-[10px] font-semibold text-amber-800">{number(row.blocked_jobs!)} waiting for reference images</p>}
+        {row.paused_jobs > 0 && <p className="mt-1 text-[10px] text-stone-500">{number(row.paused_jobs)} paused</p>}
+        {row.scheduled_jobs > 0 && <p className="mt-1 text-[10px] text-stone-500">{number(row.scheduled_jobs)} scheduled</p>}
       </div>
       <span className="shrink-0 text-right text-[10px] text-stone-500">
         <span className="block font-semibold text-stone-700">{number(row.busy_workers)} busy · {number(row.idle_workers)} idle</span>

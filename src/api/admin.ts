@@ -173,6 +173,7 @@ export interface AdminMonitoringQueueStage {
   deferred_jobs: number;
   paused_jobs: number;
   scheduled_jobs: number;
+  blocked_jobs?: number;
   in_progress_jobs: number;
   pending_units: number;
   in_progress_units: number;
@@ -192,6 +193,7 @@ export interface AdminMonitoringRunJobStage {
   deferred_jobs: number;
   paused_jobs: number;
   scheduled_jobs: number;
+  blocked_jobs?: number;
   in_progress_jobs: number;
   completed_jobs: number;
   cancelled_jobs?: number;
@@ -352,6 +354,7 @@ export interface AdminMonitoringOverview {
     deferred_jobs: number;
     paused_jobs: number;
     scheduled_jobs: number;
+    blocked_jobs?: number;
     queued_units: number;
     running_jobs: number;
     workers: { busy: number; idle: number; starting: number; offline: number };
@@ -371,7 +374,7 @@ export type AdminMonitoringStatus = Pick<AdminMonitoringOverview,
   "generated_at" | "window_hours" | "scrape_requests" | "queue" | "worker_demand" | "setup_recovery"
 > & {
   summary: Pick<AdminMonitoringOverview["summary"],
-    "queued_jobs" | "deferred_jobs" | "paused_jobs" | "scheduled_jobs"
+    "queued_jobs" | "deferred_jobs" | "paused_jobs" | "scheduled_jobs" | "blocked_jobs"
     | "queued_units" | "running_jobs"
   > & {
     workers: Pick<AdminMonitoringOverview["summary"]["workers"], "busy" | "idle" | "starting">;
@@ -624,7 +627,7 @@ export async function getAdminMonitoringOverview(opts: {
     || overview.worker_demand.some(row => !isAdminMonitoringWorkerKind(row.kind))
     || overview.queue.some(queue => !isAdminMonitoringWorkerKind(queue.worker_kind) || !queue.worker_capacity)
     || overview.active_work.some(job => !isAdminMonitoringWorkerKind(job.worker_kind)
-      || !["running", "ready", "paused", "scheduled"].includes(job.queue_state))) {
+      || !["running", "ready", "paused", "scheduled", "blocked"].includes(job.queue_state))) {
     throw new Error("The server has not provided complete worker and queue status yet. This page will retry automatically.");
   }
   return overview;
@@ -827,6 +830,7 @@ export interface AdminMonitoringWorkerDemand extends AdminMonitoringWorkerCapaci
   running_jobs: number;
   paused_jobs: number;
   scheduled_jobs: number;
+  blocked_jobs?: number;
   oldest_queued_at: string | null;
 }
 
@@ -876,7 +880,7 @@ export function getAdminCaptureAttempts(jobId: string, before?: string | null) {
 }
 
 
-export type AdminJobQueueState = "running" | "ready" | "paused" | "scheduled";
+export type AdminJobQueueState = "running" | "ready" | "paused" | "scheduled" | "blocked";
 
 
 function isAdminMonitoringWorkerKind(kind: unknown): kind is AdminMonitoringWorkerKind {

@@ -5,10 +5,12 @@ import {
   Check,
   ChevronRight,
   CircleDashed,
+  Clock3,
   ExternalLink,
   Image as ImageIcon,
   LoaderCircle,
   MapPin,
+  Pause,
   Search,
   Store,
 } from "lucide-react";
@@ -23,9 +25,9 @@ import {
 import type { FirstScanResultTotals } from "./resultTotals";
 import type { ResultFilter } from "./useFirstScanFeed";
 import {
-  ACCESS_BLOCKED_RESULT_COPY,
-  RESULT_STATE_COPY,
   SOURCE_STATE_COPY,
+  resultPresentation,
+  type ResultPresentation,
   compactUrl,
   formatRelativeTime,
   formatSimilarity,
@@ -107,7 +109,7 @@ export function FirstScanResults({
       <div className="flex flex-col gap-2 border-b border-stone-200 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-1 overflow-x-auto">
           <ResultFilterButton label="All" count={resultFilterTotals.discovered} value="all" active={resultFilter} onChange={onResultFilterChange} />
-          <ResultFilterButton label="Processing" count={resultFilterTotals.processing} value="processing" active={resultFilter} onChange={onResultFilterChange} />
+          <ResultFilterButton label="Pending" count={resultFilterTotals.processing} value="processing" active={resultFilter} onChange={onResultFilterChange} />
           <ResultFilterButton label="Ready" count={resultFilterTotals.ready} value="ready" active={resultFilter} onChange={onResultFilterChange} />
           <ResultFilterButton label="Filtered" count={resultFilterTotals.filtered} value="filtered" active={resultFilter} onChange={onResultFilterChange} />
           {resultFilterTotals.failed > 0 && <ResultFilterButton label="Failed" count={resultFilterTotals.failed} value="failed" active={resultFilter} onChange={onResultFilterChange} />}
@@ -170,7 +172,7 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
   const title = result.listing_title || result.candidate_title || readableListingUrl(result.page_url);
   const progress = firstScanResultMetadata(result);
   const accessBlocked = result.qualification_access_blocked;
-  const stageCopy = accessBlocked ? ACCESS_BLOCKED_RESULT_COPY : RESULT_STATE_COPY[result.stage];
+  const stageCopy = resultPresentation(result);
   const active = FIRST_SCAN_ACTIVE_RESULT_STAGES.has(result.stage);
   const target = result.ready_for_review && result.result_id
     ? `/monitoring/tasks/${encodeURIComponent(result.result_id)}?ip_id=${encodeURIComponent(ipId)}`
@@ -188,7 +190,7 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
                     const { naturalWidth, naturalHeight } = event.currentTarget;
                     if (Math.min(naturalWidth, naturalHeight) < 16) setFailedImage(image);
                   }} />
-              : <div className="flex h-full items-center justify-center text-stone-300">{active ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}</div>}
+              : <div className="flex h-full items-center justify-center text-stone-300">{stageCopy.activity === "running" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}</div>}
           </div>
           <div className="min-w-0">
             <p className="truncate text-[13px] font-semibold text-stone-900" title={title}>{title}</p>
@@ -225,8 +227,8 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
         </p>}
       </td>
       <td className="px-3 py-2.5">
-        <ResultStageBadge stage={result.stage} accessBlocked={accessBlocked} />
-        <p className="mt-1.5 truncate text-[10px] text-stone-400" title={stageCopy.detail}>{stageCopy.detail}</p>
+        <ResultStageBadge stage={result.stage} copy={stageCopy} />
+        <p className="mt-1.5 line-clamp-2 text-[10px] text-stone-400" title={stageCopy.detail}>{stageCopy.detail}</p>
         <div className="mt-1.5 flex items-center gap-2">
           <div className="flex h-1 flex-1 overflow-hidden rounded-full bg-stone-100">
             <span className={`block rounded-full ${result.stage === "ready" ? "bg-emerald-500" : accessBlocked ? "bg-amber-500" : result.stage === "failed" ? "bg-red-400" : "bg-blue-500"}`} style={{ width: `${Math.max(8, (progress.complete / progress.total) * 100)}%` }} />
@@ -245,20 +247,28 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
   );
 }
 
-function ResultStageBadge({ stage, accessBlocked }: { stage: IpFirstScanResultStage; accessBlocked: boolean }) {
-  const copy = accessBlocked ? ACCESS_BLOCKED_RESULT_COPY : RESULT_STATE_COPY[stage];
-  const classes = accessBlocked
+function ResultStageBadge({ stage, copy }: { stage: IpFirstScanResultStage; copy: ResultPresentation }) {
+  const classes = copy.activity === "blocked"
     ? "border-amber-200 bg-amber-50 text-amber-800"
-    : stage === "ready"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : stage === "filtered"
-        ? "border-stone-200 bg-stone-50 text-stone-500"
-        : stage === "failed"
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-blue-200 bg-blue-50 text-blue-700";
+    : copy.activity === "paused"
+      ? "border-stone-200 bg-stone-50 text-stone-600"
+      : copy.activity === "scheduled"
+        ? "border-violet-200 bg-violet-50 text-violet-700"
+        : stage === "ready"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : stage === "filtered" || stage === "cancelled"
+            ? "border-stone-200 bg-stone-50 text-stone-500"
+            : stage === "failed"
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-blue-200 bg-blue-50 text-blue-700";
+  const Icon = stage === "ready" ? Check
+    : copy.activity === "blocked" || stage === "failed" ? AlertCircle
+      : stage === "filtered" || stage === "cancelled" ? CircleDashed
+        : copy.activity === "paused" ? Pause
+          : copy.activity === "queued" || copy.activity === "scheduled" ? Clock3 : LoaderCircle;
   return (
     <span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${classes}`}>
-      {stage === "ready" ? <Check className="h-3 w-3" /> : accessBlocked || stage === "failed" ? <AlertCircle className="h-3 w-3" /> : stage === "filtered" ? <CircleDashed className="h-3 w-3" /> : <LoaderCircle className="h-3 w-3 animate-spin" />}
+      <Icon className={`h-3 w-3 ${copy.activity === "running" ? "animate-spin" : ""}`} />
       <span className="truncate">{copy.label}</span>
     </span>
   );

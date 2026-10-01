@@ -5,6 +5,7 @@ export const WORK_STATE_COPY: Record<AdminJobQueueState, { label: string; dot: s
   ready: { label: "Ready", dot: "bg-amber-400", text: "text-amber-700" },
   paused: { label: "Paused", dot: "bg-stone-400", text: "text-stone-600" },
   scheduled: { label: "Scheduled", dot: "bg-violet-400", text: "text-violet-700" },
+  blocked: { label: "References needed", dot: "bg-amber-400", text: "text-amber-700" },
 };
 
 export function workStateLabel(job: AdminMonitoringJob): string {
