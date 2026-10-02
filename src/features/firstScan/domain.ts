@@ -148,7 +148,7 @@ export function summarizeFirstScanSource(
       && source.api_route.configured
     );
   // Saved results from an inactive source do not require a new search connection.
-  const sourceSetupApplies = source.enabled || (runs.length === 0 && discovered === 0);
+  const sourceSetupApplies = source.enabled !== false || (runs.length === 0 && discovered === 0);
 
   let state: FirstScanSourceState;
   if (sourceSetupApplies && source.setup_status === "retry_needed") {
