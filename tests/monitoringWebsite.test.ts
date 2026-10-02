@@ -15,10 +15,16 @@ test('website setup uses the signed-in session and selected company without a de
     calls.push(String(input));
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer website-session');
     expect(new Headers(init?.headers).get('X-Acting-Tenant')).toBe('selected-company');
-    return Response.json({});
+    const path = new URL(String(input), 'https://api.example').pathname;
+    return Response.json(path === '/api/monitoring-workspace' ? {
+      document: { version: 6, brands: [] }, revision: 3, updated_at: null,
+      active_revision: null, activated_at: null, company: { id: 'selected-company', name: 'Selected company' },
+      sources: [], reference_images: [], setup_state: 'configured',
+    } : {});
   }) as typeof fetch;
-  await monitoringSetupClient.load();
+  const workspace = await monitoringSetupClient.load();
   await monitoringSetupClient.catalog();
+  expect(workspace.document).toEqual({ version: 7, brands: [] });
   expect(calls.map(url => new URL(url, 'https://api.example').pathname)).toEqual(['/api/monitoring-workspace', '/api/admin/monitoring-marketplaces']);
   expect(calls.some(url => url.includes(':53000') || url.endsWith('/auth/dev'))).toBe(false);
 });
@@ -26,7 +32,7 @@ test('website setup uses the signed-in session and selected company without a de
 test('website activation conflicts preserve their status and are never retried', async () => {
   let calls = 0;
   globalThis.fetch = (async () => { calls++; return Response.json({ error: 'Another editor saved this draft' }, { status: 409 }); }) as typeof fetch;
-  try { await monitoringSetupClient.activate({ version: 5, brands: [] }, 5); throw new Error('Expected conflict'); }
+  try { await monitoringSetupClient.activate({ version: 7, brands: [] }, 5); throw new Error('Expected conflict'); }
   catch (error) { expect(error).toBeInstanceOf(DraftError); expect((error as DraftError).status).toBe(409); }
   expect(calls).toBe(1);
 });

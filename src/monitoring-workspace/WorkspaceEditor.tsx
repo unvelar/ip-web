@@ -5,8 +5,6 @@ import ScopeNavigator from './ScopeNavigator';
 import CoverageEditor from './CoverageEditor';
 import './workspace.css';
 import { useDraftNavigationGuard } from './useDraftNavigationGuard';
-import { coverageFromLegacy, mergeCoverage } from './legacyMigration';
-import { getTrademark } from '../api/registry';
 import ImageUploader from '../components/ImageUploader';
 import MatchingReadiness from './MatchingReadiness';
 
@@ -24,10 +22,6 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>(loaded.reference_images ?? []);
-  const [legacyImages, setLegacyImages] = useState(() => Object.fromEntries(
-    loaded.legacy_ips.flatMap(ip => ip.images === undefined ? [] : [[ip.id, ip.images]]),
-  ));
-  const [legacyImageFallbacks, setLegacyImageFallbacks] = useState<Record<string, { id: string; url: string; status: string }[]>>({});
   const imageRefresh = useRef<Promise<void> | null>(null);
   const lastImageRefreshAt = useRef(0);
   const [adding, setAdding] = useState<'brand' | 'product'>('product');
@@ -40,22 +34,10 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const coverage = brand?.coverage;
   const tenantName = loaded.company.name;
   const products = (brand ? [brand] : document.brands).flatMap(owner => owner.products.map(product => ({ ...product, brand: owner })));
-  const legacyAssignments = useMemo(() => {
-    const assignments = new Map<string, { scopeId: string; name: string; kind: 'brand' | 'product' }>();
-    for (const owner of document.brands) {
-      for (const ipId of owner.legacy_ip_ids) assignments.set(ipId, { scopeId: owner.id, name: owner.name, kind: 'brand' });
-      for (const product of owner.products) {
-        for (const ipId of product.legacy_ip_ids) assignments.set(ipId, { scopeId: product.id, name: product.name, kind: 'product' });
-      }
-    }
-    return assignments;
-  }, [document]);
-  const linkedLegacyIps = useMemo(() => scope ? loaded.legacy_ips.filter(ip => scope.legacy_ip_ids.includes(ip.id)) : [], [loaded.legacy_ips, scope]);
-  const linkedLegacyImages = linkedLegacyIps.flatMap(ip => (legacyImages[ip.id] ?? legacyImageFallbacks[ip.id] ?? []).map(image => ({ ...image, ipName: ip.name })));
   const referenceImageById = useMemo(() => new Map(referenceImages.map(image => [image.id, image])), [referenceImages]);
   const scopeReferenceImages = scope?.reference_materials.filter(material => material.kind === 'image')
     .map(material => ({ material, image: referenceImageById.get(material.id) })) ?? [];
-  const displayedReferenceIds = new Set([...scopeReferenceImages.map(item => item.material.id), ...linkedLegacyImages.map(image => image.id)]);
+  const displayedReferenceIds = new Set(scopeReferenceImages.map(item => item.material.id));
   const ownedReferenceImages = referenceImages.filter(image => image.scope_id === scope?.id && !displayedReferenceIds.has(image.id));
   const dirty = JSON.stringify(document) !== JSON.stringify(saved.document);
   const matchingStates = plan?.matching_readiness ?? (!dirty ? loaded.matching_readiness : undefined);
@@ -66,8 +48,6 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       const image = referenceImageById.get(material.id);
       return image?.url ? [{ id: material.id, url: image.url, product: product.name }] : [];
     }),
-    ...loaded.legacy_ips.filter(ip => product.legacy_ip_ids.includes(ip.id)).flatMap(ip =>
-      (legacyImages[ip.id] ?? legacyImageFallbacks[ip.id] ?? []).filter(image => image.url).map(image => ({ id: image.id, url: image.url, product: product.name }))),
   ]).map(image => [image.id, image])).values()] : [];
   const active = saved.revision > 0 && saved.active_revision === saved.revision;
 
@@ -97,27 +77,11 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     return () => { clearTimeout(timer); controller.abort(); };
   }, [client, document, brandId, productId, plan]);
 
-  useEffect(() => {
-    const missing = linkedLegacyIps.filter(ip => legacyImages[ip.id] === undefined && legacyImageFallbacks[ip.id] === undefined);
-    if (!missing.length) return;
-    const controller = new AbortController();
-    void Promise.all(missing.map(async ip => ({ ip, detail: await getTrademark(ip.id, controller.signal) }))).then(results => {
-      if (controller.signal.aborted) return;
-      setLegacyImageFallbacks(current => ({ ...current, ...Object.fromEntries(results.map(({ ip, detail }) => [ip.id,
-        detail.images.map(image => ({ id: image.id, url: image.url, status: image.status })),
-      ])) }));
-    }).catch(() => undefined);
-    return () => controller.abort();
-  }, [linkedLegacyIps, legacyImages, legacyImageFallbacks]);
-
   function refreshExpiredImageUrls() {
     if (imageRefresh.current || Date.now() - lastImageRefreshAt.current < 30_000) return;
     lastImageRefreshAt.current = Date.now();
     const refresh = client.load().then(result => {
       setReferenceImages(result.reference_images ?? []);
-      setLegacyImages(Object.fromEntries(
-        result.legacy_ips.flatMap(ip => ip.images === undefined ? [] : [[ip.id, ip.images]]),
-      ));
     }).catch(() => undefined);
     imageRefresh.current = refresh;
     void refresh.finally(() => {
@@ -126,29 +90,13 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   }
 
   function updateDocument(next: Workspace) { setDocument(next); setPlan(null); setMessage(''); }
-  function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'monitoring_enabled' | 'reference_materials' | 'legacy_ip_ids'>>) {
+  function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'monitoring_enabled' | 'reference_materials'>>) {
     if (!brand) return;
     updateDocument({ ...document, brands: document.brands.map(item => item.id !== brand.id ? item : productId
       ? { ...item, products: item.products.map(product => product.id === productId ? { ...product, ...change } : product) }
       : { ...item, ...change }) });
   }
   function selectScope(brand: string | null, product: string | null = null) { setBrandId(brand); setProductId(product); setPlan(null); setPreviewError(''); }
-  function toggleLegacyIp(ipId: string, checked: boolean) {
-    if (!brand || !scope) return;
-    if (!checked) { updateScope({ legacy_ip_ids: scope.legacy_ip_ids.filter(id => id !== ipId) }); return; }
-    const legacy = loaded.legacy_ips.find(ip => ip.id === ipId);
-    if (!legacy) return;
-    const importedCoverage = coverageFromLegacy(legacy, loaded.sources);
-    updateDocument({ ...document, brands: document.brands.map(item => item.id !== brand.id ? item : {
-      ...item,
-      coverage: mergeCoverage(item.coverage, importedCoverage),
-      ...(productId ? { products: item.products.map(product => product.id === productId ? {
-        ...product, legacy_ip_ids: [ipId], keywords: product.keywords.length ? product.keywords : legacy.keywords,
-      } : product) } : {
-        legacy_ip_ids: [ipId], keywords: item.keywords.length ? item.keywords : legacy.keywords,
-      }),
-    }) });
-  }
   async function activate() {
     setBusy(true); setError(''); setMessage('');
     try {
@@ -180,10 +128,10 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     const keywords = String(form.get('keywords')).split('\n').filter(value => value.trim());
     const id = crypto.randomUUID();
     if (adding === 'brand') {
-      const item: Brand = { id, name, keywords, monitoring_enabled: keywords.length > 0, reference_materials: [], coverage: { markets: [], frequency: 'weekly' }, legacy_ip_ids: [], products: [] };
+      const item: Brand = { id, name, keywords, monitoring_enabled: keywords.length > 0, reference_materials: [], coverage: { markets: [], frequency: 'weekly' }, products: [] };
       updateDocument({ ...document, brands: [...document.brands, item] }); setBrandId(id); setProductId(null);
     } else if (brand) {
-      const item: Product = { id, name, keywords, monitoring_enabled: keywords.length > 0, reference_materials: [], coverage: null, catalog_product_id: null, legacy_ip_ids: [] };
+      const item: Product = { id, name, keywords, monitoring_enabled: keywords.length > 0, reference_materials: [], coverage: null, catalog_product_id: null };
       updateDocument({ ...document, brands: document.brands.map(b => b.id === brandId ? { ...b, products: [...b.products, item] } : b) }); setProductId(id);
     }
     event.currentTarget.reset(); addDialog.current?.close();
@@ -249,18 +197,17 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
             <section className="panel"><div className="section-heading"><div><h2>Reference images</h2><p>Add one or more pictures that show what this {productId ? 'product' : 'brand'} looks like.</p></div></div>
               <MatchingReadiness state={matchingState} />
               <ImageUploader compact accept="image/png,image/jpeg,image/webp" uploading={busy} onUpload={files => void uploadReferences(files)} label="Add reference images" help="PNG, JPG or WebP · up to 50MB total" />
-              {(scopeReferenceImages.length > 0 || linkedLegacyImages.length > 0 || ownedReferenceImages.length > 0) && <div className="workspace-reference-grid" aria-label="Reference images">
+              {(scopeReferenceImages.length > 0 || ownedReferenceImages.length > 0) && <div className="workspace-reference-grid" aria-label="Reference images">
                 {scopeReferenceImages.map(({ material, image }) => <figure className="workspace-reference-image" key={material.id}>{image?.url
                   ? <RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} />
-                  : <div className="legacy-reference-unavailable">Image unavailable</div>}
+                  : <div className="reference-image-placeholder">Image unavailable</div>}
                   <button type="button" disabled={busy} aria-label="Remove reference image" onClick={() => updateScope({ reference_materials: scope.reference_materials.filter(item => item.id !== material.id) })}>Remove</button>
                 </figure>)}
-                {linkedLegacyImages.map(image => image.url ? <figure className="workspace-reference-image" key={image.id}><RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} /></figure> : <div className="legacy-reference-unavailable" key={image.id}>Image unavailable</div>)}
                 {ownedReferenceImages.map(image => <figure className="workspace-reference-image" key={image.id}>{image.url
                   ? <RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} />
-                  : <div className="legacy-reference-unavailable">Image unavailable</div>}</figure>)}
+                  : <div className="reference-image-placeholder">Image unavailable</div>}</figure>)}
               </div>}
-              {scopeReferenceImages.length === 0 && linkedLegacyImages.length === 0 && ownedReferenceImages.length === 0 && productReferenceImages.length === 0 && <p className="field-note">No reference images yet.</p>}
+              {scopeReferenceImages.length === 0 && ownedReferenceImages.length === 0 && productReferenceImages.length === 0 && <p className="field-note">No reference images yet.</p>}
               {productReferenceImages.length > 0 && <div className="shared-product-references">
                 <h3>Product references available to this brand</h3>
                 <p className="field-note">Used to recognize this brand. A brand match does not confirm a specific product.</p>
@@ -270,11 +217,6 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
                 </figure>)}</div>
               </div>}
             </section>
-            {loaded.legacy_ips.length > 0 && <section className="panel"><div className="section-heading"><div><h2>Existing IP record</h2><p>Choose at most one previous IP record for this {productId ? 'product' : 'brand'}. Choosing another replaces the current link while preserving that record’s searches, images and history.</p></div></div><div className="legacy-ip-list">{loaded.legacy_ips.map(ip => {
-              const assignment = legacyAssignments.get(ip.id);
-              const assignedElsewhere = !!assignment && assignment.scopeId !== scope.id;
-              return <label key={ip.id} className={`legacy-ip-row${assignedElsewhere ? ' is-disabled' : ''}`}><input type="checkbox" disabled={assignedElsewhere} checked={scope.legacy_ip_ids.includes(ip.id)} onChange={event => toggleLegacyIp(ip.id, event.target.checked)} /><span><strong>{ip.name}</strong><small>{assignedElsewhere ? `Already linked to ${assignment.kind} ${assignment.name}` : `${ip.keywords.length} keywords · ${ip.monitored_domains.filter(domain => domain.enabled).length} active sites · ${ip.image_count} reference images`}</small></span></label>;
-            })}</div></section>}
             <section ref={coverageSection} tabIndex={-1} aria-label="Shared coverage" className="panel coverage-panel"><h2>Shared coverage</h2>
               {productId ? <>
                 <p className="field-note">This product uses {brand.name}’s countries, marketplaces and schedule whenever product monitoring is on.</p>
@@ -301,6 +243,6 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
 
 function RecoveringReferenceImage({ src, onExpired }: { src: string; onExpired: () => void }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  if (failedSrc === src) return <div className="legacy-reference-unavailable">Refreshing image…</div>;
+  if (failedSrc === src) return <div className="reference-image-placeholder">Refreshing image…</div>;
   return <img src={src} alt="Reference" loading="lazy" onError={() => { setFailedSrc(src); onExpired(); }} />;
 }

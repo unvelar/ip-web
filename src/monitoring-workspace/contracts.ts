@@ -6,9 +6,9 @@ export type MatchingReadiness = {
   status: 'ready' | 'indexing' | 'references_needed'; own_reference_count: number;
   shared_reference_count: number; ready_reference_count: number; detail: string;
 };
-export type Product = { id: string; name: string; keywords: string[]; monitoring_enabled: boolean; reference_materials: ReferenceMaterial[]; coverage: null; catalog_product_id: string | null; legacy_ip_ids: string[] };
-export type Brand = { id: string; name: string; keywords: string[]; monitoring_enabled: boolean; reference_materials: ReferenceMaterial[]; coverage: Coverage; legacy_ip_ids: string[]; products: Product[] };
-export type Workspace = { version: 6; brands: Brand[] };
+export type Product = { id: string; name: string; keywords: string[]; monitoring_enabled: boolean; reference_materials: ReferenceMaterial[]; coverage: null; catalog_product_id: string | null };
+export type Brand = { id: string; name: string; keywords: string[]; monitoring_enabled: boolean; reference_materials: ReferenceMaterial[]; coverage: Coverage; products: Product[] };
+export type Workspace = { version: 7; brands: Brand[] };
 export type Source = { key: string; name: string; kind: string; domain: string; logo_key: string | null;
   categories: { key: string; name: string }[];
   markets: { country: string; storefront_domain: string; evidence_url: string }[];
@@ -18,8 +18,7 @@ export type AdminCatalog = { marketplaces: AdminMarketplace[]; categories: { key
 export type MarketplaceEdit = { key: string | null; expected_revision: number; name: string; domain: string; logo_key: string | null; categories: string[]; markets: Source['markets'] };
 export type Draft = { document: Workspace; revision: number; updated_at: string | null; active_revision: number | null; activated_at: string | null };
 export type Activation = Draft & { lifecycle: 'active'; executable: true; execution: { scopes: number; sources: number }; matching_readiness?: MatchingReadiness[] };
-export type LegacyIp = { id: string; name: string; keywords: string[]; monitoring_frequency: 'daily' | 'weekly' | 'monthly' | 'off'; image_count: number; images?: { id: string; url: string; status: string }[]; monitored_domains: { id: string; name: string; domain: string; country: string | null; enabled: boolean }[] };
-export type WorkspaceResponse = Draft & { company: { id: string; name: string }; sources: Source[]; legacy_ips: LegacyIp[]; reference_images: ReferenceImage[]; matching_readiness?: MatchingReadiness[]; setup_state: 'required' | 'configured' };
+export type WorkspaceResponse = Draft & { company: { id: string; name: string }; sources: Source[]; reference_images: ReferenceImage[]; matching_readiness?: MatchingReadiness[]; setup_state: 'required' | 'configured' };
 export type Plan = {
   lifecycle: 'draft'; executable: false; inherited: boolean; effective_coverage: Coverage | null;
   total_searches: number; combined_searches: number; scope_count: number; countries: string[]; source_keys: string[]; truncated: boolean; affected_products: number; issues: string[]; coverage_notice: string;
