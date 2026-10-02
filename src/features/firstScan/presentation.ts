@@ -37,6 +37,9 @@ export interface ResultPresentation {
 /** A pipeline phase does not mean a worker has claimed its next job. */
 export function resultPresentation(result: IpFirstScanResult): ResultPresentation {
   if (result.qualification_access_blocked) return { ...ACCESS_BLOCKED_RESULT_COPY, activity: "blocked" };
+  if (result.stage === "filtered" && result.vlm_verdict === "unclear") {
+    return { label: "Match unclear", detail: "The available evidence could not establish a match", activity: "finished" };
+  }
   if (result.stage === "matching") {
     switch (result.score_job_queue_state) {
       case "paused":

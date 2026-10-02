@@ -265,3 +265,13 @@ dialog form .actions { margin-top:20px; }
   .monitoring-workspace .reference-material-list li { grid-template-columns:auto minmax(0,1fr); }
   .monitoring-workspace .reference-material-list .text-button { grid-column:2; justify-self:start; }
 }
+
+.matching-readiness { border:1px solid #ded7cc; border-radius:8px; padding:12px 14px; margin:0 0 16px; background:#f7f4ee; font-size:12px; }
+.matching-readiness strong { display:block; font-size:13px; margin-bottom:4px; }
+.matching-readiness p + p { margin-top:6px; }
+.matching-readiness.status-ready { background:#f0f7f2; border-color:#d2e4d7; }
+.matching-readiness.status-ready strong { color:#356246; }
+.matching-readiness.status-references_needed strong { color:#93522e; }
+.shared-product-references { margin-top:18px; }
+.shared-product-references h3 { font-size:13px; font-weight:600; margin:0 0 6px; }
+.shared-product-references figcaption { padding:7px 8px; font-size:11px; line-height:1.4; color:#706b64; overflow-wrap:anywhere; }

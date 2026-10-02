@@ -8,6 +8,7 @@ import { useDraftNavigationGuard } from './useDraftNavigationGuard';
 import { coverageFromLegacy, mergeCoverage } from './legacyMigration';
 import { getTrademark } from '../api/registry';
 import ImageUploader from '../components/ImageUploader';
+import MatchingReadiness from './MatchingReadiness';
 
 export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false, tenantSwitcherLabel }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean; tenantSwitcherLabel?: string }) {
   const Content = embedded ? 'div' : 'main';
@@ -55,6 +56,16 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const scopeReferenceImages = scope?.reference_materials.filter(material => material.kind === 'image')
     .map(material => ({ material, image: referenceImageById.get(material.id) })) ?? [];
   const dirty = JSON.stringify(document) !== JSON.stringify(saved.document);
+  const matchingStates = plan?.matching_readiness ?? (!dirty ? loaded.matching_readiness : undefined);
+  const matchingState = matchingStates?.find(item => item.scope_id === scope?.id);
+  const productReferenceImages = brand && !productId ? [...new Map(brand.products.flatMap(product => [
+    ...product.reference_materials.filter(material => material.kind === 'image').flatMap(material => {
+      const image = referenceImageById.get(material.id);
+      return image?.url ? [{ id: material.id, url: image.url, product: product.name }] : [];
+    }),
+    ...loaded.legacy_ips.filter(ip => product.legacy_ip_ids.includes(ip.id)).flatMap(ip =>
+      (legacyImages[ip.id] ?? legacyImageFallbacks[ip.id] ?? []).filter(image => image.url).map(image => ({ id: image.id, url: image.url, product: product.name }))),
+  ]).map(image => [image.id, image])).values()] : [];
   const active = saved.revision > 0 && saved.active_revision === saved.revision;
 
   useDraftNavigationGuard(dirty);
@@ -233,6 +244,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
             <section className="panel"><label className="field-heading" htmlFor="scope-name">{productId ? 'Product name' : 'Brand name'}</label><input id="scope-name" className="full-width" maxLength={160} value={scope.name} onChange={event => updateScope({ name: event.target.value })} /></section>
             <section className="panel"><div className="section-heading"><div><h2>Search keywords</h2><p>{productId ? 'Phrases used to sell this product. Brand keywords are not added automatically.' : 'Optional phrases for brand-wide searches. Leave this empty to monitor only the brand’s products.'}</p></div></div><label className="visually-hidden" htmlFor="keywords">Search keywords, one per line</label><textarea id="keywords" rows={5} value={scope.keywords.join('\n')} onChange={event => updateScope({ keywords: event.target.value.split('\n') })} /><div className="field-note">One phrase per line. Each phrase is searched separately.</div></section>
             <section className="panel"><div className="section-heading"><div><h2>Reference images</h2><p>Add one or more pictures that show what this {productId ? 'product' : 'brand'} looks like.</p></div></div>
+              <MatchingReadiness state={matchingState} />
               <ImageUploader compact accept="image/png,image/jpeg,image/webp" uploading={busy} onUpload={files => void uploadReferences(files)} label="Add reference images" help="PNG, JPG or WebP · up to 50MB total" />
               {(scopeReferenceImages.length > 0 || linkedLegacyImages.length > 0) && <div className="workspace-reference-grid" aria-label="Reference images">
                 {scopeReferenceImages.map(({ material, image }) => <figure className="workspace-reference-image" key={material.id}>{image?.url
@@ -242,7 +254,15 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
                 </figure>)}
                 {linkedLegacyImages.map(image => image.url ? <figure className="workspace-reference-image" key={image.id}><RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} /></figure> : <div className="legacy-reference-unavailable" key={image.id}>Image unavailable</div>)}
               </div>}
-              {scopeReferenceImages.length === 0 && linkedLegacyImages.length === 0 && <p className="field-note">No reference images yet.</p>}
+              {scopeReferenceImages.length === 0 && linkedLegacyImages.length === 0 && productReferenceImages.length === 0 && <p className="field-note">No reference images yet.</p>}
+              {productReferenceImages.length > 0 && <div className="shared-product-references">
+                <h3>Product references available to this brand</h3>
+                <p className="field-note">Used to recognize this brand. A brand match does not confirm a specific product.</p>
+                <div className="workspace-reference-grid">{productReferenceImages.map(image => <figure className="workspace-reference-image" key={image.id}>
+                  <RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} />
+                  <figcaption>{image.product}</figcaption>
+                </figure>)}</div>
+              </div>}
             </section>
             {loaded.legacy_ips.length > 0 && <section className="panel"><div className="section-heading"><div><h2>Existing IP record</h2><p>Choose at most one previous IP record for this {productId ? 'product' : 'brand'}. Choosing another replaces the current link while preserving that record’s searches, images and history.</p></div></div><div className="legacy-ip-list">{loaded.legacy_ips.map(ip => {
               const assignment = legacyAssignments.get(ip.id);
