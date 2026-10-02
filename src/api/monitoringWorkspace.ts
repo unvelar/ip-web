@@ -70,7 +70,7 @@ function normalizeBrand(value: unknown): Brand {
 }
 
 function normalizeWorkspace(value: unknown): Workspace {
-  requireResponse(isRecord(value) && (value.version === 6 || value.version === 7) && Array.isArray(value.brands), 'monitoring workspace');
+  requireResponse(isRecord(value) && value.version === 7 && Array.isArray(value.brands), 'monitoring workspace');
   return { version: 7, brands: value.brands.map(normalizeBrand) };
 }
 

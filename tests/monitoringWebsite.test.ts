@@ -17,7 +17,7 @@ test('website setup uses the signed-in session and selected company without a de
     expect(new Headers(init?.headers).get('X-Acting-Tenant')).toBe('selected-company');
     const path = new URL(String(input), 'https://api.example').pathname;
     return Response.json(path === '/api/monitoring-workspace' ? {
-      document: { version: 6, brands: [] }, revision: 3, updated_at: null,
+      document: { version: 7, brands: [] }, revision: 3, updated_at: null,
       active_revision: null, activated_at: null, company: { id: 'selected-company', name: 'Selected company' },
       sources: [], reference_images: [], setup_state: 'configured',
     } : {});
