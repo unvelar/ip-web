@@ -23,7 +23,12 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>(loaded.reference_images ?? []);
+  const [legacyImages, setLegacyImages] = useState(() => Object.fromEntries(
+    loaded.legacy_ips.flatMap(ip => ip.images === undefined ? [] : [[ip.id, ip.images]]),
+  ));
   const [legacyImageFallbacks, setLegacyImageFallbacks] = useState<Record<string, { id: string; url: string; status: string }[]>>({});
+  const imageRefresh = useRef<Promise<void> | null>(null);
+  const lastImageRefreshAt = useRef(0);
   const [adding, setAdding] = useState<'brand' | 'product'>('product');
   const coverageSection = useRef<HTMLElement>(null);
   const addDialog = useRef<HTMLDialogElement>(null);
@@ -45,7 +50,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     return assignments;
   }, [document]);
   const linkedLegacyIps = useMemo(() => scope ? loaded.legacy_ips.filter(ip => scope.legacy_ip_ids.includes(ip.id)) : [], [loaded.legacy_ips, scope]);
-  const linkedLegacyImages = linkedLegacyIps.flatMap(ip => (ip.images ?? legacyImageFallbacks[ip.id] ?? []).map(image => ({ ...image, ipName: ip.name })));
+  const linkedLegacyImages = linkedLegacyIps.flatMap(ip => (legacyImages[ip.id] ?? legacyImageFallbacks[ip.id] ?? []).map(image => ({ ...image, ipName: ip.name })));
   const referenceImageById = useMemo(() => new Map(referenceImages.map(image => [image.id, image])), [referenceImages]);
   const scopeReferenceImages = scope?.reference_materials.filter(material => material.kind === 'image')
     .map(material => ({ material, image: referenceImageById.get(material.id) })) ?? [];
@@ -79,7 +84,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   }, [client, document, brandId, productId, plan]);
 
   useEffect(() => {
-    const missing = linkedLegacyIps.filter(ip => ip.images === undefined && legacyImageFallbacks[ip.id] === undefined);
+    const missing = linkedLegacyIps.filter(ip => legacyImages[ip.id] === undefined && legacyImageFallbacks[ip.id] === undefined);
     if (!missing.length) return;
     const controller = new AbortController();
     void Promise.all(missing.map(async ip => ({ ip, detail: await getTrademark(ip.id, controller.signal) }))).then(results => {
@@ -89,7 +94,22 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       ])) }));
     }).catch(() => undefined);
     return () => controller.abort();
-  }, [linkedLegacyIps, legacyImageFallbacks]);
+  }, [linkedLegacyIps, legacyImages, legacyImageFallbacks]);
+
+  function refreshExpiredImageUrls() {
+    if (imageRefresh.current || Date.now() - lastImageRefreshAt.current < 30_000) return;
+    lastImageRefreshAt.current = Date.now();
+    const refresh = client.load().then(result => {
+      setReferenceImages(result.reference_images ?? []);
+      setLegacyImages(Object.fromEntries(
+        result.legacy_ips.flatMap(ip => ip.images === undefined ? [] : [[ip.id, ip.images]]),
+      ));
+    }).catch(() => undefined);
+    imageRefresh.current = refresh;
+    void refresh.finally(() => {
+      if (imageRefresh.current === refresh) imageRefresh.current = null;
+    });
+  }
 
   function updateDocument(next: Workspace) { setDocument(next); setPlan(null); setMessage(''); }
   function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'monitoring_enabled' | 'reference_materials' | 'legacy_ip_ids'>>) {
@@ -216,11 +236,11 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
               <ImageUploader compact accept="image/png,image/jpeg,image/webp" uploading={busy} onUpload={files => void uploadReferences(files)} label="Add reference images" help="PNG, JPG or WebP · up to 50MB total" />
               {(scopeReferenceImages.length > 0 || linkedLegacyImages.length > 0) && <div className="workspace-reference-grid" aria-label="Reference images">
                 {scopeReferenceImages.map(({ material, image }) => <figure className="workspace-reference-image" key={material.id}>{image?.url
-                  ? <img src={image.url} alt="Reference" loading="lazy" />
+                  ? <RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} />
                   : <div className="legacy-reference-unavailable">Image unavailable</div>}
                   <button type="button" disabled={busy} aria-label="Remove reference image" onClick={() => updateScope({ reference_materials: scope.reference_materials.filter(item => item.id !== material.id) })}>Remove</button>
                 </figure>)}
-                {linkedLegacyImages.map(image => image.url ? <figure className="workspace-reference-image" key={image.id}><img src={image.url} alt="Reference" loading="lazy" /></figure> : <div className="legacy-reference-unavailable" key={image.id}>Image unavailable</div>)}
+                {linkedLegacyImages.map(image => image.url ? <figure className="workspace-reference-image" key={image.id}><RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} /></figure> : <div className="legacy-reference-unavailable" key={image.id}>Image unavailable</div>)}
               </div>}
               {scopeReferenceImages.length === 0 && linkedLegacyImages.length === 0 && <p className="field-note">No reference images yet.</p>}
             </section>
@@ -251,4 +271,10 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     <dialog ref={previewDialog} aria-labelledby="preview-heading"><div className="dialog-header"><h2 id="preview-heading">Requested searches · {plan?.total_searches ?? 0}</h2><button className="secondary" onClick={() => previewDialog.current?.close()}>Close</button></div><p>{plan?.coverage_notice}</p>{plan?.truncated && <p>Showing the first 500 searches.</p>}<div className="table-wrap"><table><thead><tr><th>Keyword</th><th>Website</th><th>Country</th><th>Schedule</th><th>Scope</th></tr></thead><tbody>{plan?.searches.map((item, i) => <tr key={i}><td>{item.keyword}</td><td>{item.source_name}<span className="preview-domain">{item.storefront_domain}</span></td><td>{countryLabel(item.country)}</td><td>{item.frequency}</td><td>{item.origins.map(origin => origin.name).join(", ")}</td></tr>)}</tbody></table></div></dialog>
     <dialog ref={leaveDialog} aria-labelledby="leave-heading"><h2 id="leave-heading">Unsaved monitoring changes</h2><p>Return to the editor to apply these changes, or discard them and switch tenant.</p><div className="actions"><button className="secondary" onClick={() => leaveDialog.current?.close()}>Keep editing</button><button className="primary" onClick={onLeave}>Discard and switch</button></div></dialog>
   </div>;
+}
+
+function RecoveringReferenceImage({ src, onExpired }: { src: string; onExpired: () => void }) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (failedSrc === src) return <div className="legacy-reference-unavailable">Refreshing image…</div>;
+  return <img src={src} alt="Reference" loading="lazy" onError={() => { setFailedSrc(src); onExpired(); }} />;
 }
