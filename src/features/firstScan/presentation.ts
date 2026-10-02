@@ -40,6 +40,9 @@ export function resultPresentation(result: IpFirstScanResult): ResultPresentatio
   if (result.stage === "filtered" && result.vlm_verdict === "unclear") {
     return { label: "Match unclear", detail: "The available evidence could not establish a match", activity: "finished" };
   }
+  if (result.stage === "filtered" && result.vlm_verdict === "present") {
+    return { label: "Screened out", detail: "A match was found, but the listing failed later checks", activity: "finished" };
+  }
   if (result.stage === "matching") {
     switch (result.score_job_queue_state) {
       case "paused":

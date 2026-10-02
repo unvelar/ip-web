@@ -40,6 +40,16 @@ const sources = [
 ];
 
 describe("FirstScanSetupNotice", () => {
+  test("inactive historical sources do not create a setup warning for ready monitoring", () => {
+    const status = {
+      ...onboarding, state: "active", checks: [],
+      progress: { monitoring_sources: { source_statuses: [{ source_id: "active-market", status: "ready" }] } },
+    } as IpOnboardingStatus;
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null,
+      createElement(FirstScanSetupNotice, { onboarding: status, sources, ipId: "ip-1" })));
+    expect(html).toBe("");
+  });
+
   test("shows scheduled recovery and monitoring-off state without claiming work is running", () => {
     const recovery = {
       enabled: true, scheduled: 1, due: 0, processing: 0, off: 0, blocked: 0, needed: 0,

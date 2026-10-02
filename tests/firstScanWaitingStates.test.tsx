@@ -62,3 +62,21 @@ test("cancelled discoveries remain visible without promising a matching check", 
   expect(row.querySelectorAll(".animate-spin")).toHaveLength(0);
   expect(summarizeFirstScanResults([cancelled]).processing).toBe(0);
 });
+
+test("a later page rejection does not erase confirmed match evidence", () => {
+  const row = renderRow(result({
+    stage: "filtered", score_job_status: "completed", qualification_job_status: "completed",
+    vlm_verdict: "present", vlm_confidence: 0.98, lifecycle_state: "rejected",
+    candidate_actionability: "non_actionable", qualified_at: "2026-10-01T11:05:00Z",
+  }));
+  expect(row.querySelectorAll("td")[3]!.textContent).toContain("Present");
+  expect(row.querySelectorAll("td")[4]!.textContent).toContain("Screened out");
+  expect(row.textContent).toContain("A match was found");
+  expect(row.textContent).not.toContain("Not a match");
+  expect(row.querySelectorAll(".animate-spin")).toHaveLength(0);
+
+  const absent = renderRow(result({ stage: "filtered", vlm_verdict: "absent" }));
+  expect(absent.querySelectorAll("td")[4]!.textContent).toContain("Not a match");
+  const unclear = renderRow(result({ stage: "filtered", vlm_verdict: "unclear" }));
+  expect(unclear.querySelectorAll("td")[4]!.textContent).toContain("Match unclear");
+});
