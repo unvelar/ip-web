@@ -118,6 +118,22 @@ function result(overrides: Partial<IpFirstScanResult> = {}): IpFirstScanResult {
 }
 
 describe("first scan progress", () => {
+  test("inactive source history reports its listing checks instead of requesting unused setup", () => {
+    const inactive = { ...source, enabled: false, recipe: null, connected: false, setup_status: "retry_needed" as const };
+    const finished = summarizeFirstScanSource(inactive, [run({})], findingsPage({}), [], true, {
+      discovered: 30, processing: 0, ready: 28, filtered: 2, failed: 0, qualified: 28,
+    });
+    expect(finished.state).toBe("ready");
+    expect(finished.error).toBeNull();
+    expect(isFirstScanSourceConnected(finished)).toBe(false);
+    const pending = summarizeFirstScanSource(inactive, [run({})], findingsPage({}), [result({ stage: "qualifying" })]);
+    expect(pending.state).toBe("preparing");
+    expect(pending.error).toBeNull();
+    const failed = summarizeFirstScanSource(inactive, [run({ status: "failed", error: "Page check failed" })], findingsPage({}));
+    expect(failed.state).toBe("failed");
+    expect(failed.error).toBe("Page check failed");
+  });
+
   test("counts a validated connection while preserving its outstanding retry status", () => {
     for (const setup_status of ['processing', 'retry_needed'] as const) {
       const summary = summarizeFirstScanSource({ ...source, setup_status, connected: true }, [], findingsPage({}));

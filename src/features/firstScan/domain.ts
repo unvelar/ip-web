@@ -147,13 +147,15 @@ export function summarizeFirstScanSource(
       source.api_route?.execution_route === "marketplace_api"
       && source.api_route.configured
     );
+  // Saved results from an inactive source do not require a new search connection.
+  const sourceSetupApplies = source.enabled || (runs.length === 0 && discovered === 0);
 
   let state: FirstScanSourceState;
-  if (source.setup_status === "retry_needed") {
+  if (sourceSetupApplies && source.setup_status === "retry_needed") {
     state = "retry_needed";
-  } else if (source.setup_status === "processing") {
+  } else if (sourceSetupApplies && source.setup_status === "processing") {
     state = "setup_processing";
-  } else if (!sourceConnected) {
+  } else if (sourceSetupApplies && !sourceConnected) {
     state = "connecting";
   } else if (running && (totals ? discovered === 0 : results.length === 0)) {
     state = "scanning";
@@ -184,7 +186,7 @@ export function summarizeFirstScanSource(
     failed,
     state,
     error:
-      source.setup_status === "retry_needed"
+      sourceSetupApplies && source.setup_status === "retry_needed"
         ? "Website setup needs a system retry"
         : results.find((result) => result.stage === "failed")?.qualification_job_error ??
           results.find((result) => result.stage === "failed")?.score_job_error ??
