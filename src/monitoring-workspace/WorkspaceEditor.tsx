@@ -55,10 +55,13 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const referenceImageById = useMemo(() => new Map(referenceImages.map(image => [image.id, image])), [referenceImages]);
   const scopeReferenceImages = scope?.reference_materials.filter(material => material.kind === 'image')
     .map(material => ({ material, image: referenceImageById.get(material.id) })) ?? [];
+  const displayedReferenceIds = new Set([...scopeReferenceImages.map(item => item.material.id), ...linkedLegacyImages.map(image => image.id)]);
+  const ownedReferenceImages = referenceImages.filter(image => image.scope_id === scope?.id && !displayedReferenceIds.has(image.id));
   const dirty = JSON.stringify(document) !== JSON.stringify(saved.document);
   const matchingStates = plan?.matching_readiness ?? (!dirty ? loaded.matching_readiness : undefined);
   const matchingState = matchingStates?.find(item => item.scope_id === scope?.id);
   const productReferenceImages = brand && !productId ? [...new Map(brand.products.flatMap(product => [
+    ...referenceImages.filter(image => image.scope_id === product.id && image.url).map(image => ({ ...image, product: product.name })),
     ...product.reference_materials.filter(material => material.kind === 'image').flatMap(material => {
       const image = referenceImageById.get(material.id);
       return image?.url ? [{ id: material.id, url: image.url, product: product.name }] : [];
@@ -246,15 +249,18 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
             <section className="panel"><div className="section-heading"><div><h2>Reference images</h2><p>Add one or more pictures that show what this {productId ? 'product' : 'brand'} looks like.</p></div></div>
               <MatchingReadiness state={matchingState} />
               <ImageUploader compact accept="image/png,image/jpeg,image/webp" uploading={busy} onUpload={files => void uploadReferences(files)} label="Add reference images" help="PNG, JPG or WebP · up to 50MB total" />
-              {(scopeReferenceImages.length > 0 || linkedLegacyImages.length > 0) && <div className="workspace-reference-grid" aria-label="Reference images">
+              {(scopeReferenceImages.length > 0 || linkedLegacyImages.length > 0 || ownedReferenceImages.length > 0) && <div className="workspace-reference-grid" aria-label="Reference images">
                 {scopeReferenceImages.map(({ material, image }) => <figure className="workspace-reference-image" key={material.id}>{image?.url
                   ? <RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} />
                   : <div className="legacy-reference-unavailable">Image unavailable</div>}
                   <button type="button" disabled={busy} aria-label="Remove reference image" onClick={() => updateScope({ reference_materials: scope.reference_materials.filter(item => item.id !== material.id) })}>Remove</button>
                 </figure>)}
                 {linkedLegacyImages.map(image => image.url ? <figure className="workspace-reference-image" key={image.id}><RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} /></figure> : <div className="legacy-reference-unavailable" key={image.id}>Image unavailable</div>)}
+                {ownedReferenceImages.map(image => <figure className="workspace-reference-image" key={image.id}>{image.url
+                  ? <RecoveringReferenceImage src={image.url} onExpired={refreshExpiredImageUrls} />
+                  : <div className="legacy-reference-unavailable">Image unavailable</div>}</figure>)}
               </div>}
-              {scopeReferenceImages.length === 0 && linkedLegacyImages.length === 0 && productReferenceImages.length === 0 && <p className="field-note">No reference images yet.</p>}
+              {scopeReferenceImages.length === 0 && linkedLegacyImages.length === 0 && ownedReferenceImages.length === 0 && productReferenceImages.length === 0 && <p className="field-note">No reference images yet.</p>}
               {productReferenceImages.length > 0 && <div className="shared-product-references">
                 <h3>Product references available to this brand</h3>
                 <p className="field-note">Used to recognize this brand. A brand match does not confirm a specific product.</p>
