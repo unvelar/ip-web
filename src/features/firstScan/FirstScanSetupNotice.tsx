@@ -26,9 +26,9 @@ export function FirstScanSetupNotice({
     ]),
   );
   const incompleteSources = sources.filter(
-    (source) => sourceStatuses.get(source.source.id) !== "ready",
+    (source) => sourceStatuses.has(source.source.id) && sourceStatuses.get(source.source.id) !== "ready",
   );
-  if (incompleteSources.length === 0 && onboarding.state !== "paused") return null;
+  if (incompleteSources.length === 0 && onboarding.state === "active") return null;
 
   if (onboarding.recovery) {
     const paused = !onboarding.recovery.enabled;
