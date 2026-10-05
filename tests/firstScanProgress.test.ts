@@ -132,12 +132,13 @@ describe("first scan progress", () => {
     }
   });
 
-  test("source counts distinguish paused sources from limited or preparing sources", () => {
+  test("website status reports selected sources without disabled-source warnings", () => {
     const progress = (enabled: boolean, setup_status: MonitoredDomain["setup_status"]) =>
       summarizeFirstScanSource({ ...source, enabled, recipe: null, setup_status }, [], findingsPage({}));
     const sources = [progress(true, "retry_needed"), progress(false, "retry_needed"), progress(false, "processing")];
-    expect(sourceConnectionDetail(sources)).toBe("1 limited · 2 paused");
-    expect(sourceConnectionDetail(sources, false)).toBe("3 paused");
+    expect(sourceConnectionDetail(sources)).toBe("1 limited");
+    expect(sourceConnectionDetail(sources, false)).toBe("monitoring off");
+    expect(sourceConnectionDetail(sources.slice(1))).toBe("none selected");
     expect(sourceConnectionDetail([progress(true, "processing")])).toBe("1 preparing");
     expect(sourceConnectionDetail([summarizeFirstScanSource(source, [run({})], findingsPage({}))])).toBe("connected");
   });

@@ -87,7 +87,9 @@ export function FirstScanResults({
   onResultFilterChange: (value: ResultFilter) => void;
   onSourceFilterChange: (value: string) => void;
 }) {
-  const partial = coverage.filter(item => item.status === "partial" && (sourceFilter === "all" || item.source_id === sourceFilter));
+  const selectedSourceIds = new Set(sources.map(({ source }) => source.id));
+  const partial = coverage.filter(item => selectedSourceIds.has(item.source_id)
+    && item.status === "partial" && (sourceFilter === "all" || item.source_id === sourceFilter));
   const partialSources = new Set(partial.map(item => item.source_id)).size;
   return (
     <section className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
@@ -312,14 +314,15 @@ function ResultFilterButton({ label, count, value, active, onChange }: { label: 
 }
 
 function ResultEmptyState({ loading, hasAnyResults, sources }: { loading: boolean; hasAnyResults: boolean; sources: FirstScanSourceProgress[] }) {
+  const noSelection = sources.length === 0;
   const paused = sources.length > 0 && sources.every(source => source.source.enabled === false);
   const activeSource = sources.find((source) => source.source.enabled !== false && source.state !== "ready" && source.state !== "failed");
   return (
     <div className="flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center">
-      {paused && !loading ? <Pause className="h-5 w-5 text-stone-400" /> : hasAnyResults && !loading ? <Search className="h-5 w-5 text-stone-300" /> : <LoaderCircle className="h-5 w-5 animate-spin text-blue-500" />}
-      <p className="mt-3 text-sm font-semibold text-stone-800">{loading ? "Loading listings…" : paused ? "Website monitoring is paused" : hasAnyResults ? "No rows match these filters" : "Waiting for the first listing"}</p>
+      {paused && !loading ? <Pause className="h-5 w-5 text-stone-400" /> : (noSelection || hasAnyResults) && !loading ? <Search className="h-5 w-5 text-stone-300" /> : <LoaderCircle className="h-5 w-5 animate-spin text-blue-500" />}
+      <p className="mt-3 text-sm font-semibold text-stone-800">{loading ? "Loading listings…" : noSelection ? "No websites selected" : paused ? "Website monitoring is paused" : hasAnyResults ? "No rows match these filters" : "Waiting for the first listing"}</p>
       <p className="mt-1 max-w-md text-xs leading-5 text-stone-500">
-        {loading ? "Updating results for the selected filters." : paused
+        {loading ? "Updating results for the selected filters." : noSelection ? "Choose websites in monitoring setup to start searches." : paused
           ? "Enable this website in monitoring setup to resume searches. Saved listings remain available."
           : hasAnyResults
           ? "Clear the search or select another pipeline stage."
@@ -327,6 +330,11 @@ function ResultEmptyState({ loading, hasAnyResults, sources }: { loading: boolea
             ? `${SOURCE_STATE_COPY[activeSource.state].label}: ${activeSource.source.display_name || readableDomain(activeSource.source.domain)}. Rows appear here as soon as the scraper saves a result.`
             : "The scan is running in the background and this table updates automatically."}
       </p>
+      {noSelection && !loading && (
+        <Link to="/monitoring/setup" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-stone-700 hover:text-stone-950">
+          Choose websites <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
+      )}
     </div>
   );
 }

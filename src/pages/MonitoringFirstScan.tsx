@@ -75,7 +75,6 @@ export default function MonitoringFirstScan() {
         <FirstScanSetupNotice
           onboarding={snapshot.onboarding}
           sources={snapshot.sources}
-          ipId={ipId}
         />
       )}
 
@@ -85,7 +84,7 @@ export default function MonitoringFirstScan() {
           value={`${totals.connected}/${totals.websites}`}
           detail={connectionDetail}
           icon={<Globe2 className="h-4 w-4" />}
-          warning={connectionDetail !== "connected"}
+          warning={totals.websites > 0 && snapshot.onboarding?.recovery?.enabled !== false && connectionDetail !== "connected"}
         />
         <SummaryMetric label="Listings found" value={totals.discovered} detail="stable rows" icon={<Search className="h-4 w-4" />} />
         <SummaryMetric label="Pending" value={totals.processing} detail="waiting or processing" icon={<LoaderCircle className="h-4 w-4" />} />
@@ -123,7 +122,7 @@ export default function MonitoringFirstScan() {
       )}
 
       <footer className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
-        <span>{snapshot.onboarding?.recovery?.enabled === false ? "Monitoring is off. Existing results remain available." : "You can leave this page. Monitoring continues in the background."}</span>
+        <span>{totals.websites === 0 ? "Select websites in monitoring setup to start monitoring." : snapshot.onboarding?.recovery?.enabled === false ? "Monitoring is off. Existing results remain available." : "You can leave this page. Monitoring continues in the background."}</span>
         <Link to={`/monitoring/tasks?ip_id=${encodeURIComponent(ipId)}&status=all`} className="inline-flex items-center gap-1 font-semibold text-stone-700 hover:text-stone-950">
           View all monitoring tasks <ChevronRight className="h-3.5 w-3.5" />
         </Link>

@@ -14,12 +14,12 @@ export const SOURCE_STATE_COPY: Record<FirstScanSourceState, { label: string; de
 };
 
 export function sourceConnectionDetail(sources: FirstScanSourceProgress[], monitoringEnabled = true): string {
-  const active = sources.filter(({ source }) => monitoringEnabled && source.enabled !== false);
+  if (!monitoringEnabled) return "monitoring off";
+  const active = sources.filter(({ source }) => source.enabled === true);
   const limited = active.filter(({ state }) => state === "retry_needed").length;
   const preparing = active.filter(({ state }) => state === "setup_processing" || state === "connecting").length;
-  const paused = sources.length - active.length;
-  return [limited && `${limited} limited`, preparing && `${preparing} preparing`, paused && `${paused} paused`]
-    .filter(Boolean).join(" · ") || "connected";
+  return [limited && `${limited} limited`, preparing && `${preparing} preparing`]
+    .filter(Boolean).join(" · ") || (active.length ? "connected" : "none selected");
 }
 
 export const RESULT_STATE_COPY: Record<IpFirstScanResultStage, { label: string; detail: string }> = {

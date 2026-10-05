@@ -13,7 +13,6 @@ import {
   type IpFirstScanResultsOptions,
   type IpFirstScanTotals,
   type IpOnboardingStatus,
-  type IpReviewFinding,
   type MonitoredDomain,
   type Trademark,
 } from "../../api";
@@ -115,13 +114,9 @@ export function useFirstScanFeed(requestedIpId: string | null) {
         }
       }
 
-      const platforms = supplementMonitoringPlatforms(
-        platformFeed.platforms,
-        progressiveFeed.results ?? [],
-        legacyFindingsPage.findings,
-        ipId,
-        progressiveFeed.page,
-      );
+      // Setup is authoritative. Historical rows cannot select a website or
+      // turn an unconfigured source into an enabled monitoring platform.
+      const platforms = platformFeed.platforms.filter(source => source.enabled === true);
       const sources = await Promise.all(platforms.map(async (source) => {
         const findingsPage = progressiveFeed.results === null
           ? {
@@ -206,6 +201,13 @@ export function useFirstScanFeed(requestedIpId: string | null) {
       activeRequest.current?.abort();
     };
   }, [ipId, loadingActiveIp, refresh]);
+
+  useEffect(() => {
+    if (snapshot && sourceFilter !== "all"
+      && !snapshot.sources.some(({ source }) => source.id === sourceFilter)) {
+      setSourceFilter("all");
+    }
+  }, [snapshot, sourceFilter]);
 
   const allResults = useMemo(
     () => snapshot?.sources.flatMap((source) => source.results) ?? [],
@@ -398,76 +400,6 @@ async function loadOnboardingStatus(
     }
     throw caught;
   }
-}
-
-function supplementMonitoringPlatforms(
-  platforms: MonitoredDomain[],
-  progressiveResults: IpFirstScanResult[],
-  findings: IpReviewFinding[],
-  ipId: string,
-  page: IpFirstScanResultsPage | null,
-): MonitoredDomain[] {
-  const byId = new Map(platforms.map((platform) => [platform.id, platform]));
-
-  for (const totals of page?.source_totals ?? []) {
-    if (byId.has(totals.source_id)) continue;
-    byId.set(totals.source_id, syntheticMonitoringPlatform({
-      id: totals.source_id, domain: totals.source_domain, displayName: totals.source_name,
-      ipId, createdAt: page!.as_of,
-    }));
-  }
-
-  for (const result of progressiveResults) {
-    if (byId.has(result.source_id)) continue;
-    byId.set(result.source_id, syntheticMonitoringPlatform({
-      id: result.source_id,
-      domain: result.source_domain,
-      displayName: result.source_name,
-      ipId,
-      createdAt: result.discovered_at,
-    }));
-  }
-
-  for (const finding of findings) {
-    const id = finding.domain_id ?? `domain:${finding.domain}`;
-    if (byId.has(id)) continue;
-    byId.set(id, syntheticMonitoringPlatform({
-      id,
-      domain: finding.domain,
-      displayName: null,
-      ipId,
-      createdAt: finding.found_at,
-    }));
-  }
-
-  return [...byId.values()];
-}
-
-function syntheticMonitoringPlatform(input: {
-  id: string;
-  domain: string;
-  displayName: string | null;
-  ipId: string;
-  createdAt: string;
-}): MonitoredDomain {
-  return {
-    id: input.id,
-    tenant_id: "",
-    domain: input.domain,
-    source_type: "domain",
-    display_name: input.displayName,
-    source_config: {},
-    ip_catalog_id: input.ipId,
-    ip_name: null,
-    ip_keywords: null,
-    recipe: null,
-    recipe_updated_at: null,
-    last_run_at: null,
-    enabled: true,
-    zero_yield_streak: 0,
-    country: null,
-    created_at: input.createdAt,
-  };
 }
 
 function isRecoverableFeedError(caught: unknown): boolean {

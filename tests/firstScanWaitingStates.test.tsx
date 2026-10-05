@@ -94,6 +94,24 @@ test("paused website filters override stale retry schedules and retain listing t
   }
 });
 
+test("an empty website selection shows setup instead of a waiting scan or old coverage warning", () => {
+  const counts = summarizeFirstScanResults([]);
+  const html = renderToStaticMarkup(<MemoryRouter><FirstScanResults
+    ipId="ip" sources={[]} results={[]} allResultCount={0}
+    coverage={[{ source_id: "unselected", keyword: "Brand", status: "partial", checked_at: "2026-10-01T11:00:00Z", previous_checked_at: null }]}
+    totals={{ ...counts, websites: 0, connected: 0 }} resultFilterTotals={counts}
+    filteredTotal={0} hasMore={false} loadingMore={false} refreshing={false}
+    query="" resultFilter="all" sourceFilter="all" onLoadMore={() => {}}
+    onQueryChange={() => {}} onResultFilterChange={() => {}} onSourceFilterChange={() => {}}
+  /></MemoryRouter>);
+  const window = new Window(); window.document.body.innerHTML = html;
+  expect(window.document.body.textContent).toContain("No websites selected");
+  expect(window.document.body.textContent).not.toContain("Search coverage is incomplete");
+  expect(window.document.body.textContent).not.toContain("Waiting for the first listing");
+  expect(window.document.querySelector('a[href="/monitoring/setup"]')).not.toBeNull();
+  expect(window.document.querySelectorAll(".animate-spin")).toHaveLength(0);
+});
+
 test("a later page rejection does not erase confirmed match evidence", () => {
   const row = renderRow(result({
     stage: "filtered", score_job_status: "completed", qualification_job_status: "completed",

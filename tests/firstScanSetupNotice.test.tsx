@@ -46,7 +46,7 @@ describe("FirstScanSetupNotice", () => {
       progress: { monitoring_sources: { source_statuses: [{ source_id: "active-market", status: "ready" }] } },
     } as IpOnboardingStatus;
     const html = renderToStaticMarkup(createElement(MemoryRouter, null,
-      createElement(FirstScanSetupNotice, { onboarding: status, sources, ipId: "ip-1" })));
+      createElement(FirstScanSetupNotice, { onboarding: status, sources })));
     expect(html).toBe("");
   });
 
@@ -57,7 +57,7 @@ describe("FirstScanSetupNotice", () => {
       sources: [{ source_id: "vinted", label: "Vinted", state: "scheduled" as const, next_retry_at: "2026-09-26T12:00:00Z", reason: null }],
     };
     const render = (status: IpOnboardingStatus) => renderToStaticMarkup(createElement(MemoryRouter, null,
-      createElement(FirstScanSetupNotice, { onboarding: status, sources, ipId: "ip-1" })));
+      createElement(FirstScanSetupNotice, { onboarding: status, sources })));
     const html = render({ ...onboarding, state: "delayed", title: "Monitoring limited, retry scheduled",
       message: "Automatic retries are scheduled and existing results remain available.", recovery });
     expect(html).toContain("Next automatic retry:");
@@ -72,7 +72,7 @@ describe("FirstScanSetupNotice", () => {
     expect(paused).not.toContain("Next automatic retry:");
   });
 
-  test("names the failed source and links directly to its monitoring setup", () => {
+  test("names the failed source and links to the current monitoring setup", () => {
     const html = renderToStaticMarkup(
       createElement(
         MemoryRouter,
@@ -80,15 +80,14 @@ describe("FirstScanSetupNotice", () => {
         createElement(FirstScanSetupNotice, {
           onboarding,
           sources,
-          ipId: "ip-1",
         }),
       ),
     );
 
     expect(html).toContain("Vinted needs a system retry");
     expect(html).toContain("4 of 5 sources ready; vinted.com needs a retry.");
-    expect(html).toContain('href="/ips/ip-1#monitoring-source-vinted"');
-    expect(html).toContain("View Vinted setup");
+    expect(html).toContain('href="/monitoring/setup"');
+    expect(html).toContain("View monitoring setup");
   });
 
   test("keeps an in-progress source visible while setup is being prepared", () => {
@@ -127,13 +126,12 @@ describe("FirstScanSetupNotice", () => {
         createElement(FirstScanSetupNotice, {
           onboarding: processingOnboarding,
           sources: processingSources,
-          ipId: "ip-1",
         }),
       ),
     );
 
     expect(html).toContain("Vinted is still being prepared");
     expect(html).toContain("4 of 5 sources ready; 1 is being prepared.");
-    expect(html).toContain('href="/ips/ip-1#monitoring-source-vinted"');
+    expect(html).toContain('href="/monitoring/setup"');
   });
 });

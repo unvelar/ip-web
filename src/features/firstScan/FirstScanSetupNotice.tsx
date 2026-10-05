@@ -13,11 +13,9 @@ function sourceLabel(source: FirstScanSourceProgress) {
 export function FirstScanSetupNotice({
   onboarding,
   sources,
-  ipId,
 }: {
   onboarding: IpOnboardingStatus;
   sources: FirstScanSourceProgress[];
-  ipId: string;
 }) {
   const sourceStatuses = new Map(
     onboarding.progress.monitoring_sources.source_statuses.map((source) => [
@@ -43,9 +41,10 @@ export function FirstScanSetupNotice({
             <p className="mt-1 text-xs leading-5 text-stone-700">{onboarding.message}</p>
             {onboarding.recovery.next_retry_at && <p className="mt-1 text-xs font-semibold text-stone-700">Next automatic retry: {retryTime(onboarding.recovery.next_retry_at)}</p>}
           </div>
-          <Link to={`/ips/${encodeURIComponent(ipId)}#monitoring`} className="shrink-0 text-xs font-semibold text-stone-700 underline">View setup</Link>
+          <Link to="/monitoring/setup" className="shrink-0 text-xs font-semibold text-stone-700 underline">View setup</Link>
         </div>
-        <MonitoringRecoveryDetails sources={onboarding.recovery.sources} />
+        <MonitoringRecoveryDetails sources={onboarding.recovery.sources.filter(item =>
+          sources.some(({ source }) => source.id === item.source_id))} />
       </section>
     );
   }
@@ -66,12 +65,6 @@ export function FirstScanSetupNotice({
     : singleSource
       ? `${sourceLabel(singleSource)} is still being prepared`
       : `${namedSources.length} websites are still being prepared`;
-  const targetHash = singleSource
-    ? `monitoring-source-${singleSource.source.id}`
-    : "monitoring";
-  const actionLabel = singleSource
-    ? `View ${sourceLabel(singleSource)} setup`
-    : "View monitoring setup";
 
   return (
     <section
@@ -98,14 +91,14 @@ export function FirstScanSetupNotice({
         </p>
       </div>
       <Link
-        to={`/ips/${encodeURIComponent(ipId)}#${targetHash}`}
+        to="/monitoring/setup"
         className={`inline-flex shrink-0 items-center gap-1.5 self-start rounded-lg border bg-white px-3 py-2 text-xs font-semibold sm:self-center ${
           needsRetry
             ? "border-rose-200 text-rose-800 hover:border-rose-300 hover:bg-rose-100"
             : "border-amber-200 text-amber-900 hover:border-amber-300 hover:bg-amber-100"
         }`}
       >
-        {actionLabel}
+        View monitoring setup
         <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
       </Link>
     </section>

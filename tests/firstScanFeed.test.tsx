@@ -16,7 +16,7 @@ const { useFirstScanFeed } = await import("../src/features/firstScan/useFirstSca
 const sourceA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const sourceB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const sources = [sourceA, sourceB].map((id, index) => ({ id, tenant_id: "tenant", ip_catalog_id: "ip",
-  domain: `${index}.example`, display_name: index ? "Older market" : "Newer market", recipe: {}, source_type: "domain" }));
+  domain: `${index}.example`, display_name: index ? "Older market" : "Newer market", recipe: {}, source_type: "domain", enabled: true }));
 const rows = Array.from({ length: 1115 }, (_, index) => ({
   candidate_id: `candidate-${index}`, source_id: index < 600 ? sourceA : sourceB,
   candidate_title: index === 1114 ? "Oldest listing" : `Listing ${index}`, page_url: `https://market.example/${index}`,
@@ -55,7 +55,9 @@ async function mount(platforms = sources) {
       }
       if (failNextPage && url.searchParams.has("cursor")) return new Response("Unavailable", { status: 503 });
       const source = url.searchParams.get("source_id"), query = url.searchParams.get("q")?.toLowerCase();
-      const matching = rows.filter(row => (!source || row.source_id === source) && (!query || row.candidate_title?.toLowerCase().includes(query)));
+      const selected = platforms.filter(platform => platform.enabled);
+      const matching = rows.filter(row => selected.some(platform => platform.id === row.source_id)
+        && (!source || row.source_id === source) && (!query || row.candidate_title?.toLowerCase().includes(query)));
       const stage = url.searchParams.get("stage");
       const filtered = matching.filter(row => !stage || stage === "all" || row.stage === stage);
       const start = Number(url.searchParams.get("cursor") ?? "0");
@@ -63,7 +65,7 @@ async function mount(platforms = sources) {
       body = { results: filtered.slice(start, start + limit), total: filtered.length,
         next_cursor: start + limit < filtered.length ? String(start + limit) : null,
         as_of: "2026-09-14T10:00:00.123456Z", filter_totals: count(matching),
-        source_totals: sources.map(source => ({ ...count(rows.filter(row => row.source_id === source.id)),
+        source_totals: selected.map(source => ({ ...count(rows.filter(row => row.source_id === source.id)),
           source_id: source.id, source_domain: source.domain, source_name: source.display_name })) };
     } else if (url.pathname.endsWith("/platforms")) body = { platforms };
     else if (url.pathname.endsWith("/onboarding-status")) body = { status: null };
@@ -92,6 +94,21 @@ test("connected count follows source setup even when cached recipes and old resu
   platforms[0]!.setup_status = "ready";
   await act(async () => { await feed.refresh(); });
   expect(feed.totals.connected).toBe(1);
+});
+
+test("current setup controls website totals, historical rows, and a removed source filter", async () => {
+  const platforms = sources.map(source => ({ ...source }));
+  await mount(platforms);
+  act(() => feed.setSourceFilter(sourceB));
+  await waitFor(() => !feed.refreshing && feed.filteredTotal === 515);
+  platforms[1]!.enabled = false;
+  await act(async () => { await feed.refresh(); });
+  expect(feed.snapshot!.sources.map(source => source.source.id)).toEqual([sourceA]);
+  expect(feed.totals.websites).toBe(1);
+  expect(feed.totals.discovered).toBe(600);
+  await waitFor(() => feed.sourceFilter === "all" && !feed.refreshing && feed.filteredTotal === 600);
+  expect(feed.resultFilterTotals.discovered).toBe(600);
+  expect(feed.visibleResults.every(row => row.source_id === sourceA)).toBe(true);
 });
 
 test("full source totals survive pagination, refresh, and a failed next page", async () => {
