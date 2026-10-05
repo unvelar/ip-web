@@ -263,3 +263,6 @@ dialog form .actions { margin-top:20px; }
 .shared-product-references { margin-top:18px; }
 .shared-product-references h3 { font-size:13px; font-weight:600; margin:0 0 6px; }
 .shared-product-references figcaption { padding:7px 8px; font-size:11px; line-height:1.4; color:#706b64; overflow-wrap:anywhere; }
+
+.monitoring-workspace .catalog-optional { margin: 12px 0; }
+.monitoring-workspace .catalog-optional summary { cursor: pointer; font-size: 13px; font-weight: 550; }

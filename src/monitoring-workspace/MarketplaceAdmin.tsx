@@ -5,7 +5,7 @@ import { DraftError, type AdminCatalog, type AdminMarketplace, type MarketplaceE
 import './workspace.css';
 import { useDraftNavigationGuard } from './useDraftNavigationGuard';
 
-const blank = (): MarketplaceEdit => ({ key: null, expected_revision: 0, name: '', domain: '', logo_key: null, categories: [], markets: [] });
+const blank = (categories: string[] = []): MarketplaceEdit => ({ key: null, expected_revision: 0, name: '', domain: '', logo_key: null, categories, markets: [] });
 const edit = (source: AdminMarketplace): MarketplaceEdit => ({ key: source.key, expected_revision: source.revision, name: source.name, domain: source.domain, logo_key: source.logo_key, categories: source.categories.map(item => item.key), markets: structuredClone(source.markets) });
 
 export default function MarketplaceAdmin({ client, onLeave, embedded = false }: { client: MarketplaceClient; onLeave?: () => void; embedded?: boolean }) {
@@ -18,6 +18,8 @@ export default function MarketplaceAdmin({ client, onLeave, embedded = false }: 
   const [country, setCountry] = useState('');
   const [sector, setSector] = useState('');
   const [form, setForm] = useState<MarketplaceEdit | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [pendingChoice, setPendingChoice] = useState<string | null>(null);
   const [savedForm, setSavedForm] = useState('');
   const [formError, setFormError] = useState('');
   const [conflict, setConflict] = useState(false);
@@ -31,14 +33,25 @@ export default function MarketplaceAdmin({ client, onLeave, embedded = false }: 
   useEffect(() => { if (form && !dialog.current?.open) dialog.current?.showModal(); }, [form]);
   useDraftNavigationGuard(dirty);
   async function refresh() { setError(''); try { const latest = await client.catalog(); setCatalog(latest); setCountry(current => latest.marketplaces.some(source => source.markets.some(market => market.country === current)) ? current : ''); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } }
-  function open(source?: AdminMarketplace) { const value = source ? edit(source) : blank(); setForm(value); setSavedForm(JSON.stringify(value)); setFormError(''); setSectorError(''); setSectorName(''); setConflict(false); setDiscarding(false); setMessage(''); }
+  function open(source?: AdminMarketplace) { const value = source ? edit(source) : blank(catalog?.categories.some(item => item.key === 'general') ? ['general'] : []); setAdding(!source); setPendingChoice(null); setForm(value); setSavedForm(JSON.stringify(value)); setFormError(''); setSectorError(''); setSectorName(''); setConflict(false); setDiscarding(false); setMessage(''); }
+  function chooseMarketplace(key: string) {
+    const source = catalog?.marketplaces.find(item => item.key === key);
+    const value = source ? edit(source) : blank(catalog?.categories.some(item => item.key === 'general') ? ['general'] : []);
+    if (source && !value.categories.length && catalog?.categories.some(item => item.key === 'general')) value.categories = ['general'];
+    setForm(value); setSavedForm(JSON.stringify(value)); setFormError(''); setConflict(false);
+    setSectorName(''); setSectorError(''); setDiscarding(false); setPendingChoice(null);
+  }
+  function requestMarketplace(key: string) {
+    if (dirty) { setPendingChoice(key); setDiscarding(true); }
+    else chooseMarketplace(key);
+  }
   function close() { dialog.current?.close(); setForm(null); }
   function requestClose() { if (busy) return; if (dirty) setDiscarding(true); else close(); }
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!form) return;
     setBusy(true); setFormError('');
     try {
-      await client.saveMarketplace(form);
+      await client.saveMarketplace({ ...form, markets: form.markets.map(market => ({ ...market, evidence_url: market.evidence_url || `https://${market.storefront_domain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')}/` })) });
       // The persisted mutation is complete even if the subsequent list refresh fails.
       close(); setMessage(`${form.name} saved. Available in the selected countries and sectors.`);
       await refresh();
@@ -63,6 +76,8 @@ export default function MarketplaceAdmin({ client, onLeave, embedded = false }: 
   function changeMarket(index: number, change: Partial<MarketplaceEdit['markets'][number]>) {
     if (form) setForm({ ...form, markets: form.markets.map((market, i) => i === index ? { ...market, ...change } : market) });
   }
+  const selectedMarketplace = adding && form?.key ? catalog?.marketplaces.find(item => item.key === form.key) : undefined;
+  const existingCountryCodes = new Set(selectedMarketplace?.markets.map(market => market.country));
   const assignedCountryCodes = new Set(catalog?.marketplaces.flatMap(source => source.markets.map(market => market.country)));
   const filterCountries = catalog?.countries.filter(item => assignedCountryCodes.has(item.code)) ?? [];
   const matches = catalog?.marketplaces.filter(source => `${source.name} ${source.domain}`.toLowerCase().includes(query.toLowerCase()) && (!country || source.markets.some(market => market.country === country)) && (!sector || source.categories.some(category => category.key === sector))) ?? [];
@@ -83,18 +98,24 @@ export default function MarketplaceAdmin({ client, onLeave, embedded = false }: 
     </div>
     <dialog className="catalog-dialog" ref={dialog} aria-labelledby="marketplace-heading" onCancel={event => { event.preventDefault(); requestClose(); }}>
       {form && catalog && <form onSubmit={save}>
-        <div className="dialog-header"><div><h2 id="marketplace-heading">{form.key ? 'Edit marketplace' : 'Add marketplace'}</h2><p>Available to all tenants in this catalog.</p></div><button type="button" className="secondary" disabled={busy} onClick={requestClose}>Close</button></div>
+        <div className="dialog-header"><div><h2 id="marketplace-heading">{adding ? 'Add marketplace' : 'Edit marketplace'}</h2><p>{adding ? 'Create a marketplace or add a country to an existing one.' : 'Available to all tenants in this catalog.'}</p></div><button type="button" className="secondary" disabled={busy} onClick={requestClose}>Close</button></div>
         {formError && <div className="error-box" role="alert">{formError}{conflict && <p>Your edits have been kept. <button type="button" className="text-button" disabled={busy} onClick={reloadMarketplace}>Discard edits and load latest</button></p>}</div>}
         <fieldset disabled={busy}>
+          {adding && <><label htmlFor="marketplace-choice">Marketplace</label><select id="marketplace-choice" autoFocus value={form.key ?? ''} onChange={event => requestMarketplace(event.target.value)}><option value="">Create a new marketplace</option>{catalog.marketplaces.map(source => <option key={source.key} value={source.key}>{source.name} ({source.domain})</option>)}</select></>}
+          {(!adding || !form.key) && <>
           <div className="catalog-form-grid"><div><label htmlFor="marketplace-name">Marketplace name</label><input id="marketplace-name" autoFocus required maxLength={160} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></div><div><label htmlFor="marketplace-domain">Main website</label><input id="marketplace-domain" required readOnly={!!form.key} placeholder="marketplace.com" value={form.domain} onChange={event => setForm({ ...form, domain: event.target.value })} /></div></div>
-          <label htmlFor="marketplace-logo">Logo</label><select id="marketplace-logo" value={form.logo_key ?? ''} onChange={event => setForm({ ...form, logo_key: event.target.value || null })}><option value="">Automatic initials</option>{['amazon', 'ebay', 'etsy', 'facebook', 'google', 'shopify'].map(key => <option key={key} value={key}>{key === 'ebay' ? 'eBay' : key[0].toUpperCase() + key.slice(1)}</option>)}</select>
+          </>}
+          {selectedMarketplace && <p className="field-note">{selectedMarketplace.name} · {selectedMarketplace.domain}<br />Existing countries: {selectedMarketplace.markets.length ? selectedMarketplace.markets.map(market => countryLabel(market.country)).join(', ') : 'None yet'}</p>}
           <div className="catalog-section-heading"><h3>Countries & storefronts</h3><select aria-label="Add marketplace country" value="" onChange={event => { const code = event.target.value; if (!code) return; const domain = form.domain.trim().replace(/^https?:\/\//, '').replace(/\/$/, ''); setForm({ ...form, markets: [...form.markets, { country: code, storefront_domain: domain, evidence_url: domain ? `https://${domain}/` : '' }] }); }}><option value="">+ Add country</option>{catalog.countries.filter(item => !form.markets.some(market => market.country === item.code)).map(item => <option key={item.code} value={item.code}>{flagEmoji(item.code)} {item.name}</option>)}</select></div>
           {!form.markets.length && <p className="field-note">Add the countries where this marketplace should appear.</p>}
-          {form.markets.map((market, index) => <div className="catalog-market" key={market.country}><div className="catalog-market-heading"><strong>{flagEmoji(market.country)} {catalog.countries.find(item => item.code === market.country)?.name ?? countryLabel(market.country)}</strong><button type="button" className="text-button" aria-label={`Remove ${market.country}`} onClick={() => setForm({ ...form, markets: form.markets.filter((_, i) => i !== index) })}>Remove</button></div><div className="catalog-form-grid"><div><label htmlFor={`storefront-${market.country}`}>Storefront domain</label><input id={`storefront-${market.country}`} required placeholder="marketplace.it" value={market.storefront_domain} onChange={event => changeMarket(index, { storefront_domain: event.target.value })} /></div><div><label htmlFor={`reference-${market.country}`}>Reference URL</label><input id={`reference-${market.country}`} required type="url" placeholder="https://marketplace.it/" value={market.evidence_url} onChange={event => changeMarket(index, { evidence_url: event.target.value })} /></div></div></div>)}
+          {form.markets.map((market, index) => existingCountryCodes.has(market.country) ? null : <div className="catalog-market" key={market.country}><div className="catalog-market-heading"><strong>{flagEmoji(market.country)} {catalog.countries.find(item => item.code === market.country)?.name ?? countryLabel(market.country)}</strong><button type="button" className="text-button" aria-label={`Remove ${market.country}`} onClick={() => setForm({ ...form, markets: form.markets.filter((_, i) => i !== index) })}>Remove</button></div><div className="catalog-form-grid"><div><label htmlFor={`storefront-${market.country}`}>Storefront domain</label><input id={`storefront-${market.country}`} required placeholder="marketplace.it" value={market.storefront_domain} onChange={event => { const value = event.target.value; const domain = value.trim().replace(/^https?:\/\//, '').replace(/\/$/, ''); changeMarket(index, { storefront_domain: value, ...(!market.evidence_url || market.evidence_url === `https://${market.storefront_domain.trim()}/` ? { evidence_url: domain ? `https://${domain}/` : '' } : {}) }); }} /></div><details className="catalog-optional"><summary>Reference URL (optional)</summary><label htmlFor={`reference-${market.country}`}>Reference URL</label><input id={`reference-${market.country}`} type="url" placeholder="https://marketplace.it/" value={market.evidence_url} onChange={event => changeMarket(index, { evidence_url: event.target.value })} /></details></div></div>)}
+          <details className="catalog-optional"><summary>Logo & sectors</summary>
+          <label htmlFor="marketplace-logo">Logo</label><select id="marketplace-logo" value={form.logo_key ?? ''} onChange={event => setForm({ ...form, logo_key: event.target.value || null })}><option value="">Automatic initials</option>{['amazon', 'ebay', 'etsy', 'facebook', 'google', 'shopify'].map(key => <option key={key} value={key}>{key === 'ebay' ? 'eBay' : key[0].toUpperCase() + key.slice(1)}</option>)}</select>
           <div className="catalog-section-heading"><h3>Sectors</h3><span className="field-note">Select all that apply</span></div><div className="catalog-sector-choices">{catalog.categories.map(category => <label key={category.key}><input type="checkbox" checked={form.categories.includes(category.key)} onChange={() => setForm({ ...form, categories: form.categories.includes(category.key) ? form.categories.filter(key => key !== category.key) : [...form.categories, category.key] })} />{category.name}</label>)}</div>
           <div className="catalog-new-sector"><input aria-label="New sector name" placeholder="New sector…" maxLength={80} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addSector(); } }} value={sectorName} onChange={event => setSectorName(event.target.value)} /><button type="button" className="secondary" disabled={!sectorName.trim()} onClick={addSector}>Add sector</button></div><p className="field-note">New sectors are saved to the shared catalog immediately.</p>{sectorError && <p className="error-box" role="alert">{sectorError}</p>}
+          </details>
         </fieldset>
-        {discarding ? <div className="catalog-discard"><p>Discard unsaved marketplace changes?</p><div className="actions"><button type="button" className="secondary" onClick={() => setDiscarding(false)}>Keep editing</button><button type="button" className="primary" onClick={close}>Discard changes</button></div></div> : <div className="actions"><button type="button" className="secondary" disabled={busy} onClick={requestClose}>Cancel</button><button type="submit" className="primary" disabled={!dirty || busy || conflict}>{busy ? 'Saving…' : 'Save marketplace'}</button></div>}
+        {discarding ? <div className="catalog-discard"><p>Discard unsaved marketplace changes?</p><div className="actions"><button type="button" className="secondary" onClick={() => { setDiscarding(false); setPendingChoice(null); }}>Keep editing</button><button type="button" className="primary" onClick={() => { if (pendingChoice !== null) chooseMarketplace(pendingChoice); else close(); }}>Discard changes</button></div></div> : <div className="actions"><button type="button" className="secondary" disabled={busy} onClick={requestClose}>Cancel</button><button type="submit" className="primary" disabled={!dirty || busy || conflict || !form.markets.length || (adding && !!form.key && !form.markets.some(market => !existingCountryCodes.has(market.country)))}>{busy ? 'Saving…' : adding && form.key ? (form.markets.filter(market => !existingCountryCodes.has(market.country)).length === 1 ? 'Add country' : 'Add countries') : 'Save marketplace'}</button></div>}
       </form>}
     </dialog>
   </div>;
