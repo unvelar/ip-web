@@ -63,4 +63,9 @@ test('switching marketplace choices requires discarding unsaved storefront chang
   await act(async()=>button('Discard changes').click());
   expect(document.querySelector('#marketplace-name')).toBeNull();
   expect((document.querySelector('#marketplace-choice') as HTMLSelectElement).value).toBe('domain:amazon.com');
+  await select('[aria-label="Add marketplace country"]','DE');
+  await select('#marketplace-choice','');
+  await act(async()=>button('Close').click());
+  await act(async()=>button('Discard changes').click());
+  expect(document.querySelector('dialog')!.hasAttribute('open')).toBe(false);
 });

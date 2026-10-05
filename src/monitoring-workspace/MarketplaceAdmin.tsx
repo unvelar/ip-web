@@ -46,7 +46,7 @@ export default function MarketplaceAdmin({ client, onLeave, embedded = false }: 
     else chooseMarketplace(key);
   }
   function close() { dialog.current?.close(); setForm(null); }
-  function requestClose() { if (busy) return; if (dirty) setDiscarding(true); else close(); }
+  function requestClose() { if (busy) return; setPendingChoice(null); if (dirty) setDiscarding(true); else close(); }
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!form) return;
     setBusy(true); setFormError('');
