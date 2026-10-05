@@ -101,6 +101,7 @@ export function FirstScanResults({
             name={source.source.display_name?.trim() || readableDomain(source.source.domain)}
             count={source.discovered}
             state={source.state}
+            enabled={source.source.enabled}
             recovery={recovery.find(item => item.source_id === source.source.id)}
           />
         ))}
@@ -149,7 +150,8 @@ export function FirstScanResults({
         </table>
       </div>
 
-      {results.length === 0 && <ResultEmptyState loading={refreshing} hasAnyResults={allResultCount > 0} sources={sources} />}
+      {results.length === 0 && <ResultEmptyState loading={refreshing} hasAnyResults={allResultCount > 0}
+        sources={sourceFilter === "all" ? sources : sources.filter(source => source.source.id === sourceFilter)} />}
       <div className="flex items-center justify-between gap-3 border-t border-stone-200 px-4 py-3">
         <p className="text-xs tabular-nums text-stone-500" aria-live="polite">
           {refreshing && results.length === 0 ? "Loading listings…" : `Showing ${results.length.toLocaleString()} of ${filteredTotal.toLocaleString()} listings`}
@@ -283,15 +285,15 @@ function MetadataValue({ value, icon, pending, strong = false }: { value: string
   );
 }
 
-function SourceFilterButton({ active, onClick, name, count, state, recovery }: { active: boolean; onClick: () => void; name: string; count: number; state?: FirstScanSourceState; recovery?: MonitoringSourceRecovery }) {
-  const automaticRetry = recovery?.state === "scheduled" || recovery?.state === "due";
-  const paused = recovery?.state === "off";
+function SourceFilterButton({ active, onClick, name, count, state, recovery, enabled }: { active: boolean; onClick: () => void; name: string; count: number; state?: FirstScanSourceState; recovery?: MonitoringSourceRecovery; enabled?: boolean }) {
+  const paused = enabled === false || state === "paused" || recovery?.state === "off";
+  const automaticRetry = !paused && (recovery?.state === "scheduled" || recovery?.state === "due");
   const needsRetry = state === "retry_needed" && !automaticRetry && !paused;
-  const hasSourceError = state === "failed" || needsRetry;
-  const setupProcessing = state === "setup_processing" || automaticRetry;
+  const hasSourceError = !paused && (state === "failed" || needsRetry);
+  const setupProcessing = !paused && (state === "setup_processing" || automaticRetry);
   return (
     <button type="button" onClick={onClick} className={`flex shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${active ? "border-stone-300 bg-stone-900 text-white" : needsRetry ? "border-rose-200 bg-rose-50 text-rose-800 hover:border-rose-300" : setupProcessing ? "border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"}`}>
-      {state && <span className={`h-1.5 w-1.5 rounded-full ${hasSourceError ? "bg-red-500" : setupProcessing ? "bg-amber-500" : state === "ready" ? "bg-emerald-500" : "bg-blue-500"}`} />}
+      {state && <span className={`h-1.5 w-1.5 rounded-full ${paused ? "bg-stone-400" : hasSourceError ? "bg-red-500" : setupProcessing ? "bg-amber-500" : state === "ready" ? "bg-emerald-500" : "bg-blue-500"}`} />}
       <span className="font-semibold">{name}</span>
       <span className={`rounded px-1.5 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : needsRetry ? "bg-rose-100 font-semibold text-rose-700" : setupProcessing ? "bg-amber-100 font-semibold text-amber-800" : "bg-stone-100 tabular-nums text-stone-500"}`}>
         {paused ? "Paused" : automaticRetry ? recovery.state === "due" ? "Retry due" : "Retry scheduled" : needsRetry ? "Retry needed" : setupProcessing ? "Preparing" : count}
@@ -310,13 +312,16 @@ function ResultFilterButton({ label, count, value, active, onChange }: { label: 
 }
 
 function ResultEmptyState({ loading, hasAnyResults, sources }: { loading: boolean; hasAnyResults: boolean; sources: FirstScanSourceProgress[] }) {
-  const activeSource = sources.find((source) => source.state !== "ready" && source.state !== "failed");
+  const paused = sources.length > 0 && sources.every(source => source.source.enabled === false);
+  const activeSource = sources.find((source) => source.source.enabled !== false && source.state !== "ready" && source.state !== "failed");
   return (
     <div className="flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center">
-      {hasAnyResults && !loading ? <Search className="h-5 w-5 text-stone-300" /> : <LoaderCircle className="h-5 w-5 animate-spin text-blue-500" />}
-      <p className="mt-3 text-sm font-semibold text-stone-800">{loading ? "Loading listings…" : hasAnyResults ? "No rows match these filters" : "Waiting for the first listing"}</p>
+      {paused && !loading ? <Pause className="h-5 w-5 text-stone-400" /> : hasAnyResults && !loading ? <Search className="h-5 w-5 text-stone-300" /> : <LoaderCircle className="h-5 w-5 animate-spin text-blue-500" />}
+      <p className="mt-3 text-sm font-semibold text-stone-800">{loading ? "Loading listings…" : paused ? "Website monitoring is paused" : hasAnyResults ? "No rows match these filters" : "Waiting for the first listing"}</p>
       <p className="mt-1 max-w-md text-xs leading-5 text-stone-500">
-        {loading ? "Updating results for the selected filters." : hasAnyResults
+        {loading ? "Updating results for the selected filters." : paused
+          ? "Enable this website in monitoring setup to resume searches. Saved listings remain available."
+          : hasAnyResults
           ? "Clear the search or select another pipeline stage."
           : activeSource
             ? `${SOURCE_STATE_COPY[activeSource.state].label}: ${activeSource.source.display_name || readableDomain(activeSource.source.domain)}. Rows appear here as soon as the scraper saves a result.`

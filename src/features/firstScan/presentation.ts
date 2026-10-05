@@ -1,5 +1,5 @@
 import type { IpFirstScanResult, IpFirstScanResultStage } from "../../api";
-import type { FirstScanSourceState } from "../../lib/firstScanProgress";
+import type { FirstScanSourceProgress, FirstScanSourceState } from "../../lib/firstScanProgress";
 
 export const SOURCE_STATE_COPY: Record<FirstScanSourceState, { label: string; detail: string }> = {
   connecting: { label: "Connecting", detail: "Preparing this website" },
@@ -9,8 +9,18 @@ export const SOURCE_STATE_COPY: Record<FirstScanSourceState, { label: string; de
   preparing: { label: "Pending", detail: "Waiting for listing checks to finish" },
   ready: { label: "Ready", detail: "Latest results processed" },
   retry_needed: { label: "Retry needed", detail: "Website setup could not finish" },
+  paused: { label: "Paused", detail: "Searches are disabled for this website" },
   failed: { label: "Needs attention", detail: "A real job error was reported" },
 };
+
+export function sourceConnectionDetail(sources: FirstScanSourceProgress[], monitoringEnabled = true): string {
+  const active = sources.filter(({ source }) => monitoringEnabled && source.enabled !== false);
+  const limited = active.filter(({ state }) => state === "retry_needed").length;
+  const preparing = active.filter(({ state }) => state === "setup_processing" || state === "connecting").length;
+  const paused = sources.length - active.length;
+  return [limited && `${limited} limited`, preparing && `${preparing} preparing`, paused && `${paused} paused`]
+    .filter(Boolean).join(" · ") || "connected";
+}
 
 export const RESULT_STATE_COPY: Record<IpFirstScanResultStage, { label: string; detail: string }> = {
   discovered: { label: "Found", detail: "Waiting for image matching" },

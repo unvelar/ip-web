@@ -16,7 +16,7 @@ import {
   SummaryMetric,
 } from "../features/firstScan/FirstScanResults";
 import { FirstScanSetupNotice } from "../features/firstScan/FirstScanSetupNotice";
-import { formatUpdateTime } from "../features/firstScan/presentation";
+import { formatUpdateTime, sourceConnectionDetail } from "../features/firstScan/presentation";
 import { useFirstScanFeed } from "../features/firstScan/useFirstScanFeed";
 
 export default function MonitoringFirstScan() {
@@ -39,11 +39,7 @@ export default function MonitoringFirstScan() {
   }
 
   const { snapshot, totals, ipId } = feed;
-  const retrySourceCount = snapshot.sources.filter((source) => source.state === "retry_needed").length;
-  const showRetryWarning = retrySourceCount > 0;
-  const preparingSourceCount = snapshot.sources.filter(
-    (source) => source.state === "setup_processing" || source.state === "connecting",
-  ).length;
+  const connectionDetail = sourceConnectionDetail(snapshot.sources, snapshot.onboarding?.recovery?.enabled);
   return (
     <div className="mx-auto max-w-[1500px] px-4 py-4 sm:px-6">
       <header className="flex flex-col gap-3 border-b border-stone-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
@@ -87,13 +83,9 @@ export default function MonitoringFirstScan() {
         <SummaryMetric
           label="Websites"
           value={`${totals.connected}/${totals.websites}`}
-          detail={showRetryWarning
-            ? snapshot.onboarding?.recovery?.enabled === false ? `${retrySourceCount} paused` : `${retrySourceCount} limited`
-            : preparingSourceCount > 0
-              ? `${preparingSourceCount} preparing`
-              : "connected"}
+          detail={connectionDetail}
           icon={<Globe2 className="h-4 w-4" />}
-          warning={showRetryWarning || preparingSourceCount > 0}
+          warning={connectionDetail !== "connected"}
         />
         <SummaryMetric label="Listings found" value={totals.discovered} detail="stable rows" icon={<Search className="h-4 w-4" />} />
         <SummaryMetric label="Pending" value={totals.processing} detail="waiting or processing" icon={<LoaderCircle className="h-4 w-4" />} />

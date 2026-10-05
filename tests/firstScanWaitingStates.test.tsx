@@ -2,9 +2,11 @@ import { expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { MemoryRouter } from "react-router-dom";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { IpFirstScanResult } from "../src/api";
+import type { IpFirstScanResult, MonitoredDomain } from "../src/api";
 import { FirstScanResults } from "../src/features/firstScan/FirstScanResults";
 import { summarizeFirstScanResults } from "../src/features/firstScan/resultTotals";
+import { summarizeFirstScanSource } from "../src/lib/firstScanProgress";
+import { emptyFindingsPage } from "../src/features/firstScan/adapters";
 
 function result(patch: Partial<IpFirstScanResult>): IpFirstScanResult {
   return {
@@ -61,6 +63,35 @@ test("cancelled discoveries remain visible without promising a matching check", 
   expect(row.textContent).not.toContain("Waiting for image matching");
   expect(row.querySelectorAll(".animate-spin")).toHaveLength(0);
   expect(summarizeFirstScanResults([cancelled]).processing).toBe(0);
+});
+
+test("paused website filters override stale retry schedules and retain listing totals", () => {
+  const source: MonitoredDomain = {
+    id: "source", tenant_id: "tenant", domain: "market.example", source_type: "domain",
+    display_name: "Market", source_config: {}, ip_catalog_id: "ip", recipe: null,
+    recipe_updated_at: null, last_run_at: null, enabled: false, zero_yield_streak: 0,
+    country: null, created_at: "2026-09-20T11:00:00Z", setup_status: "retry_needed",
+  };
+  const counts = summarizeFirstScanResults([]);
+  for (const discovered of [0, 30]) {
+    const progress = summarizeFirstScanSource(source, [], emptyFindingsPage(), [], true, { ...counts, discovered });
+    const html = renderToStaticMarkup(<MemoryRouter><FirstScanResults
+      ipId="ip" sources={[progress]} results={[]} allResultCount={discovered}
+      recovery={[{ source_id: "source", source_label: "Market", state: "scheduled", next_retry_at: "2026-10-05T19:00:00Z", failure_reason: "capture_unavailable" }]}
+      totals={{ ...counts, websites: 1, connected: 0 }} resultFilterTotals={counts}
+      filteredTotal={0} hasMore={false} loadingMore={false} refreshing={false}
+      query="" resultFilter="all" sourceFilter="all" onLoadMore={() => {}}
+      onQueryChange={() => {}} onResultFilterChange={() => {}} onSourceFilterChange={() => {}}
+    /></MemoryRouter>);
+    const window = new Window(); window.document.body.innerHTML = html;
+    const button = [...window.document.querySelectorAll("button")].find(button => button.textContent?.includes("Market"))!;
+    expect(button.textContent).toContain("Paused");
+    expect(button.textContent).not.toContain("Retry");
+    expect(button.querySelector(".bg-red-500")).toBeNull();
+    expect(window.document.body.textContent).toContain("Website monitoring is paused");
+    expect(window.document.querySelectorAll(".animate-spin")).toHaveLength(0);
+    expect(progress.discovered).toBe(discovered);
+  }
 });
 
 test("a later page rejection does not erase confirmed match evidence", () => {

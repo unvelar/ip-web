@@ -14,6 +14,7 @@ export type FirstScanSourceState =
   | "preparing"
   | "ready"
   | "retry_needed"
+  | "paused"
   | "failed"
   | "waiting";
 
@@ -48,7 +49,7 @@ export function isFirstScanSourceConnected({ source, state }: FirstScanSourcePro
   // Setup/retry state may describe another keyword on an already connected site.
   // Only the server can validate the saved recipe; old responses keep their
   // existing conservative count until the new connection field is available.
-  return source.connected ?? !["connecting", "setup_processing", "retry_needed"].includes(state);
+  return source.connected ?? !["connecting", "setup_processing", "retry_needed", "paused"].includes(state);
 }
 
 export function isActiveMonitoringRun(status: string): boolean {
@@ -147,8 +148,8 @@ export function summarizeFirstScanSource(
       source.api_route?.execution_route === "marketplace_api"
       && source.api_route.configured
     );
-  // Saved results from an inactive source do not require a new search connection.
-  const sourceSetupApplies = source.enabled !== false || (runs.length === 0 && discovered === 0);
+  // Paused sources cannot schedule setup, even before their first saved result.
+  const sourceSetupApplies = source.enabled !== false;
 
   let state: FirstScanSourceState;
   if (sourceSetupApplies && source.setup_status === "retry_needed") {
@@ -168,7 +169,7 @@ export function summarizeFirstScanSource(
   } else if (runs.length > 0) {
     state = "ready";
   } else {
-    state = "waiting";
+    state = source.enabled === false ? "paused" : "waiting";
   }
 
   return {

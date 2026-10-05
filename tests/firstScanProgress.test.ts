@@ -12,6 +12,7 @@ import {
   latestRunsByKeyword,
   summarizeFirstScanSource,
 } from "../src/lib/firstScanProgress";
+import { sourceConnectionDetail } from "../src/features/firstScan/presentation";
 
 const source = {
   id: "source-1",
@@ -118,6 +119,29 @@ function result(overrides: Partial<IpFirstScanResult> = {}): IpFirstScanResult {
 }
 
 describe("first scan progress", () => {
+  test("an explicitly paused source with no history cannot request unused setup or retries", () => {
+    for (const setup_status of ["ready", "processing", "retry_needed"] as const) {
+      const progress = summarizeFirstScanSource({
+        ...source, enabled: false, recipe: null, connected: false, setup_status,
+      }, [], findingsPage({}), [], true, {
+        discovered: 0, processing: 0, ready: 0, filtered: 0, failed: 0, qualified: 0,
+      });
+      expect(progress.state).toBe("paused");
+      expect(progress.error).toBeNull();
+      expect(isFirstScanSourceConnected(progress)).toBe(false);
+    }
+  });
+
+  test("source counts distinguish paused sources from limited or preparing sources", () => {
+    const progress = (enabled: boolean, setup_status: MonitoredDomain["setup_status"]) =>
+      summarizeFirstScanSource({ ...source, enabled, recipe: null, setup_status }, [], findingsPage({}));
+    const sources = [progress(true, "retry_needed"), progress(false, "retry_needed"), progress(false, "processing")];
+    expect(sourceConnectionDetail(sources)).toBe("1 limited · 2 paused");
+    expect(sourceConnectionDetail(sources, false)).toBe("3 paused");
+    expect(sourceConnectionDetail([progress(true, "processing")])).toBe("1 preparing");
+    expect(sourceConnectionDetail([summarizeFirstScanSource(source, [run({})], findingsPage({}))])).toBe("connected");
+  });
+
   test("inactive source history reports its listing checks instead of requesting unused setup", () => {
     const inactive = { ...source, enabled: false, recipe: null, connected: false, setup_status: "retry_needed" as const };
     const finished = summarizeFirstScanSource(inactive, [run({})], findingsPage({}), [], true, {
