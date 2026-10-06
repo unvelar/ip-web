@@ -6,7 +6,8 @@ import { retryTime } from "./recoveryPresentation";
 
 const phaseLabel = { capture: "Open website and find search", infer: "Prepare search instructions", validate: "Verify search results" };
 const stateLabel = (state: string) => state === "succeeded" ? "Succeeded"
-  : state === "failed" || state === "no_recipe" ? "Failed" : state === "cancelled" ? "Cancelled" : "In progress";
+  : state === "failed" || state === "no_recipe" ? "Failed" : state === "superseded" ? "Replaced"
+    : state === "cancelled" ? "Cancelled" : "In progress";
 const workerAttemptLabel: Record<string, string> = { completed: "Completed", retry: "Failed, retried",
   failed: "Failed", deferred: "Deferred", resource_incompatible: "Worker unavailable", running: "Running",
   abandoned: "Interrupted", cancelled: "Cancelled" };
@@ -75,6 +76,7 @@ function AttemptDialog({ ipId, sourceId, onClose }: { ipId: string; sourceId: st
 
 function AttemptEvidence({ attempt, isLatest }: { attempt: SourceSetupAttempt; isLatest: boolean }) {
   const failed = ["failed", "no_recipe"].includes(attempt.state);
+  const inactive = ["superseded", "cancelled"].includes(attempt.state);
   const step = attempt.steps.find(item => item.status === "failed") ?? attempt.steps.at(-1);
   const observed = attempt.events.find(event => event.diagnostics?.readiness?.panel);
   const panel = observed?.diagnostics?.readiness?.panel;
@@ -82,11 +84,11 @@ function AttemptEvidence({ attempt, isLatest }: { attempt: SourceSetupAttempt; i
   const pageUrl = observed?.url ?? page?.diagnostics?.final_url ?? attempt.events.find(event => event.url)?.url;
   const captures = attempt.captures.filter(capture => capture.image_url);
   return <div className="min-w-0 space-y-5 p-5">
-    <section className={`rounded-xl border p-4 ${failed ? "border-rose-200 bg-rose-50" : attempt.state === "succeeded" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-      <div className="flex items-center gap-2 font-bold text-sm">{failed ? <AlertCircle className="h-4 w-4 text-rose-700" /> : <CheckCircle2 className="h-4 w-4" />}
-        {failed ? "Search setup failed" : attempt.state === "succeeded" ? "Search setup succeeded" : "Search setup is in progress"}</div>
-      <p className="mt-2 text-xs leading-5 text-stone-700">{failed ? failureDetail(attempt.reason) : attempt.state === "succeeded" ? "The search was verified and monitoring can use it." : "The browser is preparing and checking this website's search."}</p>
-      {attempt.retries_stopped && <p className="mt-2 text-xs font-semibold text-rose-800">Automatic retries stopped after three consecutive failures at the same step.</p>}
+    <section className={`rounded-xl border p-4 ${failed ? "border-rose-200 bg-rose-50" : inactive ? "border-stone-200 bg-stone-100" : attempt.state === "succeeded" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+      <div className="flex items-center gap-2 font-bold text-sm">{failed ? <AlertCircle className="h-4 w-4 text-rose-700" /> : inactive ? <X className="h-4 w-4 text-stone-500" /> : <CheckCircle2 className="h-4 w-4" />}
+        {failed ? "Search setup failed" : attempt.state === "superseded" ? "Search setup replaced" : inactive ? "Search setup cancelled" : attempt.state === "succeeded" ? "Search setup succeeded" : "Search setup is in progress"}</div>
+      <p className="mt-2 text-xs leading-5 text-stone-700">{failed ? failureDetail(attempt.reason) : attempt.state === "superseded" ? "This attempt was replaced by a newer setup. Select the latest attempt to see its outcome." : inactive ? "This setup attempt was cancelled." : attempt.state === "succeeded" ? "The search was verified and monitoring can use it." : "The browser is preparing and checking this website's search."}</p>
+      {attempt.retries_stopped && <p className="mt-2 text-xs font-semibold text-rose-800">Automatic retries stopped after three consecutive failures with the same cause.</p>}
       {isLatest && !attempt.retries_stopped && attempt.next_retry_at && <p className="mt-2 text-xs font-semibold">Next retry: {retryTime(attempt.next_retry_at)}</p>}
     </section>
     <dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-xs">
