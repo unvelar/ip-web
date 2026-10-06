@@ -46,7 +46,7 @@ describe("FirstScanSetupNotice", () => {
       progress: { monitoring_sources: { source_statuses: [{ source_id: "active-market", status: "ready" }] } },
     } as IpOnboardingStatus;
     const html = renderToStaticMarkup(createElement(MemoryRouter, null,
-      createElement(FirstScanSetupNotice, { onboarding: status, sources })));
+      createElement(FirstScanSetupNotice, { ipId: "ip", onboarding: status, sources })));
     expect(html).toBe("");
   });
 
@@ -57,11 +57,11 @@ describe("FirstScanSetupNotice", () => {
       sources: [{ source_id: "vinted", label: "Vinted", state: "scheduled" as const, next_retry_at: "2026-09-26T12:00:00Z", reason: null }],
     };
     const render = (status: IpOnboardingStatus) => renderToStaticMarkup(createElement(MemoryRouter, null,
-      createElement(FirstScanSetupNotice, { onboarding: status, sources })));
+      createElement(FirstScanSetupNotice, { ipId: "ip", onboarding: status, sources })));
     const html = render({ ...onboarding, state: "delayed", title: "Monitoring limited, retry scheduled",
       message: "Automatic retries are scheduled and existing results remain available.", recovery });
     expect(html).toContain("Next automatic retry:");
-    expect(html).toContain("Website retry details (1)");
+    expect(html).toContain("Website setup details (1)");
     expect(html).not.toContain("needs a system retry");
     const paused = render({ ...onboarding, state: "paused", title: "Monitoring is off",
       message: "Automatic scans and retries are off.", recovery: {
@@ -78,6 +78,7 @@ describe("FirstScanSetupNotice", () => {
         MemoryRouter,
         null,
         createElement(FirstScanSetupNotice, {
+          ipId: "ip",
           onboarding,
           sources,
         }),
@@ -124,6 +125,7 @@ describe("FirstScanSetupNotice", () => {
         MemoryRouter,
         null,
         createElement(FirstScanSetupNotice, {
+          ipId: "ip",
           onboarding: processingOnboarding,
           sources: processingSources,
         }),
