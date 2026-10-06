@@ -4,9 +4,10 @@ import type { Brand } from './contracts';
 
 type Authorization = { id: string; scope: 'tenant' | 'brand' | 'legacy_ip'; brand_id: string | null; domain: string; seller_name: string | null; seller_url: string | null };
 const endpoint = '/api/monitoring-workspace/seller-authorizations';
-export default function AuthorizedSellers({ brands, tenantName }: { brands: Brand[]; tenantName: string }) {
+export default function AuthorizedSellers({ brands, tenantName, scopeId, onScopeChange }: { brands: Brand[]; tenantName: string; scopeId?: string; onScopeChange?: (scope: string) => void }) {
   const [rules, setRules] = useState<Authorization[]>([]);
-  const [scope, setScope] = useState(brands[0]?.id ?? 'tenant');
+  const [localScope, setLocalScope] = useState(brands[0]?.id ?? 'tenant');
+  const scope = scopeId ?? localScope;
   const [domain, setDomain] = useState('');
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
@@ -35,10 +36,10 @@ export default function AuthorizedSellers({ brands, tenantName }: { brands: Bran
     catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
   }
   const visible = rules.filter(rule => scope === 'tenant' || rule.scope === 'tenant' || rule.brand_id === scope);
-  return <section className="panel authorized-sellers" aria-label="Authorized sellers">
-    <h2>Authorized sellers</h2><p>Manage sellers you trust to sell your brands. Matching listings are automatically dismissed.</p>
+  return <section className="panel authorized-sellers" aria-label="Authorized resellers">
+    <h2>Authorized resellers</h2><p>Manage sellers you trust to sell your brands. Matching listings are automatically dismissed.</p>
     <label htmlFor="authorization-scope">Authorization scope</label>
-    <select id="authorization-scope" value={scope} onChange={event => setScope(event.target.value)}>
+    <select id="authorization-scope" value={scope} onChange={event => (onScopeChange ?? setLocalScope)(event.target.value)}>
       <option value="tenant">Entire tenant · {tenantName}</option>{brands.map(brand => <option key={brand.id} value={brand.id}>Brand · {brand.name}</option>)}
     </select>
     <p className="field-note">{scope === 'tenant' ? 'Tenant-wide authorization covers every current and future brand and product.' : 'Brand authorization covers every current and future product in this brand. Tenant-wide rules also apply.'}</p>

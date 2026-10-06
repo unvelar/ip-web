@@ -182,7 +182,8 @@ dialog form .actions { margin-top:20px; }
   .scope-navigator .scope-state { flex-shrink:0; margin-left:auto; border-radius:999px; padding:3px 6px; line-height:1; }
   .scope-state.is-on { background:#e5eee5; color:#35613c; }
   .scope-state.is-off { background:#ebe7e1; color:#766f66; }
-  .scope-navigator .scope-tenant { margin-bottom:16px; }
+  .scope-navigator .scope-tenant { margin-bottom:4px; }
+  .scope-navigator .scope-tenant-resellers { margin-bottom:16px; padding-left:32px; }
   .scope-hierarchy-label { font-size:10px; color:#8a8278; margin:4px 8px 8px; }
   .scope-brand-row { display:flex; align-items:center; }
   .scope-navigator .scope-expand { width:24px; flex-shrink:0; padding:4px; justify-content:center; }
@@ -267,9 +268,6 @@ dialog form .actions { margin-top:20px; }
 .monitoring-workspace .catalog-optional { margin: 12px 0; }
 .monitoring-workspace .catalog-optional summary { cursor: pointer; font-size: 13px; font-weight: 550; }
 
-.monitoring-settings-tabs { display:flex; gap:24px; border-bottom:1px solid #ddd6cc; margin-bottom:24px; }
-.monitoring-settings-tabs button { border:0; border-radius:0; background:transparent; padding:12px 0; color:#78716c; border-bottom:3px solid transparent; }
-.monitoring-settings-tabs button[aria-pressed="true"] { color:#292524; border-bottom-color:#292524; font-weight:600; }
 .authorized-sellers { max-width:1100px; }
 .authorized-sellers > p, .authorized-sellers > select { margin-bottom:20px; }
 .authorized-sellers > label { display:block; margin-top:24px; margin-bottom:8px; }

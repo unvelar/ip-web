@@ -98,7 +98,8 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       ? { ...item, products: item.products.map(product => product.id === productId ? { ...product, ...change } : product) }
       : { ...item, ...change }) });
   }
-  function selectScope(brand: string | null, product: string | null = null) { setBrandId(brand); setProductId(product); setPlan(null); setPreviewError(''); }
+  function selectAuthorizations(brand: string | null) { setBrandId(brand); setProductId(null); setSettingsView('sellers'); }
+  function selectScope(brand: string | null, product: string | null = null) { setSettingsView('monitoring'); setBrandId(brand); setProductId(product); setPlan(null); setPreviewError(''); }
   async function activate() {
     setBusy(true); setError(''); setMessage('');
     try {
@@ -181,15 +182,11 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
         <div className="page tenant-editor-page">
           {error && <div className="error-box" role="alert">{error}{conflict && <p>Your edits are still here. Copy any changes you want to keep, then <button className="text-button" disabled={busy} onClick={reload}>reload the saved draft</button>.</p>}</div>}
           <div className="page-heading"><div><div className="eyebrow">Tenant · {tenantName}</div><h1>Monitoring</h1><p>{settingsView === 'sellers' ? 'Manage seller authorization for a brand or the entire tenant.' : 'Choose a brand or product to configure its monitoring.'}</p></div><div className="actions">{(!embedded || tenantSwitcherLabel) && <button className="secondary" disabled={busy} onClick={() => dirty ? leaveDialog.current?.showModal() : onLeave()}>{tenantSwitcherLabel ?? 'Switch tenant'}</button>}<button className="secondary" disabled={busy} onClick={() => openAdd('brand')}>+ Add brand</button></div></div>
-          {embedded && <nav className="monitoring-settings-tabs" aria-label="Monitoring settings">
-            <button aria-pressed={settingsView === 'monitoring'} onClick={() => setSettingsView('monitoring')}>Monitoring configuration</button>
-            <button aria-pressed={settingsView === 'sellers'} onClick={() => setSettingsView('sellers')}>Authorized sellers</button>
-          </nav>}
-          {embedded && settingsView === 'sellers' && <AuthorizedSellers brands={saved.document.brands} tenantName={tenantName} />}
-          <div hidden={settingsView !== 'monitoring'}>
           <div className="scope-workspace">
-            <ScopeNavigator brands={document.brands} tenantName={tenantName} brandId={brandId} productId={productId} disabled={busy} onSelect={selectScope} />
+            <ScopeNavigator brands={document.brands} tenantName={tenantName} brandId={brandId} productId={productId} disabled={busy} onSelect={selectScope} authorizationScope={settingsView === 'sellers' ? brandId ?? 'tenant' : undefined} onSelectAuthorizations={embedded ? selectAuthorizations : undefined} savedBrandIds={saved.document.brands.map(item => item.id)} />
             <div className="scope-detail">
+              {embedded && settingsView === 'sellers' && <AuthorizedSellers key={brandId ?? 'tenant'} brands={saved.document.brands} tenantName={tenantName} scopeId={brandId ?? 'tenant'} onScopeChange={value => selectAuthorizations(value === 'tenant' ? null : value)} />}
+              <div hidden={settingsView !== 'monitoring'}>
               <div className="scope-detail-heading"><div><div className="scope-breadcrumb">{brand ? <><button onClick={() => selectScope(null)}>Tenant</button><span>/</span>{productId ? <><button onClick={() => selectScope(brand.id)}>{brand.name}</button><span>/</span><span>Product</span></> : <span>Brand</span>}</> : 'Tenant overview'}</div><h2>{scope?.name ?? tenantName}</h2><p>{productId ? 'Product keywords · Coverage inherited from brand' : brand ? 'Brand keywords and shared coverage' : 'All brands and products in this tenant'}</p></div>{brand && <button className="secondary" disabled={busy} onClick={() => openAdd('product')}>+ Add product</button>}</div>
           {!brandId ? <div className="editor-grid company-overview"><section>
             <h3 className="tenant-overview-title">Coverage overview</h3><p className="field-note">A combined view of every brand and product’s searches. Set coverage once per brand. Each product has its own keywords and automatically uses its brand’s coverage.</p>
@@ -236,8 +233,10 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
               </>}
             </section>
           </div>{summary}</fieldset> : null}
+              </div>
             </div>
           </div>
+          <div hidden={settingsView !== 'monitoring'}>
           <div className="savebar"><div><span>{dirty ? 'Unsaved changes' : active ? (appliedState === 'active' ? `Active · Revision ${saved.revision}` : appliedState === 'paused' ? `Applied · Monitoring paused · Revision ${saved.revision}` : `Applied · Revision ${saved.revision}`) : activationBlocked ? 'Complete setup to apply' : `Ready to apply · Revision ${saved.revision}`}</span><p className="field-note">{activationIssue || (active ? (appliedState === 'active' ? 'This configuration runs scheduled searches.' : appliedState === 'paused' ? 'All brand and product monitoring is off. Your setup is kept.' : 'Checking scheduled monitoring…') : 'Apply this configuration to update scheduled monitoring.')}</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={busy || conflict || activationBlocked || (!dirty && active)} onClick={activate}>{busy ? 'Applying…' : 'Save and apply'}</button></div></div>
           <div className="status" role="status">{message}</div>
           </div>
