@@ -207,7 +207,7 @@ export interface AdminMonitoringRunJobStage {
 export interface AdminMonitoringScrapeEvidence {
   source: "worker" | "candidates" | "job_result" | "page_capture" | "not_recorded";
   steps: Array<{
-    method: "marketplace_specific" | "nodriver" | "scrapling" | "scrapfly" | "scrapedo" | "web_search";
+    method: "marketplace_specific" | "nodriver" | "scrapling" | "scrapfly" | "scrapedo" | "web_search" | "http";
     role: "primary" | "fallback" | "shadow" | "reused";
     provider: string | null;
     recorded_at: string | null;

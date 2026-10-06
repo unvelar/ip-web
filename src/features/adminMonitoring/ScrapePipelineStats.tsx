@@ -7,6 +7,7 @@ import {
 } from "../../api";
 
 const METHOD: Record<string, string> = {
+  http: "Direct HTTP",
   nodriver: "Nodriver", scrapling: "Scrapling stealth", scrapedo: "Scrape.do",
   scrapfly: "Scrapfly", marketplace_specific: "Marketplace API", web_search: "Web search API",
 };

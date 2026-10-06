@@ -3,6 +3,7 @@ import type { AdminMonitoringJob, AdminMonitoringScrapeEvidence } from "../../ap
 import { supportsScrapeMethod } from "./monitoringJobs";
 
 const METHOD_COPY = {
+  http: { label: "Direct HTTP", style: "bg-emerald-50 text-emerald-700 border-emerald-100" },
   marketplace_specific: { label: "Marketplace specific", style: "bg-sky-50 text-sky-700 border-sky-100" },
   scrapling: { label: "Scrapling", style: "bg-indigo-50 text-indigo-700 border-indigo-100" },
   nodriver: { label: "Nodriver", style: "bg-violet-50 text-violet-700 border-violet-100" },

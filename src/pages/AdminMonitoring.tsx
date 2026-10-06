@@ -22,6 +22,7 @@ const number = (value: number) => value.toLocaleString();
 const percentage = (value: number | null | undefined) => value == null ? "No data" : `${value.toFixed(1)}%`;
 
 const METHOD_LABELS: Record<string, string> = {
+  http: "Direct HTTP",
   nodriver: "Nodriver",
   scrapling: "Scrapling stealth",
   scrapedo: "Scrape.do",
@@ -30,7 +31,7 @@ const METHOD_LABELS: Record<string, string> = {
   web_search: "Web search API",
 };
 
-const METHOD_ORDER = ["nodriver", "scrapling", "scrapedo", "scrapfly", "marketplace_specific", "web_search"];
+const METHOD_ORDER = ["http", "nodriver", "scrapling", "scrapedo", "scrapfly", "marketplace_specific", "web_search"];
 
 export default function AdminMonitoring() {
   const monitor = useAdminMonitoringStatus();
