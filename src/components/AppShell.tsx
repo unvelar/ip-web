@@ -298,6 +298,10 @@ function AppShellContent() {
         {user && (
           <UserMenu
             user={user}
+            tenants={tenants}
+            actingTenantId={actingTenantId}
+            isActingAsOther={isActingAsOther}
+            onSwitchTenant={switchTenant}
             onLogout={logout}
             collapsed={collapsed}
           />
@@ -374,7 +378,7 @@ function AppShellContent() {
           )}
           {/* Tenant context and its single management entry. */}
           <div
-            className="shell-desktop-topbar hidden lg:flex sticky z-20 h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
+            className="shell-desktop-topbar hidden lg:flex sticky z-[29] h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
             style={{ top: `var(${APP_SHELL_BANNER_HEIGHT_VAR})` }}
           >
             <TenantMenu key={pathname} tenants={tenants} />
@@ -556,6 +560,10 @@ function ActingTenantBanner({ label, onReturn }: { label: string; onReturn: () =
 
 function UserMenu({
   user,
+  tenants,
+  actingTenantId,
+  isActingAsOther,
+  onSwitchTenant,
   onLogout,
   collapsed = false,
 }: {
@@ -565,6 +573,10 @@ function UserMenu({
     picture_url: string | null;
     role?: "user" | "admin";
   };
+  tenants: Tenant[];
+  actingTenantId: string | null;
+  isActingAsOther: boolean;
+  onSwitchTenant: (tenantId: string) => void;
   onLogout: () => Promise<void>;
   collapsed?: boolean;
 }) {
@@ -615,6 +627,22 @@ function UserMenu({
               <div className="text-xs text-stone-500 truncate">{user.email}</div>
             )}
           </div>
+          {user.role === "admin" && (
+            <div className="px-3 py-2.5 border-b border-stone-100">
+              <label htmlFor="account-tenant" className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-1">
+                <Building2 size={12} /> Operate as tenant
+              </label>
+              <select
+                id="account-tenant"
+                value={actingTenantId ?? ""}
+                disabled={!tenants.length}
+                onChange={(event) => onSwitchTenant(event.target.value)}
+                className={`w-full text-sm rounded-lg border px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 ${isActingAsOther ? "border-amber-400 text-amber-900" : "border-stone-300 text-stone-800"}`}
+              >
+                {tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenantLabel(tenant)}</option>)}
+              </select>
+            </div>
+          )}
           <button
             onClick={async () => {
               setOpen(false);

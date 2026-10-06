@@ -7,7 +7,7 @@ import { useActiveIp } from '../context/ActiveIpContext';
 
 /** One global entry for tenant context and its management workspace. */
 export default function TenantMenu({ tenants }: { tenants: Tenant[] }) {
-  const { user, actingTenantId, switchTenant } = useAuth();
+  const { actingTenantId } = useAuth();
   const { ips, activeIp, activeIpId, loading, error, selectIp } = useActiveIp();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -34,10 +34,7 @@ export default function TenantMenu({ tenants }: { tenants: Tenant[] }) {
           </select>
           <p>{error ?? `Filters the current reports${activeIp ? ` for ${activeIp.name}` : ''}.`}</p>
         </div>
-        {user?.role === 'admin' && <div className="tenant-menu-section">
-          <label htmlFor={`${id}-tenant`}>Switch tenant</label>
-          <select id={`${id}-tenant`} value={actingTenantId ?? ''} disabled={!tenants.length} onChange={event => switchTenant(event.target.value)}>{tenants.map(value => <option key={value.id} value={value.id}>{tenantLabel(value)}</option>)}</select>
-        </div>}
+
       </div>
     </>}
   </div>;
