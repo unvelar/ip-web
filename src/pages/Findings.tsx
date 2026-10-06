@@ -12,11 +12,12 @@ import {
 } from "../api";
 import { parseFilters, writeFilters, type InboxFilters } from "../lib/monitoringFilters";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
-import { ChevronRight, CircleAlert } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import "../components/monitoring/board/MonitoringResults.css";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
+import { TenantMonitoringSetupNotice } from "../components/monitoring/TenantMonitoringSetupNotice";
 
 /** Legacy route — redirects to the canonical Monitoring Tasks page. */
 export default function Findings() {
@@ -41,11 +42,7 @@ export function MonitoringInboxView() {
     activeIp,
     loading: loadingActiveIp,
   } = useActiveIp();
-  const {
-    status: onboardingStatus,
-    loading: onboardingLoading,
-    error: onboardingError,
-  } = useIpOnboardingStatus(activeIpId);
+  const { status: onboardingStatus } = useIpOnboardingStatus(activeIpId);
   const urlFilters = useMemo(() => parseFilters(params), [params]);
   const urlIpChanged =
     Boolean(urlFilters.ip_id) &&
@@ -388,15 +385,12 @@ export function MonitoringInboxView() {
     return out;
   }, [campaignBatchFindings, findings, linkedFinding]);
 
-  // Keep the live-scan entry point available after onboarding and after the
-  // first findings arrive. Match Dashboard's permanent one-line status link.
-  const showMonitoringStatus = Boolean(activeIpId);
   const emptyStateMessage = onboardingStatus?.state === "active"
     ? "Monitoring is active. There is nothing to review in this view."
-    : onboardingStatus?.state === "setup_required"
+    : onboardingStatus?.customer_action_required
       ? "Finish the missing setup items above before findings can arrive."
       : onboardingStatus
-        ? "No findings are available yet. See the setup status above."
+        ? "No findings are available yet. View the live scan for progress."
         : undefined;
 
   return (
@@ -406,14 +400,16 @@ export function MonitoringInboxView() {
           <p className="monitoring-workspace-eyebrow">{activeIp?.name ?? "Workspace"} / Marketplaces</p>
           <h1>Listings</h1>
         </div>
-        {showMonitoringStatus && <Link className="monitoring-status-link" data-state={onboardingStatus?.state}
-          to={`/monitoring/first-scan?ip_id=${encodeURIComponent(activeIpId!)}`}
-          aria-label={`${onboardingStatus?.title ?? "Monitoring status"}. View live monitoring.`}>
-          {(onboardingStatus?.state === "delayed" || onboardingStatus?.customer_action_required || onboardingError) && <CircleAlert size={13} aria-hidden />}
-          <span>{onboardingLoading ? "Checking monitoring…" : onboardingError ? "Monitoring status unavailable" : onboardingStatus?.title ?? "View live monitoring"}</span>
+        {activeIpId && <Link className="monitoring-status-link"
+          to={`/monitoring/first-scan?ip_id=${encodeURIComponent(activeIpId)}`}>
+          <span>View live scan</span>
           <ChevronRight size={13} aria-hidden />
         </Link>}
       </header>
+
+      {activeIpId && onboardingStatus?.customer_action_required && (
+        <div className="monitoring-workspace-notice"><TenantMonitoringSetupNotice ipId={activeIpId} status={onboardingStatus} /></div>
+      )}
 
       {err && <div className="monitoring-workspace-notice text-sm text-red-600">
         {err}

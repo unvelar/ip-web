@@ -17,6 +17,7 @@ import { WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
 import { useAdminMonitoringStatus, type AdminMonitoringWindow } from "../features/adminMonitoring/useAdminMonitoringStatus";
 import { WebsitePerformance } from "../features/adminMonitoring/WebsitePerformance";
 import { recoveryLabel } from "../components/monitoring/recoveryPresentation";
+import { failureDetail } from "../components/monitoring/failureDetail";
 
 const number = (value: number) => value.toLocaleString();
 const percentage = (value: number | null | undefined) => value == null ? "No data" : `${value.toFixed(1)}%`;
@@ -182,7 +183,11 @@ function SetupRecovery({ recovery }: { recovery: NonNullable<AdminMonitoringStat
         <div className="mt-2 max-h-80 overflow-auto divide-y divide-stone-100">
           {recovery.sources.map(source => (
             <div key={source.source_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <Link to={`/admin/ips/${encodeURIComponent(source.ip_id)}`} className="font-medium text-stone-800 hover:underline">{source.ip_name} · {source.label}</Link>
+              <div className="min-w-0 flex-1">
+                <Link to={`/admin/ips/${encodeURIComponent(source.ip_id)}`} className="font-medium text-stone-800 hover:underline">{source.ip_name} · {source.label}</Link>
+                {source.reason && <p className="mt-1 text-stone-500">{failureDetail(source.reason)}</p>}
+                {source.reason && <Link to={`/admin/browser-activity?q=${encodeURIComponent(source.label)}`} className="mt-1 inline-block font-medium text-stone-600 hover:underline">View browser activity</Link>}
+              </div>
               <span className={source.state === "due" || source.state === "needed" || source.state === "blocked" ? "text-amber-800" : "text-stone-500"}>{recoveryLabel(source)}</span>
             </div>
           ))}

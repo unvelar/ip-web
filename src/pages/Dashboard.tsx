@@ -20,7 +20,8 @@ import {
   type DashboardGroups,
   type IpOnboardingStatus,
 } from "../api";
-import { IpOnboardingStatusCard } from "../components/monitoring/IpOnboardingStatusCard";
+import { ChevronRight } from "lucide-react";
+import { TenantMonitoringSetupNotice } from "../components/monitoring/TenantMonitoringSetupNotice";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
 import { dashboardContentState } from "../lib/dashboardState";
@@ -66,11 +67,7 @@ export default function Dashboard() {
     activeIp,
     loading: activeIpLoading,
   } = useActiveIp();
-  const {
-    status: onboardingStatus,
-    loading: onboardingLoading,
-    error: onboardingError,
-  } = useIpOnboardingStatus(selectedIpId);
+  const { status: onboardingStatus } = useIpOnboardingStatus(selectedIpId);
   const [data, setData] = useState<DashboardGroups | null>(null);
   const [err, setErr] = useState("");
 
@@ -127,10 +124,6 @@ export default function Dashboard() {
     hasActiveIp: Boolean(activeIp),
     hasActivity: Boolean(selectedIp),
   });
-  // Keep the live-scan entry point available after onboarding and after the
-  // first findings arrive. Users should never need browser history to return.
-  const showMonitoringStatus = Boolean(activeIpId);
-
   return (
     <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
       <div className="flex items-end justify-between gap-3 flex-wrap">
@@ -142,17 +135,22 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {activeIpId && (
+            <Link
+              to={`/monitoring/first-scan?ip_id=${encodeURIComponent(activeIpId)}`}
+              className="mr-2 inline-flex items-center gap-1 text-xs font-semibold text-stone-600 hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400"
+            >
+              View live scan<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          )}
           <RangeToggle days={days} onChange={setDays} />
         </div>
       </div>
 
-      {showMonitoringStatus && (
-        <IpOnboardingStatusCard
-          ipId={activeIpId ?? undefined}
+      {activeIpId && (
+        <TenantMonitoringSetupNotice
+          ipId={activeIpId}
           status={onboardingStatus}
-          loading={onboardingLoading}
-          error={onboardingError}
-          summaryHref={`/monitoring/first-scan?ip_id=${encodeURIComponent(activeIpId!)}`}
         />
       )}
 
@@ -227,7 +225,7 @@ function DashboardNoActivity({
 }) {
   const message = status?.state === "active"
     ? `Monitoring is active for ${ipName}. There are no qualifying findings to show right now.`
-    : status?.state === "setup_required"
+    : status?.customer_action_required
       ? "Finish the missing setup items above before monitoring can start."
       : status
         ? "Your monitoring setup is saved. Findings will appear here after scans complete and identify matches."
@@ -237,7 +235,7 @@ function DashboardNoActivity({
     <div className="rounded-2xl border border-stone-200 bg-white px-6 py-12 text-center">
       <p className="text-base font-semibold text-stone-700">No dashboard findings yet</p>
       <p className="mt-1 text-sm text-stone-500">{message}</p>
-      {status?.state === "setup_required" && (
+      {status?.customer_action_required && (
         <Link
           to={`/ips/${encodeURIComponent(ipId)}`}
           className="inline-flex items-center gap-2 mt-5 px-4 py-2 rounded-full bg-stone-900 text-white text-sm font-semibold hover:bg-stone-800 transition-colors"

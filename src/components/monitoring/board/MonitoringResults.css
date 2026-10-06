@@ -6,7 +6,6 @@
 .monitoring-status-link { display: flex; align-items: center; justify-content: flex-end; gap: 6px; max-width: 320px; padding: 4px 0; color: #706d66; text-align: right; font-size: 11px; }
 .monitoring-status-link:hover { color: #242320; text-decoration: underline; text-underline-offset: 3px; }
 .monitoring-status-link svg { flex-shrink: 0; }
-.monitoring-status-link[data-state="delayed"], .monitoring-status-link[data-state="needs_attention"], .monitoring-status-link[data-state="setup_required"] { color: #9a6700; }
 .monitoring-workspace-notice { margin: 14px 20px; }
 .monitoring-results-summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 18px 20px 10px; color: #706d66; font-size: 12px; }
 .monitoring-results-summary strong { color: #242320; font-weight: 500; }

@@ -2,7 +2,7 @@ import type { MonitoringSourceSetupStatus } from "../../api";
 
 export type { MonitoringSourceSetupStatus } from "../../api";
 
-export type SourceSetupTone = "ready" | "processing" | "attention";
+export type SourceSetupTone = "ready" | "processing" | "limited";
 
 export function sourceSetupPresentation(status: MonitoringSourceSetupStatus): {
   label: string;
@@ -11,9 +11,9 @@ export function sourceSetupPresentation(status: MonitoringSourceSetupStatus): {
 } {
   if (status === "retry_needed") {
     return {
-      label: "Retry needed",
-      detail: "Setup couldn't finish. We'll retry automatically.",
-      tone: "attention",
+      label: "Limited",
+      detail: "Searches on this website have not completed. Your settings are saved.",
+      tone: "limited",
     };
   }
   if (status === "processing") {

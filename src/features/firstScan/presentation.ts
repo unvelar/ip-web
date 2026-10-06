@@ -8,9 +8,9 @@ export const SOURCE_STATE_COPY: Record<FirstScanSourceState, { label: string; de
   scanning: { label: "Scanning", detail: "Looking for listings now" },
   preparing: { label: "Pending", detail: "Waiting for listing checks to finish" },
   ready: { label: "Ready", detail: "Latest results processed" },
-  retry_needed: { label: "Retry needed", detail: "Website setup could not finish" },
+  retry_needed: { label: "Limited", detail: "Searches on this website have not completed" },
   paused: { label: "Paused", detail: "Searches are disabled for this website" },
-  failed: { label: "Needs attention", detail: "A real job error was reported" },
+  failed: { label: "Unavailable", detail: "The latest search did not complete" },
 };
 
 export function sourceConnectionDetail(sources: FirstScanSourceProgress[], monitoringEnabled = true): string {

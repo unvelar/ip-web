@@ -10,6 +10,6 @@ export function failureDetail(reason: string | null): string {
   if (reason.includes("challenge")) return "The website blocked the browser with a verification challenge.";
   if (reason.startsWith("page_not_ready")) return "A page dialog or unavailable control prevented the search from starting.";
   if (reason === "collection_unproved") return "The browser reached the website, but could not verify that the page contained the requested search results.";
-  if (reason === "stage_failed" || reason === "stage_timed_out" || reason === "capture_unavailable") return "Search setup stopped before it could be verified. Open the attempt for the recorded failure.";
+  if (reason === "stage_failed" || reason === "stage_timed_out" || reason === "capture_unavailable") return "Search setup stopped before it could be verified.";
   return "The search could not be verified. This does not establish that the website has no matching listings.";
 }

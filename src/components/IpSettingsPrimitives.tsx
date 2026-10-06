@@ -16,9 +16,13 @@ const checkLinks = {
 export function IpSetupProgress({ status, loading, error, ipId }: { status: IpOnboardingStatus | null; loading: boolean; error: string; ipId: string }) {
   if (!status) return <div className="ip-setup-placeholder" role="status">{loading ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}{loading ? "Checking setup…" : error ? "Setup status unavailable. Refresh to try again." : "Setup status unavailable."}</div>;
   const complete = status.checks.filter((check) => check.status === "complete").length;
-  return <section className="ip-setup" aria-label="IP setup status"><div className="ip-setup-title"><span>{status.state === "active" ? "Setup complete" : status.title}</span><span>{complete}/{status.checks.length} complete</span></div><div className="ip-setup-track" aria-hidden="true">{status.checks.map((check) => <span key={check.key} data-status={check.status} />)}</div><div className="ip-setup-checks">{status.checks.map((check) => {
+  const title = status.customer_action_required ? "Finish monitoring setup"
+    : status.state === "active" ? "Setup complete" : status.state === "paused" ? "Monitoring is off" : "Setup saved";
+  const checks = status.checks.map((check) => check.status === "attention"
+    ? { ...check, status: "waiting" as const, detail: "Processing has not completed yet." } : check);
+  return <section className="ip-setup" aria-label="IP setup status"><div className="ip-setup-title"><span>{title}</span><span>{complete}/{checks.length} complete</span></div><div className="ip-setup-track" aria-hidden="true">{checks.map((check) => <span key={check.key} data-status={check.status} />)}</div><div className="ip-setup-checks">{checks.map((check) => {
     const { icon: Icon, href, label } = checkLinks[check.key];
-    const StateIcon = check.status === "complete" ? Check : check.status === "processing" ? LoaderCircle : ["missing", "attention"].includes(check.status) ? CircleAlert : CircleDashed;
+    const StateIcon = check.status === "complete" ? Check : check.status === "processing" ? LoaderCircle : check.status === "missing" ? CircleAlert : CircleDashed;
     return <Link key={check.key} to={href || `/monitoring/first-scan?ip_id=${ipId}`} className="ip-setup-check" data-status={check.status} title={check.detail} aria-label={`${check.label}: ${check.detail}`}><Icon size={16} aria-hidden="true" /><span>{label}</span><StateIcon size={14} className={check.status === "processing" ? "animate-spin" : ""} aria-hidden="true" /></Link>;
   })}</div></section>;
 }

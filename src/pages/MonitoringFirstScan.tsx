@@ -15,7 +15,7 @@ import {
   PageMessage,
   SummaryMetric,
 } from "../features/firstScan/FirstScanResults";
-import { FirstScanSetupNotice } from "../features/firstScan/FirstScanSetupNotice";
+import { TenantMonitoringSetupNotice } from "../components/monitoring/TenantMonitoringSetupNotice";
 import { formatUpdateTime, sourceConnectionDetail } from "../features/firstScan/presentation";
 import { useFirstScanFeed } from "../features/firstScan/useFirstScanFeed";
 
@@ -71,12 +71,10 @@ export default function MonitoringFirstScan() {
         </div>
       )}
 
-      {snapshot.onboarding && (
-        <FirstScanSetupNotice
-          ipId={ipId}
-          onboarding={snapshot.onboarding}
-          sources={snapshot.sources}
-        />
+      {snapshot.onboarding?.customer_action_required && (
+        <div className="mt-4">
+          <TenantMonitoringSetupNotice ipId={ipId} status={snapshot.onboarding} />
+        </div>
       )}
 
       <section className="mt-4 grid overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:grid-cols-2 lg:grid-cols-5">
@@ -114,13 +112,6 @@ export default function MonitoringFirstScan() {
         onResultFilterChange={feed.setResultFilter}
         onSourceFilterChange={feed.setSourceFilter}
       />
-
-      {snapshot.onboarding?.customer_action_required && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <div><span className="font-semibold">{snapshot.onboarding.title}.</span> {snapshot.onboarding.message}</div>
-        </div>
-      )}
 
       <footer className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
         <span>{totals.websites === 0 ? "Select websites in monitoring setup to start monitoring." : snapshot.onboarding?.recovery?.enabled === false ? "Monitoring is off. Existing results remain available." : "You can leave this page. Monitoring continues in the background."}</span>

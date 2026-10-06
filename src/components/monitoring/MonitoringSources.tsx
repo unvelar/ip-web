@@ -146,8 +146,8 @@ export function MonitoringSources({ platforms, patterns, monitoringOn, hasKeywor
           const setup = platform && option.kind === "domain" && running
             ? sourceSetupPresentation(platform.setup_status ?? (platform.recipe ? "ready" : "processing")) : null;
           const status = !added ? "Available" : !running ? "Paused" : option.kind === "search" ? "Via web search"
-            : setup?.tone === "attention" ? "Retry needed" : setup?.tone === "processing" ? "Preparing" : "Active";
-          const tone = !running ? "quiet" : setup?.tone === "attention" ? "attention" : setup?.tone === "processing" ? "preparing" : "active";
+            : setup?.tone === "limited" ? "Limited" : setup?.tone === "processing" ? "Preparing" : "Active";
+          const tone = !running || setup?.tone === "limited" ? "quiet" : setup?.tone === "processing" ? "preparing" : "active";
           const isExpanded = expanded === option.key;
           const rowBusy = busy === option.key || (platform && busy === platform.id);
           const activity = option.activity;
