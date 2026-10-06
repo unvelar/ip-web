@@ -1,17 +1,13 @@
 import { useState } from 'react';
-import { faAmazon, faEbay, faEtsy, faFacebookF, faGoogle, faShopify } from '@fortawesome/free-brands-svg-icons';
 import { COUNTRIES, flagEmoji } from '../lib/countries';
 import type { Coverage, Source } from './contracts';
 import { countrySources, sourcesForCountry } from './coverage';
 
-// Font Awesome Free 6.7.2 brand SVGs (CC BY 4.0); package retains attribution.
-// https://fontawesome.com/license/free — used only to identify these services.
-const logos: Record<string, typeof faAmazon> = { amazon: faAmazon, ebay: faEbay, etsy: faEtsy, facebook: faFacebookF, google: faGoogle, shopify: faShopify };
 export function MarketplaceMark({ source }: { source: Source }) {
-  const icon = source.logo_key ? logos[source.logo_key] : null;
-  if (!icon) return <span className="marketplace-monogram" aria-hidden="true">{source.name.slice(0, 2)}</span>;
-  const [width, height, , , paths] = icon.icon;
-  return <span className="marketplace-logo" aria-hidden="true"><svg viewBox={`0 0 ${width} ${height}`} focusable="false">{(Array.isArray(paths) ? paths : [paths]).map((path, i) => <path key={i} d={path} />)}</svg></span>;
+  const [failedDomain, setFailedDomain] = useState<string | null>(null);
+  const domain = source.domain.trim();
+  if (!domain || failedDomain === domain) return <span className="marketplace-monogram" aria-hidden="true">{source.name.slice(0, 2)}</span>;
+  return <span className="marketplace-logo" aria-hidden="true"><img key={domain} src={`https://${domain}/favicon.ico`} alt="" width={24} height={24} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedDomain(domain)} /></span>;
 }
 
 export default function CoverageEditor({ value, sources, disabled, onChange }: {

@@ -55,7 +55,7 @@ dialog form .actions { margin-top:20px; }
 .marketplace-row:has(input:disabled) { cursor:default; }
 .marketplace-row input { margin:0; }
 .marketplace-logo,.marketplace-monogram { display:flex; align-items:center; justify-content:center; width:32px; height:32px; }
-.marketplace-logo svg { width:29px; height:24px; fill:#49433a; }
+.marketplace-logo img { display:block; width:24px; height:24px; object-fit:contain; }
 .marketplace-monogram { font-size:12px; font-weight:600; color:#756c5e; background:#eae4d9; border-radius:4px; }
 .marketplace-identity { display:grid; gap:2px; min-width:0; }
 .marketplace-identity strong { font-size:12px; font-weight:550; }
