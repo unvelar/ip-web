@@ -266,3 +266,14 @@ dialog form .actions { margin-top:20px; }
 
 .monitoring-workspace .catalog-optional { margin: 12px 0; }
 .monitoring-workspace .catalog-optional summary { cursor: pointer; font-size: 13px; font-weight: 550; }
+
+.monitoring-settings-tabs { display:flex; gap:24px; border-bottom:1px solid #ddd6cc; margin-bottom:24px; }
+.monitoring-settings-tabs button { border:0; border-radius:0; background:transparent; padding:12px 0; color:#78716c; border-bottom:3px solid transparent; }
+.monitoring-settings-tabs button[aria-pressed="true"] { color:#292524; border-bottom-color:#292524; font-weight:600; }
+.authorized-sellers { max-width:1100px; }
+.authorized-sellers > p, .authorized-sellers > select { margin-bottom:20px; }
+.authorized-sellers > label { display:block; margin-top:24px; margin-bottom:8px; }
+.authorized-sellers td a { display:block; text-decoration:underline; }
+.authorized-sellers form { margin-top:28px; border-top:1px solid #e7e5e4; padding-top:20px; }
+.authorization-fields { display:flex; flex-wrap:wrap; gap:16px; margin:16px 0; }
+.authorization-fields label { display:flex; flex-direction:column; gap:8px; flex:1; min-width:200px; }

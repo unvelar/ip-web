@@ -1,3 +1,4 @@
+import AuthorizedSellers from "./AuthorizedSellers";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { countryLabel } from '../lib/countries';
 import { DraftError, type Brand, type Draft, type Plan, type Product, type ReferenceImage, type Workspace, type WorkspaceResponse, type WorkspaceClient } from './contracts';
@@ -10,6 +11,7 @@ import MatchingReadiness from './MatchingReadiness';
 
 export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false, tenantSwitcherLabel }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean; tenantSwitcherLabel?: string }) {
   const Content = embedded ? 'div' : 'main';
+  const [settingsView, setSettingsView] = useState<'monitoring' | 'sellers'>(() => embedded && window.location.hash === '#authorized-sellers' ? 'sellers' : 'monitoring');
   const [saved, setSaved] = useState<Draft>(loaded);
   const [document, setDocument] = useState(loaded.document);
   const [brandId, setBrandId] = useState<string | null>(null);
@@ -178,7 +180,13 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       <Content className="workspace-content">
         <div className="page tenant-editor-page">
           {error && <div className="error-box" role="alert">{error}{conflict && <p>Your edits are still here. Copy any changes you want to keep, then <button className="text-button" disabled={busy} onClick={reload}>reload the saved draft</button>.</p>}</div>}
-          <div className="page-heading"><div><div className="eyebrow">Tenant · {tenantName}</div><h1>Monitoring</h1><p>Choose a brand or product to configure its monitoring.</p></div><div className="actions">{(!embedded || tenantSwitcherLabel) && <button className="secondary" disabled={busy} onClick={() => dirty ? leaveDialog.current?.showModal() : onLeave()}>{tenantSwitcherLabel ?? 'Switch tenant'}</button>}<button className="secondary" disabled={busy} onClick={() => openAdd('brand')}>+ Add brand</button></div></div>
+          <div className="page-heading"><div><div className="eyebrow">Tenant · {tenantName}</div><h1>Monitoring</h1><p>{settingsView === 'sellers' ? 'Manage seller authorization for a brand or the entire tenant.' : 'Choose a brand or product to configure its monitoring.'}</p></div><div className="actions">{(!embedded || tenantSwitcherLabel) && <button className="secondary" disabled={busy} onClick={() => dirty ? leaveDialog.current?.showModal() : onLeave()}>{tenantSwitcherLabel ?? 'Switch tenant'}</button>}<button className="secondary" disabled={busy} onClick={() => openAdd('brand')}>+ Add brand</button></div></div>
+          {embedded && <nav className="monitoring-settings-tabs" aria-label="Monitoring settings">
+            <button aria-pressed={settingsView === 'monitoring'} onClick={() => setSettingsView('monitoring')}>Monitoring configuration</button>
+            <button aria-pressed={settingsView === 'sellers'} onClick={() => setSettingsView('sellers')}>Authorized sellers</button>
+          </nav>}
+          {embedded && settingsView === 'sellers' && <AuthorizedSellers brands={saved.document.brands} tenantName={tenantName} />}
+          <div hidden={settingsView !== 'monitoring'}>
           <div className="scope-workspace">
             <ScopeNavigator brands={document.brands} tenantName={tenantName} brandId={brandId} productId={productId} disabled={busy} onSelect={selectScope} />
             <div className="scope-detail">
@@ -232,6 +240,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
           </div>
           <div className="savebar"><div><span>{dirty ? 'Unsaved changes' : active ? (appliedState === 'active' ? `Active · Revision ${saved.revision}` : appliedState === 'paused' ? `Applied · Monitoring paused · Revision ${saved.revision}` : `Applied · Revision ${saved.revision}`) : activationBlocked ? 'Complete setup to apply' : `Ready to apply · Revision ${saved.revision}`}</span><p className="field-note">{activationIssue || (active ? (appliedState === 'active' ? 'This configuration runs scheduled searches.' : appliedState === 'paused' ? 'All brand and product monitoring is off. Your setup is kept.' : 'Checking scheduled monitoring…') : 'Apply this configuration to update scheduled monitoring.')}</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={busy || conflict || activationBlocked || (!dirty && active)} onClick={activate}>{busy ? 'Applying…' : 'Save and apply'}</button></div></div>
           <div className="status" role="status">{message}</div>
+          </div>
         </div>
       </Content>
     </div>
