@@ -7,7 +7,7 @@ import { retryTime } from "./recoveryPresentation";
 const phaseLabel = { capture: "Open website and find search", infer: "Prepare search instructions", validate: "Verify search results" };
 const stateLabel = (state: string) => state === "succeeded" ? "Succeeded"
   : state === "failed" || state === "no_recipe" ? "Failed" : state === "cancelled" ? "Cancelled" : "In progress";
-const workerAttemptLabel: Record<string, string> = { completed: "Succeeded", retry: "Failed, retried",
+const workerAttemptLabel: Record<string, string> = { completed: "Completed", retry: "Failed, retried",
   failed: "Failed", deferred: "Deferred", resource_incompatible: "Worker unavailable", running: "Running",
   abandoned: "Interrupted", cancelled: "Cancelled" };
 
