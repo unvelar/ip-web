@@ -73,6 +73,7 @@ export default function MonitoringFirstScan() {
 
       {snapshot.onboarding && (
         <FirstScanSetupNotice
+          ipId={ipId}
           onboarding={snapshot.onboarding}
           sources={snapshot.sources}
         />

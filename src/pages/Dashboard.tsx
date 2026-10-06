@@ -148,6 +148,7 @@ export default function Dashboard() {
 
       {showMonitoringStatus && (
         <IpOnboardingStatusCard
+          ipId={activeIpId ?? undefined}
           status={onboardingStatus}
           loading={onboardingLoading}
           error={onboardingError}

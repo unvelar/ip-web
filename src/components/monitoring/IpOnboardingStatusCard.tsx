@@ -121,12 +121,14 @@ function StatusSummaryLink({
 }
 
 export function IpOnboardingStatusCard({
+  ipId,
   status,
   loading = false,
   error = "",
   compact = false,
   summaryHref,
 }: {
+  ipId?: string;
   status: IpOnboardingStatus | null;
   loading?: boolean;
   error?: string;
@@ -212,7 +214,7 @@ export function IpOnboardingStatusCard({
         </div>
       </div>
 
-      {status.recovery && <MonitoringRecoveryDetails sources={status.recovery.sources} />}
+      {status.recovery && <MonitoringRecoveryDetails ipId={ipId} sources={status.recovery.sources} />}
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {status.checks.map((check) => (
           <div key={check.key} className="flex items-start gap-2 rounded-lg border border-black/5 bg-white/70 px-3 py-2.5">

@@ -12,9 +12,8 @@ export function recoveryLabel(source: MonitoringSourceRecovery): string {
     case "due": return "Retry due, waiting for scheduling";
     case "off": return "Monitoring off, automatic retries paused";
     case "processing": return "Setup queued or running";
-    case "blocked": return "Configuration needs attention";
+    case "blocked": return "Needs attention";
     case "needed": return "Retry needs attention";
     case "ready": return "Ready";
   }
 }
-

@@ -24,6 +24,8 @@ import {
 } from "../../lib/firstScanProgress";
 import type { FirstScanResultTotals } from "./resultTotals";
 import type { ResultFilter } from "./useFirstScanFeed";
+import { SourceAttemptDetails } from "../../components/monitoring/SourceAttemptDetails";
+import { failureDetail } from "../../components/monitoring/failureDetail";
 import {
   SOURCE_STATE_COPY,
   resultPresentation,
@@ -109,6 +111,11 @@ export function FirstScanResults({
         ))}
       </div>
 
+      {sourceFilter !== "all" && selectedSourceIds.has(sourceFilter) && <div className="flex items-center justify-between gap-3 border-b border-stone-100 bg-stone-50/70 px-4 py-2">
+        <p className="text-xs text-stone-500">Search setup and browser evidence for this website</p>
+        <SourceAttemptDetails ipId={ipId} sourceId={sourceFilter} label="View search history" />
+      </div>}
+
       <div className="flex flex-col gap-2 border-b border-stone-200 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-1 overflow-x-auto">
           <ResultFilterButton label="All" count={resultFilterTotals.discovered} value="all" active={resultFilter} onChange={onResultFilterChange} />
@@ -152,7 +159,7 @@ export function FirstScanResults({
         </table>
       </div>
 
-      {results.length === 0 && <ResultEmptyState loading={refreshing} hasAnyResults={allResultCount > 0}
+      {results.length === 0 && <ResultEmptyState ipId={ipId} recovery={recovery} loading={refreshing} hasAnyResults={allResultCount > 0}
         sources={sourceFilter === "all" ? sources : sources.filter(source => source.source.id === sourceFilter)} />}
       <div className="flex items-center justify-between gap-3 border-t border-stone-200 px-4 py-3">
         <p className="text-xs tabular-nums text-stone-500" aria-live="polite">
@@ -290,7 +297,7 @@ function MetadataValue({ value, icon, pending, strong = false }: { value: string
 function SourceFilterButton({ active, onClick, name, count, state, recovery, enabled }: { active: boolean; onClick: () => void; name: string; count: number; state?: FirstScanSourceState; recovery?: MonitoringSourceRecovery; enabled?: boolean }) {
   const paused = enabled === false || state === "paused" || recovery?.state === "off";
   const automaticRetry = !paused && (recovery?.state === "scheduled" || recovery?.state === "due");
-  const needsRetry = state === "retry_needed" && !automaticRetry && !paused;
+  const needsRetry = !paused && (recovery?.state === "blocked" || state === "retry_needed" && !automaticRetry);
   const hasSourceError = !paused && (state === "failed" || needsRetry);
   const setupProcessing = !paused && (state === "setup_processing" || automaticRetry);
   return (
@@ -298,7 +305,7 @@ function SourceFilterButton({ active, onClick, name, count, state, recovery, ena
       {state && <span className={`h-1.5 w-1.5 rounded-full ${paused ? "bg-stone-400" : hasSourceError ? "bg-red-500" : setupProcessing ? "bg-amber-500" : state === "ready" ? "bg-emerald-500" : "bg-blue-500"}`} />}
       <span className="font-semibold">{name}</span>
       <span className={`rounded px-1.5 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : needsRetry ? "bg-rose-100 font-semibold text-rose-700" : setupProcessing ? "bg-amber-100 font-semibold text-amber-800" : "bg-stone-100 tabular-nums text-stone-500"}`}>
-        {paused ? "Paused" : automaticRetry ? recovery.state === "due" ? "Retry due" : "Retry scheduled" : needsRetry ? "Retry needed" : setupProcessing ? "Preparing" : count}
+        {paused ? "Paused" : automaticRetry ? recovery.state === "due" ? "Retry due" : "Retry scheduled" : needsRetry ? "Needs attention" : setupProcessing ? "Preparing" : count}
       </span>
     </button>
   );
@@ -313,10 +320,20 @@ function ResultFilterButton({ label, count, value, active, onChange }: { label: 
   );
 }
 
-function ResultEmptyState({ loading, hasAnyResults, sources }: { loading: boolean; hasAnyResults: boolean; sources: FirstScanSourceProgress[] }) {
+function ResultEmptyState({ ipId, recovery, loading, hasAnyResults, sources }: { ipId: string; recovery: MonitoringSourceRecovery[]; loading: boolean; hasAnyResults: boolean; sources: FirstScanSourceProgress[] }) {
   const noSelection = sources.length === 0;
   const paused = sources.length > 0 && sources.every(source => source.source.enabled === false);
   const activeSource = sources.find((source) => source.source.enabled !== false && source.state !== "ready" && source.state !== "failed");
+  const failedSetup = sources.length === 1 && sources[0].discovered === 0
+    ? recovery.find(item => item.source_id === sources[0].source.id && item.reason
+      && ["scheduled", "due", "blocked", "needed"].includes(item.state)) : null;
+  if (failedSetup && !loading) return <div className="flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center">
+    <AlertCircle className="h-5 w-5 text-amber-600" />
+    <p className="mt-3 text-sm font-semibold text-stone-800">{failedSetup.label} search setup failed</p>
+    <p className="mt-1 max-w-md text-xs leading-5 text-stone-500">{failureDetail(failedSetup.reason)}</p>
+    <p className="mt-1 max-w-md text-xs leading-5 text-stone-500">No search results were collected. This does not mean there are no matching listings.</p>
+    <div className="mt-3"><SourceAttemptDetails ipId={ipId} sourceId={failedSetup.source_id} /></div>
+  </div>;
   return (
     <div className="flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center">
       {paused && !loading ? <Pause className="h-5 w-5 text-stone-400" /> : (noSelection || hasAnyResults) && !loading ? <Search className="h-5 w-5 text-stone-300" /> : <LoaderCircle className="h-5 w-5 animate-spin text-blue-500" />}

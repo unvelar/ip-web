@@ -11,9 +11,11 @@ function sourceLabel(source: FirstScanSourceProgress) {
 }
 
 export function FirstScanSetupNotice({
+  ipId,
   onboarding,
   sources,
 }: {
+  ipId: string;
   onboarding: IpOnboardingStatus;
   sources: FirstScanSourceProgress[];
 }) {
@@ -43,7 +45,7 @@ export function FirstScanSetupNotice({
           </div>
           <Link to="/monitoring/setup" className="shrink-0 text-xs font-semibold text-stone-700 underline">View setup</Link>
         </div>
-        <MonitoringRecoveryDetails sources={onboarding.recovery.sources.filter(item =>
+        <MonitoringRecoveryDetails ipId={ipId} sources={onboarding.recovery.sources.filter(item =>
           sources.some(({ source }) => source.id === item.source_id))} />
       </section>
     );
