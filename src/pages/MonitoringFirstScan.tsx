@@ -16,6 +16,7 @@ import {
   SummaryMetric,
 } from "../features/firstScan/FirstScanResults";
 import { TenantMonitoringSetupNotice } from "../components/monitoring/TenantMonitoringSetupNotice";
+import { MonitoringRecoveryDetails } from "../components/monitoring/MonitoringRecovery";
 import { formatUpdateTime, sourceConnectionDetail } from "../features/firstScan/presentation";
 import { useFirstScanFeed } from "../features/firstScan/useFirstScanFeed";
 
@@ -90,6 +91,8 @@ export default function MonitoringFirstScan() {
         <SummaryMetric label="Ready for triage" value={totals.ready} detail={`${totals.filtered} screened out`} icon={<Check className="h-4 w-4" />} accent={totals.ready > 0} />
         <SummaryMetric label="Failed listings" value={totals.failed} detail="processing stopped" icon={<AlertCircle className="h-4 w-4" />} attention={totals.failed > 0} />
       </section>
+
+      <MonitoringRecoveryDetails ipId={ipId} sources={snapshot.onboarding?.recovery?.sources ?? []} />
 
       <FirstScanResults
         ipId={ipId}
