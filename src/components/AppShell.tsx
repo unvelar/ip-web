@@ -16,6 +16,7 @@ import {
   Inbox as InboxIcon,
   Bell,
   Store,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import "./AppShell.css";
@@ -55,10 +56,11 @@ const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
  *
  * Sidebar layout (top → bottom):
  *   Dashboard
- *   Marketplaces
+ *   Monitoring
  *     ↳ Tasks        (badge = open monitoring findings)
  *     ↳ Sellers      (badge = returned sellers with open listings)
  *     ↳ Product lab
+ *     ↳ Manage monitoring
  *
  * Tenant context and management share one topbar menu. The existing working-IP
  * report filter stays inside that menu until canonical brand/product mapping exists.
@@ -243,7 +245,7 @@ function AppShellContent() {
         />
 
         <NavGroup
-          label="Marketplaces"
+          label="Monitoring"
           icon={<Radar size={14} />}
           open={monOpen}
           onToggle={() => setMonOpen((v) => !v)}
@@ -270,6 +272,13 @@ function AppShellContent() {
             icon={<Network size={18} />}
             label="Product lab"
             active={pathname === "/monitoring/products" || pathname.startsWith("/monitoring/products/")}
+            collapsed={collapsed}
+          />
+          <NavItem
+            to="/monitoring/setup"
+            icon={<SlidersHorizontal size={18} />}
+            label="Manage monitoring"
+            active={isActive("/monitoring/setup")}
             collapsed={collapsed}
           />
         </NavGroup>
