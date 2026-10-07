@@ -12,6 +12,7 @@ export interface SourceSetupAttempt {
   failure_streak: number; retries_stopped: boolean; next_retry_at: string | null;
   steps: Array<{ phase: "capture" | "infer" | "validate"; status: string; error: string | null;
     started_at: string | null; completed_at: string | null;
+    available_at?: string | null; waiting_reason?: string | null;
     attempts: Array<{ id: string; number: number; status: string; error: string | null;
       started_at: string; completed_at: string | null }> }>;
   captures: Array<{ id: string; at: string; label: string | null; url: string | null;
@@ -40,6 +41,7 @@ function validAttempt(value: unknown): value is SourceSetupAttempt {
     || !nullableText(value.next_retry_at)) return false;
   if (!Array.isArray(value.steps) || value.steps.length > 3 || !value.steps.every(s => isRecord(s)
     && ["capture", "infer", "validate"].includes(String(s.phase)) && text(s.status) && nullableText(s.error)
+    && (s.available_at === undefined || nullableText(s.available_at)) && (s.waiting_reason === undefined || nullableText(s.waiting_reason))
     && nullableText(s.started_at) && nullableText(s.completed_at) && Array.isArray(s.attempts) && s.attempts.length <= 50
     && s.attempts.every(a => isRecord(a) && text(a.id) && number(a.number) && text(a.status)
       && nullableText(a.error) && text(a.started_at) && nullableText(a.completed_at)))) return false;

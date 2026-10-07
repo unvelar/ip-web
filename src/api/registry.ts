@@ -23,6 +23,7 @@ export interface Trademark {
   protected_terms?: ProtectedTerm[];
   protected_terms_revision?: number;
   monitoring_identity?: MonitoringIdentity;
+  monitoring_owner?: {scope_id: string; brand_scope_id: string; scope_kind: 'brand' | 'product'} | null;
   /** Monitoring keywords proposed by the wizard's VLM step + user edits. */
   keywords: string[];
   monitoring_frequency: MonitoringFrequency;

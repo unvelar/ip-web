@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
+import { getMonitoringSetupCapabilities } from "../api/monitoringWorkspace";
+import { useAuth } from "../context/AuthContext";
 import {
   listMonitoredIps,
   removeIpMonitoring,
@@ -13,6 +15,27 @@ import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
  * watched platforms, link to Audit log.
  */
 export default function Monitors() {
+  const {actingTenantId} = useAuth();
+  return <TenantMonitors key={actingTenantId} />;
+}
+
+function TenantMonitors() {
+  const {search} = useLocation();
+  const [workspaceEnabled, setWorkspaceEnabled] = useState<boolean | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    void getMonitoringSetupCapabilities().then(value => {if (active) setWorkspaceEnabled(value.workspace);})
+      .catch(error => {if (active) setError(error instanceof Error ? error.message : 'Monitoring configuration could not be loaded');});
+    return () => {active = false;};
+  }, []);
+  if (error) return <p className="p-8" role="alert">{error}</p>;
+  if (workspaceEnabled === null) return <p className="p-8" role="status">Loading monitoring configuration…</p>;
+  if (workspaceEnabled) return <Navigate to={`/monitoring/setup${search}`} replace />;
+  return <LegacyMonitors />;
+}
+
+function LegacyMonitors() {
   const [ips, setIps] = useState<MonitoredIpSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState("");
