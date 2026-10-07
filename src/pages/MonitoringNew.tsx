@@ -10,13 +10,14 @@ import { PlatformSelector } from "../components/monitoring/PlatformSelector";
 import { COUNTRIES, countryLabel } from "../lib/countries";
 import { monitoringPlatformOption } from "../lib/platforms";
 import { startMonitoringSources } from "../lib/startMonitoringSources";
+import { MonitoringConfigurationGate } from "../components/monitoring/MonitoringConfigurationGate";
 
-/**
- * Start monitoring a registered IP. Picks an IP not already watched and seeds
- * it with one or more selected platforms. Adding the first platform creates
- * the monitored-domain link. On success, lands on Monitoring settings.
- */
+/** Keep the per-IP setup available only to tenants without the shared configuration. */
 export default function MonitoringNew() {
+  return <MonitoringConfigurationGate><LegacyMonitoringNew /></MonitoringConfigurationGate>;
+}
+
+function LegacyMonitoringNew() {
   const navigate = useNavigate();
   const [all, setAll] = useState<Trademark[] | null>(null);
   const [monitoredIds, setMonitoredIds] = useState<string[]>([]);
