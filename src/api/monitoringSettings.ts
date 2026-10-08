@@ -94,6 +94,7 @@ export function deleteMonitoredDomain(id: string) {
 
 export function listMonitoringRuns(opts: { domain_id?: string; limit?: number } = {}, signal?: AbortSignal) {
   const params = new URLSearchParams();
+  params.set("view", "summary");
   if (opts.domain_id) params.set("domain_id", opts.domain_id);
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
   const qs = params.toString();

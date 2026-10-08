@@ -29,6 +29,7 @@ function count(items: IpFirstScanResult[]): IpFirstScanTotals {
 }
 const originalFetch = globalThis.fetch;
 const requests: URL[] = [];
+const runRequests: URL[] = [];
 let failNextPage = false;
 let delayNextFirstPage: Promise<void> | null = null;
 let feed: ReturnType<typeof useFirstScanFeed>;
@@ -69,7 +70,7 @@ async function mount(platforms = sources) {
           source_id: source.id, source_domain: source.domain, source_name: source.display_name })) };
     } else if (url.pathname.endsWith("/platforms")) body = { platforms };
     else if (url.pathname.endsWith("/onboarding-status")) body = { status: null };
-    else if (url.pathname.includes("/runs")) body = { runs: [] };
+    else if (url.pathname.includes("/runs")) { runRequests.push(url); body = { runs: [] }; }
     else if (url.pathname === "/api/ip/ip") body = { trademark: { id: "ip", name: "Brand", keywords: [], image_count: 0, indexed_count: 0 }, images: [] };
     else if (url.pathname === "/api/auth/me") body = { user: null };
     else throw new Error(`Unexpected request ${url.pathname}`);
@@ -81,7 +82,7 @@ async function mount(platforms = sources) {
 }
 afterEach(() => {
   if (root) act(() => root!.unmount()); root = undefined;
-  document.body.replaceChildren(); globalThis.fetch = originalFetch; requests.length = 0; failNextPage = false; delayNextFirstPage = null;
+  document.body.replaceChildren(); globalThis.fetch = originalFetch; requests.length = 0; runRequests.length = 0; failNextPage = false; delayNextFirstPage = null;
 });
 
 test("connected count follows source setup even when cached recipes and old results exist", async () => {
@@ -89,6 +90,8 @@ test("connected count follows source setup even when cached recipes and old resu
     ...source, setup_status: index ? "retry_needed" : "processing",
   }));
   await mount(platforms);
+  expect(runRequests.length).toBeGreaterThan(0);
+  expect(runRequests.every(url => url.searchParams.get("view") === "summary")).toBe(true);
   expect(feed.totals.connected).toBe(0);
   expect(feed.totals.discovered).toBe(1115);
   platforms[0]!.setup_status = "ready";
