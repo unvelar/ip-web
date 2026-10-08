@@ -1,23 +1,15 @@
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
-  ArrowRight,
-  Check,
   ChevronRight,
-  Globe2,
-  LoaderCircle,
   Radar,
-  Search,
 } from "lucide-react";
 import {
   FirstScanResults,
   FirstScanSkeleton,
   PageMessage,
-  SummaryMetric,
 } from "../features/firstScan/FirstScanResults";
 import { TenantMonitoringSetupNotice } from "../components/monitoring/TenantMonitoringSetupNotice";
-import { MonitoringRecoveryDetails } from "../components/monitoring/MonitoringRecovery";
-import { formatUpdateTime, sourceConnectionDetail } from "../features/firstScan/presentation";
 import { useFirstScanFeed } from "../features/firstScan/useFirstScanFeed";
 
 export default function MonitoringFirstScan() {
@@ -25,7 +17,7 @@ export default function MonitoringFirstScan() {
 
   if (feed.loading && !feed.snapshot) return <FirstScanSkeleton />;
   if (!feed.ipId) {
-    return <PageMessage icon={<Radar className="h-5 w-5" />} title="Choose a brand or product to watch its first scan" detail="Select a brand or product from the tenant menu." />;
+    return <PageMessage icon={<Radar className="h-5 w-5" />} title="Choose a brand or product to watch its first scan" detail="Select a brand or product from the top bar." />;
   }
   if (!feed.snapshot) {
     return (
@@ -39,59 +31,21 @@ export default function MonitoringFirstScan() {
   }
 
   const { snapshot, totals, ipId } = feed;
-  const connectionDetail = sourceConnectionDetail(snapshot.sources, snapshot.onboarding?.recovery?.enabled);
   return (
-    <div className="mx-auto max-w-[1500px] px-4 py-4 sm:px-6">
-      <header className="flex flex-col gap-3 border-b border-stone-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-stone-400"><Radar className="h-3.5 w-3.5" /> First scan</div>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-stone-950">Watching the web for {snapshot.trademark.name}</h1>
-          <p className="mt-0.5 text-sm text-stone-500">Every listing stays in the same row while images, match evidence, and marketplace details arrive.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs text-stone-500" aria-live="polite">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            Live · {formatUpdateTime(snapshot.updatedAt)}
-            {feed.refreshing && <LoaderCircle className="h-3.5 w-3.5 animate-spin text-stone-400" />}
-          </div>
-          {totals.ready > 0 && (
-            <Link to={`/monitoring/tasks?ip_id=${encodeURIComponent(ipId)}`} className="inline-flex items-center gap-2 rounded-lg bg-stone-950 px-3.5 py-2 text-xs font-semibold text-white hover:bg-stone-800">
-              Open triage <span className="rounded bg-white/15 px-1.5 py-0.5 text-[10px]">{totals.ready}</span><ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          )}
-        </div>
-      </header>
+    <div className="mx-auto max-w-[1500px] px-4 py-3 sm:px-6">
+      <h1 className="sr-only">Monitoring listings for {snapshot.trademark.name}</h1>
 
       {feed.error && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <AlertCircle className="h-4 w-4 shrink-0" /> Some live progress is temporarily unavailable. {feed.error}
         </div>
       )}
 
       {snapshot.onboarding?.customer_action_required && (
-        <div className="mt-4">
+        <div className="mb-3">
           <TenantMonitoringSetupNotice ipId={ipId} status={snapshot.onboarding} />
         </div>
       )}
-
-      <section className="mt-4 grid overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:grid-cols-2 lg:grid-cols-5">
-        <SummaryMetric
-          label="Websites"
-          value={`${totals.connected}/${totals.websites}`}
-          detail={connectionDetail}
-          icon={<Globe2 className="h-4 w-4" />}
-          warning={totals.websites > 0 && snapshot.onboarding?.recovery?.enabled !== false && connectionDetail !== "connected"}
-        />
-        <SummaryMetric label="Listings found" value={totals.discovered} detail="stable rows" icon={<Search className="h-4 w-4" />} />
-        <SummaryMetric label="Pending" value={totals.processing} detail="waiting or processing" icon={<LoaderCircle className="h-4 w-4" />} />
-        <SummaryMetric label="Ready for triage" value={totals.ready} detail={`${totals.filtered} screened out`} icon={<Check className="h-4 w-4" />} accent={totals.ready > 0} />
-        <SummaryMetric label="Failed listings" value={totals.failed} detail="processing stopped" icon={<AlertCircle className="h-4 w-4" />} attention={totals.failed > 0} />
-      </section>
-
-      <MonitoringRecoveryDetails ipId={ipId} sources={snapshot.onboarding?.recovery?.sources ?? []} />
 
       <FirstScanResults
         ipId={ipId}
