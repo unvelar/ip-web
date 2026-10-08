@@ -114,8 +114,8 @@ export function triggerMonitoringRun(domainId: string, keyword?: string) {
   );
 }
 
-export function getMonitoringSettings() {
-  return request<{ settings: MonitoringSettings | null }>("/api/monitoring/settings");
+export function getMonitoringSettings(signal?: AbortSignal) {
+  return request<{ settings: MonitoringSettings | null }>("/api/monitoring/settings", { signal });
 }
 
 export function updateMonitoringSettings(patch: {

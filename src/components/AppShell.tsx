@@ -21,6 +21,8 @@ import {
 import { useAuth } from "../context/AuthContext";
 import "./AppShell.css";
 import BrandProductSelector from "./BrandProductSelector";
+import MonitoringPulse from "./MonitoringPulse";
+import { useMonitoringPulse } from "./useMonitoringPulse";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
 import {
@@ -74,6 +76,7 @@ export default function AppShell() {
 
 function AppShellContent() {
   const { user, logout, actingTenantId, isActingAsOther, switchTenant } = useAuth();
+  const monitoringPulse = useMonitoringPulse();
   const [tenants, setTenants] = useState<Tenant[]>([]);
 
   // Load the tenant roster once for the admin "operate as any tenant" switcher.
@@ -337,6 +340,7 @@ function AppShellContent() {
           <BrandMark className="h-6 w-6 shrink-0" />
           <span className="hidden text-sm font-bold tracking-tight sm:inline">Unvelar</span>
         </Link>
+        {monitoringPulse.visible && <MonitoringPulse pulse={monitoringPulse.pulse} error={monitoringPulse.error} />}
         <div className="ml-auto flex items-center gap-1.5">
           <BrandProductSelector />
           <NotificationBell count={notificationCount} active={isActive("/inbox")} />
@@ -389,6 +393,7 @@ function AppShellContent() {
             className="shell-desktop-topbar hidden lg:flex sticky z-[29] h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
             style={{ top: `var(${APP_SHELL_BANNER_HEIGHT_VAR})` }}
           >
+            {monitoringPulse.visible && <MonitoringPulse pulse={monitoringPulse.pulse} error={monitoringPulse.error} />}
             <BrandProductSelector />
             <div className="ml-1 h-[18px] w-px bg-stone-200" aria-hidden />
             <NotificationBell count={notificationCount} active={isActive("/inbox")} />
