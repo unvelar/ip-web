@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import "./AppShell.css";
-import TenantMenu from "./TenantMenu";
+import BrandProductSelector from "./BrandProductSelector";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
 import {
@@ -62,8 +62,7 @@ const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
  *     ↳ Product lab
  *     ↳ Manage monitoring
  *
- * Tenant context and management share one topbar menu. The existing working-IP
- * report filter stays inside that menu until canonical brand/product mapping exists.
+ * The topbar provides a direct brand or product selector for report filtering.
  */
 export default function AppShell() {
   return (
@@ -339,7 +338,7 @@ function AppShellContent() {
           <span className="hidden text-sm font-bold tracking-tight sm:inline">Unvelar</span>
         </Link>
         <div className="ml-auto flex items-center gap-1.5">
-          <TenantMenu key={pathname} tenants={tenants} />
+          <BrandProductSelector />
           <NotificationBell count={notificationCount} active={isActive("/inbox")} />
         </div>
       </div>
@@ -385,12 +384,12 @@ function AppShellContent() {
               onReturn={() => user && switchTenant(user.tenant_id)}
             />
           )}
-          {/* Tenant context and its single management entry. */}
+          {/* Brand or product report filter. */}
           <div
             className="shell-desktop-topbar hidden lg:flex sticky z-[29] h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
             style={{ top: `var(${APP_SHELL_BANNER_HEIGHT_VAR})` }}
           >
-            <TenantMenu key={pathname} tenants={tenants} />
+            <BrandProductSelector />
             <div className="ml-1 h-[18px] w-px bg-stone-200" aria-hidden />
             <NotificationBell count={notificationCount} active={isActive("/inbox")} />
           </div>

@@ -12,7 +12,7 @@ Object.assign(globalThis, { window: happyWindow, document: happyWindow.document,
 const { AuthProvider } = await import("../src/context/AuthContext");
 const { ActiveIpProvider, useActiveIp } = await import("../src/context/ActiveIpContext");
 const { setActingTenant, getActingTenant } = await import("../src/api/transport");
-const { default: TenantMenu } = await import("../src/components/TenantMenu");
+const { default: BrandProductSelector } = await import("../src/components/BrandProductSelector");
 const originalFetch = globalThis.fetch;
 const originalTenant = getActingTenant();
 let root: Root | undefined;
@@ -26,7 +26,7 @@ function Probe() {
   const scope = useActiveIp(), location = useLocation(), navigate = useNavigate();
   return <><output>{JSON.stringify({id:scope.activeIpId,name:scope.activeIp?.name,error:scope.error,loading:scope.loading,url:location.pathname+location.search})}</output>
     <button onClick={() => navigate(-1)}>Back</button><button onClick={() => navigate(1)}>Forward</button>
-    <TenantMenu tenants={[]} /></>;
+    <BrandProductSelector /></>;
 }
 async function waitFor(predicate: () => boolean) {
   const deadline = Date.now() + 2000;
@@ -55,7 +55,6 @@ async function mount(route: string, stored = "brand") {
   const click = async (label: string) => {
     await act(async () => { [...container.querySelectorAll("button")].find(button => button.textContent === label)!.click(); });
   };
-  await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="Tenant menu: Your tenant"]')!.click(); });
   const select = async (value: string) => {
     await act(async () => { const element=container.querySelector("select")!; element.value=value;
       element.dispatchEvent(new happyWindow.Event("change", {bubbles:true})); });
@@ -81,12 +80,12 @@ test("linked-history URLs and remembered records resolve to the canonical brand"
   await waitFor(() => state().url === "/monitoring/first-scan?ip_id=brand");
   expect(state().id).toBe("brand");
   expect([...container.querySelectorAll("option")].some(option => option.value === "earlier")).toBe(false);
-  expect(container.querySelector('[aria-label="Linked history"]')?.textContent).toContain("Earlier brand");
+  expect(container.querySelector('[aria-label="Linked history"]')).toBeNull();
 });
 
 test("the selector labels brands, products and unconfigured records separately", async () => {
   const {container,state} = await mount("/monitoring/first-scan", "missing-record");
   expect(state().id).toBe("brand");
-  expect(container.querySelector("label")?.textContent).toBe("Brand or product");
+  expect(container.querySelector("select")?.getAttribute("aria-label")).toBe("Brand or product");
   expect([...container.querySelectorAll("optgroup")].map(group => group.label)).toEqual(["Brands", "Products", "Unconfigured records"]);
 });

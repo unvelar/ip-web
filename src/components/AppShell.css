@@ -93,29 +93,12 @@
 .shell-sidebar-scroll > button { height: 30px; margin-bottom: 8px; padding: 5px; }
 .shell-desktop-topbar, .shell-mobile-topbar { background: #faf9f6ed; border-color: var(--shell-border); }
 .shell-desktop-topbar { padding: 0 24px; }
-.tenant-menu { position:relative; min-width:0; font-size:12px; }
-.tenant-trigger { display:flex; align-items:center; gap:8px; height:32px; max-width:300px; padding:0 10px; border:1px solid #e5e3df; border-radius:7px; background:#fff; cursor:pointer; }
-.tenant-trigger:hover, .tenant-trigger[aria-expanded=true] { background:#eeede9; }
-.tenant-trigger:active { transform:scale(.98); }
-.tenant-trigger-label { color:#78716c; font-size:10px; }
-.tenant-trigger-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:550; }
-.tenant-menu-dismiss { position:fixed; inset:0; z-index:40; }
-.tenant-popover { position:absolute; z-index:41; right:0; top:calc(100% + 8px); width:min(320px,calc(100vw - 60px)); max-height:calc(100dvh - 130px); overflow-y:auto; border:1px solid #e5e3df; border-radius:10px; background:#fff; box-shadow:0 12px 36px #2925241a,0 2px 6px #2925240a; }
-.tenant-menu-heading { display:grid; gap:3px; padding:14px 14px 8px; }
-.tenant-menu-heading span { font-size:10px; color:#78716c; }
-.tenant-menu-heading strong { font-size:13px; font-weight:550; overflow-wrap:anywhere; }
-.tenant-manage-link { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px; margin:4px 4px 8px; border-radius:6px; }
-.tenant-manage-link:hover { background:#f4f3f0; }
-.tenant-manage-link span { display:grid; gap:3px; }
-.tenant-manage-link strong { font-weight:550; }
-.tenant-manage-link small, .tenant-menu-section p { font-size:11px; color:#78716c; }
-.tenant-menu-section { padding:12px 14px; border-top:1px solid #eeede9; }
-.tenant-menu-section label { display:block; margin-bottom:6px; font-weight:500; }
-.tenant-menu-section select { width:100%; padding:7px; border:1px solid #e5e3df; border-radius:5px; background:white; }
-.tenant-menu-section p { margin-top:6px; }
-.tenant-history-label { display:block; font-size:11px; font-weight:550; color:#44403c; }
-.tenant-history-link { display:inline-flex; align-items:center; gap:5px; margin-top:8px; font-size:11px; font-weight:550; }
-.tenant-menu :is(button,a,select):focus-visible { outline:2px solid #a8a29e; outline-offset:2px; }
+.brand-product-selector { position:relative; min-width:0; max-width:300px; font-size:12px; }
+.brand-product-selector select { appearance:none; width:100%; height:32px; padding:0 30px 0 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border:1px solid #e5e3df; border-radius:7px; background:#fff; color:#292524; font:inherit; font-weight:550; cursor:pointer; }
+.brand-product-selector select:hover { background:#eeede9; }
+.brand-product-selector select:disabled { color:#78716c; cursor:default; }
+.brand-product-selector > svg { position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none; }
+.brand-product-selector select:focus-visible { outline:2px solid #a8a29e; outline-offset:2px; }
 .tenant-workspace-nav { max-width:1320px; margin:0 auto; padding:24px 38px 0; }
 .tenant-workspace-nav > span { font-size:11px; color:#78716c; }
 .tenant-workspace-nav nav { display:flex; gap:22px; border-bottom:1px solid #e5e3df; margin-top:7px; }
@@ -132,6 +115,11 @@
 .shell-mobile-topbar > a > span { font-size: 14px; }
 .shell-mobile-topbar > button { padding: 6px; }
 .shell-mobile-drawer { width: 272px; max-width: calc(100vw - 48px); }
+@media (max-width: 1023px) {
+  .shell-mobile-topbar > div { min-width:0; }
+  .shell-mobile-topbar .brand-product-selector { max-width:min(300px,calc(100vw - 156px)); }
+  .shell-mobile-topbar .brand-product-selector select { min-height:44px; }
+}
 @media (min-width: 1024px) {
   .app-shell { --app-shell-topbar-height: 40px; --app-shell-banner-sticky-top: 0px; }
   .shell-sidebar-frame { width: 224px; transition: width 180ms ease; }
@@ -139,8 +127,6 @@
 }
 @media (max-width: 639px) {
   .shell-tenant-banner { padding: 0 16px; }
-  .tenant-trigger { max-width:230px; min-height:36px; }
-  .tenant-trigger-label { display:none; }
   .tenant-workspace-nav { padding:20px 20px 0; }
   .tenant-workspace-nav nav { gap:16px; overflow-x:auto; }
   .tenant-workspace-nav a { font-size:12px; }
