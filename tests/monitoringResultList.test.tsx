@@ -50,6 +50,13 @@ async function setup(options: { findings?: IpReviewFinding[]; total?: number; cl
         if (selected.has(id)) selected.delete(id); else selected.add(id);
         render();
       }}
+      onSelectAll={(checked) => {
+        selected = new Set(selected);
+        for (const item of options.findings ?? listings) {
+          if (checked) selected.add(item.result_id); else selected.delete(item.result_id);
+        }
+        render();
+      }}
       onSort={(sort) => sorts.push(sort)}
       emptyMessage={options.emptyMessage}
       onClearFilters={options.clear ? () => { clears++; } : undefined}
@@ -88,13 +95,13 @@ test("listing clicks and row Enter/Space open evidence without changing selectio
 
 test("checking and unchecking a listing never opens its inspector", async () => {
   const ui = await setup();
-  const checkbox = () => ui.container.querySelector("input[type=checkbox]") as HTMLInputElement;
-  await ui.click("input[type=checkbox]");
+  const checkbox = () => ui.container.querySelector("tbody input[type=checkbox]") as HTMLInputElement;
+  await ui.click("tbody input[type=checkbox]");
   expect(checkbox().checked).toBe(true);
-  await ui.key("input[type=checkbox]", "Enter");
-  await ui.key("input[type=checkbox]", " ");
+  await ui.key("tbody input[type=checkbox]", "Enter");
+  await ui.key("tbody input[type=checkbox]", " ");
   expect(ui.opened).toEqual([]);
-  await ui.click("input[type=checkbox]");
+  await ui.click("tbody input[type=checkbox]");
   expect(checkbox().checked).toBe(false);
   expect(ui.selections).toEqual(["high", "high"]);
   expect(ui.opened).toEqual([]);

@@ -20,7 +20,7 @@ const sortOptions: Array<{ value: MonitoringSortMode; label: string }> = [
 /** A readable review queue. Filtering and sorting still cover the full server corpus. */
 export function MonitoringResultList({
   findings, total, sort, selected, activeId, dismissing, showIp, showStatus,
-  onSort, onSelect, onOpen, emptyMessage, onClearFilters,
+  onSort, onSelect, onSelectAll, onOpen, emptyMessage, onClearFilters,
 }: {
   findings: IpReviewFinding[];
   total: number;
@@ -32,10 +32,14 @@ export function MonitoringResultList({
   showStatus: boolean;
   onSort: (sort: MonitoringSortMode) => void;
   onSelect: (id: string) => void;
+  onSelectAll: (checked: boolean) => void;
   onOpen: (id: string) => void;
   emptyMessage?: string;
   onClearFilters?: () => void;
 }) {
+  const allSelected = findings.length > 0 && findings.every((finding) => selected.has(finding.result_id));
+  const partiallySelected = !allSelected && findings.some((finding) => selected.has(finding.result_id));
+
   return <>
     <div className="monitoring-results-summary">
       <span aria-live="polite"><strong>{total.toLocaleString()} {total === 1 ? "listing" : "listings"}</strong> matching this view</span>
@@ -46,7 +50,19 @@ export function MonitoringResultList({
     <table className="monitoring-result-list" aria-label="Monitoring listings">
       <colgroup><col className="monitoring-checkbox-column" /><col /><col className="monitoring-price-column" /><col className="monitoring-assessment-column" /></colgroup>
       <thead><tr>
-        <th colSpan={2} scope="col">Listing / seller / website</th>
+        <th scope="col" className="monitoring-listing-checkbox">
+          <label title="Select all loaded listings">
+            <input
+              type="checkbox"
+              aria-label="Select all loaded listings"
+              checked={allSelected}
+              ref={(element) => { if (element) element.indeterminate = partiallySelected; }}
+              disabled={findings.length === 0}
+              onChange={(event) => onSelectAll(event.target.checked)}
+            />
+          </label>
+        </th>
+        <th scope="col" className="monitoring-listing-heading">Listing / seller / website</th>
         <th scope="col" className="monitoring-price-heading">Price (USD)</th>
         <th scope="col" className="monitoring-assessment-heading">Suggested action</th>
       </tr></thead>
