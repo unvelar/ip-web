@@ -38,7 +38,7 @@ export function MonitoringResultList({
 }) {
   return <>
     <div className="monitoring-results-summary">
-      <span aria-live="polite"><strong>{total.toLocaleString()} {total === 1 ? "listing" : "listings"}</strong> matching this view</span>
+      <span aria-live="polite"><strong>{total.toLocaleString()} {total === 1 ? "listing" : "listings"}</strong><span className="monitoring-results-context"> matching this view</span></span>
       <select aria-label="Sort listings" value={sort} onChange={(event) => onSort(event.target.value as MonitoringSortMode)}>
         {sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>

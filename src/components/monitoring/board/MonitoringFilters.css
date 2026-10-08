@@ -41,6 +41,8 @@
 .monitoring-workflow-tab.is-active::after, .monitoring-workflow .monitoring-filter-trigger.is-active::after { position: absolute; bottom: -1px; left: 8px; right: 8px; height: 2px; background: #242320; content: ""; }
 .monitoring-workflow-tab span { margin-left: 0; color: #706d66; font-size: 12px; font-variant-numeric: tabular-nums; }
 .monitoring-filter-toolbar { position: relative; padding: 16px 20px 0; }
+.monitoring-filter-search-row { display: flex; align-items: center; gap: 8px; }
+.monitoring-mobile-filter-toggle, .monitoring-mobile-filter-done { display: none; }
 .monitoring-listing-search { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid #e9e6e0; border-radius: 8px; padding: 0 11px; background: #fff; }
 .monitoring-listing-search input { outline: none; min-width: 0; width: 100%; padding: 10px 0; border: 0; background: transparent; color: #242320; font-size: 14px; line-height: 1.45; }
 .monitoring-listing-search input::placeholder { color: #706d66; }
@@ -77,6 +79,25 @@
 .monitoring-filters .product-filter-picker input[type="search"] { height: 36px; border-color: #e9e6e0; border-radius: 6px; background: #f8f7f5; }
 @keyframes monitoring-filter-enter { from { opacity: 0; transform: translateY(-3px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .monitoring-filter-popover { animation: none; } }
+@media (max-width: 640px) {
+  .monitoring-workflow { padding: 8px 12px 0; }
+  .monitoring-workflow-tabs { flex-wrap: nowrap; overflow-x: auto; }
+  .monitoring-workflow-tabs > * { flex-shrink: 0; }
+  .monitoring-workflow-tab, .monitoring-workflow .monitoring-filter-trigger { min-height: 44px; }
+  .monitoring-filter-toolbar { padding: 12px 12px 0; }
+  .monitoring-listing-search { flex: 1; min-width: 0; gap: 6px; }
+  .monitoring-listing-search input { min-height: 44px; font-size: 16px; }
+  .monitoring-mobile-filter-toggle { display: inline-flex; min-height: 44px; flex-shrink: 0; font-size: 12px; }
+  .monitoring-filter-count { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #242320; color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .monitoring-filter-tools { display: none; }
+  .monitoring-filter-tools.is-expanded { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .monitoring-filter-tools > .monitoring-filter-anchor > .monitoring-filter-trigger { width: 100%; min-height: 44px; }
+  .monitoring-mobile-filter-done { display: inline-flex; grid-column: 1 / -1; min-height: 44px; background: #242320; color: #fff; }
+  .monitoring-mobile-filter-done:hover { background: #44403c; }
+  .monitoring-active-filters { flex-wrap: nowrap; overflow-x: auto; padding: 8px 12px 0; }
+  .monitoring-active-filters > * { flex-shrink: 0; }
+  .monitoring-filter-chip { max-width: 240px; }
+}
 @media (max-width: 480px) {
   .monitoring-workflow { padding: 12px 6px 0; }
   .monitoring-workflow-tab, .monitoring-workflow .monitoring-filter-trigger { font-size: 11px; }

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Banknote, Globe, Package, Search, SlidersHorizontal, X } from "lucide-react";
 import type { MonitoringFacets, MonitoringSourceFacet, TenantMember } from "../../../api";
 import { getPersistedProductGroups } from "../../../api/products";
@@ -78,6 +78,9 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
   ipId: string | null; showIpFilter: boolean; members: TenantMember[]; membersLoading: boolean; membersError: string; currentMemberId: string | null;
 }) {
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const toolsId = useId();
+  const filtersToggleRef = useRef<HTMLButtonElement>(null);
   const [search, setSearch] = useState(filters.query ?? "");
   const [productLabel, setProductLabel] = useState<{ ipId: string; id: string; label: string } | null>(null);
   useEffect(() => {
@@ -191,6 +194,7 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
   const evidenceLabels = { text: "Protected terms", text_only: "Text only", visual: "Images", both: "Text and images" };
   if (filters.match_basis) chips.push({ key: "evidence", label: `Evidence: ${evidenceLabels[filters.match_basis]}`, edit: () => setPanel("more"), remove: () => onChange({ match_basis: null }) });
   if (filters.protected_term_id) chips.push({ key: "term", label: "Protected term: Selected term", edit: () => setPanel("more"), remove: () => onChange({ protected_term_id: null }) });
+  const activeFilterCount = chips.filter((chip) => chip.key !== "search").length;
   const trigger = (key: Panel, label: string, icon: ReactNode, active: boolean) => <button type="button" ref={(node) => { triggerRefs.current[key] = node; }}
     className={`monitoring-filter-trigger ${active ? "is-active" : ""}`} aria-expanded={panel === key} aria-controls={`monitoring-filter-${key}`} aria-haspopup="dialog"
     onClick={() => setPanel(panel === key ? null : key)}>{icon}<span>{label}</span>{key !== "more" && <ChevronDown size={13} aria-hidden />}</button>;
@@ -209,12 +213,23 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
       </div>
     </nav>
     <div className="monitoring-filter-toolbar">
+      <div className="monitoring-filter-search-row">
       <label className="monitoring-listing-search">
         <Search size={15} className="shrink-0 text-stone-400" aria-hidden />
         <input type="search" ref={searchRef} aria-label="Search listings or sellers" placeholder="Search listings or sellers…" value={search} onChange={(event) => setSearch(event.target.value)} />
         {search && <button type="button" aria-label="Clear search" onClick={() => { setSearch(""); onChange({ query: null }); }}><X size={14} /></button>}
       </label>
-      <div className="monitoring-filter-tools">
+      <button type="button" ref={filtersToggleRef} className="monitoring-filter-trigger monitoring-mobile-filter-toggle"
+        aria-expanded={filtersExpanded} aria-controls={toolsId}
+        onClick={() => { setPanel(null); setFiltersExpanded(!filtersExpanded); }}>
+        <SlidersHorizontal size={16} aria-hidden /><span>Filters</span>
+        {activeFilterCount > 0 && <span className="monitoring-filter-count">{activeFilterCount}</span>}
+      </button>
+      </div>
+      <div id={toolsId} className={`monitoring-filter-tools ${filtersExpanded ? "is-expanded" : ""}`}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !panel && window.matchMedia("(max-width: 640px)").matches) { setFiltersExpanded(false); filtersToggleRef.current?.focus(); }
+        }}>
       <div className="monitoring-filter-anchor">
         {trigger("product", "Product or group", <Package size={14} aria-hidden />, hasProduct)}
         {popover("product", <ProductFilterPicker ipId={ipId} productId={filters.catalog_product_id} groupId={filters.product_group_id} onChange={({ label, ...selection }) => {
@@ -243,10 +258,13 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
           <button type="button" className="h-8 w-full rounded-md bg-stone-900 text-xs font-semibold text-white hover:bg-stone-800" onClick={() => close(true)}>Done</button>
         </div>)}
       </div>
+      <button type="button" className="monitoring-filter-trigger monitoring-mobile-filter-done" onClick={() => {
+        setPanel(null); setFiltersExpanded(false); filtersToggleRef.current?.focus();
+      }}>Show listings<Check size={14} aria-hidden /></button>
       </div>
     </div>
     {chips.length > 0 && <div className="monitoring-active-filters" aria-label="Active filters">
-      {chips.map((chip) => <span className="monitoring-filter-chip" key={chip.key}>{chip.edit ? <button type="button" className="truncate" aria-label={`Edit ${chip.label} filter`} onClick={() => { chip.edit?.(); if (chip.key === "search") searchRef.current?.focus(); }} title={chip.label}>{chip.label}</button> : <span className="truncate">{chip.label}</span>}<button type="button" aria-label={`Remove ${chip.label} filter`} onClick={chip.remove}><X size={12} aria-hidden /></button></span>)}
+      {chips.map((chip) => <span className="monitoring-filter-chip" key={chip.key}>{chip.edit ? <button type="button" className="truncate" aria-label={`Edit ${chip.label} filter`} onClick={() => { if (chip.key !== "search") setFiltersExpanded(true); chip.edit?.(); if (chip.key === "search") searchRef.current?.focus(); }} title={chip.label}>{chip.label}</button> : <span className="truncate">{chip.label}</span>}<button type="button" aria-label={`Remove ${chip.label} filter`} onClick={chip.remove}><X size={12} aria-hidden /></button></span>)}
       <button type="button" className="monitoring-clear-filters" onClick={clear}>Clear filters</button>
     </div>}
   </section>;

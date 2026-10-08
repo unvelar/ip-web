@@ -22,8 +22,9 @@ const facets: MonitoringFacets = {
 let root: Root | undefined;
 afterEach(async () => { if (root) await act(async () => root?.unmount()); root = undefined; });
 
-async function setup(initial: Partial<InboxFilters> = {}) {
+async function setup(initial: Partial<InboxFilters> = {}, mobile = false) {
   const window = new Window({ url: "http://localhost:5173" });
+  if (mobile) window.innerWidth = 390;
   Object.assign(globalThis, { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement("div");
   document.body.append(container);
@@ -118,4 +119,38 @@ test("drilling into Google keeps keyboard focus inside the panel and Escape rema
   await ui.escape();
   expect(ui.container.querySelector('[role="dialog"]')).toBeNull();
   expect(document.activeElement).toBe(trigger);
+});
+
+test("filter disclosure preserves selections and returns to listings with focus restored", async () => {
+  const ui = await setup({ source: "domain:ebay.com" });
+  const toggle = ui.button("Filters");
+  const tools = document.getElementById(toggle.getAttribute("aria-controls")!);
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(toggle.textContent).toBe("Filters1");
+  await ui.click("Filters");
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(tools?.classList.contains("is-expanded")).toBe(true);
+  await ui.click("Source");
+  await ui.click("Google");
+  await ui.click("one.shop");
+  await ui.click("Show listings");
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(ui.filters()).toMatchObject({ source: "search:google", platform: "one.shop" });
+  expect(toggle.textContent).toBe("Filters2");
+  expect(document.activeElement).toBe(toggle);
+  await ui.remove("Website: one.shop");
+  expect(toggle.textContent).toBe("Filters1");
+});
+
+test("editing an active filter reveals its controls and Escape can collapse them", async () => {
+  const ui = await setup({ source: "domain:ebay.com" }, true);
+  const toggle = ui.button("Filters");
+  await act(async () => (ui.container.querySelector('[aria-label="Edit Found via: eBay filter"]') as HTMLButtonElement).click());
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(ui.container.querySelector('[role="dialog"]')).not.toBeNull();
+  await ui.escape();
+  expect(document.activeElement).toBe(ui.button("Source"));
+  await ui.escape();
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(document.activeElement).toBe(toggle);
 });

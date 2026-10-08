@@ -89,5 +89,15 @@
   .monitoring-selection-bar { padding: 10px 12px; gap: 5px; }
   .monitoring-selection-bar button { padding: 8px; }
 }
+@media (max-width: 640px) {
+  .monitoring-results-summary { flex-wrap: nowrap; gap: 8px; padding: 8px 12px; }
+  .monitoring-results-summary > span { flex-shrink: 0; }
+  .monitoring-results-context { display: none; }
+  .monitoring-results-summary select { min-width: 0; max-width: 65%; min-height: 44px; }
+}
+@media (max-width: 480px) {
+  /* Keep column headings accessible without a redundant heading row above cards. */
+  .monitoring-result-list thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+}
 @media (pointer: coarse) { .monitoring-selection-bar button, .monitoring-results-pagination button { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .monitoring-listing-row { transition: none; } }
