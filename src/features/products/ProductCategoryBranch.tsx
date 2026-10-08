@@ -103,9 +103,6 @@ export function ProductCategoryBranch({
                   title={hiddenCategories.map((item) => item.label).join(" / ")}
                 >
                   <span className="font-semibold">…</span>
-                  <span className="rounded bg-stone-200/80 px-1 text-[8px] tabular-nums text-stone-500">
-                    {hiddenCategories.length}
-                  </span>
                 </summary>
                 <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-[240px] overflow-hidden rounded-md border border-stone-200 bg-white py-1 shadow-lg">
                   {hiddenCategories.map((item) => (
@@ -137,9 +134,6 @@ export function ProductCategoryBranch({
             </>
           )}
         </div>
-        <span className="shrink-0 rounded bg-stone-200/70 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
-          {categoryGroups.length}
-        </span>
       </div>
 
       {!collapsed && (
