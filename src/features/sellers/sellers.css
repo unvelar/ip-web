@@ -230,3 +230,16 @@
 .seller-history summary { width: fit-content; padding: 2px 0; }
 .seller-history > div { max-width: 280px; padding: 6px 0 2px; line-height: 1.6; }
   .seller-history summary { min-height: 28px; display: list-item; padding-top: 6px; }
+
+@container (max-width: 420px) {
+  .seller-listing-filters { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .seller-listing-filters select { width: 100%; min-height: 44px; }
+  .listing-decision-toolbar { flex-wrap: wrap; }
+  .listing-selection-actions { flex-wrap: wrap; width: 100%; }
+}
+@media (max-width: 639px) {
+  .seller-action button, .seller-open button, .seller-item-external { min-width: 44px; min-height: 44px; }
+  .seller-item-columns { grid-template-columns: 24px minmax(0, 1fr) auto 44px; }
+  .seller-item-checkbox { width: 20px; height: 20px; }
+  .listing-selection-actions > button, .listing-actions-more > button { min-height: 44px; }
+}
