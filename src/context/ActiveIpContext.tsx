@@ -130,7 +130,7 @@ export function ActiveIpProvider({ children }: { children: ReactNode }) {
     persistIp(actingTenantId, selected.id);
     const params = new URLSearchParams(location.search);
     params.set("ip_id", selected.id);
-    for (const key of ["scope", "cursor", "source_id", "product_group_id", "catalog_product_id", "seller", "finding", "campaign_batch"]) params.delete(key);
+    for (const key of ["scope", "cursor", "source_id", "product_group_id", "catalog_product_id", "protected_term_id", "seller", "finding", "campaign_batch"]) params.delete(key);
     navigate({ pathname: location.pathname, search: params.toString(), hash: location.hash });
   }, [actingTenantId, location.hash, location.pathname, location.search, navigate, resolveIp]);
 

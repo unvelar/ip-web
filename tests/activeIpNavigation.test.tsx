@@ -69,7 +69,7 @@ afterEach(async () => {
 });
 
 test("selection updates a scoped URL and back/forward keeps the selected product in sync", async () => {
-  const {state,select,click} = await mount("/monitoring/first-scan?ip_id=brand&q=robot");
+  const {state,select,click} = await mount("/monitoring/first-scan?ip_id=brand&q=robot&protected_term_id=old-term&source_id=old-source&product_group_id=old-group");
   await select("product");
   expect(state()).toMatchObject({id:"product",name:"Space soldier",url:"/monitoring/first-scan?ip_id=product&q=robot"});
   await click("Back"); expect(state().id).toBe("brand");
