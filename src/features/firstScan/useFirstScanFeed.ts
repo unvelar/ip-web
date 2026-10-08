@@ -196,17 +196,31 @@ export function useFirstScanFeed(requestedIpId: string | null) {
     let stopped = false;
     let timer: number | undefined;
     let controller: AbortController | null = null;
+    let polling = false;
     loadedPages.current = 1;
-    const poll = async () => {
+    const poll = async (initial = false) => {
+      if (stopped || polling || (!initial && document.visibilityState === "hidden")) return;
+      timer = undefined;
+      polling = true;
       if (!activeRequest.current || activeRequest.current.signal.aborted) {
         controller = new AbortController();
         await refresh(controller.signal);
       }
-      if (!stopped) timer = window.setTimeout(poll, POLL_INTERVAL_MS);
+      polling = false;
+      if (!stopped && document.visibilityState !== "hidden") {
+        timer = window.setTimeout(() => void poll(), POLL_INTERVAL_MS);
+      }
     };
-    void poll();
+    const onVisibilityChange = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+      if (document.visibilityState !== "hidden") void poll();
+    };
+    void poll(true);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       stopped = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (timer !== undefined) window.clearTimeout(timer);
       controller?.abort();
       activeRequest.current?.abort();

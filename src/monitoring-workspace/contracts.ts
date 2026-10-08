@@ -30,7 +30,7 @@ export class DraftError extends Error {
   constructor(message: string, status: number) { super(message); this.status = status; }
 }
 export interface WorkspaceClient {
-  load(): Promise<WorkspaceResponse>;
+  load(signal?: AbortSignal): Promise<WorkspaceResponse>;
   uploadReferenceImages(scopeId: string, files: File[]): Promise<ReferenceImage[]>;
   activate(document: Workspace, revision: number): Promise<Activation>;
   preview(document: Workspace, brandId: string | null, productId: string | null, signal?: AbortSignal): Promise<Plan>;

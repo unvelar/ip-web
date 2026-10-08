@@ -171,3 +171,31 @@ test("a changed filter replaces an in-flight refresh immediately and ignores its
   expect(feed.filteredTotal).toBe(515);
   expect(feed.visibleResults.every(row => row.source_id === sourceB)).toBe(true);
 });
+
+test("hidden first-scan tabs stop polling and resume once without overlapping requests", async () => {
+  await mount();
+  const descriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  let visibility = "hidden";
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+  try {
+    const before = requests.length;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 5_100)); });
+    expect(requests.length).toBe(before);
+    let release!: () => void;
+    delayNextFirstPage = new Promise<void>(resolve => { release = resolve; });
+    visibility = "visible";
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => requests.length === before + 1 && feed.refreshing);
+    await act(async () => { release(); });
+    await waitFor(() => !feed.refreshing);
+    expect(requests.length).toBe(before + 1);
+    expect(feed.totals.discovered).toBe(1115);
+  } finally {
+    if (descriptor) Object.defineProperty(document, "visibilityState", descriptor);
+    else Reflect.deleteProperty(document, "visibilityState");
+  }
+}, 10_000);

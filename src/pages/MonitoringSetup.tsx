@@ -16,16 +16,17 @@ function TenantSetup() {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     void (async () => {
       try {
-        const capabilities = await getMonitoringSetupCapabilities();
+        const capabilities = await getMonitoringSetupCapabilities(controller.signal);
         if (!active) return;
         if (!capabilities.workspace) { setUnavailable(true); return; }
-        const value = await monitoringSetupClient.load();
+        const value = await monitoringSetupClient.load(controller.signal);
         if (active) setWorkspace(value);
       } catch (err) { if (active) setError(err instanceof Error ? err.message : String(err)); }
     })();
-    return () => { active = false; };
+    return () => { active = false; controller.abort(); };
   }, [attempt]);
   if (workspace) return <WorkspaceEditor client={monitoringSetupClient} loaded={workspace} embedded onLeave={() => window.location.assign('/dashboard')} />;
   return <section className="p-8 max-w-3xl"><h1 className="text-2xl font-semibold mb-3">Monitoring</h1>

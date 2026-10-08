@@ -6,9 +6,9 @@ import { DraftError, type Activation, type Brand, type Coverage, type Marketplac
 
 export type MonitoringSetupCapabilities = { workspace: boolean; marketplace_admin: boolean };
 
-export async function getMonitoringSetupCapabilities(): Promise<MonitoringSetupCapabilities> {
+export async function getMonitoringSetupCapabilities(signal?: AbortSignal): Promise<MonitoringSetupCapabilities> {
   try {
-    const value = await request<MonitoringSetupCapabilities>('/api/monitoring-workspace/capabilities');
+    const value = await request<MonitoringSetupCapabilities>('/api/monitoring-workspace/capabilities', { signal });
     requireResponse(typeof value?.workspace === 'boolean' && typeof value?.marketplace_admin === 'boolean', 'monitoring setup availability');
     return value;
   } catch (error) {
@@ -120,7 +120,7 @@ function normalizeActivation(value: unknown): Activation {
 // Uses the website's WorkOS session and acting-company header. The isolated
 // development client is deliberately a separate adapter with no shared login.
 export const monitoringSetupClient: WorkspaceClient & MarketplaceClient = {
-  load: async () => normalizeLoadResponse(await setupRequest<unknown>('/api/monitoring-workspace')),
+  load: async signal => normalizeLoadResponse(await setupRequest<unknown>('/api/monitoring-workspace', { signal })),
   uploadReferenceImages: async (scopeId, files) => {
     const body = new FormData();
     body.append('scope_id', scopeId);

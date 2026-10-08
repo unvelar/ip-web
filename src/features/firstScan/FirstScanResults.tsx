@@ -188,7 +188,7 @@ function ProgressiveResultRow({ result, ipId }: { result: IpFirstScanResult; ipI
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-stone-200 bg-stone-100">
             {image && failedImage !== image
-              ? <img src={image} alt="" className="h-full w-full object-cover"
+              ? <img src={image} alt="" loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover"
                   onError={() => setFailedImage(image)}
                   onLoad={event => {
                     const { naturalWidth, naturalHeight } = event.currentTarget;
