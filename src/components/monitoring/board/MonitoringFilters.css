@@ -77,6 +77,14 @@
 .monitoring-filters .product-filter-picker input[type="search"] { height: 36px; border-color: #e9e6e0; border-radius: 6px; background: #f8f7f5; }
 @keyframes monitoring-filter-enter { from { opacity: 0; transform: translateY(-3px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .monitoring-filter-popover { animation: none; } }
+@media (max-width: 639px) {
+  .monitoring-filter-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .monitoring-filter-anchor, .monitoring-filter-trigger { min-width: 0; max-width: 100%; }
+  .monitoring-filter-tools .monitoring-filter-trigger { width: 100%; justify-content: flex-start; }
+  .monitoring-filter-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .monitoring-filter-chip button:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .monitoring-filter-menu-heading button { width: 44px; height: 44px; }
+}
 @media (max-width: 480px) {
   .monitoring-workflow { padding: 12px 6px 0; }
   .monitoring-workflow-tab, .monitoring-workflow .monitoring-filter-trigger { font-size: 11px; }

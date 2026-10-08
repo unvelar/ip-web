@@ -68,24 +68,27 @@
   .monitoring-result-list .monitoring-assessment-column { width: 118px; }
   .monitoring-listing-assessment, .monitoring-result-list .monitoring-assessment-heading { padding-right: 12px; }
 }
-@media (max-width: 480px) {
+@media (max-width: 639px) {
   .monitoring-results-summary { padding: 16px 12px 10px; font-size: 11px; }
   .monitoring-workspace-header { flex-wrap: wrap; }
   .monitoring-status-link { max-width: none; text-align: left; justify-content: flex-start; padding: 0; }
   .monitoring-result-list, .monitoring-result-list tbody { display: block; }
-  .monitoring-result-list colgroup, .monitoring-result-list .monitoring-assessment-heading, .monitoring-listing-assessment { display: none; }
+  .monitoring-result-list colgroup, .monitoring-result-list .monitoring-assessment-heading { display: none; }
   .monitoring-result-list thead, .monitoring-result-list thead tr { display: block; }
   .monitoring-result-list th { display: inline-block; padding: 8px 12px; }
   .monitoring-result-list .monitoring-price-heading { display: none; }
   .monitoring-listing-row { display: grid; grid-template-columns: 20px minmax(0,1fr); gap: 4px 10px; padding: 13px 12px; }
   .monitoring-listing-row td { display: block; padding: 0; }
-  .monitoring-listing-checkbox { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
-  .monitoring-listing-checkbox label { width: 20px; }
+  .monitoring-listing-checkbox { grid-column: 1; grid-row: 1 / span 3; align-self: start; }
+  .monitoring-listing-checkbox label { width: 28px; min-height: 44px; }
   .monitoring-listing-cell { grid-column: 2; grid-row: 1; }
   .monitoring-listing-main { gap: 10px; align-items: flex-start; }
   .monitoring-listing-thumbnail { flex-basis: 40px; width: 40px; height: 48px; }
   .monitoring-listing-price { grid-column: 2; grid-row: 2; margin-left: 50px; text-align: left; }
-  .monitoring-listing-row .monitoring-listing-assessment { display: none; }
+  .monitoring-listing-row .monitoring-listing-assessment { display: block; grid-column: 2; grid-row: 3; margin-left: 50px; text-align: left; font-size: 12px; }
+  .monitoring-listing-meta { font-size: 12px; }
+  .monitoring-results-summary { align-items: stretch; flex-direction: column; gap: 8px; }
+  .monitoring-results-summary select { width: 100%; max-width: 100%; font-size: 16px; }
   .monitoring-selection-bar { padding: 10px 12px; gap: 5px; }
   .monitoring-selection-bar button { padding: 8px; }
 }

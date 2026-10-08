@@ -538,7 +538,7 @@ function ContactModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="contact-modal-title"
@@ -548,12 +548,12 @@ function ContactModal({ onClose }: { onClose: () => void }) {
         onClick={onClose}
         aria-hidden
       />
-      <div className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-white p-6 sm:p-8 shadow-2xl card-elevated animate-fade-up">
+      <div className="relative max-h-[calc(100dvh-2rem)] overflow-y-auto w-full max-w-md rounded-2xl sm:rounded-3xl bg-white p-6 sm:p-8 shadow-2xl card-elevated animate-fade-up">
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+          className="absolute top-3 right-3 min-w-11 min-h-11 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>

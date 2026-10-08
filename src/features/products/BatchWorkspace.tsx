@@ -90,7 +90,7 @@ export function BatchWorkspace({
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[1040px] flex-col">
-      <div className="sticky top-0 z-20 border-b border-stone-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-7">
+      <div className="sticky top-[calc(var(--app-shell-topbar-height)_+_var(--app-shell-banner-height))] lg:top-0 z-20 border-b border-stone-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-7">
         <button
           type="button"
           onClick={onBack}

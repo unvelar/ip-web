@@ -2,6 +2,7 @@
 .app-shell {
   --app-shell-topbar-height: 56px;
   --app-shell-banner-sticky-top: 56px;
+  --app-shell-acting-banner-height: 1.75rem;
   --shell-border: #e8e6e2;
   background: #faf9f6;
 }
@@ -123,13 +124,42 @@
 .tenant-workspace-nav a:focus-visible { outline:2px solid #a8a29e; outline-offset:3px; }
 .shell-notification-bell { height: 30px; width: 30px; }
 .shell-notification-bell svg { width: 16px; height: 16px; }
-.shell-tenant-banner { background: #faf5e6; border-color: #eae0c6; color: #85683f; padding: 0 24px; font-size: 11px; gap: 7px; }
+.shell-tenant-banner { height: var(--app-shell-banner-height); background: #faf5e6; border-color: #eae0c6; color: #85683f; padding: 0 24px; font-size: 11px; gap: 7px; }
 .shell-tenant-banner button { font-weight: 500; }
 .shell-mobile-topbar { height: 56px; padding: 0 12px; gap: 10px; z-index:31; }
 .shell-mobile-topbar > a > svg { width: 24px; height: 24px; }
 .shell-mobile-topbar > a > span { font-size: 14px; }
 .shell-mobile-topbar > button { padding: 6px; }
 .shell-mobile-drawer { width: 272px; max-width: calc(100vw - 48px); }
+.shell-navigation-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: hidden;
+}
+.shell-navigation-dialog[open] { display: flex; }
+.shell-navigation-dialog::backdrop { background: #1c191766; }
+.shell-navigation-close { display: grid; place-items: center; width: 44px; height: 44px; }
+@media (max-width: 1023px) {
+  .app-shell { --app-shell-acting-banner-height: 44px; }
+  .shell-mobile-topbar { padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)); }
+  .shell-mobile-topbar > button, .shell-notification-bell { min-width: 44px; min-height: 44px; }
+  .shell-mobile-topbar > div { min-width: 0; }
+  .shell-mobile-topbar .tenant-trigger { max-width: min(300px, calc(100vw - 156px)); min-height: 44px; }
+  .shell-mobile-drawer .shell-brand-row { padding-right: 56px; }
+  .shell-mobile-drawer .shell-sidebar-scroll { min-height: 0; overscroll-behavior: contain; }
+  .shell-mobile-drawer .shell-sidebar-footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .shell-mobile-drawer :is(.shell-nav-item, .shell-account > button, .shell-nav-group > button) { min-height: 44px; }
+  .tenant-popover :is(a, select) { min-height: 44px; }
+}
 @media (min-width: 1024px) {
   .app-shell { --app-shell-topbar-height: 40px; --app-shell-banner-sticky-top: 0px; }
   .shell-sidebar-frame { width: 224px; transition: width 180ms ease; }

@@ -275,3 +275,15 @@ dialog form .actions { margin-top:20px; }
 .authorized-sellers form { margin-top:28px; border-top:1px solid #e7e5e4; padding-top:20px; }
 .authorization-fields { display:flex; flex-wrap:wrap; gap:16px; margin:16px 0; }
 .authorization-fields label { display:flex; flex-direction:column; gap:8px; flex:1; min-width:200px; }
+@media(max-width:639px) {
+  .monitoring-workspace .page { padding-inline:16px; }
+  .monitoring-workspace :is(button.primary,button.secondary,select) { min-height:44px; }
+  .monitoring-workspace .scope-navigator button { min-height:44px; }
+  .monitoring-workspace .scope-navigator .scope-expand { min-width:44px; }
+  .monitoring-workspace .frequency-row { flex-wrap:wrap; }
+  .monitoring-workspace .monitoring-control { flex-wrap:wrap; gap:14px; }
+  .monitoring-workspace .monitoring-switch { min-height:44px; }
+  .monitoring-workspace .authorization-fields label { min-width:0; flex-basis:100%; }
+  .monitoring-workspace .savebar .actions { width:100%; }
+  .monitoring-workspace .savebar .actions button { flex:1; }
+}
