@@ -624,6 +624,18 @@ export function MonitoringBoard({
       return next;
     });
   }
+  function selectAllLoaded(checked: boolean) {
+    setReviewingSelection(false);
+    setBatchResult(null);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const finding of displayFindings) {
+        if (checked) next.add(finding.result_id);
+        else next.delete(finding.result_id);
+      }
+      return next;
+    });
+  }
   function addRelatedToBatch(findingsToAdd: IpReviewFinding[]) {
     setReviewingSelection(false);
     const openFindings = findingsToAdd.filter(isBatchSelectableFinding);
@@ -1153,6 +1165,7 @@ export function MonitoringBoard({
           showStatus={filters.status === null || filters.status === "all"}
           onSort={(sort) => onFiltersChange({ sort })}
           onSelect={toggleSelect}
+          onSelectAll={selectAllLoaded}
           onOpen={setActiveFinding}
           emptyMessage={emptyStateMessage}
           onClearFilters={hasActiveFilters ? clearFilters : undefined}
