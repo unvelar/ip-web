@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ListTodo,
   Menu,
-  X,
   Building2,
   Network,
   PanelLeftClose,
@@ -23,6 +22,7 @@ import "./AppShell.css";
 import TenantMenu from "./TenantMenu";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
+import MobileNavigation from "./MobileNavigation";
 import {
   getMonitoringFindingsCount,
   getReturnedMonitoringSellersCount,
@@ -174,7 +174,17 @@ function AppShellContent() {
   // Close mobile drawer on navigation.
   useEffect(() => {
     setDrawerOpen(false);
+    if (!hash && !window.matchMedia("(min-width: 1024px)").matches) {
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
   }, [pathname, hash]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = () => { if (desktop.matches) setDrawerOpen(false); };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
 
   function isActive(to: string) {
     return pathname === to || pathname.startsWith(`${to}/`);
@@ -321,7 +331,7 @@ function AppShellContent() {
 
   return (
     <div
-      className="app-shell min-h-dvh bg-cream text-stone-900 font-[Inter,system-ui,sans-serif] [--app-shell-topbar-height:3rem] [--app-shell-banner-sticky-top:3rem] lg:fixed lg:inset-0 lg:overflow-hidden lg:[--app-shell-topbar-height:40px] lg:[--app-shell-banner-sticky-top:0px]"
+      className="app-shell min-h-dvh bg-cream text-stone-900 font-[Inter,system-ui,sans-serif] lg:fixed lg:inset-0 lg:overflow-hidden"
       style={appShellLayoutStyle(isActingAsOther)}
     >
       {/* Mobile topbar */}
@@ -331,10 +341,12 @@ function AppShellContent() {
           onClick={() => setDrawerOpen(true)}
           className="p-2 rounded-md hover:bg-stone-100 text-stone-700"
           aria-label="Open navigation"
+          aria-haspopup="dialog"
+          aria-expanded={drawerOpen}
         >
           <Menu size={18} />
         </button>
-        <Link to="/" className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2" aria-label="Unvelar home">
           <BrandMark className="h-6 w-6 shrink-0" />
           <span className="hidden text-sm font-bold tracking-tight sm:inline">Unvelar</span>
         </Link>
@@ -352,29 +364,9 @@ function AppShellContent() {
 
         {/* Off-canvas drawer (mobile) */}
         {drawerOpen && (
-          <div className="lg:hidden fixed inset-0 z-40 flex">
-            <div
-              className="absolute inset-0 bg-stone-900/40"
-              onClick={() => setDrawerOpen(false)}
-              aria-hidden
-            />
-            <div
-              className="shell-mobile-drawer relative h-full bg-cream shadow-xl flex flex-col"
-              onClick={(event) => {
-                if (event.target instanceof Element && event.target.closest("a[href]")) setDrawerOpen(false);
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setDrawerOpen(false)}
-                className="absolute top-3 right-3 p-2 rounded-md hover:bg-stone-100 text-stone-600 z-10"
-                aria-label="Close navigation"
-              >
-                <X size={18} />
-              </button>
-              {renderSidebar()}
-            </div>
-          </div>
+          <MobileNavigation onClose={() => setDrawerOpen(false)}>
+            {renderSidebar()}
+          </MobileNavigation>
         )}
 
         {/* Main */}

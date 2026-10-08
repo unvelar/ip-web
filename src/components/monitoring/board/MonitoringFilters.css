@@ -97,6 +97,11 @@
   .monitoring-active-filters { flex-wrap: nowrap; overflow-x: auto; padding: 8px 12px 0; }
   .monitoring-active-filters > * { flex-shrink: 0; }
   .monitoring-filter-chip { max-width: 240px; }
+  .monitoring-filter-anchor, .monitoring-filter-trigger { min-width: 0; max-width: 100%; }
+  .monitoring-filter-tools .monitoring-filter-trigger { width: 100%; justify-content: flex-start; }
+  .monitoring-filter-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .monitoring-filter-chip button:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .monitoring-filter-menu-heading button { width: 44px; height: 44px; }
 }
 @media (max-width: 480px) {
   .monitoring-workflow { padding: 12px 6px 0; }

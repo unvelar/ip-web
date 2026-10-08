@@ -4,13 +4,14 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import ImageUploader from "../src/components/ImageUploader";
 import Lightbox from "../src/components/Lightbox";
+import MobileNavigation from "../src/components/MobileNavigation";
 
 let root: Root | undefined;
 afterEach(async () => { if (root) await act(async () => root?.unmount()); root = undefined; });
 function setup() {
   const window = new Window();
   Object.assign(globalThis, { window, document: window.document, navigator: window.navigator,
-    HTMLElement: window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true });
+    HTMLElement: window.HTMLElement, Element: window.Element, IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -51,4 +52,30 @@ test("lightbox exposes a modal dialog, handles cancellation, and restores focus"
   await act(async () => root.unmount());
   expect(document.activeElement === trigger).toBe(true);
   expect(document.body.style.overflow).toBe("");
+});
+
+test("mobile navigation locks scrolling, dismisses on Escape or a link, and restores focus", async () => {
+  const { window, container, root } = setup();
+  const trigger = document.createElement("button");
+  document.body.append(trigger);
+  trigger.focus();
+  let closes = 0;
+  await act(async () => root.render(createElement(MobileNavigation, {
+    onClose: () => { closes += 1; },
+    children: createElement("a", { href: "/dashboard", onClick: (event) => event.preventDefault() }, "Dashboard"),
+  })));
+  const dialog = container.querySelector("dialog")!;
+  expect(dialog.open).toBe(true);
+  expect(dialog.getAttribute("aria-label")).toBe("Workspace navigation");
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Close navigation");
+  expect(document.body.style.overflow).toBe("hidden");
+  await act(async () => { dialog.dispatchEvent(new window.Event("cancel", { cancelable: true })); });
+  expect(closes).toBe(1);
+  await act(async () => { container.querySelector("a")!.click(); });
+  expect(closes).toBe(2);
+  await act(async () => { dialog.click(); });
+  expect(closes).toBe(3);
+  await act(async () => root.unmount());
+  expect(document.body.style.overflow).toBe("");
+  expect(document.activeElement === trigger).toBe(true);
 });

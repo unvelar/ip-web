@@ -712,6 +712,16 @@ export default function ProductLab() {
   );
   const nextProductPageSize = Math.min(PAGE_SIZE, remainingProductCount);
   const showMobileInspector = Boolean(selectedGroupId && !mergeSourceGroup);
+  const mobileListScrollRef = useRef(0);
+  useEffect(() => {
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+    if (showMobileInspector) {
+      mobileListScrollRef.current = window.scrollY;
+      window.scrollTo({ top: 0, behavior: "instant" });
+    } else {
+      window.scrollTo({ top: mobileListScrollRef.current, behavior: "instant" });
+    }
+  }, [showMobileInspector]);
   const matchingRecentDecisions = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     if (!needle) return recentDecisions;
@@ -1314,7 +1324,7 @@ export default function ProductLab() {
             )}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="min-h-0 flex-1 lg:overflow-y-auto lg:overscroll-contain">
             {view !== "history" && error && (
               <div className="m-4 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-[12px] text-red-800">
                 {error}
@@ -1473,7 +1483,7 @@ export default function ProductLab() {
           </div>
         </section>
 
-        <section className={`${showMobileInspector ? "block" : "hidden lg:block"} min-h-0 overflow-y-auto overscroll-contain bg-white`} aria-label="Selected product">
+        <section className={`${showMobileInspector ? "block" : "hidden lg:block"} min-h-0 lg:overflow-y-auto lg:overscroll-contain bg-white`} aria-label="Selected product">
           {view === "history" ? (
             <div className="grid h-full min-h-[420px] place-items-center px-8 text-center">
               <div className="max-w-xs">

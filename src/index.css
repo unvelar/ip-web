@@ -10,6 +10,23 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Use the native text scale on phones; keep the roomy desktop scale above sm. */
+@media (max-width: 639px) {
+  html { font-size: 100%; }
+
+  /* Prevent iOS from zooming the page when focusing a compact form field. */
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    font-size: max(16px, 1em) !important;
+  }
+
+  .app-shell :is(button, select, [role="button"]),
+  .app-shell a.inline-flex { min-height: 44px; }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  html { font-size: 112.5%; }
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;
