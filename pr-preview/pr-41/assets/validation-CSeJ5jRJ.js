@@ -1,0 +1,1 @@
+var e=class extends Error{constructor(e){super(`The server returned an invalid ${e}. Please try again.`),this.name=`InvalidApiResponseError`}};function t(e){return typeof e==`object`&&!!e&&!Array.isArray(e)}function n(t,n){if(!t)throw new e(n)}export{n,t};
