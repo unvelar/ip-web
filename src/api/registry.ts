@@ -180,6 +180,10 @@ export interface KeywordLearningReport {
 export interface TrademarkSelector {
   id: string;
   name: string;
+  scope_kind: "brand" | "product" | null;
+  brand_name: string | null;
+  monitoring_enabled: boolean;
+  historical_ips: Array<{ id: string; name: string }>;
 }
 
 type TrademarkRecord = Omit<Trademark, "image_count" | "indexed_count">;
@@ -205,8 +209,23 @@ export async function listTrademarks(signal?: AbortSignal) {
   return parseTrademarkList(await request<unknown>("/api/ip", { signal }));
 }
 
-export function listTrademarkSelectors(signal?: AbortSignal) {
-  return request<{ ips: TrademarkSelector[] }>("/api/ip/selector", { signal });
+export async function listTrademarkSelectors(signal?: AbortSignal): Promise<{ ips: TrademarkSelector[] }> {
+  const value = await request<unknown>("/api/ip/selector", { signal });
+  requireResponse(isRecord(value) && Array.isArray(value.ips), "Brand and product selector");
+  const ips = value.ips.map((ip): TrademarkSelector => {
+    requireResponse(isRecord(ip) && typeof ip.id === "string" && ip.id.length > 0 && typeof ip.name === "string",
+      "Brand and product identity");
+    requireResponse(ip.scope_kind == null || ip.scope_kind === "brand" || ip.scope_kind === "product", "Monitoring scope kind");
+    requireResponse(ip.brand_name == null || typeof ip.brand_name === "string", "Parent brand");
+    requireResponse(ip.monitoring_enabled === undefined || typeof ip.monitoring_enabled === "boolean", "Monitoring state");
+    requireResponse(ip.historical_ips === undefined || (Array.isArray(ip.historical_ips)
+      && ip.historical_ips.every(earlier => isRecord(earlier) && typeof earlier.id === "string"
+        && earlier.id.length > 0 && typeof earlier.name === "string")), "Linked history");
+    return { id: ip.id, name: ip.name, scope_kind: ip.scope_kind ?? null, brand_name: ip.brand_name ?? null,
+      monitoring_enabled: ip.monitoring_enabled ?? false,
+      historical_ips: (ip.historical_ips ?? []) as TrademarkSelector["historical_ips"] };
+  });
+  return { ips };
 }
 
 export function listPublicTrademarks() {

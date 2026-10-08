@@ -141,8 +141,7 @@ export default function Sellers() {
       next.delete("ip_id");
     } else {
       selectIp(value);
-      next.delete("scope");
-      next.set("ip_id", value);
+      return;
     }
     setParams(next);
   }

@@ -49,10 +49,12 @@ export type ResultFilter = "all" | "processing" | "ready" | "filtered" | "failed
 export function useFirstScanFeed(requestedIpId: string | null) {
   const { activeIpId, loading: loadingActiveIp } = useActiveIp();
   const ipId = requestedIpId ?? activeIpId;
-  const [snapshot, setSnapshot] = useState<FirstScanSnapshot | null>(null);
+  const [loadedSnapshot, setSnapshot] = useState<FirstScanSnapshot | null>(null);
+  const snapshot = loadedSnapshot?.trademark.id === ipId ? loadedSnapshot : null;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorState, setError] = useState<{ ipId: string | null; message: string | null }>({ ipId: null, message: null });
+  const error = errorState.ipId === ipId ? errorState.message : null;
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
@@ -65,6 +67,15 @@ export function useFirstScanFeed(requestedIpId: string | null) {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [query]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setSourceFilter("all");
+      setResultFilter("all");
+      setQuery("");
+      setDebouncedQuery("");
+    });
+  }, [ipId]);
 
   const refresh = useCallback(async (parentSignal?: AbortSignal, pageCount = loadedPages.current) => {
     if (!ipId) return;
@@ -162,10 +173,10 @@ export function useFirstScanFeed(requestedIpId: string | null) {
       if (signal?.aborted) return;
       loadedPages.current = pageCount;
       setSnapshot({ trademark, onboarding: onboardingFeed.status, sources, page: progressiveFeed.page, updatedAt: new Date() });
-      setError([...degradedReasons].join(" ") || null);
+      setError({ ipId, message: [...degradedReasons].join(" ") || null });
     } catch (caught) {
       if (signal?.aborted) return;
-      setError(caught instanceof Error ? caught.message : "Unable to load monitoring progress");
+      setError({ ipId, message: caught instanceof Error ? caught.message : "Unable to load monitoring progress" });
     } finally {
       if (activeRequest.current === controller) activeRequest.current = null;
       if (!signal?.aborted) {
@@ -264,7 +275,7 @@ export function useFirstScanFeed(requestedIpId: string | null) {
   return {
     ipId,
     snapshot,
-    loading,
+    loading: loading || Boolean(ipId && !snapshot && !error),
     refreshing,
     error,
     query,

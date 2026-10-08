@@ -7,8 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useLocation } from "react-router-dom";
-import { listTrademarkSelectors, type TrademarkSelector } from "../api";
+import { useLocation, useNavigate } from "react-router-dom";
+import { listTrademarkSelectors, type TrademarkSelector } from "../api/registry";
 import { useAuth } from "./AuthContext";
 
 interface ActiveIpContextValue {
@@ -48,8 +48,9 @@ function persistIp(tenantId: string, ipId: string | null) {
 export function ActiveIpProvider({ children }: { children: ReactNode }) {
   const { actingTenantId } = useAuth();
   const location = useLocation();
-  const [ips, setIps] = useState<TrademarkSelector[]>([]);
-  const [activeIpId, setActiveIpId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [catalog, setCatalog] = useState<{ tenantId: string | null; ips: TrademarkSelector[] }>({ tenantId: null, ips: [] });
+  const [rememberedIpId, setRememberedIpId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const registryRouteKey = location.pathname.startsWith("/ips")
@@ -62,8 +63,8 @@ export function ActiveIpProvider({ children }: { children: ReactNode }) {
     if (!actingTenantId) {
       queueMicrotask(() => {
         if (!alive) return;
-        setIps([]);
-        setActiveIpId(null);
+        setCatalog({ tenantId: null, ips: [] });
+        setRememberedIpId(null);
         setLoading(false);
       });
       return () => {
@@ -72,11 +73,9 @@ export function ActiveIpProvider({ children }: { children: ReactNode }) {
     }
 
     const controller = new AbortController();
-    const urlIpId = new URLSearchParams(window.location.search).get("ip_id");
-    const storedIpId = readStoredIp(actingTenantId);
     queueMicrotask(() => {
       if (!alive) return;
-      setActiveIpId(urlIpId ?? storedIpId);
+      setRememberedIpId(readStoredIp(actingTenantId));
       setLoading(true);
       setError(null);
     });
@@ -85,21 +84,11 @@ export function ActiveIpProvider({ children }: { children: ReactNode }) {
       .then(({ ips: selectorIps }) => {
         if (!alive) return;
         const nextIps = [...selectorIps].sort((left, right) =>
-          left.name.localeCompare(right.name)
-        );
-        const available = new Set(nextIps.map((ip) => ip.id));
-
-        setIps(nextIps);
-        setActiveIpId((current) => {
-          const nextActiveIpId =
-            (urlIpId && available.has(urlIpId) ? urlIpId : null) ??
-            (current && available.has(current) ? current : null) ??
-            (storedIpId && available.has(storedIpId) ? storedIpId : null) ??
-            nextIps[0]?.id ??
-            null;
-          persistIp(actingTenantId, nextActiveIpId);
-          return nextActiveIpId;
-        });
+          Number(Boolean(right.scope_kind)) - Number(Boolean(left.scope_kind))
+          || Number(right.monitoring_enabled) - Number(left.monitoring_enabled)
+          || Number(left.scope_kind === "product") - Number(right.scope_kind === "product")
+          || left.name.localeCompare(right.name));
+        setCatalog({ tenantId: actingTenantId, ips: nextIps });
       })
       .catch((caught: unknown) => {
         if (!alive) return;
@@ -115,16 +104,35 @@ export function ActiveIpProvider({ children }: { children: ReactNode }) {
     };
   }, [actingTenantId, registryRouteKey]);
 
-  const selectIp = useCallback((ipId: string) => {
-    if (!actingTenantId || !ips.some((ip) => ip.id === ipId)) return;
-    setActiveIpId(ipId);
-    persistIp(actingTenantId, ipId);
-  }, [actingTenantId, ips]);
+  const ips = useMemo(() => catalog.tenantId === actingTenantId ? catalog.ips : [], [actingTenantId, catalog]);
+  const requestedIpId = new URLSearchParams(location.search).get("ip_id");
+  const resolveIp = useCallback((id: string | null) => ips.find(ip => ip.id === id)
+    ?? ips.find(ip => ip.historical_ips.some(earlier => earlier.id === id)), [ips]);
+  const activeIp = resolveIp(requestedIpId) ?? resolveIp(rememberedIpId) ?? ips[0] ?? null;
+  const activeIpId = activeIp?.id ?? null;
 
-  const activeIp = useMemo(
-    () => ips.find((ip) => ip.id === activeIpId) ?? null,
-    [activeIpId, ips],
-  );
+  // The URL owns scoped navigation, including browser history and old aliases.
+  useEffect(() => {
+    if (loading || !actingTenantId || !activeIpId) return;
+    persistIp(actingTenantId, activeIpId);
+    const params = new URLSearchParams(location.search);
+    const scopedPage = location.pathname === "/dashboard"
+      || (location.pathname.startsWith("/monitoring/") && !location.pathname.startsWith("/monitoring/setup"));
+    if (!scopedPage || params.get("scope") === "all" || requestedIpId === activeIpId) return;
+    params.set("ip_id", activeIpId);
+    navigate({ pathname: location.pathname, search: params.toString(), hash: location.hash }, { replace: true });
+  }, [activeIpId, actingTenantId, loading, location.hash, location.pathname, location.search, navigate, requestedIpId]);
+
+  const selectIp = useCallback((ipId: string) => {
+    const selected = resolveIp(ipId);
+    if (!actingTenantId || !selected) return;
+    setRememberedIpId(selected.id);
+    persistIp(actingTenantId, selected.id);
+    const params = new URLSearchParams(location.search);
+    params.set("ip_id", selected.id);
+    for (const key of ["scope", "cursor", "source_id", "product_group_id", "catalog_product_id", "seller", "finding", "campaign_batch"]) params.delete(key);
+    navigate({ pathname: location.pathname, search: params.toString(), hash: location.hash });
+  }, [actingTenantId, location.hash, location.pathname, location.search, navigate, resolveIp]);
 
   const value = useMemo<ActiveIpContextValue>(() => ({
     ips,

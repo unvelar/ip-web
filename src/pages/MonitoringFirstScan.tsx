@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   AlertCircle,
   ArrowRight,
@@ -21,12 +21,11 @@ import { formatUpdateTime, sourceConnectionDetail } from "../features/firstScan/
 import { useFirstScanFeed } from "../features/firstScan/useFirstScanFeed";
 
 export default function MonitoringFirstScan() {
-  const [params] = useSearchParams();
-  const feed = useFirstScanFeed(params.get("ip_id"));
+  const feed = useFirstScanFeed(null);
 
   if (feed.loading && !feed.snapshot) return <FirstScanSkeleton />;
   if (!feed.ipId) {
-    return <PageMessage icon={<Radar className="h-5 w-5" />} title="Choose an IP to watch its first scan" detail="Select a working IP from the top bar, then return to this page." />;
+    return <PageMessage icon={<Radar className="h-5 w-5" />} title="Choose a brand or product to watch its first scan" detail="Select a brand or product from the tenant menu." />;
   }
   if (!feed.snapshot) {
     return (
