@@ -1,9 +1,48 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError, request } from '../api/transport';
+import { listMonitoringSellers, type MonitoringSellerSummary } from '../api/monitoring';
+import { sellerProfilePath } from '../lib/sellers';
 import type { Brand } from './contracts';
 
-type Authorization = { id: string; scope: 'tenant' | 'brand' | 'legacy_ip'; brand_id: string | null; domain: string; seller_name: string | null; seller_url: string | null };
+type Authorization = { id: string; scope: 'tenant' | 'brand' | 'legacy_ip'; brand_id: string | null; ip_catalog_id: string | null; domain: string; seller_name: string | null; seller_url: string | null };
 const endpoint = '/api/monitoring-workspace/seller-authorizations';
+
+function AuthorizedSellerProfileLink({ rule }: { rule: Authorization }) {
+  const [profile, setProfile] = useState<{ path: string | null; failed: boolean } | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    // Use server-issued keys: authorization names and URLs are matching rules,
+    // not necessarily the seller's canonical profile identity.
+    async function resolve() {
+      const sellers: MonitoringSellerSummary[] = [];
+      let cursor: string | null = null;
+      const name = rule.seller_name?.trim().replace(/^@+/, '').toLowerCase();
+      const url = rule.seller_url?.trim().toLowerCase();
+      const ipId = rule.scope === 'legacy_ip' ? rule.ip_catalog_id : null;
+      do {
+        const page = await listMonitoringSellers({ status: 'all', platform: rule.domain,
+          ip_id: ipId, query: url ? undefined : name?.slice(0, 100), cursor, limit: 100, signal: controller.signal });
+        sellers.push(...page.sellers);
+        cursor = page.next_cursor;
+      } while (cursor);
+      const byUrl = url ? sellers.filter(seller => seller.profile_url?.trim().toLowerCase() === url) : [];
+      const matches = byUrl.length ? byUrl : name ? sellers.filter(seller =>
+        seller.seller_name.trim().replace(/^@+/, '').toLowerCase() === name) : [];
+      const path = matches.length === 1 ? sellerProfilePath(matches[0].seller_key) : null;
+      if (!controller.signal.aborted) setProfile({
+        path: path && ipId ? `${path}?${new URLSearchParams({ ip_id: ipId })}` : path, failed: false,
+      });
+    }
+    void resolve().catch(() => {
+      if (!controller.signal.aborted) setProfile({ path: null, failed: true });
+    });
+    return () => controller.abort();
+  }, [rule.domain, rule.seller_name, rule.seller_url, rule.scope, rule.ip_catalog_id]);
+  return profile?.path ? <Link to={profile.path}>Visit shop</Link>
+    : <div className="field-note">{!profile ? 'Loading shop profile…' : profile.failed ? 'Shop profile could not be loaded' : 'No monitored shop profile'}</div>;
+}
+
 export default function AuthorizedSellers({ brands, tenantName, scopeId, onScopeChange }: { brands: Brand[]; tenantName: string; scopeId?: string; onScopeChange?: (scope: string) => void }) {
   const [rules, setRules] = useState<Authorization[]>([]);
   const [localScope, setLocalScope] = useState(brands[0]?.id ?? 'tenant');
@@ -47,7 +86,7 @@ export default function AuthorizedSellers({ brands, tenantName, scopeId, onScope
     {loading ? <p role="status">Loading authorized sellers…</p> : available ? <>
       {!visible.length && <p>No authorized sellers for this scope yet.</p>}
       {!!visible.length && <div className="table-wrap"><table><thead><tr><th>Seller</th><th>Marketplace</th><th>Authorized for</th><th>Action</th></tr></thead><tbody>{visible.map(rule => <tr key={rule.id}>
-        <td>{rule.seller_name}{rule.seller_url && <a href={rule.seller_url} target="_blank" rel="noreferrer">Visit shop</a>}</td><td>{rule.domain}</td>
+        <td>{rule.seller_name}<AuthorizedSellerProfileLink rule={rule} /></td><td>{rule.domain}</td>
         <td>{rule.scope === 'tenant' ? 'Entire tenant' : rule.scope === 'legacy_ip' ? 'Existing IP · brand mapping needed' : brands.find(brand => brand.id === rule.brand_id)?.name ?? 'Brand unavailable'}</td>
         <td><button className="secondary" disabled={busy} onClick={() => void revoke(rule)} aria-label={`Revoke authorization for ${rule.seller_name ?? rule.seller_url} on ${rule.domain}`}>Revoke authorization</button></td>
       </tr>)}</tbody></table></div>}
