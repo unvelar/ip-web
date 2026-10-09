@@ -51,6 +51,8 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const displayedReferenceIds = new Set(scopeReferenceImages.map(item => item.material.id));
   const ownedReferenceImages = referenceImages.filter(image => image.scope_id === scope?.id && !displayedReferenceIds.has(image.id));
   const dirty = JSON.stringify(document) !== JSON.stringify(saved.document);
+  const incompleteEnforcementRules = document.brands.some(brand => [brand, ...brand.products]
+    .some(scope => scope.enforcement_rules?.some(rule => rule.condition.trim().length < 10)));
   const matchingStates = plan?.matching_readiness ?? (!dirty ? loaded.matching_readiness : undefined);
   const matchingState = matchingStates?.find(item => item.scope_id === scope?.id);
   const productReferenceImages = brand && !productId ? [...new Map(brand.products.flatMap(product => [
@@ -65,6 +67,11 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   useDraftNavigationGuard(dirty);
 
   useEffect(() => {
+    if (incompleteEnforcementRules) {
+      setPlan(null);
+      setPreviewError('Describe every enforcement rule using at least 10 characters.');
+      return;
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => {
       void client.preview(document, brandId, productId, controller.signal).then(result => {
@@ -72,9 +79,13 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       }).catch(err => { if (!controller.signal.aborted) { setPlan(null); setPreviewError(err.message); } });
     }, 180);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [client, document, brandId, productId]);
+  }, [client, document, brandId, productId, incompleteEnforcementRules]);
 
   useEffect(() => {
+    if (incompleteEnforcementRules) {
+      setActivationPlan(null);
+      return;
+    }
     if (!brandId && !productId) {
       setActivationPlan(plan);
       return;
@@ -86,7 +97,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       }).catch(() => { if (!controller.signal.aborted) setActivationPlan(null); });
     }, 180);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [client, document, brandId, productId, plan]);
+  }, [client, document, brandId, productId, plan, incompleteEnforcementRules]);
 
   function refreshExpiredImageUrls() {
     if (imageRefresh.current || Date.now() - lastImageRefreshAt.current < 30_000) return;
@@ -176,7 +187,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     <div className="eyebrow">Search preview</div><h2>{scope?.name ?? tenantName}</h2>
     <p>{!brandId ? 'All brands and products' : !scope?.monitoring_enabled ? 'Monitoring is off' : productId ? 'Uses shared brand coverage' : 'Brand-wide searches'}</p>
     <div className="search-number"><strong>{plan?.total_searches ?? '—'}</strong><span>requested searches</span></div>
-    <p>{plan ? `${plan.source_keys.length} websites · ${plan.countries.length} countries${plan.effective_coverage ? ` · ${plan.effective_coverage.frequency}` : ''}` : 'Updating preview…'}</p>
+    <p>{plan ? `${plan.source_keys.length} websites · ${plan.countries.length} countries${plan.effective_coverage ? ` · ${plan.effective_coverage.frequency}` : ''}` : incompleteEnforcementRules ? 'Complete enforcement rules to preview searches.' : 'Updating preview…'}</p>
     {!!plan?.combined_searches && <p className="impact">{plan.combined_searches} duplicate {plan.combined_searches === 1 ? 'search combined' : 'searches combined'} across scopes with the same schedule.</p>}
     {!!plan?.affected_products && <p className="impact">Coverage changes also apply to {plan.affected_products} {plan.affected_products === 1 ? 'product' : 'products'} using brand coverage.</p>}
     {plan?.issues.slice(0, 3).map(issue => <p className="notice" key={issue}>{issue}</p>)}
@@ -185,8 +196,8 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     <button className="secondary" disabled={!plan?.total_searches} onClick={() => previewDialog.current?.showModal()}>Preview searches</button>
     <p className="field-note">Save and apply updates scheduled monitoring. If every scope is off, monitoring is paused.</p>
   </aside>;
-  const activationIssue = activationPlan?.issues[0] ?? '';
-  const activationBlocked = !activationPlan || activationPlan.issues.length > 0;
+  const activationIssue = incompleteEnforcementRules ? 'Complete enforcement rule conditions to apply monitoring.' : activationPlan?.issues[0] ?? '';
+  const activationBlocked = incompleteEnforcementRules || !activationPlan || activationPlan.issues.length > 0;
   const appliedState = activationPlan ? (activationPlan.scope_count > 0 ? 'active' : 'paused') : 'loading';
   const scopesAfterApply = new Set(document.brands.flatMap(brand => [brand, ...brand.products])
     .filter(scope => scope.monitoring_enabled).map(scope => scope.id));
