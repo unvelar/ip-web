@@ -154,7 +154,7 @@ export function legalQueueReasonLabel(reason: string | null | undefined) {
 
 export function findingStatusBadge(f: IpReviewFinding) {
   if (f.dismissed_at) return dismissalBadge(f.dismissal_reason);
-  if (f.licensed_seller) return dismissalBadge("licensed");
+  if (f.licensed_seller && !f.takedown_sent_at && !f.enforced_at) return dismissalBadge("do_not_pursue");
   if ((!f.ready_for_review || !hasReviewAnalysis(f)) && (f.review_status ?? "pending") === "pending") {
     return { label: "Preparing", cls: "bg-stone-100 text-stone-500" };
   }

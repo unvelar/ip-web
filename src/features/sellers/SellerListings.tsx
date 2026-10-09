@@ -53,7 +53,7 @@ export function SellerListings({ sellerKey, sellerName, ipId, initialStatus = "o
   initialStatus?: MonitoringSellerStatus;
   onChanged?: () => void;
   onIpChange?: (ipId: string | null) => void;
-  renderHeader?: (profile: MonitoringSellerProfilePage) => ReactNode;
+  renderHeader?: (profile: MonitoringSellerProfilePage, onChanged:()=>Promise<void>) => ReactNode;
 } & FilterControl & FindingControl) {
   const [localFilters, setLocalFilters] = useState<SellerListingFilters>({ status: initialStatus, availability: null, sort: "found_desc" });
   const { status, availability, sort } = filters ?? localFilters;
@@ -126,7 +126,7 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
   sellerName?: string;
   filterToolbar: (busy: boolean) => ReactNode;
   onChanged?: () => void;
-  renderHeader?: (profile: MonitoringSellerProfilePage) => ReactNode;
+  renderHeader?: (profile: MonitoringSellerProfilePage, onChanged:()=>Promise<void>) => ReactNode;
   onLoaded: (profile: MonitoringSellerProfilePage) => void;
 } & FindingControl) {
   const [localFindingId, setLocalFindingId] = useState<string | null>(null);
@@ -288,7 +288,7 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
   const name = page?.seller?.name ?? sellerName ?? "Seller";
   return (
     <>
-      {page && renderHeader?.(page)}
+      {page && renderHeader?.(page,refreshLoaded)}
       <section className="seller-listings" aria-label={`Listings from ${name}`} aria-busy={!page && !error || loadingMore}>
         <div className="seller-toolbar-slot">
           <div className="seller-toolbar-filters" inert={selectedFindings.length > 0 || Boolean(progress)} aria-hidden={selectedFindings.length > 0 || Boolean(progress)}>

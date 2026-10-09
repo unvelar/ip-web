@@ -32,7 +32,7 @@ export default function SellerProfile() {
           if (value) next.set("ip_id", value); else next.delete("ip_id");
           setParams(next);
         }}
-        renderHeader={(profile) => <SellerProfileHeader profile={profile} />}
+        renderHeader={(profile,onChanged) => <SellerProfileHeader profile={profile} onChanged={onChanged} ipId={ipId}/>}
       />
     </div>
   );

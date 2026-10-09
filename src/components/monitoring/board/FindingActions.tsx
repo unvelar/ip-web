@@ -374,7 +374,7 @@ export function FindingActions({
       disabled={actionPending}
       title={actionTitle(
         "license",
-        "Mark this seller as licensed on this domain — dismisses this and future findings from them",
+        "Authorize this seller on this marketplace for this brand, dismissing current and future findings as Do not pursue",
       )}
       className={
         recommendedAction === "license"
@@ -383,12 +383,12 @@ export function FindingActions({
             ? "px-1.5 py-1 rounded text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
             : ghostStone
       }
-      aria-label={actionAriaLabel("license", "Mark as licensed seller")}
+      aria-label={actionAriaLabel("license", "Authorize seller")}
       aria-keyshortcuts={recommendedAction === "license" ? "Enter" : undefined}
       data-recommended-action={recommendedAction === "license" ? "true" : undefined}
     >
       {recommendedAction === "license" && <Sparkles className="recommended-action-icon" aria-hidden="true" />}
-      {licensing ? "Marking…" : compact ? "Mark as licensed seller" : "License seller"}
+      {licensing ? "Marking…" : compact ? "Authorize seller" : "Authorize seller"}
     </button>
   ) : null;
 

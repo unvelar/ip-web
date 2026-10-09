@@ -33,7 +33,7 @@ function suggestedAction(f: IpReviewFinding) {
   // safeguards ahead of a candidate bucket, and describe actions rather than
   // presenting a model's infringement assessment as an established fact.
   switch (actionability.key) {
-    case "licensed_seller": return { label: "Licensed seller", reason: actionability.reason };
+    case "licensed_seller": return { label: "Authorized seller", reason: actionability.reason };
     case "allowed_resale": return { label: "Second hand", reason: actionability.reason };
     case "send_takedown": return { label: "Takedown recommended", reason: actionability.reason };
     case "false_positive": return { label: "Different product", reason: actionability.reason };

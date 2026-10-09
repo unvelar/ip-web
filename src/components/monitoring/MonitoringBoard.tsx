@@ -465,7 +465,7 @@ export function MonitoringBoard({
 
   const rememberLicensedAction = useCallback((f: IpReviewFinding, dismissedCount: number) => {
     recordLastAction({
-      label: "Seller licensed",
+      label: "Seller authorized",
       detail:
         dismissedCount > 1
           ? `${dismissedCount} findings dismissed`

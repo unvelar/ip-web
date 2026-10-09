@@ -487,6 +487,7 @@ export interface MonitoringSellersPage {
 }
 
 export interface MonitoringSellerProfilePage {
+  policy?: SellerPolicy;
   seller: {
     key: string;
     name: string;
@@ -515,6 +516,53 @@ export interface MonitoringSellerProfilePage {
   statuses: Record<string, number>;
   findings: IpReviewFinding[];
   next_cursor: string | null;
+}
+
+export interface SellerPolicy {
+  authorizations: Array<{
+    id: string;
+    scope: 'tenant' | 'brand' | 'legacy_ip';
+    brand_id: string | null;
+    created_at: string;
+  }>;
+  brands: Array<{ id: string; name: string }>;
+  investigations: Array<{
+    id: string;
+    ip_catalog_id: string;
+    ip_name: string;
+    status: 'queued' | 'running' | 'complete' | 'partial' | 'blocked' | 'authorized';
+    pages_checked: number;
+    listings_checked: number;
+    findings_created: number;
+    matching_pending: boolean;
+    stop_reason: string | null;
+    hold_reason: string | null;
+    updated_at: string;
+  }>;
+  can_authorize: boolean;
+  discovery_enabled: boolean;
+  discovery_paused: boolean;
+}
+
+export function authorizeMonitoringSeller(sellerKey: string, scope: 'tenant' | 'brand', brandId: string | null) {
+  return request<{ authorization: { id: string }; dismissed: number; cancelled_notices: number }>(
+    `/api/monitoring/sellers/${encodeURIComponent(sellerKey)}/authorization`,
+    { method: 'POST', body: JSON.stringify({ scope, brand_id: brandId }) },
+  );
+}
+
+export function revokeMonitoringSellerAuthorization(sellerKey: string, id: string) {
+  return request<{ ok: true; restored: number }>(
+    `/api/monitoring/sellers/${encodeURIComponent(sellerKey)}/authorization/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export function investigateMonitoringSeller(sellerKey: string, ipId: string) {
+  return request<{ enqueued: boolean; skipped_reason: string | null }>(
+    `/api/monitoring/sellers/${encodeURIComponent(sellerKey)}/investigate`,
+    { method: 'POST', body: JSON.stringify({ ip_id: ipId }) },
+  );
 }
 
 /** Tenant-wide returned sellers with at least one current open listing — the

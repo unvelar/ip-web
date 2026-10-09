@@ -230,3 +230,14 @@
 .seller-history summary { width: fit-content; padding: 2px 0; }
 .seller-history > div { max-width: 280px; padding: 6px 0 2px; line-height: 1.6; }
   .seller-history summary { min-height: 28px; display: list-item; padding-top: 6px; }
+
+.seller-policy { padding: 1rem 1.25rem; border: 1px solid #e7e5e4; border-radius: 1rem; background: #fff; }
+.seller-policy-button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; padding: .5rem .75rem; border: 1px solid #d6d3d1; border-radius: .5rem; background: #fff; color: #44403c; font-size: .75rem; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.seller-policy-button:hover { background: #fafaf9; border-color: #a8a29e; }
+.seller-policy-button:disabled { opacity: .5; cursor: default; }
+.seller-policy-button:focus-visible, .seller-policy-select:focus-visible { outline: 2px solid #059669; outline-offset: 2px; }
+.seller-policy-primary { background: #047857; border-color: #047857; color: #fff; }
+.seller-policy-primary:hover { background: #065f46; border-color: #065f46; }
+.seller-policy-dialog { width: min(32rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; padding: 1.5rem; border: 1px solid #e7e5e4; border-radius: 1rem; background: #fff; box-shadow: 0 24px 64px #0003; }
+.seller-policy-dialog::backdrop { background: #1c191766; }
+.seller-policy-select { display: block; width: 100%; margin-top: .5rem; padding: .625rem .75rem; border: 1px solid #d6d3d1; border-radius: .5rem; background: #fff; color: #292524; font-size: .875rem; }
