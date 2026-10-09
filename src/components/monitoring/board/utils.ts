@@ -147,6 +147,8 @@ export function legalQueueReasonLabel(reason: string | null | undefined) {
       return "Automatic delivery could not be queued";
     case "automatic_delivery_failed":
       return "Automatic delivery failed";
+    case "enforcement_policy_changed":
+      return "Enforcement rules or listing evidence changed. Review and approve this notice again.";
     default:
       return reason ? reason.replace(/_/g, " ") : "Manual legal submission required";
   }

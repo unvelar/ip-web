@@ -39,6 +39,7 @@ export type MonitoringCandidateOutcome =
   | "second_hand"
   | "none";
 export type MonitoringActionabilityKey =
+  | "do_not_pursue"
   | "send_takedown"
   | "allowed_resale"
   | "licensed_seller"
@@ -63,6 +64,7 @@ export interface MonitoringDecisionFactor {
     | "condition"
     | "authenticity"
     | "product_authenticity"
+    | "policy"
     | "license"
     | "infringement"
     | "description"

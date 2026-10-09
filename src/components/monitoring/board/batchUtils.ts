@@ -112,6 +112,7 @@ export function summarizeTakedownBatch(
   const missingUrl = legalQueue.missing_listing_url ?? 0;
   const automaticQueueFailed = legalQueue.automatic_queue_failed ?? 0;
   const automaticDeliveryFailed = legalQueue.automatic_delivery_failed ?? 0;
+  const policyChanged = legalQueue.enforcement_policy_changed ?? 0;
   const legacyManualCompose = skipped["needs manual compose"] ?? 0;
   const alreadyHandled = skipped["already sent or closed"] ?? 0;
   const stillPreparing = skipped["still preparing"] ?? 0;
@@ -178,10 +179,12 @@ export function summarizeTakedownBatch(
         "missing_listing_url",
         "automatic_queue_failed",
         "automatic_delivery_failed",
+        "enforcement_policy_changed",
       ].includes(reason)
     ) continue;
     details.push(`${listingCount(count)} entered the legal queue: ${reason}.`);
   }
+  if (policyChanged > 0) details.push(`${listingCount(policyChanged)} need another review because enforcement rules or listing evidence changed.`);
   if (alreadyHandled > 0) {
     details.push(
       `${listingCount(alreadyHandled)} ${alreadyHandled === 1 ? "was already sent or is" : "were already sent or are"} no longer open.`,

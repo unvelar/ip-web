@@ -131,7 +131,8 @@ export type TakedownLegalQueueReason =
   | "email_not_configured"
   | "missing_listing_url"
   | "automatic_queue_failed"
-  | "automatic_delivery_failed";
+  | "automatic_delivery_failed"
+  | "enforcement_policy_changed";
 
 export interface TakedownLegalQueueResult {
   case_id: string;

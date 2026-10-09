@@ -10,6 +10,7 @@ import ImageUploader from '../components/ImageUploader';
 import MatchingReadiness from './MatchingReadiness';
 import { splitSearchKeywords } from './keywords';
 import HistoryLinks from './HistoryLinks';
+import EnforcementRules from './EnforcementRules';
 
 export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false, tenantSwitcherLabel }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean; tenantSwitcherLabel?: string }) {
   const Content = embedded ? 'div' : 'main';
@@ -100,11 +101,14 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   }
 
   function updateDocument(next: Workspace) { setDocument(next); setPlan(null); setMessage(''); }
-  function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'monitoring_enabled' | 'reference_materials'>>) {
+  function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'monitoring_enabled' | 'reference_materials' | 'enforcement_rules'>>) {
     if (!brand) return;
     updateDocument({ ...document, brands: document.brands.map(item => item.id !== brand.id ? item : productId
       ? { ...item, products: item.products.map(product => product.id === productId ? { ...product, ...change } : product) }
-      : { ...item, ...change }) });
+      : { ...item, ...change, products: change.enforcement_rules ? item.products.map(product => ({ ...product,
+        enforcement_rules: product.enforcement_rules?.map(rule => rule.overrides_rule_id && !change.enforcement_rules!.some(parent => parent.id === rule.overrides_rule_id)
+          ? { ...rule, overrides_rule_id: null } : rule),
+      })) : item.products }) });
   }
   function selectAuthorizations(brand: string | null) { setBrandId(brand); setProductId(null); setSettingsView('sellers'); }
   function selectScope(brand: string | null, product: string | null = null) { setSettingsView('monitoring'); setBrandId(brand); setProductId(product); setPlan(null); setPreviewError(''); }
@@ -116,6 +120,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       setMessage(result.execution.scopes > 0
         ? `Monitoring applied · Revision ${result.revision}. ${result.execution.scopes} scopes and ${result.execution.sources} sources are scheduled.`
         : `Monitoring paused · Revision ${result.revision}. Your brand and product setup has been kept.`);
+      if (result.execution.enforcement_checks_queued) setMessage(current => `${current} Enforcement checks queued for ${result.execution.enforcement_checks_queued} existing tasks.`);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); setConflict(err instanceof DraftError && err.status === 409); }
     finally { setBusy(false); }
   }
@@ -211,6 +216,8 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
               : productId ? 'No searches run for this product. Its settings and history are kept.' : 'No brand-wide searches run. Active products continue to use this brand’s shared coverage.'}</p></div><label className="monitoring-switch"><input type="checkbox" role="switch" checked={scope.monitoring_enabled} onChange={event => updateScope({ monitoring_enabled: event.target.checked })} /><span aria-hidden="true" /><strong>{scope.monitoring_enabled ? 'On' : 'Off'}</strong></label></section>
             <section className="panel"><label className="field-heading" htmlFor="scope-name">{productId ? 'Product name' : 'Brand name'}</label><input id="scope-name" className="full-width" maxLength={160} value={scope.name} onChange={event => updateScope({ name: event.target.value })} /></section>
             <section className="panel"><div className="section-heading"><div><h2>Search keywords</h2><p>{productId ? 'Phrases used to sell this product. Brand keywords are not added automatically.' : 'Optional phrases for brand-wide searches. Leave this empty to monitor only the brand’s products.'}</p></div></div><label className="visually-hidden" htmlFor="keywords">Search keywords, separated by commas or newlines</label><textarea id="keywords" rows={5} value={scope.keywords.join('\n')} onChange={event => updateScope({ keywords: splitSearchKeywords(event.target.value) })} /><div className="field-note">Separate phrases with commas or newlines. Each phrase is searched separately.</div></section>
+            <EnforcementRules rules={scope.enforcement_rules ?? []} inherited={productId ? brand.enforcement_rules ?? [] : []}
+              product={!!productId} supported={loaded.enforcement_rules_supported === true} onChange={enforcement_rules => updateScope({ enforcement_rules })} />
             <section className="panel"><div className="section-heading"><div><h2>Reference images</h2><p>Add one or more pictures that show what this {productId ? 'product' : 'brand'} looks like.</p></div></div>
               <MatchingReadiness state={matchingState} />
               <ImageUploader compact accept="image/png,image/jpeg,image/webp" uploading={busy} onUpload={files => void uploadReferences(files)} label="Add reference images" help="PNG, JPG or WebP · up to 50MB total" />

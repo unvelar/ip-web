@@ -275,3 +275,15 @@ dialog form .actions { margin-top:20px; }
 .authorized-sellers form { margin-top:28px; border-top:1px solid #e7e5e4; padding-top:20px; }
 .authorization-fields { display:flex; flex-wrap:wrap; gap:16px; margin:16px 0; }
 .authorization-fields label { display:flex; flex-direction:column; gap:8px; flex:1; min-width:200px; }
+.monitoring-workspace .enforcement-rule { border: 1px solid var(--color-stone-200, #e7e5e4); border-radius: 10px; padding: 16px; margin: 20px 0; min-width: 0; }
+.monitoring-workspace .enforcement-rule legend { font-weight: 600; padding: 0 6px; }
+.monitoring-workspace .enforcement-rule label { display: block; margin: 14px 0 6px; font-weight: 500; }
+.monitoring-workspace .enforcement-rule textarea, .monitoring-workspace .enforcement-rule select { width: 100%; }
+.monitoring-workspace .enforcement-rule .text-button { margin-top: 12px; }
+.monitoring-workspace .inherited-rules { margin: 20px 0; }
+.monitoring-workspace .inherited-rule { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid #e7e5e4; }
+.monitoring-workspace .inherited-rule p { margin: 6px 0; overflow-wrap: anywhere; }
+.monitoring-workspace .inherited-rule .secondary { flex-shrink: 0; }
+.monitoring-workspace .inherited-rule.is-replaced .rule-action { color: #78716c; }
+.monitoring-workspace .rule-action { font-size: 13px; font-weight: 600; color: #57534e; }
+@media (max-width: 640px) { .monitoring-workspace .inherited-rule { flex-direction: column; } }

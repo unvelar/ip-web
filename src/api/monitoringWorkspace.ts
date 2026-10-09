@@ -1,6 +1,6 @@
 import { ApiError, request } from './transport';
 import { isRecord, requireResponse } from './validation';
-import { DraftError, type Activation, type Brand, type Coverage, type MarketplaceClient, type MatchingReadiness, type Product,
+import { DraftError, type Activation, type Brand, type Coverage, type EnforcementRule, type MarketplaceClient, type MatchingReadiness, type Product,
   type ReferenceImage, type ReferenceMaterial, type Source, type Workspace, type WorkspaceClient,
   type WorkspaceResponse } from '../monitoring-workspace/contracts';
 
@@ -52,13 +52,24 @@ function normalizeCoverage(value: unknown): Coverage {
   };
 }
 
+function normalizeEnforcementRules(value: unknown): EnforcementRule[] | undefined {
+  if (value === undefined) return undefined;
+  requireResponse(Array.isArray(value) && value.length <= 30, 'enforcement rule list');
+  return value.map(rule => {
+    requireResponse(isRecord(rule) && typeof rule.id === 'string' && typeof rule.condition === 'string'
+      && ['do_not_pursue', 'takedown', 'review'].includes(String(rule.action)) && typeof rule.explanation === 'string'
+      && (rule.overrides_rule_id === null || typeof rule.overrides_rule_id === 'string'), 'enforcement rule');
+    return rule as EnforcementRule;
+  });
+}
+
 function normalizeProduct(value: unknown): Product {
   requireResponse(isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string'
     && typeof value.monitoring_enabled === 'boolean'
     && (value.catalog_product_id === null || typeof value.catalog_product_id === 'string'), 'monitoring product');
   return { id: value.id, name: value.name, keywords: stringArray(value.keywords, 'monitoring product keywords'),
     monitoring_enabled: value.monitoring_enabled, reference_materials: normalizeReferences(value.reference_materials),
-    coverage: null, catalog_product_id: value.catalog_product_id };
+    enforcement_rules: normalizeEnforcementRules(value.enforcement_rules), coverage: null, catalog_product_id: value.catalog_product_id };
 }
 
 function normalizeBrand(value: unknown): Brand {
@@ -66,7 +77,7 @@ function normalizeBrand(value: unknown): Brand {
     && typeof value.monitoring_enabled === 'boolean' && Array.isArray(value.products), 'monitoring brand');
   return { id: value.id, name: value.name, keywords: stringArray(value.keywords, 'monitoring brand keywords'),
     monitoring_enabled: value.monitoring_enabled, reference_materials: normalizeReferences(value.reference_materials),
-    coverage: normalizeCoverage(value.coverage), products: value.products.map(normalizeProduct) };
+    enforcement_rules: normalizeEnforcementRules(value.enforcement_rules), coverage: normalizeCoverage(value.coverage), products: value.products.map(normalizeProduct) };
 }
 
 function normalizeWorkspace(value: unknown): Workspace {
@@ -105,7 +116,7 @@ function normalizeLoadResponse(value: unknown): WorkspaceResponse {
     && (value.setup_state === 'required' || value.setup_state === 'configured'), 'monitoring setup');
   return { ...draft, company: { id: value.company.id, name: value.company.name }, sources: value.sources as Source[],
     reference_images: value.reference_images as ReferenceImage[], matching_readiness: normalizeMatchingReadiness(value.matching_readiness),
-    setup_state: value.setup_state };
+    setup_state: value.setup_state, enforcement_rules_supported: value.enforcement_rules_supported === true };
 }
 
 function normalizeActivation(value: unknown): Activation {
@@ -113,7 +124,8 @@ function normalizeActivation(value: unknown): Activation {
   requireResponse(isRecord(value) && isRecord(value.execution) && typeof value.execution.scopes === 'number'
     && typeof value.execution.sources === 'number', 'monitoring activation');
   return { ...draft, lifecycle: 'active', executable: true,
-    execution: { scopes: value.execution.scopes, sources: value.execution.sources },
+    execution: { scopes: value.execution.scopes, sources: value.execution.sources,
+      enforcement_checks_queued: typeof value.execution.enforcement_checks_queued === 'number' ? value.execution.enforcement_checks_queued : undefined },
     matching_readiness: normalizeMatchingReadiness(value.matching_readiness) };
 }
 
