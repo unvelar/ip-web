@@ -23,6 +23,10 @@ export function RecentDecisionRow({
   const title = finding.listing_title?.trim() || "Untitled listing";
   const decisionAuthor = finding.decision_by_display_name?.trim() ||
     finding.decision_by_email?.trim() || null;
+  const remembered = finding.decision_source === "remembered_product";
+  const attribution = remembered
+    ? `Remembered decision${decisionAuthor ? ` by ${decisionAuthor}` : ""}`
+    : decisionAuthor ?? "Legacy or system action";
   const decisionReason = finding.decision_reason?.trim() || null;
   const decisionBatchSize = Math.max(1, finding.decision_batch_size ?? 1);
   return (
@@ -75,7 +79,7 @@ export function RecentDecisionRow({
                   size={16}
                 />
               )}
-              <span className="shrink-0">{decisionAuthor ?? "Legacy or system action"}</span>
+              <span className={remembered ? "min-w-0 truncate" : "shrink-0"} title={attribution}>{attribution}</span>
               {decisionBatchSize > 1 && (
                 <span className="shrink-0 rounded bg-stone-100 px-1 py-0.5">
                   Batch of {decisionBatchSize}
@@ -93,6 +97,9 @@ export function RecentDecisionRow({
           type="button"
           onClick={onUndo}
           disabled={undoing}
+          title={remembered
+            ? "Forget this product dismissal and reopen the findings it dismissed"
+            : undefined}
           className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 text-[10px] font-medium text-stone-600 transition hover:border-stone-300 hover:text-stone-950 disabled:opacity-50"
         >
           {undoing ? <LoaderCircle size={11} className="animate-spin" /> : <RotateCcw size={11} />}

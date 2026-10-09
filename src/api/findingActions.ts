@@ -153,7 +153,7 @@ export function dismissIpFinding(
   resultId: string,
   opts: MonitoringDismissOptions = {},
 ) {
-  return request<{ ok: boolean }>(
+  return request<{ ok: boolean; remembered?: boolean; dismissed?: number }>(
     `/api/ip/${ipId}/monitoring/findings/${resultId}/dismiss`,
     { method: "POST", body: JSON.stringify(opts) },
   );

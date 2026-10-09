@@ -399,13 +399,13 @@ export function MonitoringBoard({
     setResultCompleting(f.result_id, true);
     advanceAfterAction(f.result_id);
     try {
-      await dismissIpFinding(fipId, f.result_id, {
+      const decision = await dismissIpFinding(fipId, f.result_id, {
         reason,
         ...(reasonCode ? { reason_code: reasonCode } : {}),
       });
       onDismiss?.(f.result_id);
       recordLastAction({
-        label: `${dismissalDecisionLabel(reason, reasonCode)} applied`,
+        label: decision.remembered ? "Different product remembered" : `${dismissalDecisionLabel(reason, reasonCode)} applied`,
         detail: compactListingTitle(f),
         undo: { kind: "undismiss", ipId: fipId, resultId: f.result_id },
       });

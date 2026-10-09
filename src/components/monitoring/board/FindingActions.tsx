@@ -226,14 +226,19 @@ export function FindingActions({
       {isDismissing ? (
         "Working…"
       ) : (
-        <>
+        <span className={grouped && action === "false_positive" ? "flex flex-col items-start gap-1" : undefined}>
           <ButtonWithShortcut
             label={label}
             shortcut={shortcut}
             dark={recommendedAction === action}
             leadingIcon={recommendedAction === action ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
           />
-        </>
+          {grouped && action === "false_positive" && (
+            <span className={`text-[10px] font-normal leading-4 ${recommendedAction === action ? "text-white/80" : "text-stone-500"}`}>
+              Remember confirmed repeats for this IP.
+            </span>
+          )}
+        </span>
       )}
     </button>
   );
@@ -243,7 +248,7 @@ export function FindingActions({
     "Different product",
     "false_positive",
     "different_product",
-    "Shortcut 1: the listing is for a different product",
+    "Shortcut 1: dismiss this product and remember confirmed repeats for this IP",
     "1",
   );
   const dontPursueBtn = outcomeButton(
