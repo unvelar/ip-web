@@ -50,7 +50,7 @@ export function SellerProfileHeader({ profile,onChanged,ipId }: { profile: Monit
           </div>
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-stone-100 sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
-          <Metric label="Open findings" value={summary.monitored_listings.toLocaleString()} icon={<ShoppingBag size={15} />} />
+          <Metric label="Findings" value={summary.monitored_listings.toLocaleString()} icon={<ShoppingBag size={15} />} />
           <Metric label="Available" value={summary.available_listings.toLocaleString()} icon={<PackageOpen size={15} />} />
           <Metric label="Availability unknown" value={unknownAvailability.toLocaleString()} />
           <Metric label="Market value" value={formatMoney(summary.monitored_market_usd, "USD")} />
