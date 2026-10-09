@@ -170,7 +170,7 @@ describe("Grouped finding decisions", () => {
     const escapeReachedWindow = mock(() => undefined);
     window.addEventListener("keydown", escapeReachedWindow);
     act(() => button(container, "Dismiss").click());
-    expect(document.activeElement).toBe(button(container, "1Different product"));
+    expect(document.activeElement).toBe(container.querySelector('button[aria-keyshortcuts="1"]'));
     act(() => document.activeElement?.dispatchEvent(new happyWindow.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
     expect(escapeReachedWindow).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(button(container, "Dismiss"));
