@@ -85,7 +85,7 @@ test("the USD column preserves cents and zero but never substitutes a native cur
 test("suggested actions preserve clearance guidance and describe takedown as a recommendation", async () => {
   const ui = await setup();
   for (const [key, expected] of [
-    ["send_takedown", "Takedown recommended"], ["licensed_seller", "Licensed seller"],
+    ["send_takedown", "Takedown recommended"], ["licensed_seller", "Authorized seller"],
     ["allowed_resale", "Second hand"], ["false_positive", "Different product"], ["needs_review", "Needs review"],
   ] as const) {
     const f = finding();
@@ -97,7 +97,7 @@ test("suggested actions preserve clearance guidance and describe takedown as a r
   expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Do not pursue");
   const f = finding();
   await ui.render(finding({ manual_candidate_outcome: "takedown", actionability: { ...f.actionability, key: "licensed_seller" } }));
-  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Licensed seller");
+  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Authorized seller");
 });
 
 test("mixed workflow views show lifecycle separately from suggested action", async () => {

@@ -437,7 +437,7 @@ export function FindingActions({
         }
         title="This seller matches a saved license rule for this IP and platform."
       >
-        Licensed seller
+        Authorized seller
       </span>
     );
   } else if (state === "pending") {
@@ -605,7 +605,7 @@ export function FindingActions({
         {buttons}
         {!compact && !grouped && utilityButtons}
         {grouped && !sellerLicensed && ["pending", "review", "takedown_pending"].includes(state) && (
-          <FindingActionPopover label="More actions" description="Allow product and License seller also affect future findings."
+          <FindingActionPopover label="More actions" description="Allow product and Authorize seller also affect future findings."
             disabled={actionPending} recommended={recommendedAction === "license"}>
             {allowProductBtn}
             {utilityButtons}

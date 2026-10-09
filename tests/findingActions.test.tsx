@@ -184,7 +184,7 @@ describe("Grouped finding decisions", () => {
     const options = container.querySelector<HTMLElement>('[role="group"][aria-label="More actions"]')!;
     expect(options.hidden).toBe(false);
     expect(button(options, "Allow product").disabled).toBe(false);
-    expect(button(options, "License seller").disabled).toBe(false);
+    expect(button(options, "Authorize seller").disabled).toBe(false);
     expect(allowProductImage).not.toHaveBeenCalled();
     const pending = renderActions({ grouped: true, isDismissing: true });
     for (const action of pending.container.querySelectorAll<HTMLButtonElement>(".finding-action-buttons button")) {
@@ -226,7 +226,7 @@ describe("FindingActions allow product", () => {
       "3Do not pursue",
       "RReview",
       "TTakedown",
-      "License seller",
+      "Authorize seller",
     ]) {
       expect(button(container, label).disabled).toBe(true);
     }
