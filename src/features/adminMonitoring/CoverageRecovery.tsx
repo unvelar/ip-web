@@ -74,7 +74,7 @@ export function CoverageRecovery({refreshAt}: {refreshAt: string}) {
               {busy === (issue.run_id ?? source.source_id) ? <LoaderCircle className="animate-spin" size={13}/> : 'Retry recovery'}
             </button>
           </div>)}
-          <Link to={`/admin/browser-activity?q=${encodeURIComponent(source.label)}`} className="mt-3 inline-block text-xs font-medium text-stone-600 hover:underline">View browser evidence</Link>
+          <Link to={`/admin/browser-activity?q=${encodeURIComponent(source.label)}`} className="mt-3 block w-fit text-xs font-medium text-stone-600 hover:underline">View browser evidence</Link>
         </div>
       </details>)}
     </div>
