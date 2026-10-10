@@ -264,7 +264,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
                 <button className="secondary" onClick={() => { selectScope(brand.id); requestAnimationFrame(() => { coverageSection.current?.focus(); coverageSection.current?.scrollIntoView({ block: 'start' }); }); }}>Edit shared coverage</button>
               </> : <>
                 <p className="field-note">Used by every active product and by brand-wide searches when they are on.</p>
-                <CoverageEditor key={brandId} value={coverage} sources={loaded.sources} disabled={busy} onChange={value => updateDocument({ ...document, brands: document.brands.map(item => item.id === brand.id ? { ...item, coverage: value } : item) })} />
+                <CoverageEditor key={brandId} value={coverage} sources={loaded.sources} countries={loaded.countries} disabled={busy} onChange={value => updateDocument({ ...document, brands: document.brands.map(item => item.id === brand.id ? { ...item, coverage: value } : item) })} />
               </>}
             </section>
             <HistoryLinks key={scope.id} scopeId={scope.id} name={scope.name} />

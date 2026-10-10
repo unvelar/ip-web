@@ -19,11 +19,12 @@ test('website setup uses the signed-in session and selected company without a de
     return Response.json(path === '/api/monitoring-workspace' ? {
       document: { version: 7, brands: [] }, revision: 3, updated_at: null,
       active_revision: null, activated_at: null, company: { id: 'selected-company', name: 'Selected company' },
-      sources: [], reference_images: [], setup_state: 'configured',
-    } : {});
+      sources: [], countries: [{code: 'GG', name: 'Guernsey'}], reference_images: [], setup_state: 'configured',
+    } : {marketplaces: [], categories: [], countries: [{code: 'GG', name: 'Guernsey'}]});
   }) as typeof fetch;
   const workspace = await monitoringSetupClient.load();
   await monitoringSetupClient.catalog();
+  expect(workspace.countries).toEqual([{code: 'GG', name: 'Guernsey'}]);
   expect(workspace.document).toEqual({ version: 7, brands: [] });
   expect(calls.map(url => new URL(url, 'https://api.example').pathname)).toEqual(['/api/monitoring-workspace', '/api/admin/monitoring-marketplaces']);
   expect(calls.some(url => url.includes(':53000') || url.endsWith('/auth/dev'))).toBe(false);
@@ -79,7 +80,7 @@ test('saved rule identities, actions and replacements survive load and activatio
     const path = new URL(String(input), 'https://api.example').pathname;
     if (path.endsWith('/activate')) expect(JSON.parse(String(init?.body)).document).toEqual(document);
     return Response.json({ document, revision: 5, updated_at: null, active_revision: 5, activated_at: null,
-      company: { id: 'tenant', name: 'Company' }, sources: [], reference_images: [], setup_state: 'configured', enforcement_rules_supported: true,
+      company: { id: 'tenant', name: 'Company' }, sources: [], countries: [{code: 'GG', name: 'Guernsey'}], reference_images: [], setup_state: 'configured', enforcement_rules_supported: true,
       execution: { scopes: 0, sources: 0, enforcement_checks_queued: 8 } });
   }) as typeof fetch;
   const loaded = await monitoringSetupClient.load();

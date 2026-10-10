@@ -16,7 +16,8 @@ import {
   type MonitoredDomain,
   type OpenWebSearchConfig,
 } from "../../api";
-import { COUNTRIES, countryLabel } from "../../lib/countries";
+import { countryLabel } from "../../lib/countries";
+import { useMonitoringCountries } from "../../hooks/useMonitoringCountries";
 import { monitoringPlatformOption } from "../../lib/platforms";
 import { MonitoringSources } from "./MonitoringSources";
 import type { WebsiteOption } from "../../lib/websiteCatalog";
@@ -137,6 +138,7 @@ export function PlatformsPanel({
   onMonitoringFrequencyChanged?: (frequency: MonitoringFrequency) => void;
 }) {
   const hasKeywords = (keywords ?? []).length > 0;
+  const { countries, ready: countriesReady, error: countriesError } = useMonitoringCountries();
   const currentFrequency = isMonitoringFrequency(monitoringFrequency) ? monitoringFrequency : "weekly";
 
   const monitoringOn = currentFrequency !== "off";
@@ -385,7 +387,9 @@ export function PlatformsPanel({
       {!hasKeywords && <div className="ms-message">Add monitoring keywords above to start searching.</div>}
       {err && <div role="alert" className="ms-message ms-error">{err}
         {!platformsReady && <button type="button" onClick={() => void loadPlatforms()}>Retry</button>}</div>}
+      {countriesError && <p role="alert" className="ms-message ms-error">{countriesError}</p>}
       <MonitoringSources key={ipId} platforms={platforms} patterns={effectiveScopes} monitoringOn={monitoringOn}
+        countries={countries} countriesReady={countriesReady}
         hasKeywords={hasKeywords && platformsReady} busy={busy} loading={loadingPlatforms}
         onAdd={source => void add(source)} onToggle={platform => void toggle(platform)}
         onRemove={platform => void remove(platform)} onRefresh={platform => void refreshPlatform(platform)}
@@ -415,12 +419,13 @@ export function PlatformsPanel({
           <span className="text-[10px] text-stone-400 uppercase tracking-wide">Target country (optional)</span>
           <select
             value={newCountry}
+            disabled={!countriesReady}
             onChange={(e) => setNewCountry(e.target.value)}
             title="See the platform as a shopper in this country would"
             className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs bg-white text-stone-700 min-w-[10rem]"
           >
             <option value="">🌐 Anywhere</option>
-            {COUNTRIES.map((cn) => (
+            {countries.map((cn) => (
               <option key={cn.code} value={cn.code}>
                 {countryLabel(cn.code)}
               </option>

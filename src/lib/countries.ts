@@ -1,7 +1,5 @@
-// Curated ISO-2 country list for the monitored-platform "scrape from" picker.
-// Not exhaustive (anyip supports more) — these are the common e-commerce
-// markets; the backend validates format only, so an unlisted code still works
-// if passed. Keep alphabetical by name.
+// Common country labels for maps and worker location registration.
+// Monitoring target choices come from the API's country capabilities.
 export interface Country {
   code: string; // uppercase ISO-2
   name: string;
@@ -54,6 +52,7 @@ export const COUNTRIES: Country[] = [
 const BY_CODE: Record<string, Country> = Object.fromEntries(
   COUNTRIES.map((c) => [c.code, c]),
 );
+const REGION_NAMES = new Intl.DisplayNames(['en'], { type: 'region' });
 
 /** Regional-indicator flag emoji for an ISO-2 code (e.g. "DE" → 🇩🇪). */
 export function flagEmoji(code: string): string {
@@ -62,10 +61,11 @@ export function flagEmoji(code: string): string {
   return String.fromCodePoint(...[...cc].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
 }
 
-/** "🇩🇪 Germany" for a known code, else the bare code (uppercased). */
+/** "🇩🇪 Germany" for an ISO-2 code. */
 export function countryLabel(code: string): string {
   const cc = code.trim().toUpperCase();
   const known = BY_CODE[cc];
   const flag = flagEmoji(cc);
-  return known ? `${flag} ${known.name}` : `${flag} ${cc}`.trim();
+  const name = known?.name ?? (/^[A-Z]{2}$/.test(cc) ? REGION_NAMES.of(cc) : undefined) ?? cc;
+  return `${flag} ${name}`.trim();
 }

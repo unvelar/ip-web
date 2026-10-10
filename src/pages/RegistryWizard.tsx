@@ -2,7 +2,8 @@ import ProtectedTermsSettings from "../components/ProtectedTermsSettings";
 import { Link } from "react-router-dom";
 import ImageUploader from "../components/ImageUploader";
 import { PlatformSelector } from "../components/monitoring/PlatformSelector";
-import { COUNTRIES, countryLabel } from "../lib/countries";
+import { countryLabel } from "../lib/countries";
+import { useMonitoringCountries } from "../hooks/useMonitoringCountries";
 import {
   BrandNameVariants,
   BrandConfirmationCard,
@@ -190,17 +191,19 @@ function SearchTermsStep({ flow }: { flow: OnboardingFlow }) {
 }
 
 function WebsitesStep({ flow }: { flow: OnboardingFlow }) {
+  const { countries, ready: countriesReady, error: countriesError } = useMonitoringCountries();
   return (
     <StepPanel step={4} title="Where should we look?" description={`Choose the websites where ${flow.trademark?.name ?? "your brand"} is most likely to appear.`}>
       <div className="space-y-5">
         <PlatformSelector value={flow.platforms} onChange={flow.setPlatforms} disabled={flow.startingMonitoring} />
         <div className="space-y-1">
           <label htmlFor="onboarding-monitor-country" className="block text-sm font-semibold text-stone-700">Target country <span className="font-normal text-stone-400">(optional)</span></label>
-          <select id="onboarding-monitor-country" value={flow.pickedCountry} onChange={(event) => flow.setPickedCountry(event.target.value)} disabled={flow.startingMonitoring} className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700 disabled:opacity-50">
+          <select id="onboarding-monitor-country" value={flow.pickedCountry} onChange={(event) => flow.setPickedCountry(event.target.value)} disabled={flow.startingMonitoring || !countriesReady} className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700 disabled:opacity-50">
             <option value="">Anywhere</option>
-            {COUNTRIES.map((country) => <option key={country.code} value={country.code}>{countryLabel(country.code)}</option>)}
+            {countries.map((country) => <option key={country.code} value={country.code}>{countryLabel(country.code)}</option>)}
           </select>
-          <p className="text-[11px] text-stone-400">Uses the selected country’s marketplace view when supported.</p>
+          {countriesError && <p role="alert" className="text-sm text-red-700">{countriesError}</p>}
+          <p className="text-[11px] text-stone-400">Visits require the selected country. Anywhere allows visits from any country.</p>
         </div>
         <StepActions onBack={() => flow.setCurrentStep(3)} onContinue={() => void flow.handleStartMonitoring()} continueLabel="Start monitoring" disabled={flow.platforms.length === 0 || flow.startingMonitoring} />
       </div>

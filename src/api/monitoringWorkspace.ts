@@ -1,5 +1,6 @@
 import { ApiError, request } from './transport';
 import { isRecord, requireResponse } from './validation';
+import { parseMonitoringCountries } from './monitoringCountries';
 import { DraftError, type Activation, type Brand, type Coverage, type EnforcementRule, type MarketplaceClient, type MatchingReadiness, type Product,
   type ReferenceImage, type ReferenceMaterial, type Source, type Workspace, type WorkspaceClient,
   type WorkspaceResponse } from '../monitoring-workspace/contracts';
@@ -115,6 +116,7 @@ function normalizeLoadResponse(value: unknown): WorkspaceResponse {
     && typeof value.company.name === 'string' && Array.isArray(value.sources) && Array.isArray(value.reference_images)
     && (value.setup_state === 'required' || value.setup_state === 'configured'), 'monitoring setup');
   return { ...draft, company: { id: value.company.id, name: value.company.name }, sources: value.sources as Source[],
+    countries: parseMonitoringCountries(value.countries),
     reference_images: value.reference_images as ReferenceImage[], matching_readiness: normalizeMatchingReadiness(value.matching_readiness),
     setup_state: value.setup_state, enforcement_rules_supported: value.enforcement_rules_supported === true };
 }
@@ -142,7 +144,10 @@ export const monitoringSetupClient: WorkspaceClient & MarketplaceClient = {
   },
   activate: async (document, revision) => normalizeActivation(await setupRequest<unknown>('/api/monitoring-workspace/activate', { method: 'POST', body: JSON.stringify({ document, expected_revision: revision }) })),
   preview: (document, brandId, productId, signal) => setupRequest('/api/monitoring-workspace/preview', { method: 'POST', body: JSON.stringify({ document, brand_id: brandId, product_id: productId }), signal }),
-  catalog: () => setupRequest('/api/admin/monitoring-marketplaces'),
+  catalog: async () => {
+    const value = await setupRequest<Awaited<ReturnType<MarketplaceClient['catalog']>>>('/api/admin/monitoring-marketplaces');
+    return { ...value, countries: parseMonitoringCountries(value.countries) };
+  },
   saveMarketplace: value => setupRequest('/api/admin/monitoring-marketplaces', { method: 'PUT', body: JSON.stringify(value) }),
   addSector: name => setupRequest('/api/admin/monitoring-marketplaces/sectors', { method: 'POST', body: JSON.stringify({ name }) }),
 };

@@ -1,3 +1,5 @@
+import type { Country } from '../lib/countries';
+
 export type Coverage = { markets: { country: string | null; sources: string[] }[]; frequency: 'daily' | 'weekly' | 'monthly' };
 export type ReferenceMaterial = { id: string; name: string; kind: 'image' | 'document'; note: string };
 export type ReferenceImage = { id: string; scope_id: string; original_filename: string; url: string };
@@ -15,11 +17,11 @@ export type Source = { key: string; name: string; kind: string; domain: string; 
   markets: { country: string; storefront_domain: string; evidence_url: string }[];
 };
 export type AdminMarketplace = Source & { revision: number };
-export type AdminCatalog = { marketplaces: AdminMarketplace[]; categories: { key: string; name: string }[]; countries: { code: string; name: string }[] };
+export type AdminCatalog = { marketplaces: AdminMarketplace[]; categories: { key: string; name: string }[]; countries: Country[] };
 export type MarketplaceEdit = { key: string | null; expected_revision: number; name: string; domain: string; logo_key: string | null; categories: string[]; markets: Source['markets'] };
 export type Draft = { document: Workspace; revision: number; updated_at: string | null; active_revision: number | null; activated_at: string | null };
 export type Activation = Draft & { lifecycle: 'active'; executable: true; execution: { scopes: number; sources: number; enforcement_checks_queued?: number }; matching_readiness?: MatchingReadiness[] };
-export type WorkspaceResponse = Draft & { company: { id: string; name: string }; sources: Source[]; reference_images: ReferenceImage[]; matching_readiness?: MatchingReadiness[]; setup_state: 'required' | 'configured'; enforcement_rules_supported?: boolean };
+export type WorkspaceResponse = Draft & { company: { id: string; name: string }; sources: Source[]; countries: Country[]; reference_images: ReferenceImage[]; matching_readiness?: MatchingReadiness[]; setup_state: 'required' | 'configured'; enforcement_rules_supported?: boolean };
 export type Plan = {
   lifecycle: 'draft'; executable: false; inherited: boolean; effective_coverage: Coverage | null;
   total_searches: number; combined_searches: number; scope_count: number; countries: string[]; source_keys: string[]; truncated: boolean; affected_products: number; issues: string[]; coverage_notice: string;
