@@ -52,7 +52,7 @@ export default function MonitoringFirstScan() {
         sources={snapshot.sources}
         recovery={snapshot.onboarding?.recovery?.sources}
         results={feed.visibleResults}
-        coverage={snapshot.page?.source_coverage}
+        health={snapshot.page?.source_health}
         allResultCount={totals.discovered}
         totals={totals}
         resultFilterTotals={feed.resultFilterTotals}

@@ -1,6 +1,12 @@
 import type { MonitoringSourceSetupStatus } from "./registry";
 import { request } from "./transport";
 
+export interface MonitoringSourceHealth {
+  source_id: string; label: string; country: string | null;
+  state: "monitoring" | "updating" | "delayed" | "paused";
+  last_checked_at: string | null;
+}
+
 // --- Brand monitoring (scrape target sites for IP infringements) ---
 
 export interface MonitoredDomain {

@@ -14,7 +14,8 @@ import {
   Search,
   Store,
 } from "lucide-react";
-import type { IpFirstScanResult, IpFirstScanResultStage, IpFirstScanResultsPage, MonitoringSourceRecovery } from "../../api";
+import type { IpFirstScanResult, IpFirstScanResultStage, MonitoringSourceRecovery } from "../../api";
+import type { MonitoringSourceHealth } from "../../api/monitoringSettings";
 import {
   FIRST_SCAN_ACTIVE_RESULT_STAGES,
   firstScanResultImage,
@@ -51,7 +52,7 @@ export function FirstScanResults({
   sources,
   recovery = [],
   results,
-  coverage = [],
+  health = [],
   allResultCount,
   totals,
   resultFilterTotals,
@@ -71,7 +72,7 @@ export function FirstScanResults({
   sources: FirstScanSourceProgress[];
   recovery?: MonitoringSourceRecovery[];
   results: IpFirstScanResult[];
-  coverage?: IpFirstScanResultsPage["source_coverage"];
+  health?: MonitoringSourceHealth[];
   allResultCount: number;
   totals: FirstScanTotals;
   resultFilterTotals: FirstScanResultTotals;
@@ -87,10 +88,9 @@ export function FirstScanResults({
   onResultFilterChange: (value: ResultFilter) => void;
   onSourceFilterChange: (value: string) => void;
 }) {
-  const selectedSourceIds = new Set(sources.map(({ source }) => source.id));
-  const partial = coverage.filter(item => selectedSourceIds.has(item.source_id)
-    && item.status === "partial" && (sourceFilter === "all" || item.source_id === sourceFilter));
-  const partialSources = new Set(partial.map(item => item.source_id)).size;
+  const selectedHealth = health.filter(item => sources.some(source => source.source.id === item.source_id)
+    && (sourceFilter === "all" || item.source_id === sourceFilter));
+  const delayed = selectedHealth.filter(item => item.state === "delayed");
   return (
     <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
       <div className="flex items-center gap-1.5 overflow-x-auto border-b border-stone-100 px-3 py-1.5">
@@ -104,7 +104,9 @@ export function FirstScanResults({
             count={source.discovered}
             state={source.state}
             enabled={source.source.enabled}
+            country={source.source.country}
             recovery={recovery.find(item => item.source_id === source.source.id)}
+            health={health.find(item => item.source_id === source.source.id)}
           />
         ))}
       </div>
@@ -123,15 +125,12 @@ export function FirstScanResults({
         </label>
       </div>
 
-      {partialSources > 0 && (
-        <div role="status" className="flex items-start gap-2 border-b border-amber-100 bg-amber-50/70 px-3 py-2 text-xs text-amber-900">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <p>
-            Search coverage is incomplete for {sourceFilter === "all" ? `${partialSources} website${partialSources === 1 ? "" : "s"}` : "this website"}. More listings may be available.
-            {partial.some(item => item.previous_checked_at) && " Results from an earlier scan are retained and dated below."}
-          </p>
-        </div>
-      )}
+      {delayed.length > 0 && <p role="status" className="border-b border-stone-100 px-3 py-2 text-xs text-stone-500">
+        Updates from {delayed.map(item => item.label).join(", ")} are delayed. Saved listings remain available.
+      </p>}
+      {sourceFilter !== "all" && selectedHealth[0]?.last_checked_at && <p className="border-b border-stone-100 px-3 py-1.5 text-[11px] text-stone-400">
+        Last checked {new Date(selectedHealth[0].last_checked_at).toLocaleString()}
+      </p>}
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1120px] table-fixed text-left">
@@ -153,6 +152,7 @@ export function FirstScanResults({
       </div>
 
       {results.length === 0 && <ResultEmptyState recovery={recovery} loading={refreshing} hasAnyResults={allResultCount > 0}
+        health={selectedHealth}
         sources={sourceFilter === "all" ? sources : sources.filter(source => source.source.id === sourceFilter)} />}
       <div className="flex items-center justify-between gap-3 border-t border-stone-200 px-4 py-3">
         <p className="text-xs tabular-nums text-stone-500" aria-live="polite">
@@ -287,18 +287,22 @@ function MetadataValue({ value, icon, pending, strong = false }: { value: string
   );
 }
 
-function SourceFilterButton({ active, onClick, name, count, state, recovery, enabled }: { active: boolean; onClick: () => void; name: string; count: number; state?: FirstScanSourceState; recovery?: MonitoringSourceRecovery; enabled?: boolean }) {
-  const paused = enabled === false || state === "paused" || recovery?.state === "off";
-  const limited = !paused && (state === "failed" || state === "retry_needed"
-    || Boolean(recovery && ["scheduled", "due", "blocked", "needed"].includes(recovery.state)));
-  const setupProcessing = !paused && !limited && (state === "setup_processing" || state === "connecting");
+function SourceFilterButton({ active, onClick, name, count, state, recovery, enabled, country, health }: { active: boolean; onClick: () => void; name: string; count: number; state?: FirstScanSourceState; recovery?: MonitoringSourceRecovery; enabled?: boolean; country?: string | null; health?: MonitoringSourceHealth }) {
+  const paused = enabled === false || state === "paused" || recovery?.state === "off" || health?.state === "paused";
+  const selectedCountry = health?.country ?? country;
+  const delayed = !paused && health?.state === "delayed";
+  const updating = !paused && !delayed && (health?.state === "updating" || state === "setup_processing" || state === "connecting" || state === "scanning");
+  const label = paused ? "Paused" : delayed ? "Delayed" : updating ? "Updating" : null;
+  const checked = health?.last_checked_at ? `Last checked ${new Date(health.last_checked_at).toLocaleString()}` : "";
   return (
-    <button type="button" onClick={onClick} className={`flex shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${active ? "border-stone-300 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"}`}>
-      {state && <span className={`h-1.5 w-1.5 rounded-full ${paused || limited ? "bg-stone-400" : setupProcessing ? "bg-blue-500" : state === "ready" ? "bg-emerald-500" : "bg-blue-500"}`} />}
+    <button type="button" onClick={onClick} title={[name, selectedCountry, checked].filter(Boolean).join(" · ")} className={`flex shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${active ? "border-stone-300 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"}`}>
+      {state && <span className={`h-1.5 w-1.5 rounded-full ${paused || delayed ? "bg-stone-400" : updating ? "bg-blue-500" : "bg-stone-400"}`} />}
       <span className="font-semibold">{name}</span>
+      {selectedCountry && <span className={`text-[10px] ${active ? "text-white/70" : "text-stone-400"}`}>{selectedCountry}</span>}
       <span className={`rounded px-1.5 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : "bg-stone-100 tabular-nums text-stone-500"}`}>
-        {paused ? "Paused" : limited ? "Limited" : setupProcessing ? "Preparing" : count}
+        {count.toLocaleString()}
       </span>
+      {label && <span className={`text-[10px] ${active ? "text-white/70" : "text-stone-400"}`}>{label}</span>}
     </button>
   );
 }
@@ -312,17 +316,18 @@ function ResultFilterButton({ label, count, value, active, onChange }: { label: 
   );
 }
 
-function ResultEmptyState({ recovery, loading, hasAnyResults, sources }: { recovery: MonitoringSourceRecovery[]; loading: boolean; hasAnyResults: boolean; sources: FirstScanSourceProgress[] }) {
+function ResultEmptyState({ recovery, loading, hasAnyResults, sources, health }: { recovery: MonitoringSourceRecovery[]; loading: boolean; hasAnyResults: boolean; sources: FirstScanSourceProgress[]; health: MonitoringSourceHealth[] }) {
   const noSelection = sources.length === 0;
-  const paused = sources.length > 0 && sources.every(source => source.source.enabled === false);
+  const paused = sources.length > 0 && sources.every(source => source.source.enabled === false
+    || health.some(item => item.source_id === source.source.id && item.state === "paused"));
   const activeSource = sources.find((source) => source.source.enabled !== false && source.state !== "ready" && source.state !== "failed");
   const failedSetup = sources.length === 1 && sources[0].discovered === 0
     ? recovery.find(item => item.source_id === sources[0].source.id && item.reason
       && ["scheduled", "due", "blocked", "needed"].includes(item.state)) : null;
-  if (failedSetup && !loading) return <div className="flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center">
+  if (failedSetup && !paused && !loading) return <div className="flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center">
     <Search className="h-5 w-5 text-stone-400" />
-    <p className="mt-3 text-sm font-semibold text-stone-800">No results collected from {failedSetup.label}</p>
-    <p className="mt-1 max-w-md text-xs leading-5 text-stone-500">No search results were collected. This does not mean there are no matching listings.</p>
+    <p className="mt-3 text-sm font-semibold text-stone-800">Waiting for updates from {failedSetup.label}</p>
+    <p className="mt-1 max-w-md text-xs leading-5 text-stone-500">New listings will appear here as monitoring updates.</p>
   </div>;
   return (
     <div className="flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center">
@@ -334,8 +339,8 @@ function ResultEmptyState({ recovery, loading, hasAnyResults, sources }: { recov
           : hasAnyResults
           ? "Clear the search or select another pipeline stage."
           : activeSource
-            ? `${SOURCE_STATE_COPY[activeSource.state].label}: ${activeSource.source.display_name || readableDomain(activeSource.source.domain)}. Rows appear here as soon as the scraper saves a result.`
-            : "The scan is running in the background and this table updates automatically."}
+            ? `${SOURCE_STATE_COPY[activeSource.state].label}: ${activeSource.source.display_name || readableDomain(activeSource.source.domain)}. Listings appear as monitoring finds them.`
+            : "Monitoring adds listings here as updates become available."}
       </p>
       {noSelection && !loading && (
         <Link to="/monitoring/setup" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-stone-700 hover:text-stone-950">

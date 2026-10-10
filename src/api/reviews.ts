@@ -549,6 +549,7 @@ export interface IpFirstScanTotals {
 
 export interface IpFirstScanResultsPage {
   results: IpFirstScanResult[];
+  source_health?: import("./monitoringSettings").MonitoringSourceHealth[];
   source_coverage?: Array<{
     source_id: string;
     keyword: string | null;

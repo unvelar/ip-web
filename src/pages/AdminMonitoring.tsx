@@ -16,6 +16,7 @@ import { ADMIN_JOB_COPY } from "../features/adminMonitoring/monitoringJobs";
 import { WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
 import { useAdminMonitoringStatus, type AdminMonitoringWindow } from "../features/adminMonitoring/useAdminMonitoringStatus";
 import { WebsitePerformance } from "../features/adminMonitoring/WebsitePerformance";
+import {CoverageRecovery} from '../features/adminMonitoring/CoverageRecovery';
 import { recoveryLabel } from "../components/monitoring/recoveryPresentation";
 import { failureDetail } from "../components/monitoring/failureDetail";
 
@@ -164,6 +165,7 @@ export default function AdminMonitoring() {
               />
             </div>
           </div>
+          <CoverageRecovery refreshAt={monitor.status.generated_at}/>
           <WebsitePerformance key={monitor.windowHours} windowHours={monitor.windowHours} asOf={monitor.status.generated_at} />
         </div>
       )}
