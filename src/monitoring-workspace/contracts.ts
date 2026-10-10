@@ -1,4 +1,4 @@
-export type Coverage = { markets: { country: string; sources: string[] }[]; frequency: 'daily' | 'weekly' | 'monthly' };
+export type Coverage = { markets: { country: string | null; sources: string[] }[]; frequency: 'daily' | 'weekly' | 'monthly' };
 export type ReferenceMaterial = { id: string; name: string; kind: 'image' | 'document'; note: string };
 export type ReferenceImage = { id: string; scope_id: string; original_filename: string; url: string };
 export type EnforcementRule = { id: string; condition: string; action: 'do_not_pursue' | 'takedown' | 'review'; explanation: string; overrides_rule_id: string | null };
@@ -23,7 +23,7 @@ export type WorkspaceResponse = Draft & { company: { id: string; name: string };
 export type Plan = {
   lifecycle: 'draft'; executable: false; inherited: boolean; effective_coverage: Coverage | null;
   total_searches: number; combined_searches: number; scope_count: number; countries: string[]; source_keys: string[]; truncated: boolean; affected_products: number; issues: string[]; coverage_notice: string;
-  searches: { keyword: string; source_key: string; source_name: string; country: string; frequency: Coverage['frequency']; storefront_domain: string | null; coverage_status: 'unverified'; origins: { brand_id: string; product_id: string | null; name: string }[] }[];
+  searches: { keyword: string; source_key: string; source_name: string; country: string | null; frequency: Coverage['frequency']; storefront_domain: string | null; coverage_status: 'unverified'; origins: { brand_id: string; product_id: string | null; name: string }[] }[];
   matching_readiness?: MatchingReadiness[];
 };
 export class DraftError extends Error {

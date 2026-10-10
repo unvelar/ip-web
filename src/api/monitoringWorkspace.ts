@@ -46,7 +46,7 @@ function normalizeCoverage(value: unknown): Coverage {
   return {
     frequency: value.frequency as Coverage['frequency'],
     markets: value.markets.map(market => {
-      requireResponse(isRecord(market) && typeof market.country === 'string', 'monitoring market');
+      requireResponse(isRecord(market) && (market.country === null || typeof market.country === 'string'), 'monitoring market');
       return { country: market.country, sources: stringArray(market.sources, 'monitoring market sources') };
     }),
   };
