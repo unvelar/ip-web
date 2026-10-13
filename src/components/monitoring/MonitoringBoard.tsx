@@ -23,7 +23,7 @@ import {
 } from "../../api";
 import { ConfirmSendModal } from "../TakedownPanel";
 import { BatchConfirmModal } from "./board/batch";
-import { BatchOperationBar } from "./board/BatchOperationBar";
+import { MonitoringSelectionBar } from "./board/MonitoringSelectionBar";
 import { BatchResultNotice } from "./board/BatchResultNotice";
 import {
   type BatchResult,
@@ -35,7 +35,6 @@ import {
   summarizeTakedownBatch,
 } from "./board/batchUtils";
 import {
-  CANDIDATE_OUTCOME_LABELS,
   DISMISSAL_REASON_LABELS,
   type ResortTarget,
 } from "./board/constants";
@@ -44,7 +43,7 @@ import { FindingInspector } from "./board/FindingInspector";
 import type { FindingUpdateOptions } from "./board/FindingActions";
 import { MonitoringFilters } from "./board/MonitoringFilters";
 import type { InboxFilters } from "../../lib/monitoringFilters";
-import { compactListingTitle, hasReviewAnalysis, selectedFindingSummary } from "./board/utils";
+import { compactListingTitle, hasReviewAnalysis } from "./board/utils";
 import { useTenantMembers } from "../../hooks/useTenantMembers";
 import { useAuth } from "../../context/AuthContext";
 
@@ -259,7 +258,6 @@ export function MonitoringBoard({
   // in a small side map without reordering the visible page.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reviewingSelection, setReviewingSelection] = useState(false);
-  const selectionReviewRef = useRef<HTMLDivElement>(null);
   const [selectionExtras, setSelectionExtras] = useState<Map<string, IpReviewFinding>>(new Map());
 
   const displayFindings = useMemo(() => {
@@ -310,12 +308,17 @@ export function MonitoringBoard({
     setCompletingResultIds(next);
   }, [findings]);
 
+  const inspectorFindings = useMemo(
+    () => reviewingSelection ? displayFindings.filter((finding) => selected.has(finding.result_id)) : displayFindings,
+    [displayFindings, reviewingSelection, selected],
+  );
+
   // If filters/refetches remove the active row, the inspector naturally closes
   // until the user selects another visible row.
   const activeIndex = activeId
-    ? displayFindings.findIndex((f) => f.result_id === activeId)
+    ? inspectorFindings.findIndex((f) => f.result_id === activeId)
     : -1;
-  const activeFinding = activeIndex >= 0 ? displayFindings[activeIndex] : null;
+  const activeFinding = activeIndex >= 0 ? inspectorFindings[activeIndex] : null;
 
   useEffect(() => {
     if (!activeFinding) return;
@@ -336,7 +339,7 @@ export function MonitoringBoard({
 
   const visibleActionableFindings = useMemo(
     () =>
-      displayFindings.filter((f) => {
+      inspectorFindings.filter((f) => {
         const state: CaseReviewStatus = f.dismissed_at
           ? "dismissed"
           : (f.review_status ?? "pending");
@@ -349,7 +352,7 @@ export function MonitoringBoard({
           !completingResultIds.has(f.result_id)
         );
       }),
-    [completingResultIds, displayFindings, dismissing],
+    [completingResultIds, inspectorFindings, dismissing],
   );
 
   const advanceAfterAction = useCallback((resultId: string) => {
@@ -375,14 +378,14 @@ export function MonitoringBoard({
   }, [onRefresh, setResultCompleting]);
 
   const moveActive = useCallback((delta: -1 | 1) => {
-    if (displayFindings.length === 0) return;
+    if (inspectorFindings.length === 0) return;
     const current = activeId
-      ? displayFindings.findIndex((f) => f.result_id === activeId)
+      ? inspectorFindings.findIndex((f) => f.result_id === activeId)
       : -1;
-    const base = current >= 0 ? current : delta > 0 ? -1 : displayFindings.length;
-    const next = Math.max(0, Math.min(displayFindings.length - 1, base + delta));
-    setActiveFinding(displayFindings[next].result_id);
-  }, [activeId, displayFindings, setActiveFinding]);
+    const base = current >= 0 ? current : delta > 0 ? -1 : inspectorFindings.length;
+    const next = Math.max(0, Math.min(inspectorFindings.length - 1, base + delta));
+    setActiveFinding(inspectorFindings[next].result_id);
+  }, [activeId, inspectorFindings, setActiveFinding]);
 
   const handleDismiss = useCallback(async (
     f: IpReviewFinding,
@@ -1077,12 +1080,6 @@ export function MonitoringBoard({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeFinding, moveActive, runShortcutAction, setActiveFinding]);
 
-  useEffect(() => {
-    if (!reviewingSelection) return;
-    selectionReviewRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
-    selectionReviewRef.current?.focus({ preventScroll: true });
-  }, [reviewingSelection]);
-
   const hasActiveFilters = Boolean(filters.country || filters.query || filters.product_group_id || filters.catalog_product_id ||
     filters.source || filters.platform || filters.seller || filters.assignee || filters.priority ||
     filters.candidate_outcome || filters.dismissal_reason || filters.match_basis || filters.protected_term_id ||
@@ -1091,10 +1088,6 @@ export function MonitoringBoard({
     source: null, platform: null, seller: null, assignee: null, priority: null, candidate_outcome: null,
     dismissal_reason: null, min_price_usd: null, max_price_usd: null, match_basis: null, protected_term_id: null });
 
-  const selectedSummary = useMemo(
-    () => selectedFindingSummary(selectedActionFindings),
-    [selectedActionFindings],
-  );
   const selectedHasTakedownDecision = selectedActionFindings.some((finding) => {
     const state = finding.dismissed_at ? "dismissed" : (finding.review_status ?? "pending");
     return isDecisionState(state);
@@ -1102,34 +1095,12 @@ export function MonitoringBoard({
   const selectedHasLegalQueue = selectedActionFindings.some(
     (finding) => !finding.dismissed_at && finding.review_status === "takedown_pending",
   );
-  const resortSelectedTooltip = filters.candidate_outcome
-    ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
-    : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
-  const bulkSelectionBar = (
-    <BatchOperationBar
-      placement="inline"
-      selectedCount={selectedActionFindings.length}
-      selectedSummary={selectedSummary}
-      batchProgress={batchProgress}
-      onAction={setConfirmAction}
-      onResort={() => void runResort()}
-      resortDisabled={!filters.candidate_outcome}
-      resortTooltip={resortSelectedTooltip}
-      onClear={clearSelection}
-      showTakedown={selectedHasTakedownDecision}
-      showMarkSubmitted={selectedHasLegalQueue}
-      showPackagingOnly={selectedActionFindings.length > 0 && selectedActionFindings.every(
-        (finding) => finding.offer_subject === "packaging_only",
-      )}
-      assigneeOptions={tenantMembers.map((member) => ({
-        id: member.id,
-        label: member.id === currentTenantMember?.id
-          ? `Me — ${tenantMemberLabel(member)}`
-          : tenantMemberLabel(member),
-      }))}
-      onAssign={(assigneeId) => void runBatchAssignment(assigneeId)}
-    />
-  );
+  const selectionActions: BatchAction[] = ["do_not_pursue", "false_positive", "second_hand", "review", "enforce"];
+  if (selectedHasTakedownDecision) selectionActions.push("send");
+  if (selectedHasLegalQueue) selectionActions.push("submit");
+  if (selectedActionFindings.length > 0 && selectedActionFindings.every((finding) => finding.offer_subject === "packaging_only")) {
+    selectionActions.push("packaging_only");
+  }
 
   return (
     <>
@@ -1166,7 +1137,7 @@ export function MonitoringBoard({
           onSort={(sort) => onFiltersChange({ sort })}
           onSelect={toggleSelect}
           onSelectAll={selectAllLoaded}
-          onOpen={setActiveFinding}
+          onOpen={(resultId) => { setReviewingSelection(false); setActiveFinding(resultId); }}
           emptyMessage={emptyStateMessage}
           onClearFilters={hasActiveFilters ? clearFilters : undefined}
         />
@@ -1189,24 +1160,25 @@ export function MonitoringBoard({
         )}
       </div>
 
-      {selectedActionFindings.length > 0 && (
-        <div className="monitoring-selection-bar" aria-label="Selected listings">
-          <span aria-live="polite">{selectedActionFindings.length} {selectedActionFindings.length === 1 ? "listing" : "listings"} selected</span>
-          <button type="button" disabled={Boolean(batchProgress)} onClick={clearSelection}>Deselect</button>
-          <button type="button" disabled={Boolean(batchProgress)} onClick={() => setReviewingSelection(true)}>Review selection</button>
-        </div>
-      )}
-      {reviewingSelection && selectedActionFindings.length > 0 && (
-        <div ref={selectionReviewRef} className="monitoring-selection-review" tabIndex={-1} aria-label="Review selected listings">
-          <h2>Review {selectedActionFindings.length} selected {selectedActionFindings.length === 1 ? "listing" : "listings"}</h2>
-          <p>Open each listing to check its evidence before choosing a decision.</p>
-          <ul>{selectedActionFindings.map((finding) => <li key={finding.result_id}>
-            <button type="button" onClick={() => setActiveFinding(finding.result_id)}>{compactListingTitle(finding)} <small>· {finding.domain}</small></button>
-          </li>)}</ul>
-          {bulkSelectionBar}
-          <button type="button" className="monitoring-back-to-list" disabled={Boolean(batchProgress)} onClick={() => { setReviewingSelection(false); queueRef.current?.scrollIntoView({ block: "start", behavior: "instant" }); queueRef.current?.querySelector<HTMLSelectElement>('[aria-label="Sort listings"]')?.focus({ preventScroll: true }); }}>Back to listings</button>
-        </div>
-      )}
+      <MonitoringSelectionBar
+        selectedCount={selectedActionFindings.length}
+        actions={selectionActions}
+        progress={batchProgress}
+        onAction={setConfirmAction}
+        onClear={clearSelection}
+        onReview={() => {
+          const first = selectedActionFindings[0];
+          if (!first) return;
+          setReviewingSelection(true);
+          setActiveFinding(first.result_id);
+        }}
+        assignees={tenantMembers.map((member) => ({
+          id: member.id,
+          label: member.id === currentTenantMember?.id ? `Me — ${tenantMemberLabel(member)}` : tenantMemberLabel(member),
+        }))}
+        onAssign={(assigneeId) => void runBatchAssignment(assigneeId)}
+        onResort={filters.candidate_outcome ? () => void runResort() : undefined}
+      />
 
       {activeFinding && (
         <FindingInspector
@@ -1215,7 +1187,13 @@ export function MonitoringBoard({
           showIp={ipAware}
           isDismissed={!!activeFinding.dismissed_at || dismissing.has(activeFinding.result_id)}
           isDismissing={dismissing.has(activeFinding.result_id) && !activeFinding.dismissed_at}
-          onClose={() => setActiveFinding(null)}
+          onClose={() => { setReviewingSelection(false); setActiveFinding(null); }}
+          navigation={{
+            position: activeIndex + 1,
+            total: inspectorFindings.length,
+            onPrevious: activeIndex > 0 ? () => moveActive(-1) : undefined,
+            onNext: activeIndex < inspectorFindings.length - 1 ? () => moveActive(1) : undefined,
+          }}
           onDismiss={(reason, reasonCode) => handleDismiss(activeFinding, reason, reasonCode)}
           onActionComplete={() => advanceAfterAction(activeFinding.result_id)}
           onNeedsReview={() => rememberNeedsReviewAction(activeFinding)}
