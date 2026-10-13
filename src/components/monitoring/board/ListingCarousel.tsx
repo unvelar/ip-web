@@ -1,6 +1,6 @@
-import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus, X } from "lucide-react";
-import { allowIpFindingProductImage, type IpReviewFinding } from "../../../api";
+import { type IpReviewFinding } from "../../../api";
 
 /** Modern "detected region" overlay: four rounded corner brackets in an
  *  indigo→fuchsia gradient with a soft glow, plus a near-invisible fill tint
@@ -266,12 +266,11 @@ function buildGalleryItems(f: IpReviewFinding): GalleryItem[] {
 
 /** Hero-with-thumbstrip carousel for the listing's product photos. When
  *  `gallery_scores` is present (worker scored each photo against the IP), the
- *  best-matched photo is marked MATCHED and each thumb shows its similarity %.
+ *  scores determine image order without being displayed.
  *  Archived copies replace their original sources instead of becoming extra
  *  slides. The page screenshot stays first as listing-level evidence. */
 export function ListingCarousel({
   f,
-  ipId,
   compact = false,
   initialView = "screenshot",
 }: {
@@ -284,8 +283,6 @@ export function ListingCarousel({
 
   const [idx, setIdx] = useState(() => initialView === "product"
     ? Math.max(0, items.findIndex((item) => !item.isScreenshot)) : 0);
-  const [allowingUrl, setAllowingUrl] = useState<string | null>(null);
-  const [allowedSourceUrls, setAllowedSourceUrls] = useState<Set<string>>(new Set());
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerZoom, setViewerZoom] = useState(1);
   const viewerRef = useRef<HTMLDialogElement>(null);
@@ -328,32 +325,10 @@ export function ListingCarousel({
   }
 
   const active = activeItem.url;
-  const activeSourceUrl = activeItem.sourceUrl;
-  const activeSim = activeItem.similarity;
   const activeBbox = activeItem.bbox;
   // Only honor the measurement when it belongs to the current slide.
   const activeNatural = natural?.url === active ? natural : null;
-  const canAllowImage = f.protected_term_assessment?.outcome !== "matched" && !!ipId && !!activeSourceUrl && !activeItem.isScreenshot &&
-    !f.dismissed_at;
-  const activeAllowed = activeSourceUrl
-    ? allowedSourceUrls.has(activeSourceUrl)
-    : false;
   const canZoomHero = !compact;
-
-  async function allowImageUrl(e: MouseEvent, imageUrl: string) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!ipId || !imageUrl || allowingUrl) return;
-    setAllowingUrl(imageUrl);
-    try {
-      await allowIpFindingProductImage(ipId, f.result_id, { image_url: imageUrl });
-      setAllowedSourceUrls((prev) => new Set(prev).add(imageUrl));
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to allow product image");
-    } finally {
-      setAllowingUrl(null);
-    }
-  }
 
   return (
     <div className="space-y-2">
@@ -398,19 +373,6 @@ export function ListingCarousel({
             />
           )}
         </div>
-        {activeSim != null && (
-          <span
-            className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[11px] font-bold ${
-              activeItem.isBest
-                ? "bg-emerald-600 text-white"
-                : "bg-stone-900/80 text-white"
-            }`}
-            title={`Similarity to the protected IP: ${Math.round(activeSim * 100)}%`}
-          >
-            {activeItem.isBest ? "MATCHED · " : ""}
-            {Math.round(activeSim * 100)}%
-          </span>
-        )}
         {!compact && (
           <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-white/90 px-2 py-1 text-[10px] font-semibold text-stone-700 shadow-sm" aria-hidden="true">
             <Maximize2 size={11} /> View full photo
@@ -420,21 +382,6 @@ export function ListingCarousel({
           <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-900/70 text-white">
             {Math.min(idx, items.length - 1) + 1} / {items.length}
           </span>
-        )}
-        {canAllowImage && (
-          <button
-            type="button"
-            onClick={(e) => allowImageUrl(e, activeSourceUrl!)}
-            disabled={!!allowingUrl || activeAllowed}
-            title="Allow this product image — future similar images for this IP will be ignored"
-            className={`absolute bottom-2 left-2 rounded-md font-semibold shadow-sm disabled:opacity-60 ${
-              compact
-                ? "px-1.5 py-1 text-[10px] bg-white/95 text-teal-700"
-                : "px-2.5 py-1.5 text-xs bg-white/95 text-teal-700 hover:bg-teal-50"
-            }`}
-          >
-            {allowingUrl === activeSourceUrl ? "Queuing…" : activeAllowed ? "Ignored going forward" : compact ? "Allow" : "Allow this image"}
-          </button>
         )}
       </a>
       {!compact && (
@@ -527,19 +474,11 @@ export function ListingCarousel({
           </div>
         </dialog>
       )}
-      {allowedSourceUrls.size > 0 && (
-        <div className="rounded-md border border-teal-200 bg-teal-50 px-2.5 py-2 text-xs font-medium text-teal-800">
-          Similar products will be ignored going forward.
-        </div>
-      )}
-
-      {/* Thumb strip — horizontal scroll on overflow, matched thumb framed emerald. */}
+      {/* Thumb strip — horizontal scroll on overflow, with one selection outline. */}
       {items.length > 1 && (
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           {items.map((item, i) => {
-            const sim = item.similarity;
             const isActive = i === idx;
-            const sourceUrl = item.sourceUrl;
             return (
               <button
                 key={item.key}
@@ -554,31 +493,10 @@ export function ListingCarousel({
                 className={`relative shrink-0 ${compact ? "w-11 h-11" : "w-14 h-14"} rounded overflow-hidden border-2 transition-colors ${
                   isActive
                     ? "border-stone-900"
-                    : item.isBest
-                      ? "border-emerald-500"
-                      : "border-stone-200 hover:border-stone-400"
+                    : "border-stone-200 hover:border-stone-400"
                 }`}
-                title={sim != null ? `${Math.round(sim * 100)}% match` : undefined}
               >
                 <img src={item.url} alt="" className="w-full h-full object-cover" loading="lazy" />
-                {sim != null && (
-                  <span className="absolute bottom-0 right-0 px-1 py-px bg-stone-900/80 text-white text-[9px] font-bold leading-tight">
-                    {Math.round(sim * 100)}
-                  </span>
-                )}
-                {ipId && sourceUrl && !item.isScreenshot && !f.dismissed_at && (
-                  <span
-                    onClick={(e) => allowImageUrl(e, sourceUrl)}
-                    className={`absolute top-0 left-0 px-1 py-px text-[9px] font-bold leading-tight rounded-br ${
-                      allowedSourceUrls.has(sourceUrl)
-                        ? "bg-teal-600 text-white"
-                        : "bg-white/90 text-teal-700 hover:bg-teal-50"
-                    }`}
-                    title="Allow this individual product image"
-                  >
-                    {allowingUrl === sourceUrl ? "..." : allowedSourceUrls.has(sourceUrl) ? "OK" : "Allow"}
-                  </span>
-                )}
               </button>
             );
           })}
