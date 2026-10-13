@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-Bo2XkFjk.js";var t=e(),n=`/pr-preview/pr-42/logo/logo.svg`;function r({className:e=``}){return(0,t.jsx)(`img`,{className:e,src:n,width:`512`,height:`512`,alt:``,"aria-hidden":`true`,decoding:`async`,draggable:!1})}export{r as t};
