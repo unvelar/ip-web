@@ -25,7 +25,7 @@ export function FindingActionPopover({ label, description, recommended, disabled
 
   function focusOption(last = false) {
     const options = root.current?.querySelectorAll<HTMLButtonElement>('[data-action-options] button:not(:disabled)');
-    (last ? options?.[options.length - 1] : options?.[0])?.focus();
+    (last ? options?.[options.length - 1] : options?.[0])?.focus({ preventScroll: true });
   }
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export function FindingActionPopover({ label, description, recommended, disabled
       if (event.key === "Escape") {
         event.preventDefault();
         setOpen(false);
-        trigger.current?.focus();
+        trigger.current?.focus({ preventScroll: true });
       } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
         event.preventDefault();
         const options = Array.from(root.current?.querySelectorAll<HTMLButtonElement>('[data-action-options] button:not(:disabled)') ?? []);
@@ -71,7 +71,7 @@ export function FindingActionPopover({ label, description, recommended, disabled
         className="finding-action-options" onClick={(event) => {
           if (event.target instanceof Element && event.target.closest("button:not(:disabled)")) {
             setOpen(false);
-            trigger.current?.focus();
+            trigger.current?.focus({ preventScroll: true });
           }
         }}>
         <p>{description}</p>
