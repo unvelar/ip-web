@@ -1,0 +1,12 @@
+.monitoring-data-workspace {
+  --monitoring-ink: #242320;
+  --monitoring-muted: #706d66;
+  --monitoring-line: #e9e6e0;
+  --monitoring-subtle: #f8f7f5;
+  --monitoring-selected: #f5f4f0;
+  color: var(--monitoring-ink);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #fff;
+  border: 1px solid var(--monitoring-line);
+  border-radius: 12px;
+}

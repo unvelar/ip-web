@@ -73,9 +73,11 @@ function SourcePicker({ facets, filters, onChange, onClose }: {
   </div>;
 }
 
-export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilter, members, membersLoading, membersError, currentMemberId }: {
+export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilter, showSearch = true, searchInputRef, members, membersLoading, membersError, currentMemberId }: {
   filters: InboxFilters; facets: MonitoringFacets; onChange: (change: Partial<InboxFilters>) => void;
   ipId: string | null; showIpFilter: boolean; members: TenantMember[]; membersLoading: boolean; membersError: string; currentMemberId: string | null;
+  showSearch?: boolean;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [search, setSearch] = useState(filters.query ?? "");
@@ -97,7 +99,8 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
   }, [ipId, filters.catalog_product_id, productLabel]);
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRefs = useRef<Partial<Record<Panel, HTMLButtonElement | null>>>({});
-  const searchRef = useRef<HTMLInputElement>(null);
+  const localSearchRef = useRef<HTMLInputElement>(null);
+  const searchRef = searchInputRef ?? localSearchRef;
   const latestChange = useRef(onChange);
   useEffect(() => { latestChange.current = onChange; }, [onChange]);
   const [previousQuery, setPreviousQuery] = useState(filters.query);
@@ -106,11 +109,12 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
     setSearch(filters.query ?? "");
   }
   useEffect(() => {
+    if (!showSearch) return;
     const value = search.trim() || null;
     if (value === filters.query) return;
     const timer = window.setTimeout(() => latestChange.current({ query: value }), 250);
     return () => window.clearTimeout(timer);
-  }, [search, filters.query]);
+  }, [search, filters.query, showSearch]);
   function close(restore = false) {
     if (restore && panel) triggerRefs.current[panel]?.focus();
     setPanel(null);
@@ -209,11 +213,11 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
       </div>
     </nav>
     <div className="monitoring-filter-toolbar">
-      <label className="monitoring-listing-search">
+      {showSearch && <label className="monitoring-listing-search">
         <Search size={15} className="shrink-0 text-stone-400" aria-hidden />
         <input type="search" ref={searchRef} aria-label="Search listings or sellers" placeholder="Search listings or sellers…" value={search} onChange={(event) => setSearch(event.target.value)} />
         {search && <button type="button" aria-label="Clear search" onClick={() => { setSearch(""); onChange({ query: null }); }}><X size={14} /></button>}
-      </label>
+      </label>}
       <div className="monitoring-filter-tools">
       <div className="monitoring-filter-anchor">
         {trigger("product", "Product or group", <Package size={14} aria-hidden />, hasProduct)}

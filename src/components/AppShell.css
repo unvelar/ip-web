@@ -129,6 +129,7 @@
 }
 @media (min-width: 1024px) {
   .app-shell { --app-shell-topbar-height: 40px; --app-shell-banner-sticky-top: 0px; }
+  .app-shell[data-monitoring-toolbar=true] { --app-shell-topbar-height:49px; }
   .shell-sidebar-frame { width: 224px; transition: width 180ms ease; }
   .shell-sidebar-frame[data-collapsed=true] { width: 60px; }
 }

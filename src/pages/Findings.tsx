@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   getMonitoringCampaign,
   getMonitoringFinding,
@@ -11,9 +11,11 @@ import {
   type MonitoringFindingsQuery,
 } from "../api";
 import { parseFilters, writeFilters, type InboxFilters } from "../lib/monitoringFilters";
+import MonitoringToolbar from "../components/MonitoringToolbar";
+import MonitoringSearch from "../components/MonitoringSearch";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
-import { ChevronRight } from "lucide-react";
 import "../components/monitoring/board/MonitoringResults.css";
+import "../components/monitoring/MonitoringWorkspace.css";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
@@ -39,7 +41,6 @@ export function MonitoringInboxView() {
   const { actingTenantId, switchTenant } = useAuth();
   const {
     activeIpId,
-    activeIp,
     loading: loadingActiveIp,
   } = useActiveIp();
   const { status: onboardingStatus } = useIpOnboardingStatus(activeIpId);
@@ -70,6 +71,7 @@ export function MonitoringInboxView() {
   // The request currently in flight for the first page (filter changes); we
   // ignore stale responses so a quick filter toggle can't flicker an older
   // payload back on screen.
+  const toolbarSearchRef = useRef<HTMLInputElement>(null);
   const reqSeq = useRef(0);
   const linkedReqSeq = useRef(0);
   const taskIdRef = useRef<string | undefined>(taskId);
@@ -394,71 +396,69 @@ export function MonitoringInboxView() {
         : undefined;
 
   return (
-    <div className="monitoring-results-workspace">
-      <header className="monitoring-workspace-header">
-        <div>
-          <p className="monitoring-workspace-eyebrow">{activeIp?.name ?? "Workspace"} / Marketplaces</p>
-          <h1>Listings</h1>
-        </div>
-        {activeIpId && <Link className="monitoring-status-link"
-          to={`/monitoring/first-scan?ip_id=${encodeURIComponent(activeIpId)}`}>
-          <span>View live scan</span>
-          <ChevronRight size={13} aria-hidden />
-        </Link>}
-      </header>
+    <>
+      <MonitoringToolbar title="Tasks" onRefresh={() => refresh()} refreshing={!loaded}
+        meta={<span role="status">{facets ? `${facets.total.toLocaleString()} ${facets.total === 1 ? "listing" : "listings"}` : "Loading…"}</span>}
+      >
+        <MonitoringSearch inputRef={toolbarSearchRef} value={filters.query ?? ""} onChange={(query) => onFiltersChange({ query: query || null })} debounceMs={250} label="Search listings or sellers" placeholder="Search listings or sellers…" />
+      </MonitoringToolbar>
+      <div className="monitoring-results-workspace monitoring-data-workspace">
 
-      {activeIpId && onboardingStatus?.customer_action_required && (
-        <div className="monitoring-workspace-notice"><TenantMonitoringSetupNotice ipId={activeIpId} status={onboardingStatus} /></div>
-      )}
+        {activeIpId && onboardingStatus?.customer_action_required && (
+          <div className="monitoring-workspace-notice"><TenantMonitoringSetupNotice ipId={activeIpId} status={onboardingStatus} /></div>
+        )}
 
-      {err && <div className="monitoring-workspace-notice text-sm text-red-600">
-        {err}
-        {(filters.min_price_usd != null || filters.max_price_usd != null) && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ min_price_usd: null, max_price_usd: null })}>Clear price filter</button>}
-        {filters.country && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ country: null })}>Clear country filter</button>}
-        {filters.source && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ source: null, platform: null })}>Clear source filter</button>}
-      </div>}
-      {linkedErr && (
-        <div className="monitoring-workspace-notice text-sm text-red-600">
-          Unable to open linked task: {linkedErr}
-        </div>
-      )}
-      {campaignBatchErr && (
-        <div className="monitoring-workspace-notice text-sm text-red-600">
-          Unable to load campaign batch: {campaignBatchErr}
-        </div>
-      )}
-      {campaignBatchId && campaignBatchFindings.length > 0 && (
-        <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
-          Campaign view loaded: {campaignBatchTitle || campaignBatchId}. Select only the rows you have reviewed.
-        </div>
-      )}
+        {err && <div className="monitoring-workspace-notice text-sm text-red-600">
+          {err}
+          {(filters.min_price_usd != null || filters.max_price_usd != null) && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ min_price_usd: null, max_price_usd: null })}>Clear price filter</button>}
+          {filters.country && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ country: null })}>Clear country filter</button>}
+          {filters.source && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ source: null, platform: null })}>Clear source filter</button>}
+        </div>}
+        {linkedErr && (
+          <div className="monitoring-workspace-notice text-sm text-red-600">
+            Unable to open linked task: {linkedErr}
+          </div>
+        )}
+        {campaignBatchErr && (
+          <div className="monitoring-workspace-notice text-sm text-red-600">
+            Unable to load campaign batch: {campaignBatchErr}
+          </div>
+        )}
+        {campaignBatchId && campaignBatchFindings.length > 0 && (
+          <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+            Campaign view loaded: {campaignBatchTitle || campaignBatchId}. Select only the rows you have reviewed.
+          </div>
+        )}
 
-      {!loadingActiveIp && !activeIpId ? (
-        <div className="rounded-lg border border-dashed border-stone-300 bg-white px-6 py-12 text-center text-sm text-stone-500">
-          Add an IP from the top bar to start reviewing monitoring tasks.
-        </div>
-      ) : !loaded ? (
-        <div className="text-sm text-stone-400 py-8 text-center">Loading…</div>
-      ) : !facets ? (
-        <div className="text-sm text-stone-400 py-8 text-center">No task data available.</div>
-      ) : (
-        <MonitoringBoard
-          findings={boardFindings}
-          facets={facets}
-          filters={filters}
-          onFiltersChange={onFiltersChange}
-          nextCursor={nextCursor}
-          loadingMore={loadingMore}
-          onLoadMore={loadMore}
-          emptyStateMessage={emptyStateMessage}
-          onRefresh={refresh}
-          showIpColumn
-          showIpFilter={false}
-          activeFindingId={taskId ?? null}
-          onActiveFindingChange={onActiveFindingChange}
-        />
-      )}
-    </div>
+        {!loadingActiveIp && !activeIpId ? (
+          <div className="rounded-lg border border-dashed border-stone-300 bg-white px-6 py-12 text-center text-sm text-stone-500">
+            Add an IP from the top bar to start reviewing monitoring tasks.
+          </div>
+        ) : !loaded ? (
+          <div className="text-sm text-stone-400 py-8 text-center">Loading…</div>
+        ) : !facets ? (
+          <div className="text-sm text-stone-400 py-8 text-center">No task data available.</div>
+        ) : (
+          <MonitoringBoard
+            findings={boardFindings}
+            facets={facets}
+            filters={filters}
+            onFiltersChange={onFiltersChange}
+            nextCursor={nextCursor}
+            loadingMore={loadingMore}
+            onLoadMore={loadMore}
+            emptyStateMessage={emptyStateMessage}
+            onRefresh={refresh}
+            showIpColumn
+            showIpFilter={false}
+            showSearch={false}
+            searchInputRef={toolbarSearchRef}
+            activeFindingId={taskId ?? null}
+            onActiveFindingChange={onActiveFindingChange}
+          />
+        )}
+      </div>
+    </>
   );
 }
 

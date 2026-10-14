@@ -1,4 +1,4 @@
-import { ArrowLeft, Settings2 } from "lucide-react";
+import { ArrowLeft, Settings2, X } from "lucide-react";
 import type { PersistedProductGroup } from "../../api/products";
 import { productName } from "./labDomain";
 import { ProductGroupSettings } from "./ProductGroupSettings";
@@ -27,10 +27,10 @@ export function ProductSettingsWorkspace({
           <button
             type="button"
             onClick={onBack}
-            className="mb-1 inline-flex items-center gap-1 text-[10px] font-medium text-stone-400 hover:text-stone-700 lg:hidden"
+            className="mb-1 inline-flex items-center gap-1 text-[12px] font-medium text-stone-500 hover:text-stone-700"
           >
-            <ArrowLeft size={12} />
-            Product groups
+            <X size={12} />
+            Clear selection
           </button>
           <div className="flex items-center gap-2">
             <Settings2 size={15} className="shrink-0 text-stone-500" />

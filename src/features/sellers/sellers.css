@@ -6,7 +6,7 @@
   width: 100%;
   max-width: 1480px;
   margin: 0 auto;
-  padding: 40px 40px 56px;
+  padding: 20px 40px 56px;
   color: var(--seller-ink);
   font-size: 14px;
   line-height: 1.5;
@@ -32,6 +32,8 @@
 .sellers-search input::-webkit-search-cancel-button { display: none; }
 .sellers-search button { display: grid; place-items: center; min-width: 26px; height: 30px; }
 .sellers-filters { display: flex; gap: 9px; min-width: 0; }
+.sellers-mobile-scope { display:none; }
+@media (max-width:1023px) { .sellers-mobile-scope { display:block; min-width:0; } }
 .sellers-filters select { min-width: 0; max-width: 230px; height: 38px; border: 1px solid var(--seller-line); border-radius: 7px; padding: 0 28px 0 10px; color: #57534e; background-color: transparent; font-size: 12px; cursor: pointer; }
 .sellers-notice { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; padding: 12px 14px; border-radius: 8px; background: #f7eee9; color: #924a31; font-size: 13px; }
 .sellers-notice > svg { flex-shrink: 0; }

@@ -23,6 +23,7 @@ import "./AppShell.css";
 import BrandProductSelector from "./BrandProductSelector";
 import MonitoringPulse from "./MonitoringPulse";
 import { useMonitoringPulse } from "./useMonitoringPulse";
+import { MonitoringToolbarContext } from "./MonitoringToolbarContext";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
 import {
@@ -104,6 +105,10 @@ function AppShellContent() {
 
   const actingTenant = tenants.find((t) => t.id === actingTenantId) ?? null;
   const { pathname, hash } = useLocation();
+  const toolbarPath = pathname.replace(/\/$/, "");
+  const unifiedMonitoringToolbar = toolbarPath === "/monitoring/products" ||
+    toolbarPath === "/monitoring/sellers" || toolbarPath === "/monitoring/tasks" ||
+    pathname.startsWith("/monitoring/tasks/");
   const [monitoringCount, setMonitoringCount] = useState(0);
   const [returnedSellerCount, setReturnedSellerCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -325,6 +330,7 @@ function AppShellContent() {
     <div
       className="app-shell min-h-dvh bg-cream text-stone-900 font-[Inter,system-ui,sans-serif] [--app-shell-topbar-height:3rem] [--app-shell-banner-sticky-top:3rem] lg:fixed lg:inset-0 lg:overflow-hidden lg:[--app-shell-topbar-height:40px] lg:[--app-shell-banner-sticky-top:0px]"
       style={appShellLayoutStyle(isActingAsOther)}
+      data-monitoring-toolbar={unifiedMonitoringToolbar || undefined}
     >
       {/* Mobile topbar */}
       <div className="shell-mobile-topbar lg:hidden sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 flex items-center px-3 gap-3">
@@ -389,7 +395,7 @@ function AppShellContent() {
             />
           )}
           {/* Brand or product report filter. */}
-          <div
+          {!unifiedMonitoringToolbar && <div
             className="shell-desktop-topbar hidden lg:flex sticky z-[29] h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
             style={{ top: `var(${APP_SHELL_BANNER_HEIGHT_VAR})` }}
           >
@@ -397,8 +403,16 @@ function AppShellContent() {
             <BrandProductSelector />
             <div className="ml-1 h-[18px] w-px bg-stone-200" aria-hidden />
             <NotificationBell count={notificationCount} active={isActive("/inbox")} />
-          </div>
-          <Outlet />
+          </div>}
+          <MonitoringToolbarContext.Provider value={{
+            status: monitoringPulse.visible
+              ? <MonitoringPulse pulse={monitoringPulse.pulse} error={monitoringPulse.error} />
+              : null,
+            scope: <BrandProductSelector />,
+            notifications: <NotificationBell count={notificationCount} active={isActive("/inbox")} />,
+          }}>
+            <Outlet />
+          </MonitoringToolbarContext.Provider>
         </main>
       </div>
     </div>

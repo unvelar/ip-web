@@ -119,14 +119,20 @@ export function messageFor(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function productName(group: PersistedProductGroup, index?: number) {
+export function productName(group: Pick<PersistedProductGroup,
+  "display_name" | "name_source" | "catalog_display_name" | "catalog_name_source" | "members" | "triage_members"
+>, index?: number) {
+  const manualName = group.name_source === "manual" ? group.display_name?.trim() : null;
+  const catalogName = group.catalog_name_source === "manual"
+    ? group.catalog_display_name?.trim()
+    : null;
   const representative = group.members[0] ?? group.triage_members[0] ?? null;
   const title = representative?.listing_title?.trim();
   const profileTitle = representative?.profile_text
     .split("\n")[0]
     ?.replace(/^Title:\s*/i, "")
     .trim();
-  return group.display_name?.trim() || title || profileTitle ||
+  return manualName || catalogName || group.display_name?.trim() || title || profileTitle ||
     (index == null ? "Untitled product" : `Product ${index + 1}`);
 }
 
