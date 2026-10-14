@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Building2, Cpu, Inbox, Library, Monitor, Radar, Store, type LucideIcon } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Building2, Cpu, Inbox, Library, Monitor, Radar, Store, type LucideIcon } from "lucide-react";
 import "./AdminPage.css";
 
 const sections = [
   { id: "monitoring", label: "Monitoring", to: "/admin/monitoring", icon: Radar },
   { id: "marketplaces", label: "Marketplaces", to: "/admin/marketplaces", icon: Store },
   { id: "browser-activity", label: "Browser activity", to: "/admin/browser-activity", icon: Monitor },
+  { id: "llm-activity", label: "LLM activity", to: "/admin/llm-activity", icon: BrainCircuit },
   { id: "compute", label: "Compute", to: "/admin/compute", icon: Cpu },
   { id: "tenants", label: "Tenants", to: "/admin/tenants", icon: Building2 },
   { id: "intakes", label: "Public intakes", to: "/admin/intakes", icon: Inbox },
