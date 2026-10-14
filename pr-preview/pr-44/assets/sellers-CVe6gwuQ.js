@@ -1,0 +1,1 @@
+function e(e){return e?`/monitoring/sellers/${encodeURIComponent(e)}`:null}export{e as t};
