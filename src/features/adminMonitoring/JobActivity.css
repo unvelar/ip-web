@@ -4,7 +4,17 @@
 .job-activity-heading p { margin: 3px 0 0; color: #78716c; font-size: 11px; }
 .job-activity-updated { font-size: 10px; color: #78716c; white-space: nowrap; }
 .job-activity-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.job-completion-metric { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; min-width: 0; font-variant-numeric: tabular-nums; }
+.job-completion-metric { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; min-width: 0; font-variant-numeric: tabular-nums; }
+.job-completion-main { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; }
+.job-flow-balance { padding-top: 10px; border-top: 1px solid #eeece9; font-size: 11px; color: #57534e; }
+.job-flow-average { color: #78716c; font-size: 10px; }
+.job-balance-ahead { color: #047857; }
+.job-balance-behind { color: #b45309; }
+.job-backlog { min-width: 0; overflow: hidden; }
+.job-backlog-totals { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 12px 18px 0; color: #78716c; font-size: 11px; font-variant-numeric: tabular-nums; }
+.job-backlog-totals > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; }
+.job-backlog-totals strong { color: #292524; font-weight: 600; }
+.job-backlog-totals > div > span:last-child { margin-left: 4px; }
 .job-kind-label { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; }
 .job-completion-count > strong { display: block; margin: 6px 0 2px; color: #292524; font-size: 25px; font-weight: 600; line-height: 1.2; }
 .job-completion-count > span, .job-completion-rate > span { display: block; color: #78716c; font-size: 10px; line-height: 1.7; }
@@ -22,6 +32,7 @@
 .job-chart-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 12px 18px 0; color: #78716c; font-size: 10px; }
 .job-chart-legend > span { display: inline-flex; align-items: center; gap: 5px; }
 .job-chart-legend i { display: block; width: 7px; height: 7px; border-radius: 2px; }
+.job-chart-legend i.job-legend-dashed { width: 14px; height: 0; border-top: 2px dashed; border-radius: 0; }
 .job-history-plot { height: 215px; margin: 10px 6px 0; }
 .job-queue-plot { margin: 10px 6px 0; }
 .job-chart-note { padding: 10px 18px 14px; color: #78716c; font-size: 10px; line-height: 1.6; }
@@ -42,4 +53,6 @@
   .job-activity-summary { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .job-chart-heading { flex-wrap: wrap; }
   .job-completion-metric { padding: 14px; }
+  .job-completion-main { gap: 10px; }
+  .job-completion-rate { padding-left: 10px; }
 }
