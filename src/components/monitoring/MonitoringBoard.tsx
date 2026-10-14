@@ -132,6 +132,8 @@ export function MonitoringBoard({
   onDismiss,
   showIpColumn,
   showIpFilter = true,
+  showSearch = true,
+  searchInputRef,
   activeFindingId,
   onActiveFindingChange,
 }: {
@@ -157,6 +159,8 @@ export function MonitoringBoard({
   showIpColumn?: boolean;
   /** Render the page-level IP filter. False when the app shell owns selection. */
   showIpFilter?: boolean;
+  showSearch?: boolean;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
   /** Finding opened by a route such as /monitoring/tasks/:taskId. */
   activeFindingId?: string | null;
   /** Notifies the route owner when the reviewer opens/collapses a finding. */
@@ -1110,6 +1114,8 @@ export function MonitoringBoard({
         onChange={onFiltersChange}
         ipId={filters.ip_id ?? ipId ?? null}
         showIpFilter={showIpFilter && ipAware}
+        showSearch={showSearch}
+        searchInputRef={searchInputRef}
         members={tenantMembers}
         membersLoading={tenantMembersLoading}
         membersError={tenantMembersError}
