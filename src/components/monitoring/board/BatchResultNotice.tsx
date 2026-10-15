@@ -1,9 +1,32 @@
-import { AlertTriangle, ArrowRight, CheckCircle2, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, ImageOff, X } from "lucide-react";
+import { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import type { BatchResult, TakedownBatchSummary } from "./batchUtils";
+
+const OUTCOME_LABELS = {
+  queued: "Email queued",
+  legal_queue: "Legal queue",
+  skipped: "Skipped",
+  failed: "Not processed",
+};
 
 function isTakedownSummary(result: BatchResult): result is TakedownBatchSummary {
   return typeof result !== "string" && result.kind === "takedown_batch";
+}
+
+function BatchListingThumbnail({ urls, title, taskHref }: { urls: string[]; title: string; taskHref: string }) {
+  const [index, setIndex] = useState(0);
+  const src = urls[index];
+  const className = "grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded border border-stone-200 bg-white";
+  return (
+    <Link to={taskHref} className={className} aria-label={`Open details for ${title}`}>
+      {src ? (
+        <img src={src} alt={`${title} listing image`} className="h-full w-full object-contain"
+          loading="lazy" decoding="async" referrerPolicy="no-referrer"
+          onError={() => setIndex((current) => current + 1)} />
+      ) : <ImageOff size={20} className="text-stone-300" aria-label="No listing image" />}
+    </Link>
+  );
 }
 
 export function BatchResultNotice({
@@ -17,6 +40,7 @@ export function BatchResultNotice({
   profileIpId?: string | null;
   className?: string;
 }) {
+  const location = useLocation();
   const summary = isTakedownSummary(result) ? result : null;
   const warning = summary?.tone === "warning" || (
     typeof result === "string" && result.startsWith("Nothing")
@@ -51,6 +75,52 @@ export function BatchResultNotice({
                 ))}
               </ul>
             )}
+            {summary.listings.length > 0 && (
+              <details open className="mt-3">
+                <summary className="cursor-pointer text-xs font-bold">
+                  Results for {summary.listings.length} selected listing{summary.listings.length === 1 ? "" : "s"}
+                </summary>
+                <ul aria-label="Listing takedown results" className="mt-2 max-h-80 space-y-2 overflow-y-auto pr-1 text-xs">
+                  {summary.listings.map((listing) => {
+                    const params = location.pathname.startsWith("/monitoring/tasks")
+                      ? new URLSearchParams(location.search)
+                      : new URLSearchParams();
+                    if (listing.ipId) params.set("ip_id", listing.ipId);
+                    const query = params.toString();
+                    const taskHref = `/monitoring/tasks/${encodeURIComponent(listing.resultId)}${query ? `?${query}` : ""}`;
+                    return (
+                      <li key={listing.resultId} className="rounded-md border border-current/15 bg-white/60 p-3">
+                        <div className="flex items-start gap-3">
+                          <BatchListingThumbnail key={listing.imageUrls.join("|")} urls={listing.imageUrls} title={listing.title} taskHref={taskHref} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                              <div className="min-w-0 flex-1 basis-64">
+                                <Link to={taskHref} className="font-semibold underline underline-offset-2 hover:text-violet-700">
+                                  {listing.title}
+                                </Link>
+                                <p className="mt-1 opacity-75">{[listing.seller, listing.domain].filter(Boolean).join(" · ")}</p>
+                                {listing.url && (
+                                  <a href={listing.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block break-all underline underline-offset-2 opacity-75 hover:text-violet-700" aria-label={`Open original listing: ${listing.title}`}>
+                                    {listing.url} <ExternalLink size={12} className="inline" aria-hidden />
+                                  </a>
+                                )}
+                              </div>
+                              <span className="shrink-0 rounded border border-current/15 px-2 py-0.5 font-bold">{OUTCOME_LABELS[listing.outcome]}</span>
+                            </div>
+                            <p className="mt-2">{listing.reason}</p>
+                            {listing.needsProfile && listing.ipId && (
+                              <Link to={`/ips/${encodeURIComponent(listing.ipId)}#takedown-signer`} className="mt-1 inline-flex font-bold underline underline-offset-2 hover:text-violet-700">
+                                Complete the IP takedown profile
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
+            )}
             {(summary.showLegalQueueLink || (summary.needsProfile && profileIpId)) && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {summary.showLegalQueueLink && (
@@ -58,11 +128,11 @@ export function BatchResultNotice({
                     to={legalQueueHref}
                     className="inline-flex items-center gap-1.5 rounded-md bg-violet-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
                   >
-                    Escalate
+                    View legal queue
                     <ArrowRight size={13} aria-hidden />
                   </Link>
                 )}
-                {summary.needsProfile && profileIpId && (
+                {summary.needsProfile && profileIpId && summary.listings.length === 0 && (
                   <Link
                     to={`/ips/${encodeURIComponent(profileIpId)}#takedown-signer`}
                     className="inline-flex text-xs font-bold text-amber-900 underline decoration-amber-400 underline-offset-2 hover:text-amber-700"

@@ -280,6 +280,9 @@ export function MonitoringInboxView() {
       setLinkedErr("");
       return;
     }
+    // Explicit navigation can reopen a completed item from its batch result.
+    // Keep the completion guard for background refreshes, not a user's click.
+    completedLinkedIds.current.delete(taskId);
     void loadLinkedFinding(taskId);
   }, [loadLinkedFinding, taskId]);
 

@@ -52,6 +52,7 @@ import {
   runPool,
   summarizeBatch,
   summarizeTakedownBatch,
+  takedownBatchListingResults,
 } from "../components/monitoring/board/batchUtils";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
@@ -1030,8 +1031,10 @@ export default function ProductClusters() {
   function partitionGroupBatch(action: BatchAction) {
     const eligible: IpReviewFinding[] = [];
     const skipped: Record<string, number> = {};
-    const skip = (reason: string) => {
+    const skippedByResultId: Record<string, string> = {};
+    const skip = (reason: string, resultId?: string) => {
       skipped[reason] = (skipped[reason] ?? 0) + 1;
+      if (resultId) skippedByResultId[resultId] = reason;
     };
     for (const finding of selectedProductGroupBatchFindings(activeBatch)) {
       const state: CaseReviewStatus = finding.dismissed_at
@@ -1039,8 +1042,8 @@ export default function ProductClusters() {
         : (finding.review_status ?? "pending");
       const findingIpId = finding.ip_id ?? selectedIpId;
       if (action === "send") {
-        if (!isDecisionState(state)) skip("already sent or closed");
-        else if (!finding.case_id) skip("still preparing");
+        if (!isDecisionState(state)) skip("already sent or closed", finding.result_id);
+        else if (!finding.case_id) skip("still preparing", finding.result_id);
         else eligible.push(finding);
       } else if (action === "review") {
         if (state !== "pending") skip("not in triage");
@@ -1065,7 +1068,7 @@ export default function ProductClusters() {
         else eligible.push(finding);
       }
     }
-    return { eligible, skipped };
+    return { eligible, skipped, skippedByResultId };
   }
 
   async function runGroupBatch(
@@ -1073,13 +1076,17 @@ export default function ProductClusters() {
     decisionReason?: string,
     associationScopes?: TakedownFeedbackAssociationScope[],
   ) {
-    const { eligible, skipped } = partitionGroupBatch(action);
+    const { eligible, skipped, skippedByResultId } = partitionGroupBatch(action);
     const completedBatch = activeBatch;
     const skipCounts = { ...skipped };
     let ok = 0;
     let failed = 0;
     if (eligible.length === 0) {
-      setBatchResult(summarizeBatch(action, 0, skipCounts, 0));
+      setBatchResult(action === "send"
+        ? summarizeTakedownBatch(0, 0, {}, skipCounts, 0, takedownBatchListingResults(
+          selectedProductGroupBatchFindings(completedBatch), { queued_case_ids: [], skipped: [], failed: [] }, skippedByResultId, selectedIpId,
+        ))
+        : summarizeBatch(action, 0, skipCounts, 0));
       return;
     }
 
@@ -1111,6 +1118,7 @@ export default function ProductClusters() {
           legalQueueCounts,
           skipCounts,
           failed,
+          takedownBatchListingResults(selectedProductGroupBatchFindings(completedBatch), result, skippedByResultId, selectedIpId),
         );
         const scopeLabel = completedBatch
           ? productGroupRecommendationBucket(completedBatch.bucket).label

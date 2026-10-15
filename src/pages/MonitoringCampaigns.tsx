@@ -39,6 +39,7 @@ import {
   dismissalOptionsForBatchAction,
   summarizeBatch,
   summarizeTakedownBatch,
+  takedownBatchListingResults,
 } from "../components/monitoring/board/batchUtils";
 import { ManagedFindingInspector } from "../components/monitoring/board/ManagedFindingInspector";
 import { sellerProfilePath } from "../lib/sellers";
@@ -407,16 +408,18 @@ function CampaignDetailPanel({
   function partitionCampaignSelection(action: BatchAction) {
     const eligible: IpReviewFinding[] = [];
     const skipped: Record<string, number> = {};
-    const skip = (reason: string) => {
+    const skippedByResultId: Record<string, string> = {};
+    const skip = (reason: string, resultId?: string) => {
       skipped[reason] = (skipped[reason] ?? 0) + 1;
+      if (resultId) skippedByResultId[resultId] = reason;
     };
     for (const finding of campaignBatchMembers) {
       const state: CaseReviewStatus = finding.dismissed_at
         ? "dismissed"
         : (finding.review_status ?? "pending");
       if (action === "send") {
-        if (!isDecisionState(state)) skip("already sent or closed");
-        else if (!finding.case_id) skip("still preparing");
+        if (!isDecisionState(state)) skip("already sent or closed", finding.result_id);
+        else if (!finding.case_id) skip("still preparing", finding.result_id);
         else eligible.push(finding);
       } else if (action === "review") {
         if (state !== "pending") skip("not in triage");
@@ -436,7 +439,7 @@ function CampaignDetailPanel({
         else eligible.push(finding);
       }
     }
-    return { eligible, skipped };
+    return { eligible, skipped, skippedByResultId };
   }
 
   async function runCampaignBatch(
@@ -444,12 +447,16 @@ function CampaignDetailPanel({
     decisionReason?: string,
     associationScopes?: TakedownFeedbackAssociationScope[],
   ) {
-    const { eligible, skipped } = partitionCampaignSelection(action);
+    const { eligible, skipped, skippedByResultId } = partitionCampaignSelection(action);
     const skipCounts: Record<string, number> = { ...skipped };
     let ok = 0;
     let failed = 0;
     if (eligible.length === 0) {
-      setBatchResult(summarizeBatch(action, 0, skipCounts, 0));
+      setBatchResult(action === "send"
+        ? summarizeTakedownBatch(0, 0, {}, skipCounts, 0, takedownBatchListingResults(
+          campaignBatchMembers, { queued_case_ids: [], skipped: [], failed: [] }, skippedByResultId, null,
+        ))
+        : summarizeBatch(action, 0, skipCounts, 0));
       return;
     }
     const bump = (reason: string) => {
@@ -483,6 +490,7 @@ function CampaignDetailPanel({
           legalQueueCounts,
           skipCounts,
           failed,
+          takedownBatchListingResults(campaignBatchMembers, result, skippedByResultId, null),
         ));
         if (handled === 0) {
           setCampaignBatchActive(previousCampaignBatchActive);
