@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleCheck, X } from "lucide-react";
+import { CircleCheck, Layers, X } from "lucide-react";
 import {
   dismissIpFinding,
   excludePersistedProductGroupMember,
@@ -38,7 +38,9 @@ import {
   DISMISSAL_REASON_LABELS,
   type ResortTarget,
 } from "./board/constants";
-import { MonitoringResultList } from "./board/MonitoringResultList";
+import { MonitoringResultList, MonitoringSortControl } from "./board/MonitoringResultList";
+import { MonitoringGroupDetails } from "./board/MonitoringGroupDetails";
+import { groupMonitoringFindings, type MonitoringGroupBy, type MonitoringListingGroup } from "../../lib/monitoringGrouping";
 import { FindingInspector } from "./board/FindingInspector";
 import type { FindingUpdateOptions } from "./board/FindingActions";
 import { MonitoringFilters } from "./board/MonitoringFilters";
@@ -136,6 +138,9 @@ export function MonitoringBoard({
   searchInputRef,
   activeFindingId,
   onActiveFindingChange,
+  groupBy = "none",
+  onGroupByChange,
+  updating = false,
 }: {
   findings: IpReviewFinding[];
   facets: MonitoringFacets;
@@ -165,7 +170,13 @@ export function MonitoringBoard({
   activeFindingId?: string | null;
   /** Notifies the route owner when the reviewer opens/collapses a finding. */
   onActiveFindingChange?: (resultId: string | null) => void;
+  groupBy?: MonitoringGroupBy;
+  onGroupByChange?: (groupBy: MonitoringGroupBy) => void;
+  updating?: boolean;
 }) {
+  const unified = Boolean(onGroupByChange);
+  const [groupReference, setGroupReference] = useState<{ group: MonitoringListingGroup; ipId: BoardFilters["ip_id"] } | null>(null);
+  const closeGroup = useCallback(() => setGroupReference(null), []);
   const { user } = useAuth();
   const ipAware = showIpColumn ?? findings.some((f) => !!f.ip_id);
   const {
@@ -316,6 +327,23 @@ export function MonitoringBoard({
     () => reviewingSelection ? displayFindings.filter((finding) => selected.has(finding.result_id)) : displayFindings,
     [displayFindings, reviewingSelection, selected],
   );
+  const activeGroup = useMemo(() => {
+    if (!groupReference) return null;
+    const group = groupMonitoringFindings(displayFindings, groupReference.group.kind)
+      .find((candidate) => candidate.key === groupReference.group.key)
+      ?? { ...groupReference.group, findings: [] };
+    // A seller can span several IPs. Its overview follows the selected workspace
+    // scope rather than whichever task happened to appear first in the group.
+    return group.kind === "seller" ? { ...group, ipId: groupReference.ipId ?? null } : group;
+  }, [displayFindings, groupReference]);
+  const openGroup = (group: MonitoringListingGroup) => {
+    setActiveFinding(null);
+    setGroupReference({ group, ipId: filters.ip_id });
+    const finding = group.findings[0];
+    if (group.kind === "seller" && group.sellerKey && finding?.seller_name) {
+      onFiltersChange({ seller: finding.seller_name, platform: null });
+    }
+  };
 
   // If filters/refetches remove the active row, the inspector naturally closes
   // until the user selects another visible row.
@@ -332,6 +360,7 @@ export function MonitoringBoard({
       if (!(target instanceof Node)) return;
       if (queueRef.current?.contains(target)) return;
       if (target instanceof Element && target.closest("[data-finding-inspector]")) return;
+      if (target instanceof Element && target.closest(".monitoring-group-control")) return;
       setActiveFinding(null);
     };
 
@@ -609,10 +638,17 @@ export function MonitoringBoard({
   const filterKey = JSON.stringify(filters);
   useEffect(() => {
     setReviewingSelection(false);
+    // Seller clicks open details and filter together. Keep that panel while its
+    // seller scope is active, including during the server's filtered-page fetch.
+    setGroupReference((previous) => previous?.group.kind === "seller"
+      && previous.ipId === filters.ip_id
+      && previous.group.findings[0]?.seller_name === filters.seller ? previous : null);
     setSelected(new Set());
     setSelectionExtras(new Map());
     setProductCorrectedResultIds(new Set());
     setBatchResult(null);
+    // filterKey represents every field used above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey]);
 
   function clearSelection() {
@@ -640,6 +676,15 @@ export function MonitoringBoard({
         if (checked) next.add(finding.result_id);
         else next.delete(finding.result_id);
       }
+      return next;
+    });
+  }
+  function selectGroup(ids: string[], checked: boolean) {
+    setReviewingSelection(false);
+    setBatchResult(null);
+    setSelected((previous) => {
+      const next = new Set(previous);
+      for (const id of ids) { if (checked) next.add(id); else next.delete(id); }
       return next;
     });
   }
@@ -1120,9 +1165,13 @@ export function MonitoringBoard({
         membersLoading={tenantMembersLoading}
         membersError={tenantMembersError}
         currentMemberId={currentTenantMember?.id ?? null}
+        compact={unified}
+        workflowSummary={unified ? <><strong>{facets.total.toLocaleString()} matching {facets.total === 1 ? "task" : "tasks"}</strong>{updating && <span role="status"> · Updating…</span>}</> : undefined}
+        leadingControls={unified ? <label className="monitoring-group-control"><Layers size={14} aria-hidden /><span>Group by</span><select aria-label="Group by" value={groupBy} onChange={(event) => onGroupByChange?.(event.target.value as MonitoringGroupBy)}><option value="none">None</option><option value="seller">Seller</option><option value="product">Product</option></select></label> : undefined}
+        trailingControls={unified ? <MonitoringSortControl compact sort={filters.sort} onSort={(sort) => onFiltersChange({ sort })} /> : undefined}
       />
 
-      <div ref={queueRef} className="monitoring-results-queue">
+      <div ref={queueRef} className="monitoring-results-queue" aria-busy={updating}>
         {batchResult && (
           <BatchResultNotice
             result={batchResult}
@@ -1143,7 +1192,12 @@ export function MonitoringBoard({
           onSort={(sort) => onFiltersChange({ sort })}
           onSelect={toggleSelect}
           onSelectAll={selectAllLoaded}
-          onOpen={(resultId) => { setReviewingSelection(false); setActiveFinding(resultId); }}
+          onOpen={(resultId) => { closeGroup(); setReviewingSelection(false); setActiveFinding(resultId); }}
+          compact={unified}
+          groupBy={groupBy}
+          onSelectGroup={selectGroup}
+          onGroupOpen={unified ? openGroup : undefined}
+          onEntityOpen={unified ? (kind, finding) => { const group = groupMonitoringFindings([finding], kind)[0]; if (group) openGroup(group); } : undefined}
           emptyMessage={emptyStateMessage}
           onClearFilters={hasActiveFilters ? clearFilters : undefined}
         />
@@ -1151,6 +1205,7 @@ export function MonitoringBoard({
             page, end-of-list marker otherwise. Hidden when there are no rows. */}
         {displayFindings.length > 0 && (
           <div className="monitoring-results-pagination">
+            {unified && <span>{displayFindings.length.toLocaleString()} of {facets.total.toLocaleString()} matching tasks loaded{groupBy !== "none" ? " · Group counts cover loaded tasks" : ""}</span>}
             {nextCursor ? (
               <button
                 type="button"
@@ -1160,7 +1215,7 @@ export function MonitoringBoard({
                 {loadingMore ? "Loading…" : "Load more"}
               </button>
             ) : (
-              <span>End of list</span>
+              !unified && <span>End of list</span>
             )}
           </div>
         )}
@@ -1186,8 +1241,16 @@ export function MonitoringBoard({
         onResort={filters.candidate_outcome ? () => void runResort() : undefined}
       />
 
+      {activeGroup && <MonitoringGroupDetails group={activeGroup} sellerFiltered={activeGroup.kind === "seller" && Boolean(filters.seller)} onClose={closeGroup} onFilter={() => {
+        onFiltersChange(activeGroup.kind === "seller"
+          ? { seller: activeGroup.findings[0].seller_name, platform: null }
+          : { catalog_product_id: activeGroup.productId, product_group_id: null });
+        closeGroup();
+      }} />}
+
       {activeFinding && (
         <FindingInspector
+          preserveOnGrouping={unified}
           f={activeFinding}
           ipId={activeFinding.ip_id ?? ipId}
           showIp={ipAware}

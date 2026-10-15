@@ -73,11 +73,15 @@ function SourcePicker({ facets, filters, onChange, onClose }: {
   </div>;
 }
 
-export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilter, showSearch = true, searchInputRef, members, membersLoading, membersError, currentMemberId }: {
+export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilter, showSearch = true, searchInputRef, members, membersLoading, membersError, currentMemberId, leadingControls, trailingControls, workflowSummary, compact = false }: {
   filters: InboxFilters; facets: MonitoringFacets; onChange: (change: Partial<InboxFilters>) => void;
   ipId: string | null; showIpFilter: boolean; members: TenantMember[]; membersLoading: boolean; membersError: string; currentMemberId: string | null;
   showSearch?: boolean;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
+  leadingControls?: ReactNode;
+  trailingControls?: ReactNode;
+  workflowSummary?: ReactNode;
+  compact?: boolean;
 }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [search, setSearch] = useState(filters.query ?? "");
@@ -202,7 +206,7 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
     className={`monitoring-filter-popover ${key === "product" ? "is-product" : ""}`} onBlur={(event) => {
       if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget) && !Object.values(triggerRefs.current).some((button) => button?.contains(event.relatedTarget as Node))) setPanel(null);
     }}>{key !== "source" && key !== "price" && <FilterPanelHeading title={key === "product" ? "Product or group" : key === "views" ? "More views" : "More filters"} onClose={() => close(true)} />}{content}</div> : null;
-  return <section className="monitoring-filters" aria-label="Filter listings">
+  return <section className={`monitoring-filters${compact ? " is-compact" : ""}`} aria-label="Filter listings">
     <nav className="monitoring-workflow" aria-label="Review workflow">
       <div className="monitoring-workflow-tabs">
         {primaryViews.map((view) => <button type="button" key={view.key} className={`monitoring-workflow-tab ${filters.status === view.key ? "is-active" : ""}`} aria-pressed={filters.status === view.key} onClick={() => selectView(view.key)}>{view.label}<span>{facets.statuses[view.key] ?? 0}</span></button>)}
@@ -211,6 +215,7 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
           {popover("views", <div>{otherViews.map((view) => <button type="button" key={view.key ?? "all"} className="monitoring-filter-option" aria-pressed={filters.status === view.key && (view.key !== null || !filters.show_dismissed)} onClick={() => selectView(view.key)}><span className="flex-1">{view.label}</span><span className="text-xs tabular-nums text-stone-400">{view.key === null ? countAll : facets.statuses[view.key] ?? 0}</span>{filters.status === view.key && (view.key !== null || !filters.show_dismissed) && <Check size={14} />}</button>)}</div>)}
         </div>
       </div>
+      {workflowSummary && <div className="monitoring-workflow-summary" aria-live="polite">{workflowSummary}</div>}
     </nav>
     <div className="monitoring-filter-toolbar">
       {showSearch && <label className="monitoring-listing-search">
@@ -219,8 +224,9 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
         {search && <button type="button" aria-label="Clear search" onClick={() => { setSearch(""); onChange({ query: null }); }}><X size={14} /></button>}
       </label>}
       <div className="monitoring-filter-tools">
+      {leadingControls}
       <div className="monitoring-filter-anchor">
-        {trigger("product", "Product or group", <Package size={14} aria-hidden />, hasProduct)}
+        {trigger("product", compact ? "Product" : "Product or group", <Package size={14} aria-hidden />, hasProduct)}
         {popover("product", <ProductFilterPicker ipId={ipId} productId={filters.catalog_product_id} groupId={filters.product_group_id} onChange={({ label, ...selection }) => {
           const id = selection.catalog_product_id ?? selection.product_group_id;
           setProductLabel(ipId && id && label ? { ipId, id, label } : null); changeAndClose(selection);
@@ -247,6 +253,7 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
           <button type="button" className="h-8 w-full rounded-md bg-stone-900 text-xs font-semibold text-white hover:bg-stone-800" onClick={() => close(true)}>Done</button>
         </div>)}
       </div>
+      {trailingControls && <div className="monitoring-filter-trailing">{trailingControls}</div>}
       </div>
     </div>
     {chips.length > 0 && <div className="monitoring-active-filters" aria-label="Active filters">

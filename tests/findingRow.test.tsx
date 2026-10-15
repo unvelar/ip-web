@@ -43,7 +43,7 @@ async function setup(initial = finding(), showStatus = false) {
       event.preventDefault();
       await act(async () => container.querySelector(selector)!.dispatchEvent(event));
     },
-    imageError: async () => { await act(async () => container.querySelector("img")!.dispatchEvent(new window.Event("error"))); },
+    imageError: async () => { await act(async () => container.querySelector(".monitoring-listing-thumbnail img")!.dispatchEvent(new window.Event("error"))); },
   };
 }
 
@@ -64,12 +64,13 @@ test("the compact row keeps the full listing and seller identity together and li
 test("thumbnail errors advance through real images and fall back without breaking the row", async () => {
   const ui = await setup(finding({ image_urls: ["https://images.example/two.jpg"] }));
   await ui.imageError();
-  expect(ui.container.querySelector("img")?.getAttribute("src")).toBe("https://images.example/two.jpg");
+  expect(ui.container.querySelector(".monitoring-listing-thumbnail img")?.getAttribute("src")).toBe("https://images.example/two.jpg");
   await ui.imageError();
-  expect(ui.container.querySelector("img")).toBeNull();
+  expect(ui.container.querySelector(".monitoring-listing-thumbnail img")).toBeNull();
   expect(ui.container.querySelector('[aria-label="No listing image"]')).not.toBeNull();
+  expect(ui.container.querySelector(".monitoring-marketplace img")?.getAttribute("src")).toBe("https://www.example.shop/favicon.ico");
   await ui.render(finding({ image_url: "https://images.example/new.jpg" }));
-  expect(ui.container.querySelector("img")?.getAttribute("src")).toBe("https://images.example/new.jpg");
+  expect(ui.container.querySelector(".monitoring-listing-thumbnail img")?.getAttribute("src")).toBe("https://images.example/new.jpg");
 });
 
 test("the USD column preserves cents and zero but never substitutes a native currency", async () => {

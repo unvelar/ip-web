@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MarketplaceMark } from './CoverageEditor';
+import { MarketplaceMark } from '../components/MarketplaceMark';
 import { countryLabel, flagEmoji } from '../lib/countries';
 import { DraftError, type AdminCatalog, type AdminMarketplace, type MarketplaceEdit, type MarketplaceClient } from './contracts';
 import './workspace.css';

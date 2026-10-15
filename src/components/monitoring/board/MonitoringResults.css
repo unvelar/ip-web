@@ -31,11 +31,15 @@
 .monitoring-listing-checkbox input { width: 15px; height: 15px; accent-color: #242320; cursor: pointer; }
 .monitoring-listing-cell { padding-right: 18px; }
 .monitoring-listing-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.monitoring-listing-thumbnail { display: grid; flex: 0 0 48px; width: 48px; height: 54px; place-items: center; overflow: hidden; border: 1px solid #eeece7; border-radius: 7px; background: #f4f2ed; color: #a09b92; }
+.monitoring-listing-thumbnail { display: grid; flex: 0 0 128px; width: 128px; height: 128px; place-items: center; overflow: hidden; border: 1px solid #eeece7; border-radius: 7px; background: #f4f2ed; color: #a09b92; }
 .monitoring-listing-thumbnail img { display: block; width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .monitoring-listing-copy { min-width: 0; flex: 1; }
 .monitoring-listing-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; color: #242320; font-size: 13px; font-weight: 500; line-height: 1.45; }
 .monitoring-listing-meta { margin-top: 4px; color: #706d66; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.monitoring-marketplace { display:inline-flex; align-items:center; gap:5px; vertical-align:middle; }
+.monitoring-marketplace .marketplace-logo, .monitoring-marketplace .marketplace-monogram { display:inline-flex; flex-shrink:0; align-items:center; justify-content:center; width:14px; height:14px; font-size:8px; line-height:1; }
+.monitoring-marketplace .marketplace-logo img { width:14px; height:14px; object-fit:contain; }
+.monitoring-marketplace-list { display:flex; flex-wrap:wrap; gap:10px; }
 .monitoring-listing-meta a:hover { color: #242320; text-decoration: underline; text-underline-offset: 3px; }
 .monitoring-listing-price { padding-left: 0; padding-right: 0; text-align: right; color: #242320; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .monitoring-listing-assessment { padding-left: 12px; padding-right: 20px; color: #706d66; font-size: 11px; text-align: right; }
@@ -85,8 +89,8 @@
   .monitoring-listing-checkbox label { width: 20px; }
   .monitoring-listing-cell { grid-column: 2; grid-row: 1; }
   .monitoring-listing-main { gap: 10px; align-items: flex-start; }
-  .monitoring-listing-thumbnail { flex-basis: 40px; width: 40px; height: 48px; }
-  .monitoring-listing-price { grid-column: 2; grid-row: 2; margin-left: 50px; text-align: left; }
+  .monitoring-listing-thumbnail { flex-basis: 96px; width: 96px; height: 96px; }
+  .monitoring-listing-price { grid-column: 2; grid-row: 2; margin-left: 106px; text-align: left; }
   .monitoring-listing-row .monitoring-listing-assessment { display: none; }
   .monitoring-selection-bar { padding: 10px 12px; gap: 5px; }
   .monitoring-selection-bar button { padding: 8px; }
@@ -94,3 +98,53 @@
 @media (max-width: 640px) { .monitoring-selection-bar > span:first-child { flex-basis: 100%; } .monitoring-selection-actions { width: 100%; gap: 5px; justify-content: flex-end; } .monitoring-selection-tools select { font-size: 16px; } }
 @media (pointer: coarse) { .monitoring-selection-bar button, .monitoring-results-pagination button { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .monitoring-listing-row { transition: none; } }
+
+/* One workspace: grouping changes the headings, never the task row or its actions. */
+.monitoring-task-page > .monitoring-results-workspace { max-width:none; margin:0; border:0; border-radius:0; }
+.monitoring-task-page .monitoring-toolbar { background:#fff; }
+.monitoring-task-page .monitoring-toolbar h1 { flex-basis:auto; font-weight:500; }
+.monitoring-workspace-tools { position:relative; font-size:12px; }
+.monitoring-workspace-tools summary { cursor:pointer; padding:7px 9px; border:1px solid #e9e6e0; border-radius:5px; color:#706d66; }
+.monitoring-workspace-tools > div { position:absolute; top:calc(100% + 6px); right:0; min-width:195px; padding:5px; background:#fff; border:1px solid #e9e6e0; border-radius:6px; box-shadow:0 6px 22px #24232014; }
+.monitoring-workspace-tools a { display:block; padding:8px; color:#242320; }
+.monitoring-workspace-tools a:hover { background:#f8f7f5; }
+.monitoring-task-page .monitoring-results-pagination { justify-content:space-between; gap:12px; }
+.monitoring-results-queue[aria-busy="true"] { opacity:.6; pointer-events:none; }
+.monitoring-result-list tbody[hidden] { display:none; }
+.monitoring-result-list .monitoring-group-heading th { padding:0; background:#f5f4f0; border-bottom:1px solid #e9e6e0; }
+.monitoring-group-heading-content { display:flex; align-items:center; gap:12px; padding:8px 20px 8px 20px; font-size:12px; font-weight:400; }
+.monitoring-group-heading-content > input { flex-shrink:0; width:15px; height:15px; accent-color:#242320; cursor:pointer; }
+.monitoring-group-toggle { display:flex; align-items:center; gap:8px; min-width:0; color:#242320; text-align:left; }
+.monitoring-group-toggle > span:first-of-type { overflow-wrap:anywhere; }
+.monitoring-group-toggle svg { flex-shrink:0; color:#706d66; }
+.monitoring-group-toggle .is-expanded { transform:rotate(90deg); }
+.monitoring-group-name { display:flex; align-items:center; gap:8px; min-width:0; color:#242320; text-align:left; overflow-wrap:anywhere; }
+button.monitoring-group-name:hover { text-decoration:underline; text-underline-offset:3px; }
+.monitoring-group-name svg { flex-shrink:0; color:#706d66; }
+.monitoring-group-count { flex-shrink:0; border-radius:4px; padding:1px 5px; color:#706d66; background:#fff; font-size:11px; font-variant-numeric:tabular-nums; }
+.monitoring-group-open { display:grid; place-items:center; margin-left:auto; padding:3px; color:#706d66; }
+.monitoring-grouping-notice { padding:10px 20px; border-bottom:1px solid #e9e6e0; color:#706d66; font-size:12px; }
+.monitoring-grouping-notice a { color:#242320; text-decoration:underline; text-underline-offset:3px; }
+.monitoring-entity-link { color:inherit; font:inherit; text-align:left; }
+.monitoring-entity-link:hover { color:#242320; text-decoration:underline; text-underline-offset:3px; }
+.monitoring-group-inspector { width:min(560px, 52vw, calc(100vw - 24px)); }
+.monitoring-group-detail-body h2 { margin:8px 0; font-size:20px; font-weight:500; letter-spacing:-.4px; overflow-wrap:anywhere; }
+.monitoring-group-detail-body p { color:#706d66; font-size:12px; line-height:1.6; }
+.monitoring-group-detail-body dl { display:grid; gap:16px; margin:24px 0; font-size:13px; }
+.monitoring-group-detail-body dl > div { display:grid; grid-template-columns:120px minmax(0,1fr); gap:12px; }
+.monitoring-group-detail-body dt { color:#706d66; }
+.monitoring-group-detail-body dd { margin:0; overflow-wrap:anywhere; }
+.monitoring-group-detail-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:18px 0; border-top:1px solid #e9e6e0; border-bottom:1px solid #e9e6e0; font-size:12px; }
+.monitoring-group-detail-actions button { padding:7px 10px; background:#242320; color:#fff; border-radius:6px; }
+.monitoring-group-detail-actions a { text-decoration:underline; text-underline-offset:3px; }
+.monitoring-group-detail-note { margin-top:22px; }
+.monitoring-group-detail-body h3 { margin:24px 0 0; font-size:13px; font-weight:600; }
+.monitoring-seller-shop { font-size:12px; text-decoration:underline; text-underline-offset:3px; }
+@media(max-width:780px) { .monitoring-group-inspector { width:calc(100vw - 16px); } }
+@media(max-width:480px) {
+  .monitoring-task-page > .monitoring-results-workspace { margin:0; }
+  .monitoring-result-list .monitoring-group-heading th { display:block; }
+  .monitoring-group-heading-content { padding:9px 12px; gap:10px; }
+  .monitoring-group-toggle { gap:5px; }
+  .monitoring-task-page .monitoring-listing-row .monitoring-listing-assessment { display:block; grid-column:2; grid-row:3; margin-left:106px; text-align:left; }
+}

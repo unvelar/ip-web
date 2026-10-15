@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   getMonitoringCampaign,
   getMonitoringFinding,
@@ -11,6 +11,7 @@ import {
   type MonitoringFindingsQuery,
 } from "../api";
 import { parseFilters, writeFilters, type InboxFilters } from "../lib/monitoringFilters";
+import { parseMonitoringGroupBy, type MonitoringGroupBy } from "../lib/monitoringGrouping";
 import MonitoringToolbar from "../components/MonitoringToolbar";
 import MonitoringSearch from "../components/MonitoringSearch";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
@@ -38,6 +39,8 @@ export function MonitoringInboxView() {
   const { taskId } = useParams<{ taskId?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const { actingTenantId, switchTenant } = useAuth();
   const {
     activeIpId,
@@ -45,6 +48,12 @@ export function MonitoringInboxView() {
   } = useActiveIp();
   const { status: onboardingStatus } = useIpOnboardingStatus(activeIpId);
   const urlFilters = useMemo(() => parseFilters(params), [params]);
+  const groupBy = parseMonitoringGroupBy(params.get("group_by"));
+  const onGroupByChange = (value: MonitoringGroupBy) => setParams((previous) => {
+    const next = new URLSearchParams(previous);
+    if (value === "none") next.delete("group_by"); else next.set("group_by", value);
+    return next;
+  }, { replace: true });
   const urlIpChanged =
     Boolean(urlFilters.ip_id) &&
     Boolean(activeIpId) &&
@@ -64,6 +73,7 @@ export function MonitoringInboxView() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [err, setErr] = useState("");
   const [linkedErr, setLinkedErr] = useState("");
   const [campaignBatchErr, setCampaignBatchErr] = useState("");
@@ -85,6 +95,7 @@ export function MonitoringInboxView() {
   const loadFirstPage = useCallback(
     async (q: MonitoringFindingsQuery, minRows = MONITORING_PAGE_SIZE) => {
       const seq = ++reqSeq.current;
+      setUpdating(true);
       setErr("");
       // A cursor belongs to the previous filter set until this request returns.
       setNextCursor(null);
@@ -92,6 +103,7 @@ export function MonitoringInboxView() {
         const limit = q.limit ?? MONITORING_PAGE_SIZE;
         const apiQuery: MonitoringFindingsQuery = {
           ...q,
+          include_product_identity: true,
           status: q.status ?? (
             q.show_dismissed && (q.product_group_id || q.catalog_product_id)
               ? "all"
@@ -139,7 +151,7 @@ export function MonitoringInboxView() {
         if (reqSeq.current !== seq) return;
         setErr(e instanceof Error ? e.message : String(e));
       } finally {
-        if (reqSeq.current === seq) setLoaded(true);
+        if (reqSeq.current === seq) { setLoaded(true); setUpdating(false); }
       }
     },
     [],
@@ -155,7 +167,7 @@ export function MonitoringInboxView() {
     const seq = ++linkedReqSeq.current;
     setLinkedErr("");
     try {
-      const { finding } = await getMonitoringFinding(id);
+      const { finding } = await getMonitoringFinding(id, true);
       if (linkedReqSeq.current !== seq) return;
       if (completedLinkedIds.current.has(id)) return;
       setLinkedFinding(finding);
@@ -169,7 +181,7 @@ export function MonitoringInboxView() {
             setLinkedErr("Switching tenant…");
             switchTenant(
               tenant_id,
-              `${location.pathname}${location.search}${location.hash}`,
+              `${locationRef.current.pathname}${locationRef.current.search}${locationRef.current.hash}`,
             );
             return;
           }
@@ -180,7 +192,7 @@ export function MonitoringInboxView() {
       setLinkedFinding(null);
       setLinkedErr(e instanceof Error ? e.message : String(e));
     }
-  }, [actingTenantId, location.hash, location.pathname, location.search, switchTenant]);
+  }, [actingTenantId, switchTenant]);
 
   // Refetch on any filter/sort change. URL params are the dependency — they
   // change synchronously via setParams, so this fires exactly when needed.
@@ -298,6 +310,7 @@ export function MonitoringInboxView() {
     try {
       const page = await listMonitoringFindingsGlobal({
         ...filters,
+        include_product_identity: true,
         status: filters.status ?? (
           filters.show_dismissed && (
             filters.product_group_id || filters.catalog_product_id
@@ -397,9 +410,11 @@ export function MonitoringInboxView() {
 
   return (
     <>
-      <MonitoringToolbar title="Tasks" onRefresh={() => refresh()} refreshing={!loaded}
-        meta={<span role="status">{facets ? `${facets.total.toLocaleString()} ${facets.total === 1 ? "listing" : "listings"}` : "Loading…"}</span>}
-      >
+      <MonitoringToolbar title="Monitoring" onRefresh={() => refresh()} refreshing={!loaded || updating}
+        actions={<details className="monitoring-workspace-tools"><summary>Tools</summary><div>
+          <Link to={`/monitoring/sellers${location.search}`}>Seller history</Link>
+          <Link to={`/monitoring/products${activeIpId ? `?ip_id=${encodeURIComponent(activeIpId)}` : ""}`}>Product grouping &amp; rules</Link>
+        </div></details>}>
         <MonitoringSearch inputRef={toolbarSearchRef} value={filters.query ?? ""} onChange={(query) => onFiltersChange({ query: query || null })} debounceMs={250} label="Search listings or sellers" placeholder="Search listings or sellers…" />
       </MonitoringToolbar>
       <div className="monitoring-results-workspace monitoring-data-workspace">
@@ -455,6 +470,9 @@ export function MonitoringInboxView() {
             searchInputRef={toolbarSearchRef}
             activeFindingId={taskId ?? null}
             onActiveFindingChange={onActiveFindingChange}
+            groupBy={groupBy}
+            onGroupByChange={onGroupByChange}
+            updating={updating}
           />
         )}
       </div>

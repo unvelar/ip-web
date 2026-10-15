@@ -10,12 +10,10 @@ import {
   Menu,
   X,
   Building2,
-  Network,
   PanelLeftClose,
   PanelLeftOpen,
   Inbox as InboxIcon,
   Bell,
-  Store,
   SlidersHorizontal,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -28,7 +26,6 @@ import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
 import {
   getMonitoringFindingsCount,
-  getReturnedMonitoringSellersCount,
   getAccountNotificationUnreadCount,
   listTenants,
   tenantLabel,
@@ -60,9 +57,7 @@ const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
  * Sidebar layout (top → bottom):
  *   Dashboard
  *   Monitoring
- *     ↳ Tasks        (badge = open monitoring findings)
- *     ↳ Sellers      (badge = returned sellers with open listings)
- *     ↳ Product lab
+ *     ↳ Review queue (badge = open monitoring findings)
  *     ↳ Manage monitoring
  *
  * The topbar provides a direct brand or product selector for report filtering.
@@ -110,7 +105,6 @@ function AppShellContent() {
     toolbarPath === "/monitoring/sellers" || toolbarPath === "/monitoring/tasks" ||
     pathname.startsWith("/monitoring/tasks/");
   const [monitoringCount, setMonitoringCount] = useState(0);
-  const [returnedSellerCount, setReturnedSellerCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
@@ -150,21 +144,18 @@ function AppShellContent() {
   useEffect(() => {
     if (!user) {
       setMonitoringCount(0);
-      setReturnedSellerCount(0);
       setNotificationCount(0);
       return;
     }
     if (adminPathActive) return;
     let alive = true;
     async function refresh() {
-      const [monitoring, returnedSellers, notifications] = await Promise.allSettled([
+      const [monitoring, notifications] = await Promise.allSettled([
         getMonitoringFindingsCount(),
-        getReturnedMonitoringSellersCount(),
         getAccountNotificationUnreadCount(),
       ]);
       if (!alive) return;
       if (monitoring.status === "fulfilled") setMonitoringCount(monitoring.value.count);
-      if (returnedSellers.status === "fulfilled") setReturnedSellerCount(returnedSellers.value.count);
       if (notifications.status === "fulfilled") setNotificationCount(notifications.value.count);
     }
     void refresh();
@@ -261,24 +252,9 @@ function AppShellContent() {
           <NavItem
             to="/monitoring/tasks"
             icon={<ListTodo size={18} />}
-            label="Tasks"
+            label="Review queue"
             active={isActive("/monitoring/tasks") || pathname === "/findings" || pathname.startsWith("/findings/")}
             badge={monitoringCount}
-            collapsed={collapsed}
-          />
-          <NavItem
-            to="/monitoring/sellers"
-            icon={<Store size={18} />}
-            label="Sellers"
-            active={pathname === "/monitoring/sellers" || pathname.startsWith("/monitoring/sellers/")}
-            badge={returnedSellerCount}
-            collapsed={collapsed}
-          />
-          <NavItem
-            to="/monitoring/products"
-            icon={<Network size={18} />}
-            label="Product lab"
-            active={pathname === "/monitoring/products" || pathname.startsWith("/monitoring/products/")}
             collapsed={collapsed}
           />
           <NavItem

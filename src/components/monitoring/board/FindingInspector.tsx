@@ -38,6 +38,7 @@ export function FindingInspector({
   taskHref,
   navigation,
   error,
+  preserveOnGrouping = false,
 }: {
   f: IpReviewFinding;
   ipId?: string;
@@ -59,6 +60,7 @@ export function FindingInspector({
   /** Optional escape hatch when the inspector is opened outside the Tasks page. */
   taskHref?: string;
   error?: string | null;
+  preserveOnGrouping?: boolean;
   navigation?: {
     position: number;
     total: number;
@@ -67,7 +69,7 @@ export function FindingInspector({
   };
 }) {
   const inspectorRef = useRef<HTMLElement>(null);
-  useOutsideDismiss(inspectorRef, onClose);
+  useOutsideDismiss(inspectorRef, onClose, preserveOnGrouping ? ".monitoring-group-control" : undefined);
 
   useEffect(() => {
     const trigger = document.activeElement;

@@ -173,6 +173,8 @@ export function setIpReviewMatchDecision(
 }
 
 export interface IpReviewFinding {
+  /** Opt-in Tasks projection; undefined means the API predates product grouping. */
+  product_identity?: { canonical_product_id: string; display_name: string } | null;
   result_id: string;
   run_id: string;
   domain_id: string | null;

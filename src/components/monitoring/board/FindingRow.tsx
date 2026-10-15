@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { IpReviewFinding } from "../../../api";
 import { sellerProfilePath } from "../../../lib/sellers";
+import { MarketplaceMark } from "../../MarketplaceMark";
 import { actionabilityMeta, compactListingTitle, findingPlatformLabel, formatMoney, hasReviewAnalysis, statusBadge, tableImageUrls } from "./utils";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -45,7 +46,7 @@ function suggestedAction(f: IpReviewFinding) {
 }
 
 /** The enclosing row owns selection and inspector activation. */
-export function FindingRow({ f, active, showIp, showStatus }: { f: IpReviewFinding; active: boolean; showIp?: boolean; showStatus?: boolean }) {
+export function FindingRow({ f, active, showIp, showStatus, onEntityOpen }: { f: IpReviewFinding; active: boolean; showIp?: boolean; showStatus?: boolean; onEntityOpen?: (kind: "seller" | "product", finding: IpReviewFinding) => void }) {
   const title = compactListingTitle(f);
   const images = tableImageUrls(f);
   const seller = f.seller_name?.trim() || "Unknown seller";
@@ -71,9 +72,10 @@ export function FindingRow({ f, active, showIp, showStatus }: { f: IpReviewFindi
         <div className="monitoring-listing-copy">
           <span className="monitoring-listing-title" title={title}>{title}</span>
           <div className="monitoring-listing-meta">
-            {sellerTarget ? <Link to={sellerTarget} onClick={(event) => event.stopPropagation()}
+            {onEntityOpen ? <button type="button" className="monitoring-entity-link" onClick={(event) => { event.stopPropagation(); onEntityOpen("seller", f); }}>{seller}</button> : sellerTarget ? <Link to={sellerTarget} onClick={(event) => event.stopPropagation()}
               className="hover:text-stone-900 hover:underline focus-visible:outline-2 focus-visible:outline-stone-500">{seller}</Link> : <span>{seller}</span>}
-            <span aria-hidden="true"> · </span><span>{platform}</span>
+            <span aria-hidden="true"> · </span><span className="monitoring-marketplace" title={platform}><MarketplaceMark source={{ domain: f.domain, name: platform }} /><span>{platform}</span></span>
+            {f.product_identity && <><span aria-hidden="true"> · </span>{onEntityOpen ? <button type="button" className="monitoring-entity-link" onClick={(event) => { event.stopPropagation(); onEntityOpen("product", f); }}>{f.product_identity.display_name}</button> : <span>{f.product_identity.display_name}</span>}</>}
             {showIp && f.ip_name && <><span aria-hidden="true"> · </span><span>{f.ip_name}</span></>}
             {showStatus && <><span aria-hidden="true"> · </span><span>{status}</span></>}
           </div>
