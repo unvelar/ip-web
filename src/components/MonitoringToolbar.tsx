@@ -5,7 +5,7 @@ import { useActiveIp } from "../context/ActiveIpContext";
 import { MonitoringToolbarContext } from "./MonitoringToolbarContext";
 import "./MonitoringToolbar.css";
 
-export default function MonitoringToolbar({ title, children, meta, actions, scopeControl, showStatus = true, onRefresh, refreshing = false }: {
+export default function MonitoringToolbar({ title, children, meta, actions, scopeControl, showStatus = true, onRefresh, refreshing = false, className = "" }: {
   title: string;
   children: ReactNode;
   meta?: ReactNode;
@@ -14,11 +14,12 @@ export default function MonitoringToolbar({ title, children, meta, actions, scop
   showStatus?: boolean;
   onRefresh: () => void;
   refreshing?: boolean;
+  className?: string;
 }) {
   const shell = useContext(MonitoringToolbarContext);
   const { activeIpId } = useActiveIp();
   return (
-    <header className="monitoring-toolbar" aria-label={`${title} toolbar`}>
+    <header className={`monitoring-toolbar ${className}`} aria-label={`${title} toolbar`}>
       <h1>{title}</h1>
       <div className="monitoring-toolbar-search">{children}</div>
       {meta && <div className="monitoring-toolbar-meta">{meta}</div>}

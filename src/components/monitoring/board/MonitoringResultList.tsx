@@ -39,6 +39,7 @@ export function MonitoringResultList({
   findings, total, sort, selected, activeId, dismissing, showIp, showStatus,
   onSort, onSelect, onSelectAll, onOpen, emptyMessage, onClearFilters,
   groupBy = "none", compact = false, onSelectGroup, onGroupOpen, onEntityOpen,
+  hideSort = false,
 }: {
   findings: IpReviewFinding[];
   total: number;
@@ -59,6 +60,7 @@ export function MonitoringResultList({
   onSelectGroup?: (ids: string[], checked: boolean) => void;
   onGroupOpen?: (group: MonitoringListingGroup) => void;
   onEntityOpen?: (kind: "seller" | "product", finding: IpReviewFinding) => void;
+  hideSort?: boolean;
 }) {
   const groupId = useId();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -69,7 +71,7 @@ export function MonitoringResultList({
   return <>
     {!compact && <div className="monitoring-results-summary">
       <span aria-live="polite"><strong>{total.toLocaleString()} {total === 1 ? "listing" : "listings"}</strong> matching this view</span>
-      <MonitoringSortControl sort={sort} onSort={onSort} />
+      {!hideSort && <MonitoringSortControl sort={sort} onSort={onSort} />}
     </div>}
     {groupBy === "product" && findings.length > 0 && !hasProductGrouping(findings) && <div className="monitoring-grouping-notice" role="status">
       Product grouping needs the API update. Your filtered tasks remain below. <Link to="/monitoring/products">Open product tools</Link>

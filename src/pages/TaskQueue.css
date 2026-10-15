@@ -1,0 +1,142 @@
+.task-queue-controls,
+.task-queue-workflows {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e7e5e4;
+  font-size: 13px;
+  color: #44403c;
+}
+.task-queue-workflows {
+  gap: 4px;
+}
+.task-queue-workspace {
+  scroll-margin-top: calc(
+    var(--app-shell-topbar-height, 0px) + var(--app-shell-banner-height, 0px) +
+      72px
+  );
+}
+.task-queue-workspace > :first-child {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+.task-queue-toolbar .monitoring-toolbar-meta {
+  width: auto;
+  min-width: 115px;
+}
+.task-queue-workflows button {
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+.task-queue-workflows button[aria-current="page"] {
+  background: #292524;
+  color: #fff;
+}
+.task-queue-workflows span {
+  margin-left: 5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+.task-queue-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.task-queue-controls select,
+.task-queue-controls input,
+.task-queue-advanced input:not([type="checkbox"]),
+.task-queue-advanced select,
+.task-queue-product-picker input {
+  border: 1px solid #d6d3d1;
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: #fff;
+  min-width: 0;
+  max-width: 100%;
+}
+.task-queue-controls button,
+.task-queue-button {
+  border: 1px solid #d6d3d1;
+  border-radius: 6px;
+  padding: 7px 12px;
+  background: #fff;
+  font-size: 13px;
+}
+.task-queue-button:disabled,
+.task-queue-controls button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.task-queue-lookup {
+  display: flex;
+  gap: 6px;
+  max-width: 100%;
+}
+.task-queue-lookup select {
+  max-width: 260px;
+}
+.task-queue-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
+  background: #fafaf9;
+  border-bottom: 1px solid #e7e5e4;
+}
+.task-queue-notice button {
+  text-decoration: underline;
+}
+.task-queue-advanced {
+  padding: 16px;
+  border-bottom: 1px solid #e7e5e4;
+  background: #fafaf9;
+  font-size: 13px;
+}
+.task-queue-advanced p {
+  max-width: 900px;
+  color: #57534e;
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+.task-queue-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.task-queue-advanced-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.task-queue-advanced > label {
+  margin-right: 20px;
+}
+.task-queue-product-picker {
+  padding: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #e7e5e4;
+}
+.task-queue-product-picker button {
+  padding: 7px 10px;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  max-width: 350px;
+  text-align: left;
+}
+.monitoring-results-pagination button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.task-queue-workflows button:focus-visible,
+.task-queue-controls button:focus-visible,
+.task-queue-button:focus-visible {
+  outline: 2px solid #78716c;
+  outline-offset: 2px;
+}

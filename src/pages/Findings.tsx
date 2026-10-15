@@ -5,6 +5,7 @@ import {
   getMonitoringFinding,
   isApiError,
   listMonitoringFindingsGlobal,
+  listMonitoringFindingRowsGlobal,
   resolveMonitoringFindingTenant,
   type IpReviewFinding,
   type MonitoringFacets,
@@ -87,6 +88,8 @@ export function MonitoringInboxView() {
   const taskIdRef = useRef<string | undefined>(taskId);
   const requestedIpIdRef = useRef<string | null>(null);
   const completedLinkedIds = useRef<Set<string>>(new Set());
+  const pageRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => pageRequest.current?.abort(), []);
   taskIdRef.current = taskId;
 
   // Filter-aware first-page fetch. Triggered on any filter/sort change.
@@ -96,6 +99,9 @@ export function MonitoringInboxView() {
     async (q: MonitoringFindingsQuery, minRows = MONITORING_PAGE_SIZE) => {
       const seq = ++reqSeq.current;
       setUpdating(true);
+      pageRequest.current?.abort();
+      const controller = new AbortController();
+      pageRequest.current = controller;
       setErr("");
       // A cursor belongs to the previous filter set until this request returns.
       setNextCursor(null);
@@ -104,6 +110,8 @@ export function MonitoringInboxView() {
         const apiQuery: MonitoringFindingsQuery = {
           ...q,
           include_product_identity: true,
+          facets_profile: q.product_group_id ? undefined : "tasks",
+          signal: controller.signal,
           status: q.status ?? (
             q.show_dismissed && (q.product_group_id || q.catalog_product_id)
               ? "all"
@@ -134,7 +142,7 @@ export function MonitoringInboxView() {
         const allFindings = [...page.findings];
         let cursor = page.next_cursor;
         while (cursor && allFindings.length < minRows) {
-          const nextPage = await listMonitoringFindingsGlobal({
+          const nextPage = await listMonitoringFindingRowsGlobal({
             ...apiQuery,
             cursor,
             limit,
@@ -308,7 +316,7 @@ export function MonitoringInboxView() {
     const seq = reqSeq.current;
     setLoadingMore(true);
     try {
-      const page = await listMonitoringFindingsGlobal({
+      const page = await listMonitoringFindingRowsGlobal({
         ...filters,
         include_product_identity: true,
         status: filters.status ?? (
@@ -317,6 +325,7 @@ export function MonitoringInboxView() {
           ) ? "all" : null
         ),
         cursor: nextCursor,
+        signal: pageRequest.current?.signal,
       });
       if (reqSeq.current !== seq) return;
       setFindings((prev) => [...prev, ...page.findings]);

@@ -324,6 +324,7 @@ export type MonitoringFindingRowsPage = Pick<
 export interface MonitoringFindingsQuery {
   /** Include canonical product identity on each returned row for local regrouping. */
   include_product_identity?: boolean;
+  facets_profile?: "tasks";
   country?: string | null;
   min_price_usd?: number | null;
   max_price_usd?: number | null;
@@ -365,6 +366,7 @@ function monitoringFindingsParams(
 ) {
   const params = new URLSearchParams();
   if (opts.include_product_identity) params.set("include_product_identity", "true");
+  if (opts.facets_profile) params.set("facets_profile", opts.facets_profile);
   if (opts.priority)     params.set("priority", opts.priority);
   if (opts.status)       params.set("status", opts.status);
   if (opts.ip_id)        params.set("ip_id", opts.ip_id);

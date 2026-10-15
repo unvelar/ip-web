@@ -122,6 +122,7 @@ function tenantMemberLabel(member: { display_name: string | null; email: string 
  */
 export function MonitoringBoard({
   findings,
+  reviewOnly = false,
   facets,
   filters,
   onFiltersChange,
@@ -143,6 +144,7 @@ export function MonitoringBoard({
   updating = false,
 }: {
   findings: IpReviewFinding[];
+  reviewOnly?: boolean;
   facets: MonitoringFacets;
   filters: BoardFilters;
   onFiltersChange: (next: Partial<BoardFilters>) => void;
@@ -1153,7 +1155,7 @@ export function MonitoringBoard({
 
   return (
     <>
-      <MonitoringFilters
+      {!reviewOnly && <MonitoringFilters
         filters={filters}
         facets={facets}
         onChange={onFiltersChange}
@@ -1169,7 +1171,7 @@ export function MonitoringBoard({
         workflowSummary={unified ? <><strong>{facets.total.toLocaleString()} matching {facets.total === 1 ? "task" : "tasks"}</strong>{updating && <span role="status"> · Updating…</span>}</> : undefined}
         leadingControls={unified ? <label className="monitoring-group-control"><Layers size={14} aria-hidden /><span>Group by</span><select aria-label="Group by" value={groupBy} onChange={(event) => onGroupByChange?.(event.target.value as MonitoringGroupBy)}><option value="none">None</option><option value="seller">Seller</option><option value="product">Product</option></select></label> : undefined}
         trailingControls={unified ? <MonitoringSortControl compact sort={filters.sort} onSort={(sort) => onFiltersChange({ sort })} /> : undefined}
-      />
+      />}
 
       <div ref={queueRef} className="monitoring-results-queue" aria-busy={updating}>
         {batchResult && (
@@ -1181,6 +1183,7 @@ export function MonitoringBoard({
           />
         )}
         <MonitoringResultList
+          hideSort={reviewOnly}
           findings={displayFindings}
           total={facets.total}
           sort={filters.sort}
