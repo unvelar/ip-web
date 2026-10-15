@@ -2,9 +2,9 @@
 .task-queue-workflows {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
-  padding: 12px 16px;
+  padding: 10px 16px;
   background: #fff;
   border-bottom: 1px solid #e7e5e4;
   font-size: 13px;
@@ -19,6 +19,18 @@
       72px
   );
 }
+.monitoring-task-page > .task-queue-workspace {
+  width: calc(100% - 40px);
+  max-width: 1232px;
+  margin: 20px auto 0;
+  border: 1px solid var(--monitoring-line);
+  border-radius: 12px;
+}
+.monitoring-task-page .monitoring-listing-thumbnail {
+  flex-basis: 48px;
+  width: 48px;
+  height: 54px;
+}
 .task-queue-workspace > :first-child {
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
@@ -28,7 +40,7 @@
   min-width: 115px;
 }
 .task-queue-workflows button {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: 6px;
 }
 .task-queue-workflows button[aria-current="page"] {
@@ -139,4 +151,21 @@
 .task-queue-button:focus-visible {
   outline: 2px solid #78716c;
   outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .monitoring-task-page > .task-queue-workspace {
+    width: calc(100% - 24px);
+    margin-top: 12px;
+  }
+}
+@media (max-width: 480px) {
+  .monitoring-task-page .monitoring-listing-thumbnail {
+    flex-basis: 40px;
+    width: 40px;
+    height: 48px;
+  }
+  .monitoring-task-page .monitoring-listing-price,
+  .monitoring-task-page .monitoring-listing-row .monitoring-listing-assessment {
+    margin-left: 50px;
+  }
 }
