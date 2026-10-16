@@ -304,7 +304,7 @@ export function FindingComparison({
               challenge
             </span>
           )}
-          {isDismissed && (
+          {isDismissed && sb.label !== dismissalBadge(f.dismissal_reason).label && (
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${dismissalBadge(f.dismissal_reason).cls}`}>
               {dismissalBadge(f.dismissal_reason).label}
             </span>
