@@ -6,10 +6,10 @@ import { DraftError, type Activation, type Brand, type Coverage, type Enforcemen
   type WorkspaceResponse } from '../monitoring-workspace/contracts';
 
 export type MonitoringSetupCapabilities = { workspace: boolean; marketplace_admin: boolean };
-export type EnforcementRuleTemplate = {id: string; name: string; condition: string; action: EnforcementRule['action']; explanation: string};
+export type EnforcementRuleTemplate = {id: NonNullable<EnforcementRule['template_id']>; name: string; condition: string; action: EnforcementRule['action']; explanation: string};
 export async function getEnforcementRuleTemplates(signal?: AbortSignal): Promise<EnforcementRuleTemplate[]> {
   const result=await request<{templates:EnforcementRuleTemplate[]}>('/api/monitoring-workspace/enforcement-templates',{signal});
-  requireResponse(Array.isArray(result.templates) && result.templates.every(value=>value && typeof value==='object' && typeof value.id==='string' && typeof value.name==='string'
+  requireResponse(Array.isArray(result.templates) && result.templates.every(value=>value && typeof value==='object' && value.id==='existing_product_services' && typeof value.name==='string'
     && typeof value.condition==='string' && typeof value.explanation==='string' && ['do_not_pursue','takedown','review'].includes(value.action)), 'enforcement rule templates');
   return result.templates;
 }
@@ -66,7 +66,8 @@ function normalizeEnforcementRules(value: unknown): EnforcementRule[] | undefine
   return value.map(rule => {
     requireResponse(isRecord(rule) && typeof rule.id === 'string' && typeof rule.condition === 'string'
       && ['do_not_pursue', 'takedown', 'review'].includes(String(rule.action)) && typeof rule.explanation === 'string'
-      && (rule.overrides_rule_id === null || typeof rule.overrides_rule_id === 'string'), 'enforcement rule');
+      && (rule.overrides_rule_id === null || typeof rule.overrides_rule_id === 'string')
+      && (rule.template_id === undefined || rule.template_id === 'existing_product_services'), 'enforcement rule');
     return rule as EnforcementRule;
   });
 }

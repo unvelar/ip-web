@@ -3,7 +3,7 @@ import type { Country } from '../lib/countries';
 export type Coverage = { markets: { country: string | null; sources: string[] }[]; frequency: 'daily' | 'weekly' | 'monthly' };
 export type ReferenceMaterial = { id: string; name: string; kind: 'image' | 'document'; note: string };
 export type ReferenceImage = { id: string; scope_id: string; original_filename: string; url: string };
-export type EnforcementRule = { id: string; condition: string; action: 'do_not_pursue' | 'takedown' | 'review'; explanation: string; overrides_rule_id: string | null };
+export type EnforcementRule = { id: string; condition: string; action: 'do_not_pursue' | 'takedown' | 'review'; explanation: string; overrides_rule_id: string | null; template_id?: 'existing_product_services' };
 export type MatchingReadiness = {
   scope_id: string; scope_kind: 'brand' | 'product'; name: string; monitoring_enabled: boolean;
   status: 'ready' | 'indexing' | 'references_needed'; own_reference_count: number;

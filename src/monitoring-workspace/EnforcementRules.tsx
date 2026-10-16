@@ -18,10 +18,12 @@ export default function EnforcementRules({ rules, inherited = [], product, suppo
   const replaced = new Set(rules.flatMap(rule => rule.overrides_rule_id ? [rule.overrides_rule_id] : []));
   function add(override?: EnforcementRule) {
     onChange([...rules, { id: crypto.randomUUID(), condition: override?.condition ?? '',
-      action: override?.action ?? 'review', explanation: '', overrides_rule_id: override?.id ?? null }]);
+      action: override?.action ?? 'review', explanation: '', overrides_rule_id: override?.id ?? null,
+      ...(override?.template_id ? { template_id: override.template_id } : {}) }]);
   }
   function update(id: string, change: Partial<EnforcementRule>) {
-    onChange(rules.map(rule => rule.id === id ? { ...rule, ...change } : rule));
+    onChange(rules.map(rule => rule.id === id ? { ...rule, ...change,
+      ...('condition' in change && change.condition !== rule.condition ? { template_id: undefined } : {}) } : rule));
   }
   return <section className="panel enforcement-rules" aria-label="Enforcement rules">
     <div className="section-heading"><div><h2>Enforcement rules</h2><p>{product
@@ -34,7 +36,7 @@ export default function EnforcementRules({ rules, inherited = [], product, suppo
       <p className="field-note">Review the condition and scope before Save and apply. These rules express your enforcement choices.</p>
       <div className="flex flex-wrap gap-2">{templates.map(template=><button type="button" key={template.id} className="secondary"
         disabled={rules.length>=30 || rules.some(rule=>rule.condition===template.condition)}
-        onClick={()=>onChange([...rules,{id:crypto.randomUUID(),condition:template.condition,action:template.action,explanation:template.explanation,overrides_rule_id:null}])}>
+        onClick={()=>onChange([...rules,{id:crypto.randomUUID(),template_id:template.id,condition:template.condition,action:template.action,explanation:template.explanation,overrides_rule_id:null}])}>
         {template.name}
       </button>)}</div>
     </div>}
