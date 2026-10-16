@@ -115,7 +115,7 @@ test("pending assessments have no suggested action and progress disappears when 
   const f = finding();
   const ui = await setup();
   for (const label of ["Checking saved rules", "Investigating"]) {
-    await ui.render(finding({ actionability: { ...f.actionability, key: "investigate", label } }));
+    await ui.render(finding({ suggested_review_outcome: "do_not_pursue", actionability: { ...f.actionability, key: "investigate", label } }));
     const action = ui.container.querySelector(".monitoring-listing-assessment");
     expect(action?.textContent).toBe("");
     expect(action?.getAttribute("aria-label")).toBe("No suggested action yet");

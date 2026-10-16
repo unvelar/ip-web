@@ -12,6 +12,8 @@ export function monitoringRecommendation(finding: RecommendationSource) {
   if (finding.licensed_seller || action?.key === "licensed_seller")
     return { label: "Authorized seller", reason };
   if (action?.key === "allowed_resale") return { label: "Second hand", reason };
+  if ((!action || action.key === "investigate") && finding.manual_candidate_outcome !== "do_not_pursue")
+    return { label: null, reason };
   if (outcome === "do_not_pursue")
     return { label: "Do not pursue", reason: finding.suggested_review_reason || reason };
   switch (action?.key) {
