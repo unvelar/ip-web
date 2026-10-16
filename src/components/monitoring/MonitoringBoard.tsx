@@ -34,6 +34,7 @@ import {
   summarizeBatch,
   summarizeResort,
   summarizeTakedownBatch,
+  takedownBatchListingResults,
 } from "./board/batchUtils";
 import {
   DISMISSAL_REASON_LABELS,
@@ -724,8 +725,10 @@ export function MonitoringBoard({
   function partitionSelection(action: BatchAction) {
     const eligible: IpReviewFinding[] = [];
     const skipped: Record<string, number> = {};
-    const skip = (r: string) => {
+    const skippedByResultId: Record<string, string> = {};
+    const skip = (r: string, resultId?: string) => {
       skipped[r] = (skipped[r] ?? 0) + 1;
+      if (resultId) skippedByResultId[resultId] = r;
     };
     for (const f of selectedActionFindings) {
       if (!selected.has(f.result_id)) continue;
@@ -733,8 +736,8 @@ export function MonitoringBoard({
         ? "dismissed"
         : (f.review_status ?? "pending");
       if (action === "send") {
-        if (!isDecisionState(state)) skip("already sent or closed");
-        else if (!f.case_id) skip("still preparing");
+        if (!isDecisionState(state)) skip("already sent or closed", f.result_id);
+        else if (!f.case_id) skip("still preparing", f.result_id);
         else eligible.push(f);
       } else if (action === "submit") {
         if (state !== "takedown_pending") skip("not awaiting legal action");
@@ -758,7 +761,7 @@ export function MonitoringBoard({
         else eligible.push(f);
       }
     }
-    return { eligible, skipped };
+    return { eligible, skipped, skippedByResultId };
   }
 
   function partitionResort() {
@@ -784,12 +787,19 @@ export function MonitoringBoard({
     decisionReason?: string,
     associationScopes?: TakedownFeedbackAssociationScope[],
   ) {
-    const { eligible, skipped } = partitionSelection(action);
+    const { eligible, skipped, skippedByResultId } = partitionSelection(action);
     const skipCounts: Record<string, number> = { ...skipped };
     let ok = 0;
     let failed = 0;
     if (eligible.length === 0) {
-      setBatchResult(summarizeBatch(action, 0, skipCounts, 0));
+      setBatchResult(action === "send"
+        ? summarizeTakedownBatch(0, 0, {}, skipCounts, 0, takedownBatchListingResults(
+          selectedActionFindings,
+          { queued_case_ids: [], skipped: [], failed: [] },
+          skippedByResultId,
+          ipId,
+        ))
+        : summarizeBatch(action, 0, skipCounts, 0));
       return;
     }
     const bump = (reason: string) => {
@@ -847,6 +857,7 @@ export function MonitoringBoard({
           legalQueueCounts,
           skipCounts,
           failed,
+          takedownBatchListingResults(originalSelection, result, skippedByResultId, ipId),
         ));
         if (handledCaseIds.size > 0) onRefresh();
       } catch (error) {
@@ -1007,6 +1018,10 @@ export function MonitoringBoard({
           { [result.reason]: 1 },
           {},
           0,
+          takedownBatchListingResults([targetFinding], {
+            queued_case_ids: [], skipped: [], failed: [],
+            legal_queue: [{ case_id: targetCaseId, reason: result.reason }],
+          }, {}, ipId),
         ));
       }
       setShortcutSendFinding(null);
