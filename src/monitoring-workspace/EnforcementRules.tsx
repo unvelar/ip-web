@@ -1,11 +1,20 @@
 import type { EnforcementRule } from './contracts';
+import { useEffect, useState } from 'react';
+import { getEnforcementRuleTemplates, type EnforcementRuleTemplate } from '../api/monitoringWorkspace';
 
-const actionLabels = { do_not_pursue: 'Do not pursue', takedown: 'Recommend takedown', review: 'Needs review' };
+const actionLabels = { do_not_pursue: 'Do not pursue', takedown: 'Recommend takedown', review: 'Legal review' };
 
 export default function EnforcementRules({ rules, inherited = [], product, supported, onChange }: {
   rules: EnforcementRule[]; inherited?: EnforcementRule[]; product: boolean; supported: boolean;
   onChange: (rules: EnforcementRule[]) => void;
 }) {
+  const [templates,setTemplates]=useState<EnforcementRuleTemplate[]>([]);
+  useEffect(()=>{
+    if(!supported)return;
+    const controller=new AbortController();
+    void getEnforcementRuleTemplates(controller.signal).then(value=>{if(!controller.signal.aborted)setTemplates(value);}).catch(()=>{});
+    return ()=>controller.abort();
+  },[supported]);
   const replaced = new Set(rules.flatMap(rule => rule.overrides_rule_id ? [rule.overrides_rule_id] : []));
   function add(override?: EnforcementRule) {
     onChange([...rules, { id: crypto.randomUUID(), condition: override?.condition ?? '',
@@ -18,7 +27,17 @@ export default function EnforcementRules({ rules, inherited = [], product, suppo
     <div className="section-heading"><div><h2>Enforcement rules</h2><p>{product
       ? 'Brand rules apply here. Add product rules or replace a specific brand rule for this product.'
       : 'Set how to handle matching offers for this brand and its products.'}</p></div></div>
-    <p className="field-note">Rules use the captured listing text and photos. Unclear evidence or conflicting rules require review. Takedowns always need your approval.</p>
+    <p className="field-note">Rules use captured listing text and photos. Uncertain facts go through investigation and staff triage. Conflicting rules or explicit legal questions can require a lawyer. Takedowns need your approval.</p>
+    <p className="field-note">Supported resale of existing products is always Do not pursue, across all brands. Painting and assembly services need a saved rule for the relevant brand.</p>
+    {supported && templates.length>0 && <div className="enforcement-rule-templates">
+      <h3>Start from a reusable policy</h3>
+      <p className="field-note">Review the condition and scope before Save and apply. These rules express your enforcement choices.</p>
+      <div className="flex flex-wrap gap-2">{templates.map(template=><button type="button" key={template.id} className="secondary"
+        disabled={rules.length>=30 || rules.some(rule=>rule.condition===template.condition)}
+        onClick={()=>onChange([...rules,{id:crypto.randomUUID(),condition:template.condition,action:template.action,explanation:template.explanation,overrides_rule_id:null}])}>
+        {template.name}
+      </button>)}</div>
+    </div>}
     {!supported && <p className="notice" role="status">Enforcement rule editing is currently unavailable.</p>}
     {product && inherited.length > 0 && <div className="inherited-rules"><h3>From the brand</h3>{inherited.map(rule => <div className={`inherited-rule${replaced.has(rule.id) ? ' is-replaced' : ''}`} key={rule.id}>
       <div><span className="rule-action">{actionLabels[rule.action]}{replaced.has(rule.id) ? ' · Replaced below' : ''}</span><p>{rule.condition}</p>{rule.explanation && <p className="field-note">{rule.explanation}</p>}</div>

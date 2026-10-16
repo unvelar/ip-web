@@ -23,7 +23,7 @@ export const BATCH_META: Record<
   allow_product: { label: "Allow product", verb: "Allowed product", gerund: "Allow product images for" },
   second_hand: { label: "Second hand", verb: "Marked second hand", gerund: "Mark second hand for" },
   packaging_only: { label: "Packaging only", verb: "Marked packaging only", gerund: "Mark packaging only for" },
-  review: { label: "Review", verb: "Moved to Review", gerund: "Move to Review" },
+  review: { label: "Legal review", verb: "Requested legal review for", gerund: "Request legal review for" },
   enforce: { label: "Mark enforced", verb: "Marked enforced", gerund: "Mark enforced" },
 };
 

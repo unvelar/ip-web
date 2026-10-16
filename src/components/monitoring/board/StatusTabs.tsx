@@ -2,7 +2,7 @@
 const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: "preparing", label: "Preparing" },
   { key: "pending", label: "To triage" },
-  { key: "review", label: "Review" },
+  { key: "review", label: "Legal review" },
   { key: "takedown_pending", label: "Legal queue" },
   { key: "takedown_sent", label: "Takedown sent" },
   { key: "enforced", label: "Enforced" },

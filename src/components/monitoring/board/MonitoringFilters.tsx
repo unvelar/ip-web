@@ -11,7 +11,7 @@ import "./MonitoringFilters.css";
 
 type Panel = "product" | "price" | "source" | "more" | "views";
 const primaryViews = [
-  { key: "pending", label: "To triage" }, { key: "review", label: "In review" },
+  { key: "pending", label: "To triage" }, { key: "review", label: "Legal review" },
   { key: "takedown_pending", label: "Legal queue" }, { key: "takedown_sent", label: "Sent" },
 ] as const;
 const otherViews = [

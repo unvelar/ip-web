@@ -6,6 +6,13 @@ import { DraftError, type Activation, type Brand, type Coverage, type Enforcemen
   type WorkspaceResponse } from '../monitoring-workspace/contracts';
 
 export type MonitoringSetupCapabilities = { workspace: boolean; marketplace_admin: boolean };
+export type EnforcementRuleTemplate = {id: string; name: string; condition: string; action: EnforcementRule['action']; explanation: string};
+export async function getEnforcementRuleTemplates(signal?: AbortSignal): Promise<EnforcementRuleTemplate[]> {
+  const result=await request<{templates:EnforcementRuleTemplate[]}>('/api/monitoring-workspace/enforcement-templates',{signal});
+  requireResponse(Array.isArray(result.templates) && result.templates.every(value=>value && typeof value==='object' && typeof value.id==='string' && typeof value.name==='string'
+    && typeof value.condition==='string' && typeof value.explanation==='string' && ['do_not_pursue','takedown','review'].includes(value.action)), 'enforcement rule templates');
+  return result.templates;
+}
 
 export async function getMonitoringSetupCapabilities(signal?: AbortSignal): Promise<MonitoringSetupCapabilities> {
   try {

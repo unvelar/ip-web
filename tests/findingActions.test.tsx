@@ -224,7 +224,7 @@ describe("FindingActions allow product", () => {
       "1Different product",
       "2Second hand",
       "3Do not pursue",
-      "RReview",
+      "RLegal review",
       "TTakedown",
       "Authorize seller",
     ]) {

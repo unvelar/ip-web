@@ -1,3 +1,4 @@
+import { LegalReviewDialog } from "./LegalReviewDialog";
 import { useState, type ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 import { ComposeModal, ConfirmSendModal } from "../../TakedownPanel";
@@ -68,6 +69,7 @@ export function FindingActions({
   grouped?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [requestingReview, setRequestingReview] = useState(false);
   const [licensing, setLicensing] = useState(false);
   const [composing, setComposing] = useState(false);
   const [composeDecisionReason, setComposeDecisionReason] = useState("");
@@ -173,7 +175,8 @@ export function FindingActions({
               ? f.offer_subject === "packaging_only"
                 ? "packaging_only"
                 : "false_positive"
-              : "review";
+              : f.actionability?.key === "do_not_pursue" ? "do_not_pursue"
+                : f.actionability?.key === "needs_review" ? "review" : null;
   const recommendationReason = f.actionability?.reason?.trim();
 
   const primaryCls =
@@ -318,19 +321,9 @@ export function FindingActions({
             ? "Cannot update finding: finding has no associated IP"
             : "Shortcut R: move this finding to the Review bucket for lawyer input",
       )}
-      onClick={() =>
-        ipId &&
-        run(
-          "review",
-          async () => {
-            await markIpFindingNeedsReview(ipId, f.result_id);
-            onNeedsReview();
-          },
-          { completeCurrent: true },
-        )
-      }
+      onClick={() => setRequestingReview(true)}
       className={actionClass("review")}
-      aria-label={actionAriaLabel("review", "Review")}
+      aria-label={actionAriaLabel("review", "Legal review")}
       aria-keyshortcuts={recommendedAction === "review" ? "Enter R" : "R"}
       data-recommended-action={recommendedAction === "review" ? "true" : undefined}
     >
@@ -339,7 +332,7 @@ export function FindingActions({
       ) : (
         <>
           <ButtonWithShortcut
-            label="Review"
+            label="Legal review"
             shortcut="R"
             dark={recommendedAction === "review"}
             leadingIcon={recommendedAction === "review" ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
@@ -646,6 +639,11 @@ export function FindingActions({
           }}
         />
       )}
+      {requestingReview && ipId && <LegalReviewDialog initialQuestion={f.actionability?.question ?? ""}
+        onCancel={() => setRequestingReview(false)} onConfirm={async question => {
+          await markIpFindingNeedsReview(ipId,f.result_id,question);
+          setRequestingReview(false);onNeedsReview();onActionComplete();onUpdated({completed:true});
+        }} />}
       {composing && f.case_id && (
         <ComposeModal
           caseId={f.case_id}

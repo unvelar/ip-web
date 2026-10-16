@@ -515,7 +515,7 @@ function CampaignDetailPanel({
               });
               ok++;
             } else if (action === "review") {
-              await markIpFindingNeedsReview(finding.ip_id as string, finding.result_id);
+              await markIpFindingNeedsReview(finding.ip_id as string, finding.result_id, decisionReason ?? "");
               ok++;
             } else {
               await markIpFindingEnforced(finding.ip_id as string, finding.result_id);

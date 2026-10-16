@@ -63,7 +63,7 @@ export async function runSellerListingBatch({ action, findings, ipId, decisionRe
       if (!isActive()) return;
       try {
         const findingIpId = (finding.ip_id ?? ipId)!;
-        if (action === "review") await markIpFindingNeedsReview(findingIpId, finding.result_id);
+        if (action === "review") await markIpFindingNeedsReview(findingIpId, finding.result_id, decisionReason ?? "");
         else if (action === "enforce") await markIpFindingEnforced(findingIpId, finding.result_id);
         else if (action === "allow_product") await allowIpFindingProductImage(findingIpId, finding.result_id, { image_url: preferredAllowedProductImage(finding) });
         else await dismissIpFinding(findingIpId, finding.result_id, dismissalOptionsForBatchAction(action));

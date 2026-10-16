@@ -13,8 +13,8 @@ export type TaskState = (typeof taskStates)[number];
 export const taskStateLabels: Record<TaskState, string> = {
   preparing: "Preparing",
   pending: "To triage",
-  review: "Needs review",
-  takedown_pending: "Legal review",
+  review: "Legal review",
+  takedown_pending: "Legal queue",
   takedown_sent: "Takedown sent",
   enforced: "Enforced",
   dismissed: "Dismissed",

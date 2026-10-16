@@ -87,7 +87,7 @@ test("suggested actions preserve clearance guidance and describe takedown as a r
   const ui = await setup();
   for (const [key, expected] of [
     ["send_takedown", "Takedown recommended"], ["licensed_seller", "Authorized seller"],
-    ["allowed_resale", "Second hand"], ["false_positive", "Different product"], ["needs_review", "Needs review"],
+    ["allowed_resale", "Second hand"], ["false_positive", "Different product"], ["needs_review", "Legal review"],
   ] as const) {
     const f = finding();
     await ui.render(finding({ actionability: { ...f.actionability, key, label: "Likely counterfeit", reason: "Current backend recommendation." } }));
@@ -104,7 +104,7 @@ test("suggested actions preserve clearance guidance and describe takedown as a r
 test("mixed workflow views show lifecycle separately from suggested action", async () => {
   const ui = await setup(finding({ review_status: "takedown_sent" }), true);
   expect(ui.container.querySelector(".monitoring-listing-meta")?.textContent).toContain("Takedown sent");
-  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Needs review");
+  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Legal review");
   await ui.render(finding({ dismissed_at: "2026-09-21T14:00:00Z", dismissal_reason: "second_hand" }));
   expect(ui.container.querySelector(".monitoring-listing-meta")?.textContent).toContain("Dismissed");
   await ui.render(finding({ ready_for_review: false, review_status: "pending" }));

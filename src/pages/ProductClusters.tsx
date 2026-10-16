@@ -1150,7 +1150,7 @@ export default function ProductClusters() {
               );
               ok += 1;
             } else if (action === "review") {
-              await markIpFindingNeedsReview(findingIpId, finding.result_id);
+              await markIpFindingNeedsReview(findingIpId, finding.result_id, decisionReason ?? "");
               ok += 1;
             } else {
               await markIpFindingEnforced(findingIpId, finding.result_id);

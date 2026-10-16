@@ -39,6 +39,8 @@ export type MonitoringCandidateOutcome =
   | "second_hand"
   | "none";
 export type MonitoringActionabilityKey =
+  | "investigate"
+  | "needs_triage"
   | "do_not_pursue"
   | "send_takedown"
   | "allowed_resale"
@@ -152,6 +154,7 @@ export interface ProductAuthenticityAssessment {
 }
 
 export interface MonitoringActionability {
+  question?: string | null;
   key: MonitoringActionabilityKey;
   label: string;
   reason: string;

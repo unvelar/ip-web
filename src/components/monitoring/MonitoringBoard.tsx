@@ -1,3 +1,4 @@
+import { LegalReviewDialog } from "./board/LegalReviewDialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleCheck, Layers, X } from "lucide-react";
 import {
@@ -629,6 +630,7 @@ export function MonitoringBoard({
 
   // --- Multi-select + batch operations -------------------------------------
   const [confirmAction, setConfirmAction] = useState<BatchAction | null>(null);
+  const [legalReviewFinding,setLegalReviewFinding]=useState<IpReviewFinding | null>(null);
   const [shortcutSendFinding, setShortcutSendFinding] = useState<IpReviewFinding | null>(null);
   const [shortcutSending, setShortcutSending] = useState(false);
   const [shortcutSendError, setShortcutSendError] = useState("");
@@ -894,7 +896,7 @@ export function MonitoringBoard({
               });
               ok++;
             } else if (action === "review") {
-              await markIpFindingNeedsReview((f.ip_id ?? ipId) as string, f.result_id);
+              await markIpFindingNeedsReview((f.ip_id ?? ipId) as string, f.result_id, decisionReason ?? "");
               ok++;
             } else {
               await markIpFindingEnforced((f.ip_id ?? ipId) as string, f.result_id);
@@ -1072,10 +1074,7 @@ export function MonitoringBoard({
           alert("Cannot update finding: finding has no associated IP.");
           return;
         }
-        await markIpFindingNeedsReview(fipId, targetFinding.result_id);
-        rememberNeedsReviewAction(targetFinding);
-        advanceAfterAction(targetFinding.result_id);
-        onRefresh(targetFinding.result_id);
+        setLegalReviewFinding(targetFinding);
         return;
       }
       const options = dismissalOptionsForBatchAction(action);
@@ -1084,12 +1083,9 @@ export function MonitoringBoard({
       alert(e instanceof Error ? e.message : "Failed to update finding");
     }
   }, [
-    advanceAfterAction,
     activeFinding,
     handleDismiss,
     ipId,
-    onRefresh,
-    rememberNeedsReviewAction,
     selected,
     visibleActionableFindings,
   ]);
@@ -1279,6 +1275,12 @@ export function MonitoringBoard({
         />
       )}
 
+      {legalReviewFinding && <LegalReviewDialog initialQuestion={legalReviewFinding.actionability?.question ?? ""}
+        onCancel={() => setLegalReviewFinding(null)} onConfirm={async question => {
+          await markIpFindingNeedsReview((legalReviewFinding.ip_id ?? ipId) as string,legalReviewFinding.result_id,question);
+          rememberNeedsReviewAction(legalReviewFinding);advanceAfterAction(legalReviewFinding.result_id);
+          onRefresh(legalReviewFinding.result_id);setLegalReviewFinding(null);
+        }} />}
       {shortcutSendFinding && (
         <ConfirmSendModal
           platform={shortcutSendFinding.domain}

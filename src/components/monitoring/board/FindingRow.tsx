@@ -29,7 +29,10 @@ function FindingTableThumbnail({ urls, title }: { urls: string[]; title: string 
 
 function suggestedAction(f: IpReviewFinding) {
   const actionability = actionabilityMeta(f.actionability);
+  const reason = actionability.reason;
   const outcome = f.manual_candidate_outcome ?? f.suggested_review_outcome;
+  if (outcome === "do_not_pursue" && !["licensed_seller","allowed_resale"].includes(actionability.key))
+    return {label:"Do not pursue",reason:f.suggested_review_reason || reason};
   // Actionability incorporates seller licenses and resale evidence. Keep those
   // safeguards ahead of a candidate bucket, and describe actions rather than
   // presenting a model's infringement assessment as an established fact.
@@ -38,10 +41,14 @@ function suggestedAction(f: IpReviewFinding) {
     case "allowed_resale": return { label: "Second hand", reason: actionability.reason };
     case "send_takedown": return { label: "Takedown recommended", reason: actionability.reason };
     case "false_positive": return { label: "Different product", reason: actionability.reason };
+    case "do_not_pursue": return { label: "Do not pursue", reason: actionability.reason };
+    case "needs_review": return { label: "Legal review", reason: actionability.reason };
+    case "needs_triage": return { label: actionability.label, reason: actionability.reason };
+    case "investigate": return { label: actionability.label, reason: actionability.reason };
     default:
       return outcome === "do_not_pursue"
-        ? { label: "Do not pursue", reason: f.suggested_review_reason || actionability.reason }
-        : { label: "Needs review", reason: actionability.reason };
+        ? { label: "Do not pursue", reason: f.suggested_review_reason || reason }
+        : { label: "Investigate", reason };
   }
 }
 

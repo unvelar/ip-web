@@ -94,7 +94,7 @@ test("suggestions go to triage and switching workflow clears the suggestion", as
   await ui.select("Suggested action", "takedown");
   expect(ui.filters()).toMatchObject({ status: "pending", candidate_outcome: "takedown", dismissal_reason: null, show_dismissed: false });
   await ui.click("Done");
-  await ui.click("In review");
+  await ui.click("Legal review");
   expect(ui.filters()).toMatchObject({ status: "review", candidate_outcome: null });
 });
 

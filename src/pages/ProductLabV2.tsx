@@ -875,7 +875,7 @@ export default function ProductLab() {
           try {
             const findingIpId = (finding.ip_id ?? activeIpId) as string;
             if (action === "review") {
-              await markIpFindingNeedsReview(findingIpId, finding.result_id);
+              await markIpFindingNeedsReview(findingIpId, finding.result_id, decisionReason ?? "");
             } else if (action === "allow_product") {
               await allowIpFindingProductImage(findingIpId, finding.result_id, {
                 image_url: preferredAllowedProductImage(finding),

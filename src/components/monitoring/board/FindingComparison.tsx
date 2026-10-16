@@ -500,7 +500,7 @@ export function FindingComparison({
         f.protected_term_assessment?.outcome === "matched" ||
         f.offer_subject === "packaging_only" || f.authenticity_reasoning) && (
       <details className="finding-assessment" aria-label="AI assessment">
-        <summary>AI assessment · {actionability.label || "Needs review"}</summary>
+        <summary>AI assessment · {actionability.label || "Investigate"}</summary>
         <div className="mt-3 space-y-3">
       {productAuthenticityAssessment &&
         productAuthenticityAssessment.rule_assessments.length > 0 && (

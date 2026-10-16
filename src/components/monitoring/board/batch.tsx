@@ -35,7 +35,7 @@ export function BatchConfirmModal({
   const [preflightError, setPreflightError] = useState("");
   const meta = BATCH_META[action];
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
-  const reasonValid = action !== "send" || (
+  const reasonValid = action === "review" ? decisionReason.trim().length >= 10 : action !== "send" || (
     decisionReason.trim().length >= 3 && associationScopes.length > 0
   );
   const canConfirm = eligible.length > 0 && reasonValid;
@@ -91,10 +91,11 @@ export function BatchConfirmModal({
       return;
     }
 
+    if (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement) return;
     if (event.key === "Enter" && !event.nativeEvent.isComposing && canConfirm) {
       event.preventDefault();
       onConfirm(
-        action === "send" ? decisionReason.trim() : undefined,
+        ["send", "review"].includes(action) ? decisionReason.trim() : undefined,
         action === "send" ? associationScopes : undefined,
       );
     }
@@ -205,13 +206,13 @@ export function BatchConfirmModal({
               )}
             </div>
           )}
-          {action === "send" && eligible.length > 0 && (
+          {["send", "review"].includes(action) && eligible.length > 0 && (
             <div className="space-y-1.5">
               <label
                 htmlFor="batch-takedown-decision-reason"
                 className="text-xs font-semibold text-stone-800"
               >
-                Why is takedown the right decision?
+                {action === "review" ? "What specific legal question applies to these findings?" : "Why is takedown the right decision?"}
               </label>
               <textarea
                 id="batch-takedown-decision-reason"
@@ -220,17 +221,17 @@ export function BatchConfirmModal({
                 rows={3}
                 maxLength={2000}
                 autoFocus
-                placeholder="What in these images or listing descriptions made the batch actionable?"
+                placeholder={action === "review" ? "State the unresolved legal question after checking evidence and customer policy." : "What in these images or listing descriptions made the batch actionable?"}
                 className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 focus:border-stone-400 focus:outline-none"
               />
               <p className="text-[11px] text-stone-500">
                 Asked once for this batch. The note stays linked to every selected finding.
               </p>
-              <TakedownFeedbackScopeFields
+              {action === "send" && <TakedownFeedbackScopeFields
                 idPrefix="batch-takedown-feedback"
                 scopes={associationScopes}
                 onChange={setAssociationScopes}
-              />
+              />}
             </div>
           )}
         </div>
@@ -245,7 +246,7 @@ export function BatchConfirmModal({
           <button
             type="button"
             onClick={() => onConfirm(
-              action === "send" ? decisionReason.trim() : undefined,
+              ["send", "review"].includes(action) ? decisionReason.trim() : undefined,
               action === "send" ? associationScopes : undefined,
             )}
             disabled={!canConfirm}

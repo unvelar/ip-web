@@ -76,6 +76,8 @@ export default function TaskQueue({
   const scrollToQueue = () =>
     workspaceRef.current?.scrollIntoView({ block: "start" });
   const oldFilters = useMemo(() => parseFilters(params), [params]);
+  const unresolvedSuggestion = ["investigate","needs_triage","needs_review"].includes(params.get("candidate_outcome") ?? "")
+    ? params.get("candidate_outcome") : null;
   const explicitSelector = params.get("selector") as TaskSelector | null;
   const legacySelectors = [
     oldFilters.platform
@@ -85,8 +87,8 @@ export default function TaskQueue({
     oldFilters.assignee
       ? { selector: "assignee", value: oldFilters.assignee }
       : null,
-    oldFilters.candidate_outcome
-      ? { selector: "suggestion", value: oldFilters.candidate_outcome }
+    oldFilters.candidate_outcome || unresolvedSuggestion
+      ? { selector: "suggestion", value: oldFilters.candidate_outcome ?? unresolvedSuggestion }
       : null,
   ].filter((value) => value !== null);
   const secondary = explicitSelector
@@ -652,14 +654,16 @@ export default function TaskQueue({
                     >
                       <option value="">Choose a suggestion</option>
                       {[
-                        "none",
+                        "investigate",
+                        "needs_triage",
+                        "needs_review",
                         "takedown",
                         "false_positive",
                         "do_not_pursue",
                         "second_hand",
                       ].map((value) => (
                         <option key={value} value={value}>
-                          {value.replaceAll("_", " ")}
+                          {{investigate:"Investigate",needs_triage:"Staff triage",needs_review:"Legal review"}[value] ?? value.replaceAll("_", " ")}
                         </option>
                       ))}
                     </select>
@@ -901,15 +905,7 @@ export default function TaskQueue({
                         className="monitoring-listing-assessment"
                         title={row.suggested_review_reason ?? ""}
                       >
-                        {row.licensed_seller
-                          ? "Authorized seller"
-                          : {
-                              none: "Needs review",
-                              takedown: "Takedown recommended",
-                              false_positive: "Different product",
-                              do_not_pursue: "Do not pursue",
-                              second_hand: "Second hand",
-                            }[row.suggested_review_outcome ?? "none"]}
+                        {row.licensed_seller ? "Authorized seller" : row.actionability?.label ?? "Investigate"}
                       </td>
                     </tr>
                   ))}
@@ -1210,7 +1206,7 @@ function AdvancedTaskSearch({
               "manual_cleared",
             ].map((value) => (
               <option key={value} value={value}>
-                {value.replaceAll("_", " ")}
+                {{investigate:"Investigate",needs_triage:"Staff triage",needs_review:"Legal review"}[value] ?? value.replaceAll("_", " ")}
               </option>
             ))}
           </select>
@@ -1256,14 +1252,16 @@ function AdvancedTaskSearch({
           >
             <option value="">Any suggestion</option>
             {[
-              "none",
+              "investigate",
+              "needs_triage",
+              "needs_review",
               "takedown",
               "false_positive",
               "do_not_pursue",
               "second_hand",
             ].map((value) => (
               <option key={value} value={value}>
-                {value.replaceAll("_", " ")}
+                {{investigate:"Investigate",needs_triage:"Staff triage",needs_review:"Legal review"}[value] ?? value.replaceAll("_", " ")}
               </option>
             ))}
           </select>
