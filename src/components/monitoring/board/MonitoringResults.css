@@ -36,6 +36,8 @@
 .monitoring-listing-copy { min-width: 0; flex: 1; }
 .monitoring-listing-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; color: #242320; font-size: 13px; font-weight: 500; line-height: 1.45; }
 .monitoring-listing-meta { margin-top: 4px; color: #706d66; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.monitoring-assessment-pending { margin-top: 5px; color: #706d66; font-size: 11px; line-height: 1.5; }
+.monitoring-assessment-pending::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border: 1px solid #a09b92; border-radius: 50%; vertical-align: 1px; }
 .monitoring-marketplace { display:inline-flex; align-items:center; gap:5px; vertical-align:middle; }
 .monitoring-marketplace .marketplace-logo, .monitoring-marketplace .marketplace-monogram { display:inline-flex; flex-shrink:0; align-items:center; justify-content:center; width:14px; height:14px; font-size:8px; line-height:1; }
 .monitoring-marketplace .marketplace-logo img { width:14px; height:14px; object-fit:contain; }

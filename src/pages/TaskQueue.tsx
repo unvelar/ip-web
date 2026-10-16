@@ -15,6 +15,7 @@ import {
   type MonitoringDismissReasonCode,
 } from "../api";
 import { parseFilters } from "../lib/monitoringFilters";
+import { assessmentPendingLabel, monitoringRecommendation, suggestionFilterLabel } from "../lib/monitoringRecommendation";
 import {
   taskPage,
   taskOptions,
@@ -663,7 +664,7 @@ export default function TaskQueue({
                         "second_hand",
                       ].map((value) => (
                         <option key={value} value={value}>
-                          {{investigate:"Investigate",needs_triage:"Staff triage",needs_review:"Legal review"}[value] ?? value.replaceAll("_", " ")}
+                          {suggestionFilterLabel(value)}
                         </option>
                       ))}
                     </select>
@@ -836,79 +837,84 @@ export default function TaskQueue({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.task_id}
-                      data-task-id={row.task_id}
-                      tabIndex={waitingForPage ? -1 : 0}
-                      className={`monitoring-listing-row${taskId === row.result_id ? " is-active" : ""}${selection.has(row.result_id) ? " is-selected" : ""}${row.state === "dismissed" ? " is-dismissed" : ""}`}
-                      aria-label={`Open task: ${row.listing_title ?? row.domain}`}
-                      onClick={() => {
-                        if (!waitingForPage) open(row.result_id);
-                      }}
-                      onKeyDown={(event) => {
-                        if (
-                          !waitingForPage &&
-                          event.target === event.currentTarget &&
-                          ["Enter", " "].includes(event.key)
-                        ) {
-                          event.preventDefault();
-                          open(row.result_id);
-                        }
-                      }}
-                    >
-                      <td
-                        className="monitoring-listing-checkbox"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          disabled={waitingForPage}
-                          aria-label={`Select ${row.listing_title ?? row.domain}`}
-                          checked={selection.has(row.result_id)}
-                          onChange={() =>
-                            setSelection((current) => {
-                              const next = new Set(current);
-                              if (next.has(row.result_id))
-                                next.delete(row.result_id);
-                              else next.add(row.result_id);
-                              return next;
-                            })
+                  {rows.map((row) => {
+                    const recommendation = monitoringRecommendation(row);
+                    return (
+                      <tr
+                        key={row.task_id}
+                        data-task-id={row.task_id}
+                        tabIndex={waitingForPage ? -1 : 0}
+                        className={`monitoring-listing-row${taskId === row.result_id ? " is-active" : ""}${selection.has(row.result_id) ? " is-selected" : ""}${row.state === "dismissed" ? " is-dismissed" : ""}`}
+                        aria-label={`Open task: ${row.listing_title ?? row.domain}`}
+                        onClick={() => {
+                          if (!waitingForPage) open(row.result_id);
+                        }}
+                        onKeyDown={(event) => {
+                          if (
+                            !waitingForPage &&
+                            event.target === event.currentTarget &&
+                            ["Enter", " "].includes(event.key)
+                          ) {
+                            event.preventDefault();
+                            open(row.result_id);
                           }
-                        />
-                      </td>
-                      <td className="monitoring-listing-cell">
-                        <div className="monitoring-listing-main">
-                          <TaskImage key={row.image_url} url={row.image_url} />
-                          <div className="monitoring-listing-copy">
-                            <span className="monitoring-listing-title">
-                              {row.listing_title ?? row.page_url}
-                            </span>
-                            <div className="monitoring-listing-meta">
-                              {row.seller_name ?? "Unknown seller"} ·{" "}
-                              {row.domain} ·{" "}
-                              <time dateTime={row.found_at}>
-                                {date(row.found_at)}
-                              </time>
-                              {query.status === "all" &&
-                                ` · ${taskStateLabels[row.state]}`}
+                        }}
+                      >
+                        <td
+                          className="monitoring-listing-checkbox"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={waitingForPage}
+                            aria-label={`Select ${row.listing_title ?? row.domain}`}
+                            checked={selection.has(row.result_id)}
+                            onChange={() =>
+                              setSelection((current) => {
+                                const next = new Set(current);
+                                if (next.has(row.result_id))
+                                  next.delete(row.result_id);
+                                else next.add(row.result_id);
+                                return next;
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="monitoring-listing-cell">
+                          <div className="monitoring-listing-main">
+                            <TaskImage key={row.image_url} url={row.image_url} />
+                            <div className="monitoring-listing-copy">
+                              <span className="monitoring-listing-title">
+                                {row.listing_title ?? row.page_url}
+                              </span>
+                              <div className="monitoring-listing-meta">
+                                {row.seller_name ?? "Unknown seller"} ·{" "}
+                                {row.domain} ·{" "}
+                                <time dateTime={row.found_at}>
+                                  {date(row.found_at)}
+                                </time>
+                                {query.status === "all" &&
+                                  ` · ${taskStateLabels[row.state]}`}
+                              </div>
+                              {!recommendation.label && <div className="monitoring-assessment-pending" title={recommendation.reason}>{assessmentPendingLabel}</div>}
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="monitoring-listing-price">
-                        {row.price_value_usd == null
-                          ? "Unavailable"
-                          : usd.format(row.price_value_usd)}
-                      </td>
-                      <td
-                        className="monitoring-listing-assessment"
-                        title={row.suggested_review_reason ?? ""}
-                      >
-                        {row.licensed_seller ? "Authorized seller" : row.actionability?.label ?? "Investigate"}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="monitoring-listing-price">
+                          {row.price_value_usd == null
+                            ? "Unavailable"
+                            : usd.format(row.price_value_usd)}
+                        </td>
+                        <td
+                          className="monitoring-listing-assessment"
+                          title={recommendation.label ? recommendation.reason : undefined}
+                          aria-label={recommendation.label ? undefined : "No suggested action yet"}
+                        >
+                          {recommendation.label}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {!waitingForPage && !error && !rows.length && (
@@ -1206,7 +1212,7 @@ function AdvancedTaskSearch({
               "manual_cleared",
             ].map((value) => (
               <option key={value} value={value}>
-                {{investigate:"Investigate",needs_triage:"Staff triage",needs_review:"Legal review"}[value] ?? value.replaceAll("_", " ")}
+                {suggestionFilterLabel(value)}
               </option>
             ))}
           </select>
@@ -1261,7 +1267,7 @@ function AdvancedTaskSearch({
               "second_hand",
             ].map((value) => (
               <option key={value} value={value}>
-                {{investigate:"Investigate",needs_triage:"Staff triage",needs_review:"Legal review"}[value] ?? value.replaceAll("_", " ")}
+                {suggestionFilterLabel(value)}
               </option>
             ))}
           </select>

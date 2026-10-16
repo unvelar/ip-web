@@ -110,3 +110,19 @@ test("mixed workflow views show lifecycle separately from suggested action", asy
   await ui.render(finding({ ready_for_review: false, review_status: "pending" }));
   expect(ui.container.querySelector(".monitoring-listing-meta")?.textContent).toContain("Preparing");
 });
+
+test("pending assessments have no suggested action and progress disappears when a conclusion arrives", async () => {
+  const f = finding();
+  const ui = await setup();
+  for (const label of ["Checking saved rules", "Investigating"]) {
+    await ui.render(finding({ actionability: { ...f.actionability, key: "investigate", label } }));
+    const action = ui.container.querySelector(".monitoring-listing-assessment");
+    expect(action?.textContent).toBe("");
+    expect(action?.getAttribute("aria-label")).toBe("No suggested action yet");
+    expect(ui.container.querySelector(".monitoring-listing-copy .monitoring-assessment-pending")?.textContent).toBe("Assessment pending");
+    expect(ui.container.textContent).not.toContain(label);
+  }
+  await ui.render(finding({ actionability: { ...f.actionability, key: "do_not_pursue", label: "Do not pursue" } }));
+  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Do not pursue");
+  expect(ui.container.querySelector(".monitoring-assessment-pending")).toBeNull();
+});
