@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Box, Store, X } from "lucide-react";
-import type { MonitoringListingGroup } from "../../../lib/monitoringGrouping";
+import type { MonitoringListingGroup, MonitoringGroupFinding } from "../../../lib/monitoringGrouping";
 import { sellerProfilePath } from "../../../lib/sellers";
 import { useOutsideDismiss } from "../../../hooks/useOutsideDismiss";
 import { APP_SHELL_OVERLAY_TOP } from "../../appShellLayout";
@@ -11,11 +11,12 @@ import { MarketplaceMark } from "../../MarketplaceMark";
 import { monitoringPlatformLabel } from "../../../lib/platforms";
 import "./FindingInspector.css";
 
-export function MonitoringGroupDetails({ group, sellerFiltered = false, onClose, onFilter }: {
-  group: MonitoringListingGroup;
+export function MonitoringGroupDetails({ group, sellerFiltered = false, onClose, onFilter, scope = "loaded" }: {
+  group: MonitoringListingGroup<MonitoringGroupFinding>;
   sellerFiltered?: boolean;
   onClose: () => void;
-  onFilter: () => void;
+  onFilter?: () => void;
+  scope?: "loaded" | "page";
 }) {
   const panel = useRef<HTMLElement>(null);
   useOutsideDismiss(panel, onClose, ".monitoring-group-control");
@@ -43,15 +44,15 @@ export function MonitoringGroupDetails({ group, sellerFiltered = false, onClose,
       </header>
       <div className="finding-inspector-scroll monitoring-group-detail-body">
         <h2>{group.label}</h2>
-        <p>{group.findings.length} matching {group.findings.length === 1 ? "task" : "tasks"} in the loaded results</p>
+        <p>{group.findings.length} matching {group.findings.length === 1 ? "task" : "tasks"} {scope === "page" ? "on this page" : "in the loaded results"}</p>
         <dl><div><dt>Sources</dt><dd className="monitoring-marketplace-list">{domains.map((domain) => <span key={domain} className="monitoring-marketplace"><MarketplaceMark source={{ domain, name: monitoringPlatformLabel(domain) }} /><span>{monitoringPlatformLabel(domain)}</span></span>)}</dd></div>{!seller && <div><dt>Identified sellers</dt><dd>{sellers}</dd></div>}</dl>
         {seller && group.sellerKey && <SellerDetailsFacts key={`${group.sellerKey}:${group.ipId}`} sellerKey={group.sellerKey} ipId={group.ipId} />}
         {destination && <div className="monitoring-group-detail-actions">
           {sellerFiltered ? <span role="status">Task list filtered to this seller</span>
-            : <button type="button" onClick={onFilter}>Filter to this {seller ? "seller" : "product"}</button>}
+            : onFilter && <button type="button" onClick={onFilter}>Filter to this {seller ? "seller" : "product"}</button>}
           <Link to={destination}>{seller ? "Seller profile & history" : "Product grouping & rules"}</Link>
         </div>}
-        <p className="monitoring-group-detail-note">Counts cover loaded tasks matching the current filters. Load more to expand this group. Each task keeps its own evidence, assignment, and review decision.</p>
+        <p className="monitoring-group-detail-note">{scope === "page" ? "Counts cover tasks on this page. Other pages may contain more tasks in this group." : "Counts cover loaded tasks matching the current filters. Load more to expand this group."} Each task keeps its own evidence, assignment, and review decision.</p>
       </div>
     </aside>
   </div>;

@@ -453,9 +453,10 @@ export function updateMonitoringFindingAssignment(
   );
 }
 
-export function getMonitoringFindingForCase(caseId: string) {
+export function getMonitoringFindingForCase(caseId: string, options: { includeProductIdentity?: boolean; signal?: AbortSignal } = {}) {
   return request<{ finding: IpReviewFinding }>(
-    `/api/monitoring/findings/case/${encodeURIComponent(caseId)}`,
+    `/api/monitoring/findings/case/${encodeURIComponent(caseId)}${options.includeProductIdentity ? "?include_product_identity=true" : ""}`,
+    { signal: options.signal },
   );
 }
 
