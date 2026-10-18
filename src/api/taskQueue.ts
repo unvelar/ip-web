@@ -21,6 +21,7 @@ export const taskStateLabels: Record<TaskState, string> = {
 };
 export type TaskSummary = Pick<
   IpReviewFinding,
+  | "product_identity"
   | "result_id"
   | "case_id"
   | "domain"
@@ -144,8 +145,9 @@ export const cancelTaskSearch = (id: string) =>
   request<void>("/api/monitoring/tasks/searches/" + encodeURIComponent(id), {
     method: "DELETE",
   });
-export const taskDetails = (ids: string[]) =>
+export const taskDetails = (ids: string[], signal?: AbortSignal) =>
   request<{ findings: IpReviewFinding[] }>("/api/monitoring/tasks/details", {
     method: "POST",
     body: JSON.stringify({ ids }),
+    signal,
   });

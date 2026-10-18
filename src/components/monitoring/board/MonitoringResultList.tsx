@@ -1,5 +1,4 @@
 import { Fragment, useId, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { Box, ChevronRight, PanelRight, Store } from "lucide-react";
 import type { IpReviewFinding, MonitoringSortMode } from "../../../api";
 import { groupMonitoringFindings, hasProductGrouping, type MonitoringGroupBy, type MonitoringListingGroup } from "../../../lib/monitoringGrouping";
@@ -74,7 +73,7 @@ export function MonitoringResultList({
       {!hideSort && <MonitoringSortControl sort={sort} onSort={onSort} />}
     </div>}
     {groupBy === "product" && findings.length > 0 && !hasProductGrouping(findings) && <div className="monitoring-grouping-notice" role="status">
-      Product grouping needs the API update. Your filtered tasks remain below. <Link to="/monitoring/products">Open product tools</Link>
+      Product grouping needs the API update. Your filtered tasks remain below.
     </div>}
     <table className="monitoring-result-list" aria-label="Monitoring listings">
       <colgroup><col className="monitoring-checkbox-column" /><col /><col className="monitoring-price-column" /><col className="monitoring-assessment-column" /></colgroup>

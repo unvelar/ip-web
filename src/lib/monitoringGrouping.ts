@@ -2,11 +2,15 @@ import type { IpReviewFinding } from "../api/reviews";
 
 export type MonitoringGroupBy = "none" | "seller" | "product";
 
-export interface MonitoringListingGroup {
+export type MonitoringGroupFinding = Pick<IpReviewFinding,
+  "seller_key" | "seller_name" | "ip_id" | "product_identity" | "domain"
+>;
+
+export interface MonitoringListingGroup<T extends MonitoringGroupFinding = IpReviewFinding> {
   key: string;
   kind: Exclude<MonitoringGroupBy, "none">;
   label: string;
-  findings: IpReviewFinding[];
+  findings: T[];
   sellerKey: string | null;
   productId: string | null;
   ipId: string | null;
@@ -17,17 +21,17 @@ export function parseMonitoringGroupBy(value: string | null): MonitoringGroupBy 
   return value === "seller" || value === "product" ? value : "none";
 }
 
-export function hasProductGrouping(findings: IpReviewFinding[]) {
+export function hasProductGrouping(findings: MonitoringGroupFinding[]) {
   return findings.every((finding) => finding.product_identity !== undefined);
 }
 
 /** Group only the loaded, server-filtered rows. Never infer identity from a title/name. */
-export function groupMonitoringFindings(
-  findings: IpReviewFinding[],
+export function groupMonitoringFindings<T extends MonitoringGroupFinding>(
+  findings: T[],
   by: MonitoringGroupBy,
-): MonitoringListingGroup[] {
+): MonitoringListingGroup<T>[] {
   if (by === "none" || (by === "product" && !hasProductGrouping(findings))) return [];
-  const groups = new Map<string, MonitoringListingGroup>();
+  const groups = new Map<string, MonitoringListingGroup<T>>();
   for (const finding of findings) {
     const product = finding.product_identity;
     const key = by === "seller"
