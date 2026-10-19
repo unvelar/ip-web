@@ -677,6 +677,17 @@ export default function ProductLab() {
     paginatedProductCount - visibleGroups.length,
   );
   const nextProductPageSize = Math.min(PAGE_SIZE, remainingProductCount);
+  const showMobileInspector = Boolean(selectedGroupId && !mergeSourceGroup);
+  const mobileListScrollRef = useRef(0);
+  useEffect(() => {
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+    if (showMobileInspector) {
+      mobileListScrollRef.current = window.scrollY;
+      window.scrollTo({ top: 0, behavior: "instant" });
+    } else {
+      window.scrollTo({ top: mobileListScrollRef.current, behavior: "instant" });
+    }
+  }, [showMobileInspector]);
   const showProductWorkspace = view !== "history";
   useEffect(() => {
     if (selectedGroupId || !returnFocusGroupIdRef.current) return;
@@ -695,6 +706,7 @@ export default function ProductLab() {
       selectedRowVisibilityRef.current = null;
       return;
     }
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
     if (selectedRowVisibilityRef.current === selectedGroupResolvedId) return;
     const selectedRow = Array.from(
       productListRef.current?.querySelectorAll<HTMLButtonElement>("button[data-product-id]") ?? [],
@@ -1186,8 +1198,8 @@ export default function ProductLab() {
 
       <div className={`min-h-0 flex-1 ${showProductWorkspace ? "lg:grid lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
         <section
-          className={`flex h-full min-h-0 flex-col bg-white ${showProductWorkspace
-            ? "max-h-[340px] overflow-hidden border-b border-stone-200 lg:max-h-none lg:border-b-0 lg:border-r"
+          className={`${showProductWorkspace && showMobileInspector ? "hidden lg:flex" : "flex"} min-h-0 flex-col bg-white ${showProductWorkspace
+            ? "lg:h-full lg:overflow-hidden lg:border-r lg:border-stone-200"
             : "mx-auto max-w-[1100px]"}`}
           aria-label="Products"
         >
@@ -1246,7 +1258,7 @@ export default function ProductLab() {
             </div>
           )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="min-h-0 flex-1 lg:overflow-y-auto lg:overscroll-contain">
             {view !== "history" && error && (
               <div className="m-4 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-[12px] text-red-800">
                 {error}
@@ -1403,7 +1415,7 @@ export default function ProductLab() {
           </div>
         </section>
 
-        <section ref={productWorkspaceRef} className={`${showProductWorkspace ? "block" : "hidden"} h-full min-h-0 lg:overflow-y-auto lg:overscroll-contain bg-white`} aria-label="Selected product">
+        <section ref={productWorkspaceRef} className={`${showProductWorkspace ? (showMobileInspector ? "block" : "hidden lg:block") : "hidden"} min-h-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain bg-white`} aria-label="Selected product">
           {view === "history" ? (
             <div className="grid h-full min-h-[420px] place-items-center px-8 text-center">
               <div className="max-w-xs">

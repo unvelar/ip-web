@@ -31,7 +31,7 @@
   font-weight: 500;
 }
 .finding-inspector-label svg { color: #a8a29e; }
-.finding-inspector-close {
+  .finding-inspector-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -265,12 +265,15 @@
   .finding-inspector-header { padding-left: 16px; gap: 6px; }
   .finding-inspector-scroll { padding: 12px 16px 20px; }
   .finding-inspector-footer { padding: 10px 12px max(12px, env(safe-area-inset-bottom)); border-radius: 0; }
-  .finding-inspector-footer .finding-action-buttons button { min-height: 40px; }
+  .finding-inspector-close { width: 44px; height: 44px; }
+  .finding-inspector-footer .finding-action-buttons button { min-height: 44px; }
   .finding-inspector-footer .finding-action-buttons { gap: 4px; }
   .finding-inspector-footer .finding-action-buttons > button,
   .finding-inspector-footer .finding-action-popover > button { padding-inline: 7px; }
   .finding-action-popover[data-more-actions] > button > span { display: none; }
-  .finding-action-popover[data-more-actions] > button { min-width: 40px; justify-content: center; }
+  .finding-action-popover[data-more-actions] > button { min-width: 44px; justify-content: center; }
+  .finding-inspector-footer-heading { flex-wrap: wrap; min-width: 0; }
+  .finding-inspector-footer-heading select { min-height: 44px; }
 }
 @keyframes inspector-arrive {
   from { opacity: 0; transform: translateX(24px); }

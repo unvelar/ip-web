@@ -26,6 +26,7 @@ import { useActiveIp } from "../context/ActiveIpContext";
 import { useIpOnboardingStatus } from "../hooks/useIpOnboardingStatus";
 import { dashboardContentState } from "../lib/dashboardState";
 import { sellerProfilePath } from "../lib/sellers";
+import "./Dashboard.css";
 
 type Days = 7 | 30 | 90;
 type Ip = DashboardGroups["ips"][number];
@@ -685,7 +686,7 @@ function SellersCard({
         <p className="text-xs text-stone-400 py-8 text-center">No seller data yet.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="dashboard-seller-table w-full text-sm">
             <thead>
               <tr className="text-left text-[10px] uppercase tracking-wider text-stone-400 border-b border-stone-100">
                 <th className="py-2 pr-3 font-semibold">Seller</th>
@@ -701,15 +702,15 @@ function SellersCard({
                 const target = sellerProfilePath(s.seller_key) ?? sellerTasksLink(s.seller_name, s.domain, s.ip_id);
                 return (
                   <tr key={`${s.seller_name}-${s.domain}-${s.ip_id}-${i}`} className="border-b border-stone-50 last:border-0 hover:bg-stone-50 transition-colors">
-                    <td className="py-2 pr-3 font-medium text-stone-800 truncate max-w-[12rem]">
+                    <td data-label="Seller" className="py-2 pr-3 font-medium text-stone-800 truncate max-w-[12rem]">
                       {target ? (
                         <Link to={target} className="hover:underline">{s.seller_name}</Link>
                       ) : (
                         <span className="text-stone-400">unknown</span>
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-stone-500">{s.domain}</td>
-                    <td className="py-2 pr-3">
+                    <td data-label="Platform" className="py-2 pr-3 text-stone-500">{s.domain}</td>
+                    <td data-label="IP" className="py-2 pr-3">
                       <span className="inline-flex items-center gap-1.5 min-w-0">
                         <span
                           className="w-2.5 h-2.5 rounded-sm shrink-0"
@@ -720,13 +721,13 @@ function SellersCard({
                         </span>
                       </span>
                     </td>
-                    <td className="py-2 pr-3 text-right tabular-nums font-semibold text-stone-900">
+                    <td data-label="Findings" className="py-2 pr-3 text-right tabular-nums font-semibold text-stone-900">
                       {s.findings}
                     </td>
-                    <td className="py-2 pr-3 text-right tabular-nums text-stone-600">
+                    <td data-label="Rating" className="py-2 pr-3 text-right tabular-nums text-stone-600">
                       {s.rating != null ? s.rating.toFixed(1) : "—"}
                     </td>
-                    <td className="py-2 text-right tabular-nums text-stone-600">
+                    <td data-label="Sales" className="py-2 text-right tabular-nums text-stone-600">
                       {s.sales != null ? s.sales.toLocaleString() : "—"}
                     </td>
                   </tr>

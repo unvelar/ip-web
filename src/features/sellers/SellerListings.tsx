@@ -132,6 +132,8 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
   const [localFindingId, setLocalFindingId] = useState<string | null>(null);
   const findingId = activeFindingId === undefined ? localFindingId : activeFindingId;
   const openFinding = onActiveFindingChange ?? setLocalFindingId;
+  const activeFindingRef = useRef(findingId);
+  useEffect(() => { activeFindingRef.current = findingId; }, [findingId]);
   const [page, setPage] = useState<MonitoringSellerProfilePage | null>(null);
   const [error, setError] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
@@ -263,7 +265,7 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
     return () => controller.abort();
   }, [sellerKey, ipId, status, availability, sort, attempt, onLoaded]);
 
-  async function loadMore() {
+  const loadMore = useCallback(async () => {
     const controller = requestController.current;
     if (actionPending.current || needsRefresh || !page?.next_cursor || morePending.current || !controller || controller.signal.aborted) return;
     morePending.current = true;
@@ -276,6 +278,7 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
       });
       if (!controller.signal.aborted) {
         setPage((current) => current ? { ...next, findings: [...current.findings, ...next.findings] } : next);
+        return next.findings[0]?.result_id;
       }
     } catch (caught: unknown) {
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Unable to load more listings.");
@@ -283,7 +286,35 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
       morePending.current = false;
       if (!controller.signal.aborted) setLoadingMore(false);
     }
-  }
+  }, [sellerKey, ipId, status, availability, sort, page, needsRefresh]);
+
+  useEffect(() => {
+    if (!findingId || !page) return;
+    const { findings, next_cursor: nextCursor } = page;
+    function navigateListing(event: KeyboardEvent) {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (event.target instanceof HTMLElement && event.target.closest(
+        'input, textarea, select, [contenteditable], summary, [role="menu"], [role="listbox"], button[aria-expanded="true"]:not([aria-haspopup="dialog"])',
+      )) return;
+      if (document.querySelector('[aria-modal="true"], [role="menu"], [role="listbox"]')) return;
+      const index = findings.findIndex((finding) => finding.result_id === findingId);
+      if (index < 0) return;
+      event.preventDefault();
+      if (locked || needsRefresh || actionPending.current) return;
+      const next = findings[index + (event.key === "ArrowDown" ? 1 : -1)];
+      if (next) openFinding(next.result_id);
+      else if (event.key === "ArrowDown" && nextCursor) {
+        // Continue through pagination, unless the user changes or closes the open listing.
+        const controller = requestController.current;
+        void loadMore().then((nextId) => {
+          if (nextId && controller && !controller.signal.aborted && activeFindingRef.current === findingId) openFinding(nextId);
+        });
+      }
+    }
+    window.addEventListener("keydown", navigateListing);
+    return () => window.removeEventListener("keydown", navigateListing);
+  }, [findingId, page, locked, needsRefresh, openFinding, loadMore]);
 
   const name = page?.seller?.name ?? sellerName ?? "Seller";
   return (
@@ -327,7 +358,7 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
               <span>Listing</span><span>Status</span><span>Availability</span><span>Price</span><span>Found</span><span />
             </div>
             <ul className="seller-items">
-              {page.findings.map((finding) => <SellerListingRow key={finding.result_id} finding={finding} showIp={!ipId} selected={selected.has(finding.result_id)} disabled={locked || needsRefresh || !isSelectable(finding)} onSelect={() => toggleSelection(finding.result_id)} onOpen={() => openFinding(finding.result_id)} />)}
+              {page.findings.map((finding) => <SellerListingRow key={finding.result_id} finding={finding} showIp={!ipId} active={finding.result_id === findingId} selected={selected.has(finding.result_id)} disabled={locked || needsRefresh || !isSelectable(finding)} onSelect={() => toggleSelection(finding.result_id)} onOpen={() => openFinding(finding.result_id)} />)}
             </ul>
             <div className="seller-listings-footer">
               <span role="status">{page.findings.length} {page.findings.length === 1 ? "listing" : "listings"}{page.next_cursor ? " loaded" : ""}</span>
@@ -360,9 +391,13 @@ function SellerListingResults({ sellerKey, sellerName, ipId, status, availabilit
   );
 }
 
-function SellerListingRow({ finding, showIp, selected, disabled, onSelect, onOpen }: {
-  finding: IpReviewFinding; showIp: boolean; selected: boolean; disabled: boolean; onSelect: () => void; onOpen: () => void;
+function SellerListingRow({ finding, showIp, active, selected, disabled, onSelect, onOpen }: {
+  finding: IpReviewFinding; showIp: boolean; active: boolean; selected: boolean; disabled: boolean; onSelect: () => void; onOpen: () => void;
 }) {
+  const rowRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (active) rowRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
   const title = compactListingTitle(finding);
   const image = tableImageUrls(finding)[0];
   const status = findingStatusBadge(finding);
@@ -370,9 +405,9 @@ function SellerListingRow({ finding, showIp, selected, disabled, onSelect, onOpe
   const price = finding.price_value_usd != null ? formatMoney(Number(finding.price_value_usd), "USD") : finding.price;
 
   return (
-    <li className="seller-item-columns seller-item" data-selected={selected}>
+    <li ref={rowRef} className="seller-item-columns seller-item" data-selected={selected} data-active={active}>
       <input type="checkbox" className="seller-item-checkbox" aria-label={`Select ${title}`} checked={selected} disabled={disabled} onChange={onSelect} />
-      <button type="button" className="seller-item-title text-left" onClick={onOpen} title={title} aria-haspopup="dialog">
+      <button type="button" className="seller-item-title text-left" onClick={onOpen} title={title} aria-haspopup="dialog" aria-expanded={active} aria-current={active ? "true" : undefined} aria-keyshortcuts="ArrowUp ArrowDown">
         <span className="seller-item-image">{image
           ? <img src={image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
           : <ShoppingBag size={14} aria-hidden />}</span>

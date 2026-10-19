@@ -1,0 +1,17 @@
+@media (max-width: 639px) {
+  .dashboard-seller-table, .dashboard-seller-table tbody { display: block; }
+  .dashboard-seller-table thead { display: none; }
+  .dashboard-seller-table tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 8px;
+    padding: 16px 0;
+  }
+  .dashboard-seller-table td { min-width: 0; max-width: none; padding: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+  .dashboard-seller-table td::before { content: attr(data-label); display: block; margin-bottom: 4px; color: #78716c; font-size: 11px; font-weight: 400; }
+  .dashboard-seller-table td:first-child { grid-column: 1 / -1; font-size: 15px; }
+  .dashboard-seller-table td:first-child::before { display: none; }
+  .dashboard-seller-table td:first-child a { display: flex; align-items: center; min-height: 44px; }
+  .dashboard-seller-table td:nth-child(3) { grid-column: span 2; }
+  .dashboard-seller-table td:nth-child(3) span { max-width: 100%; }
+}

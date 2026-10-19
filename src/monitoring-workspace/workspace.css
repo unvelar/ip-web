@@ -287,3 +287,16 @@ dialog form .actions { margin-top:20px; }
 .monitoring-workspace .inherited-rule.is-replaced .rule-action { color: #78716c; }
 .monitoring-workspace .rule-action { font-size: 13px; font-weight: 600; color: #57534e; }
 @media (max-width: 640px) { .monitoring-workspace .inherited-rule { flex-direction: column; } }
+
+@media(max-width:639px) {
+  .monitoring-workspace .page { padding-inline:16px; }
+  .monitoring-workspace :is(button.primary,button.secondary,select) { min-height:44px; }
+  .monitoring-workspace .scope-navigator button { min-height:44px; }
+  .monitoring-workspace .scope-navigator .scope-expand { min-width:44px; }
+  .monitoring-workspace .frequency-row { flex-wrap:wrap; }
+  .monitoring-workspace .monitoring-control { flex-wrap:wrap; gap:14px; }
+  .monitoring-workspace .monitoring-switch { min-height:44px; }
+  .monitoring-workspace .authorization-fields label { min-width:0; flex-basis:100%; }
+  .monitoring-workspace .savebar .actions { width:100%; }
+  .monitoring-workspace .savebar .actions button { flex:1; }
+}

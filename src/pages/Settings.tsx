@@ -72,7 +72,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12 space-y-10">
+    <div className="max-w-3xl mx-auto px-4 py-6 sm:px-6 sm:py-12 space-y-8 sm:space-y-10">
       <div>
         <h1 className="text-2xl font-black text-stone-900 tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-stone-500">
@@ -102,14 +102,15 @@ export default function Settings() {
 
         <form
           onSubmit={handleCreate}
-          className="bg-white rounded-2xl border border-stone-200 p-5 flex gap-3 items-center"
+          className="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center"
         >
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Key label (e.g. ‘Acme integration’)"
             maxLength={80}
-            className="flex-1 px-4 py-2 rounded-xl bg-stone-50 border border-stone-200 text-sm focus:outline-none focus:border-stone-400"
+            aria-label="API key label"
+            className="min-w-0 flex-1 px-4 py-2 rounded-xl bg-stone-50 border border-stone-200 text-sm focus:outline-none focus:border-stone-400"
           />
           <button
             type="submit"
@@ -137,7 +138,7 @@ export default function Settings() {
               </button>
             </div>
             <div className="flex gap-2">
-              <code className="flex-1 px-3 py-2 rounded-lg bg-white border border-amber-300 text-xs font-mono text-stone-800 break-all">
+              <code className="min-w-0 flex-1 px-3 py-2 rounded-lg bg-white border border-amber-300 text-xs font-mono text-stone-800 break-all">
                 {revealedToken.token}
               </code>
               <button

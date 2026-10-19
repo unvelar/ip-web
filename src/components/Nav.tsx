@@ -10,7 +10,7 @@ export default function Nav() {
   const { user } = useAuth();
   return (
     <nav className="sticky top-0 z-50 bg-cream/80 backdrop-blur-md border-b border-stone-200/60">
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
         <Link to="/" className="flex items-center gap-2">
           <BrandMark className="h-8 w-8 shrink-0" />
           <span className="text-sm font-bold tracking-tight text-stone-900">Unvelar</span>
@@ -19,7 +19,7 @@ export default function Nav() {
           {user ? (
             <Link
               to="/dashboard"
-              className="px-4 py-1.5 bg-stone-900 text-white text-sm font-semibold rounded-full hover:bg-stone-800 transition-colors"
+              className="inline-flex min-h-11 items-center justify-center whitespace-nowrap px-4 py-1.5 bg-stone-900 text-white text-sm font-semibold rounded-full hover:bg-stone-800 transition-colors"
             >
               Client portal
             </Link>
@@ -28,7 +28,7 @@ export default function Nav() {
             // the current demo phase. /login still works as a direct URL.
             <Link
               to="/monitor/start"
-              className="px-4 py-1.5 bg-stone-900 text-white text-sm font-semibold rounded-full hover:bg-stone-800 transition-colors"
+              className="inline-flex min-h-11 items-center justify-center whitespace-nowrap px-4 py-1.5 bg-stone-900 text-white text-sm font-semibold rounded-full hover:bg-stone-800 transition-colors"
             >
               Start scan
             </Link>

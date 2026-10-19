@@ -119,6 +119,83 @@ test("seller listing clicks open and close the reusable inspector without leavin
   expect(container.querySelector("output")?.textContent).toBe("/monitoring/sellers/seller-one?status=all&ip_id=ip-one");
 });
 
+test("open rows follow keyboard navigation, preserve filters and batch selection, and stop at boundaries", async () => {
+  const { container, respond } = await setup("?status=all&ip_id=ip-one&finding=First");
+  await respond(0, ["First", "Second", "Third"]);
+  const activeTitle = () => container.querySelector('[aria-current="true"]')?.textContent;
+  const arrow = async (key: string) => act(async () => {
+    document.querySelector('[aria-label="Finding details"]')!.dispatchEvent(new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+  expect(activeTitle()).toContain("First");
+  await arrow("ArrowUp");
+  expect(activeTitle()).toContain("First");
+  await arrow("ArrowDown");
+  expect(activeTitle()).toContain("Second");
+  expect(container.querySelector("output")?.textContent).toBe("/monitoring/sellers/seller-one?status=all&ip_id=ip-one&finding=Second");
+  expect(document.querySelector('[aria-label="Finding details"]')?.textContent).toContain("Second");
+  expect(container.querySelectorAll('li input:checked')).toHaveLength(0);
+  expect(container.querySelectorAll('.seller-item[data-active="true"]')).toHaveLength(1);
+  await arrow("ArrowDown");
+  await arrow("ArrowDown");
+  expect(activeTitle()).toContain("Third");
+  await arrow("ArrowUp");
+  expect(activeTitle()).toContain("Second");
+  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Close finding details"]')!.click());
+  expect(activeTitle()).toBeUndefined();
+});
+
+test("listing arrows leave form fields, expanded menus, modified keys and modal dialogs alone", async () => {
+  const { container, respond } = await setup("?finding=First");
+  await respond(0, ["First", "Second"]);
+  const panel = document.querySelector('[aria-label="Finding details"]')!;
+  for (const tag of ["input", "textarea", "select", "summary", "button", "div"]) {
+    const control = document.createElement(tag);
+    if (tag === "button") control.setAttribute("aria-expanded", "true");
+    if (tag === "div") control.setAttribute("contenteditable", "true");
+    panel.append(control);
+    await act(async () => control.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    control.remove();
+    expect(container.querySelector('[aria-current="true"]')?.textContent).toContain("First");
+  }
+  await act(async () => panel.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", ctrlKey: true, bubbles: true })));
+  const modal = document.createElement("div");
+  modal.setAttribute("aria-modal", "true");
+  document.body.append(modal);
+  await act(async () => panel.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+  modal.remove();
+  expect(container.querySelector('[aria-current="true"]')?.textContent).toContain("First");
+});
+
+test("ArrowDown loads the next page once and opens its first listing", async () => {
+  const { container, requests, respond } = await setup("?finding=First&sort=price_desc");
+  await respond(0, ["First"], "next-page");
+  const arrow = async () => act(async () => document.querySelector('[aria-label="Finding details"]')!.dispatchEvent(
+    new window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+  ));
+  await arrow();
+  await arrow();
+  const listingRequests = requests.filter((request) => request.url.pathname.includes("/monitoring/sellers/"));
+  expect(listingRequests).toHaveLength(2);
+  expect(listingRequests[1].url.searchParams.get("cursor")).toBe("next-page");
+  expect(listingRequests[1].url.searchParams.get("sort")).toBe("price_desc");
+  await respond(requests.indexOf(listingRequests[1]), ["Second"]);
+  expect(container.querySelector('[aria-current="true"]')?.textContent).toContain("Second");
+  expect(document.querySelector('[aria-label="Finding details"]')?.textContent).toContain("Second");
+});
+
+test("closing the inspector during keyboard pagination does not reopen it", async () => {
+  const { container, requests, respond } = await setup("?finding=First");
+  await respond(0, ["First"], "next-page");
+  await act(async () => document.querySelector('[aria-label="Finding details"]')!.dispatchEvent(
+    new window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+  ));
+  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Close finding details"]')!.click());
+  await respond(requests.findIndex((request) => request.url.searchParams.get("cursor") === "next-page"), ["Second"]);
+  expect(document.querySelector('[aria-label="Finding details"]')).toBeNull();
+  expect(container.querySelector('[aria-current="true"]')).toBeNull();
+  expect(container.querySelectorAll('.seller-item')).toHaveLength(2);
+});
+
 test("bookmarked findings open in place even outside the loaded seller page", async () => {
   const { container, requests, respond } = await setup("?finding=finding-one&status=all");
   await respond(0, ["Another"]);
