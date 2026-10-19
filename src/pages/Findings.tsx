@@ -1,3 +1,4 @@
+import { semanticFingerprint } from "../lib/semanticFilters";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -139,6 +140,10 @@ export function MonitoringInboxView() {
           setNextCursor(null);
           throw new Error("Price filtering is not available yet. Clear the price filter to view results.");
         }
+        if (q.semantic && (page.facets.semantic_policy_version !== "component-evidence-v1" || semanticFingerprint(page.facets.semantic) !== semanticFingerprint(JSON.parse(q.semantic)))) {
+          setFindings([]); setFacets(null); setNextCursor(null);
+          throw new Error("Product detail filtering is not available yet. Clear the detail filters to view results.");
+        }
         const allFindings = [...page.findings];
         let cursor = page.next_cursor;
         while (cursor && allFindings.length < minRows) {
@@ -157,6 +162,7 @@ export function MonitoringInboxView() {
         setNextCursor(cursor);
       } catch (e) {
         if (reqSeq.current !== seq) return;
+        if (q.semantic) { setFindings([]); setFacets(null); setNextCursor(null); }
         setErr(e instanceof Error ? e.message : String(e));
       } finally {
         if (reqSeq.current === seq) { setLoaded(true); setUpdating(false); }
@@ -438,6 +444,7 @@ export function MonitoringInboxView() {
         {err && <div className="monitoring-workspace-notice text-sm text-red-600">
           {err}
           {(filters.min_price_usd != null || filters.max_price_usd != null) && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ min_price_usd: null, max_price_usd: null })}>Clear price filter</button>}
+          {filters.semantic && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ semantic: null })}>Clear product details</button>}
           {filters.country && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ country: null })}>Clear country filter</button>}
           {filters.source && <button type="button" className="ml-2 underline" onClick={() => onFiltersChange({ source: null, platform: null })}>Clear source filter</button>}
         </div>}

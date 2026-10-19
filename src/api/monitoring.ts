@@ -295,6 +295,8 @@ export interface MonitoringSourceFacet {
 
 /** Full-tenant facet counts returned alongside every findings page. */
 export interface MonitoringFacets {
+  semantic_policy_version?: string;
+  semantic?: unknown;
   country?: string | null;
   /** Price bounds ignore the active range. Absence means API support is unavailable. */
   price_usd?: { min: number | null; max: number | null; missing: number };
@@ -328,6 +330,7 @@ export interface MonitoringFindingsQuery {
   /** Include canonical product identity on each returned row for local regrouping. */
   include_product_identity?: boolean;
   facets_profile?: "tasks";
+  semantic?: string | null;
   country?: string | null;
   min_price_usd?: number | null;
   max_price_usd?: number | null;
@@ -385,6 +388,7 @@ function monitoringFindingsParams(
   if (opts.source)       params.set("source", opts.source);
   if (opts.platform)     params.set("platform", opts.platform);
   if (opts.country)      params.set("country", opts.country);
+  if (opts.semantic) params.set("semantic", opts.semantic);
   if (opts.seller)       params.set("seller", opts.seller);
   if (opts.query)        params.set("q", opts.query);
   if (opts.assignee)     params.set("assignee", opts.assignee);

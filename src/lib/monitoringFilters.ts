@@ -5,6 +5,7 @@ import { formatPriceBound, parsePriceBound } from "./priceRange";
  *  the URL so refresh + share + KPI deep-links survive. */
 export interface InboxFilters {
   country?: string | null;
+  semantic?: string | null;
   status: MonitoringStatusFilter | null;
   priority: MonitoringPriorityBand | null;
   ip_id: string | null;
@@ -39,6 +40,7 @@ export function parseFilters(params: URLSearchParams): InboxFilters {
   const maxPrice = parsePriceBound(params.get("max_price_usd") ?? "");
   const validRange = minPrice == null || maxPrice == null || minPrice <= maxPrice;
   return {
+    semantic: params.get("semantic"),
     min_price_usd: validRange ? minPrice : null,
     max_price_usd: validRange ? maxPrice : null,
     // Default to "To triage" (pending); an explicit `status=all` clears it.
@@ -115,6 +117,7 @@ export function writeFilters(base: URLSearchParams, f: InboxFilters): URLSearchP
   setOrDel("max_price_usd", f.max_price_usd == null ? null : formatPriceBound(f.max_price_usd));
   setOrDel("platform", f.platform);
   setOrDel("country", f.country ?? null);
+  setOrDel("semantic", f.semantic ?? null);
   setOrDel("match_basis", f.match_basis ?? null);
   setOrDel("protected_term_id", f.protected_term_id ?? null);
   setOrDel("seller", f.seller);

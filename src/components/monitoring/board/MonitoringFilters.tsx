@@ -1,3 +1,5 @@
+import { SemanticFilterPanel } from "./SemanticFilterPanel";
+import { semanticFilterLabel } from "../../../lib/semanticFilters";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Banknote, Globe, Package, Search, SlidersHorizontal, X } from "lucide-react";
 import type { MonitoringFacets, MonitoringSourceFacet, TenantMember } from "../../../api";
@@ -9,7 +11,7 @@ import { ProductFilterPicker } from "./ProductFilterPicker";
 import { PriceFilterPanel } from "./PriceFilterPanel";
 import "./MonitoringFilters.css";
 
-type Panel = "product" | "price" | "source" | "more" | "views";
+type Panel = "semantic" | "product" | "price" | "source" | "more" | "views";
 const primaryViews = [
   { key: "pending", label: "To triage" }, { key: "review", label: "Legal review" },
   { key: "takedown_pending", label: "Legal queue" }, { key: "takedown_sent", label: "Sent" },
@@ -181,12 +183,13 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
   const activeSourceLabel = activeSource ? sourceLabel(activeSource) : filters.source?.replace(/^(search|domain):/, "") ?? "Source";
   const clear = () => {
     setSearch("");
-    onChange({ country: null, query: null, product_group_id: null, catalog_product_id: null, source: null, platform: null, min_price_usd: null, max_price_usd: null, assignee: null, seller: null, priority: null, candidate_outcome: null, dismissal_reason: null, match_basis: null, protected_term_id: null });
+    onChange({ semantic: null, country: null, query: null, product_group_id: null, catalog_product_id: null, source: null, platform: null, min_price_usd: null, max_price_usd: null, assignee: null, seller: null, priority: null, candidate_outcome: null, dismissal_reason: null, match_basis: null, protected_term_id: null });
     setPanel(null);
   };
   const chips: Array<{ key: string; label: string; edit?: () => void; remove: () => void }> = filters.query
     ? [{ key: "search", label: `Search: ${filters.query}`, edit: () => setPanel(null), remove: () => { setSearch(""); onChange({ query: null }); } }] : [];
   if (hasProduct) chips.push({ key: "product", label: `${filters.catalog_product_id ? "Product" : "Visual group"}: ${selectedProductLabel}`, edit: () => setPanel("product"), remove: () => onChange({ catalog_product_id: null, product_group_id: null }) });
+  if (filters.semantic) chips.push({ key: "semantic", label: `Details: ${semanticFilterLabel(filters.semantic)}`, edit: () => setPanel("semantic"), remove: () => onChange({ semantic: null }) });
   if (hasPrice) chips.push({ key: "price", label: `Price: ${priceLabel} USD`, edit: () => setPanel("price"), remove: () => onChange({ min_price_usd: null, max_price_usd: null }) });
   if (filters.source) chips.push({ key: "source", label: `Found via: ${activeSourceLabel}`, edit: () => setPanel("source"), remove: () => onChange({ source: null, platform: null }) });
   if (filters.country) chips.push({ key: "country", label: `Country: ${filters.country === "Unknown" ? "Unknown location" : filters.country}`, remove: () => onChange({ country: null }) });
@@ -205,7 +208,7 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
   const popover = (key: Panel, content: ReactNode) => panel === key ? <div id={`monitoring-filter-${key}`} ref={panelRef} role="dialog" aria-label={`${key === "more" ? "More filters" : key === "views" ? "More views" : key[0].toUpperCase() + key.slice(1)} options`}
     className={`monitoring-filter-popover ${key === "product" ? "is-product" : ""}`} onBlur={(event) => {
       if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget) && !Object.values(triggerRefs.current).some((button) => button?.contains(event.relatedTarget as Node))) setPanel(null);
-    }}>{key !== "source" && key !== "price" && <FilterPanelHeading title={key === "product" ? "Product or group" : key === "views" ? "More views" : "More filters"} onClose={() => close(true)} />}{content}</div> : null;
+    }}>{key !== "source" && key !== "price" && <FilterPanelHeading title={key === "semantic" ? "Product details" : key === "product" ? "Product or group" : key === "views" ? "More views" : "More filters"} onClose={() => close(true)} />}{content}</div> : null;
   return <section className={`monitoring-filters${compact ? " is-compact" : ""}`} aria-label="Filter listings">
     <nav className="monitoring-workflow" aria-label="Review workflow">
       <div className="monitoring-workflow-tabs">
@@ -239,6 +242,10 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
       <div className="monitoring-filter-anchor">
         {trigger("source", "Source", <Globe size={14} aria-hidden />, Boolean(filters.source || filters.platform))}
         {popover("source", <SourcePicker facets={facets} filters={filters} onChange={changeAndClose} onClose={() => close(true)} />)}
+      </div>
+      <div className="monitoring-filter-anchor">
+        {trigger("semantic", "Product details", <SlidersHorizontal size={14} aria-hidden />, Boolean(filters.semantic))}
+        {popover("semantic", <SemanticFilterPanel value={filters.semantic} ipId={ipId} available={facets.semantic_policy_version === "component-evidence-v1"} onApply={semantic => changeAndClose({ semantic })} />)}
       </div>
       <div className="monitoring-filter-anchor is-more">
         {trigger("more", `More filters${moreCount ? ` · ${moreCount}` : ""}`, <SlidersHorizontal size={14} aria-hidden />, moreCount > 0)}

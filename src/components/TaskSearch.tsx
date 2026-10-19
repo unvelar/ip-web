@@ -1,3 +1,5 @@
+import { SemanticFilterPanel } from "./monitoring/board/SemanticFilterPanel";
+import { readSemanticFilters, semanticFilterLabel } from "../lib/semanticFilters";
 import { useRef, useState, useEffect, type ReactNode } from "react";
 import {
   Search,
@@ -40,11 +42,12 @@ type Filter = {
   id: string;
   label: string;
   fields: string[];
-  kind: "select" | "lookup" | "text" | "price" | "history";
+  kind: "select" | "lookup" | "text" | "price" | "history" | "semantic";
   options?: string[][];
   lookup?: "website" | "source" | "seller" | "visual_group";
 };
 const filters: Filter[] = [
+  { id: "semantic", label: "Product details", fields: ["semantic"], kind: "semantic" },
   {
     id: "website",
     label: "Website",
@@ -221,6 +224,7 @@ export default function TaskSearch({
         ? [[params.get("protected_term_id") ?? "", "Linked protected term"]]
         : (filter.options ?? []);
   const description = (filter: Filter) => {
+    if (filter.id === "semantic") return semanticFilterLabel(values.semantic);
     if (filter.id === "price") {
       const min = values.min_price_usd,
         max = values.max_price_usd;
@@ -305,10 +309,13 @@ export default function TaskSearch({
           to: `${values.to}T00:00:00.000Z`,
           history: values.history === "on",
         };
+        if (values.semantic && !readSemanticFilters(values.semantic)) {
+          onError("Choose valid product detail filters before searching."); return;
+        }
         for (const [field, value] of Object.entries(values)) {
           if (!value || ["status", "from", "to", "history"].includes(field))
             continue;
-          request[field] = ["min_price_usd", "max_price_usd"].includes(field)
+          request[field] = field === "semantic" ? JSON.parse(value) : ["min_price_usd", "max_price_usd"].includes(field)
             ? Number(value)
             : value;
         }
@@ -522,6 +529,8 @@ export default function TaskSearch({
                   ) && <p>No more matching filters.</p>}
                 </div>
               </>
+            ) : activeFilter?.kind === "semantic" ? (
+              <SemanticFilterPanel value={values.semantic} ipId={ipId} onApply={semantic => { setValues(current => ({ ...current, semantic: semantic ?? "" })); close(true); }} />
             ) : (
               <>
                 <div className="task-search-editor" key={panel}>
