@@ -9,22 +9,23 @@ import {
   ListTodo,
   Menu,
   Building2,
-  Network,
   PanelLeftClose,
   PanelLeftOpen,
   Inbox as InboxIcon,
   Bell,
-  Store,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import "./AppShell.css";
-import TenantMenu from "./TenantMenu";
+import BrandProductSelector from "./BrandProductSelector";
+import MonitoringPulse from "./MonitoringPulse";
+import { useMonitoringPulse } from "./useMonitoringPulse";
+import { MonitoringToolbarContext } from "./MonitoringToolbarContext";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
 import MobileNavigation from "./MobileNavigation";
 import {
   getMonitoringFindingsCount,
-  getReturnedMonitoringSellersCount,
   getAccountNotificationUnreadCount,
   listTenants,
   tenantLabel,
@@ -55,13 +56,11 @@ const NOTIFICATIONS_CHANGED_EVENT = "unvelar:notifications-changed";
  *
  * Sidebar layout (top → bottom):
  *   Dashboard
- *   Marketplaces
- *     ↳ Tasks        (badge = open monitoring findings)
- *     ↳ Sellers      (badge = returned sellers with open listings)
- *     ↳ Product lab
+ *   Monitoring
+ *     ↳ Review queue (badge = open monitoring findings)
+ *     ↳ Manage monitoring
  *
- * Tenant context and management share one topbar menu. The existing working-IP
- * report filter stays inside that menu until canonical brand/product mapping exists.
+ * The topbar provides a direct brand or product selector for report filtering.
  */
 export default function AppShell() {
   return (
@@ -73,6 +72,7 @@ export default function AppShell() {
 
 function AppShellContent() {
   const { user, logout, actingTenantId, isActingAsOther, switchTenant } = useAuth();
+  const monitoringPulse = useMonitoringPulse();
   const [tenants, setTenants] = useState<Tenant[]>([]);
 
   // Load the tenant roster once for the admin "operate as any tenant" switcher.
@@ -100,8 +100,11 @@ function AppShellContent() {
 
   const actingTenant = tenants.find((t) => t.id === actingTenantId) ?? null;
   const { pathname, hash } = useLocation();
+  const toolbarPath = pathname.replace(/\/$/, "");
+  const unifiedMonitoringToolbar = toolbarPath === "/monitoring/products" ||
+    toolbarPath === "/monitoring/sellers" || toolbarPath === "/monitoring/tasks" ||
+    pathname.startsWith("/monitoring/tasks/");
   const [monitoringCount, setMonitoringCount] = useState(0);
-  const [returnedSellerCount, setReturnedSellerCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
@@ -141,21 +144,18 @@ function AppShellContent() {
   useEffect(() => {
     if (!user) {
       setMonitoringCount(0);
-      setReturnedSellerCount(0);
       setNotificationCount(0);
       return;
     }
     if (adminPathActive) return;
     let alive = true;
     async function refresh() {
-      const [monitoring, returnedSellers, notifications] = await Promise.allSettled([
+      const [monitoring, notifications] = await Promise.allSettled([
         getMonitoringFindingsCount(),
-        getReturnedMonitoringSellersCount(),
         getAccountNotificationUnreadCount(),
       ]);
       if (!alive) return;
       if (monitoring.status === "fulfilled") setMonitoringCount(monitoring.value.count);
-      if (returnedSellers.status === "fulfilled") setReturnedSellerCount(returnedSellers.value.count);
       if (notifications.status === "fulfilled") setNotificationCount(notifications.value.count);
     }
     void refresh();
@@ -253,7 +253,7 @@ function AppShellContent() {
         />
 
         <NavGroup
-          label="Marketplaces"
+          label="Monitoring"
           icon={<Radar size={14} />}
           open={monOpen}
           onToggle={() => setMonOpen((v) => !v)}
@@ -262,24 +262,16 @@ function AppShellContent() {
           <NavItem
             to="/monitoring/tasks"
             icon={<ListTodo size={18} />}
-            label="Tasks"
+            label="Review queue"
             active={isActive("/monitoring/tasks") || pathname === "/findings" || pathname.startsWith("/findings/")}
             badge={monitoringCount}
             collapsed={collapsed}
           />
           <NavItem
-            to="/monitoring/sellers"
-            icon={<Store size={18} />}
-            label="Sellers"
-            active={pathname === "/monitoring/sellers" || pathname.startsWith("/monitoring/sellers/")}
-            badge={returnedSellerCount}
-            collapsed={collapsed}
-          />
-          <NavItem
-            to="/monitoring/products"
-            icon={<Network size={18} />}
-            label="Product lab"
-            active={pathname === "/monitoring/products" || pathname.startsWith("/monitoring/products/")}
+            to="/monitoring/setup"
+            icon={<SlidersHorizontal size={18} />}
+            label="Manage monitoring"
+            active={isActive("/monitoring/setup")}
             collapsed={collapsed}
           />
         </NavGroup>
@@ -324,6 +316,7 @@ function AppShellContent() {
     <div
       className="app-shell min-h-dvh bg-cream text-stone-900 font-[Inter,system-ui,sans-serif] lg:fixed lg:inset-0 lg:overflow-hidden"
       style={appShellLayoutStyle(isActingAsOther)}
+      data-monitoring-toolbar={unifiedMonitoringToolbar || undefined}
     >
       {/* Mobile topbar */}
       <div className="shell-mobile-topbar lg:hidden sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 flex items-center px-3 gap-3">
@@ -341,8 +334,9 @@ function AppShellContent() {
           <BrandMark className="h-6 w-6 shrink-0" />
           <span className="hidden text-sm font-bold tracking-tight sm:inline">Unvelar</span>
         </Link>
+        {monitoringPulse.visible && <MonitoringPulse pulse={monitoringPulse.pulse} error={monitoringPulse.error} />}
         <div className="ml-auto flex items-center gap-1.5">
-          <TenantMenu key={pathname} tenants={tenants} />
+          <BrandProductSelector />
           <NotificationBell count={notificationCount} active={isActive("/inbox")} />
         </div>
       </div>
@@ -368,16 +362,25 @@ function AppShellContent() {
               onReturn={() => user && switchTenant(user.tenant_id)}
             />
           )}
-          {/* Tenant context and its single management entry. */}
-          <div
+          {/* Brand or product report filter. */}
+          {!unifiedMonitoringToolbar && <div
             className="shell-desktop-topbar hidden lg:flex sticky z-[29] h-[40px] items-center justify-end gap-1.5 border-b border-stone-200/60 bg-cream/90 px-4 backdrop-blur-md"
             style={{ top: `var(${APP_SHELL_BANNER_HEIGHT_VAR})` }}
           >
-            <TenantMenu key={pathname} tenants={tenants} />
+            {monitoringPulse.visible && <MonitoringPulse pulse={monitoringPulse.pulse} error={monitoringPulse.error} />}
+            <BrandProductSelector />
             <div className="ml-1 h-[18px] w-px bg-stone-200" aria-hidden />
             <NotificationBell count={notificationCount} active={isActive("/inbox")} />
-          </div>
-          <Outlet />
+          </div>}
+          <MonitoringToolbarContext.Provider value={{
+            status: monitoringPulse.visible
+              ? <MonitoringPulse pulse={monitoringPulse.pulse} error={monitoringPulse.error} />
+              : null,
+            scope: <BrandProductSelector />,
+            notifications: <NotificationBell count={notificationCount} active={isActive("/inbox")} />,
+          }}>
+            <Outlet />
+          </MonitoringToolbarContext.Provider>
         </main>
       </div>
     </div>

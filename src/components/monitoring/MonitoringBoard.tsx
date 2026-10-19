@@ -1,5 +1,6 @@
+import { LegalReviewDialog } from "./board/LegalReviewDialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleCheck, X } from "lucide-react";
+import { CircleCheck, Layers, X } from "lucide-react";
 import {
   dismissIpFinding,
   excludePersistedProductGroupMember,
@@ -23,7 +24,7 @@ import {
 } from "../../api";
 import { ConfirmSendModal } from "../TakedownPanel";
 import { BatchConfirmModal } from "./board/batch";
-import { BatchOperationBar } from "./board/BatchOperationBar";
+import { MonitoringSelectionBar } from "./board/MonitoringSelectionBar";
 import { BatchResultNotice } from "./board/BatchResultNotice";
 import {
   type BatchResult,
@@ -33,18 +34,20 @@ import {
   summarizeBatch,
   summarizeResort,
   summarizeTakedownBatch,
+  takedownBatchListingResults,
 } from "./board/batchUtils";
 import {
-  CANDIDATE_OUTCOME_LABELS,
   DISMISSAL_REASON_LABELS,
   type ResortTarget,
 } from "./board/constants";
-import { MonitoringResultList } from "./board/MonitoringResultList";
+import { MonitoringResultList, MonitoringSortControl } from "./board/MonitoringResultList";
+import { MonitoringGroupDetails } from "./board/MonitoringGroupDetails";
+import { groupMonitoringFindings, type MonitoringGroupBy, type MonitoringListingGroup } from "../../lib/monitoringGrouping";
 import { FindingInspector } from "./board/FindingInspector";
 import type { FindingUpdateOptions } from "./board/FindingActions";
 import { MonitoringFilters } from "./board/MonitoringFilters";
 import type { InboxFilters } from "../../lib/monitoringFilters";
-import { compactListingTitle, hasReviewAnalysis, selectedFindingSummary } from "./board/utils";
+import { compactListingTitle, hasReviewAnalysis } from "./board/utils";
 import { useTenantMembers } from "../../hooks/useTenantMembers";
 import { useAuth } from "../../context/AuthContext";
 
@@ -121,6 +124,7 @@ function tenantMemberLabel(member: { display_name: string | null; email: string 
  */
 export function MonitoringBoard({
   findings,
+  reviewOnly = false,
   facets,
   filters,
   onFiltersChange,
@@ -133,10 +137,16 @@ export function MonitoringBoard({
   onDismiss,
   showIpColumn,
   showIpFilter = true,
+  showSearch = true,
+  searchInputRef,
   activeFindingId,
   onActiveFindingChange,
+  groupBy = "none",
+  onGroupByChange,
+  updating = false,
 }: {
   findings: IpReviewFinding[];
+  reviewOnly?: boolean;
   facets: MonitoringFacets;
   filters: BoardFilters;
   onFiltersChange: (next: Partial<BoardFilters>) => void;
@@ -158,11 +168,19 @@ export function MonitoringBoard({
   showIpColumn?: boolean;
   /** Render the page-level IP filter. False when the app shell owns selection. */
   showIpFilter?: boolean;
+  showSearch?: boolean;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
   /** Finding opened by a route such as /monitoring/tasks/:taskId. */
   activeFindingId?: string | null;
   /** Notifies the route owner when the reviewer opens/collapses a finding. */
   onActiveFindingChange?: (resultId: string | null) => void;
+  groupBy?: MonitoringGroupBy;
+  onGroupByChange?: (groupBy: MonitoringGroupBy) => void;
+  updating?: boolean;
 }) {
+  const unified = Boolean(onGroupByChange);
+  const [groupReference, setGroupReference] = useState<{ group: MonitoringListingGroup; ipId: BoardFilters["ip_id"] } | null>(null);
+  const closeGroup = useCallback(() => setGroupReference(null), []);
   const { user } = useAuth();
   const ipAware = showIpColumn ?? findings.some((f) => !!f.ip_id);
   const {
@@ -259,7 +277,6 @@ export function MonitoringBoard({
   // in a small side map without reordering the visible page.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reviewingSelection, setReviewingSelection] = useState(false);
-  const selectionReviewRef = useRef<HTMLDivElement>(null);
   const [selectionExtras, setSelectionExtras] = useState<Map<string, IpReviewFinding>>(new Map());
 
   const displayFindings = useMemo(() => {
@@ -310,12 +327,34 @@ export function MonitoringBoard({
     setCompletingResultIds(next);
   }, [findings]);
 
+  const inspectorFindings = useMemo(
+    () => reviewingSelection ? displayFindings.filter((finding) => selected.has(finding.result_id)) : displayFindings,
+    [displayFindings, reviewingSelection, selected],
+  );
+  const activeGroup = useMemo(() => {
+    if (!groupReference) return null;
+    const group = groupMonitoringFindings(displayFindings, groupReference.group.kind)
+      .find((candidate) => candidate.key === groupReference.group.key)
+      ?? { ...groupReference.group, findings: [] };
+    // A seller can span several IPs. Its overview follows the selected workspace
+    // scope rather than whichever task happened to appear first in the group.
+    return group.kind === "seller" ? { ...group, ipId: groupReference.ipId ?? null } : group;
+  }, [displayFindings, groupReference]);
+  const openGroup = (group: MonitoringListingGroup) => {
+    setActiveFinding(null);
+    setGroupReference({ group, ipId: filters.ip_id });
+    const finding = group.findings[0];
+    if (group.kind === "seller" && group.sellerKey && finding?.seller_name) {
+      onFiltersChange({ seller: finding.seller_name, platform: null });
+    }
+  };
+
   // If filters/refetches remove the active row, the inspector naturally closes
   // until the user selects another visible row.
   const activeIndex = activeId
-    ? displayFindings.findIndex((f) => f.result_id === activeId)
+    ? inspectorFindings.findIndex((f) => f.result_id === activeId)
     : -1;
-  const activeFinding = activeIndex >= 0 ? displayFindings[activeIndex] : null;
+  const activeFinding = activeIndex >= 0 ? inspectorFindings[activeIndex] : null;
 
   useEffect(() => {
     if (!activeFinding) return;
@@ -325,6 +364,7 @@ export function MonitoringBoard({
       if (!(target instanceof Node)) return;
       if (queueRef.current?.contains(target)) return;
       if (target instanceof Element && target.closest("[data-finding-inspector]")) return;
+      if (target instanceof Element && target.closest(".monitoring-group-control")) return;
       setActiveFinding(null);
     };
 
@@ -336,7 +376,7 @@ export function MonitoringBoard({
 
   const visibleActionableFindings = useMemo(
     () =>
-      displayFindings.filter((f) => {
+      inspectorFindings.filter((f) => {
         const state: CaseReviewStatus = f.dismissed_at
           ? "dismissed"
           : (f.review_status ?? "pending");
@@ -349,7 +389,7 @@ export function MonitoringBoard({
           !completingResultIds.has(f.result_id)
         );
       }),
-    [completingResultIds, displayFindings, dismissing],
+    [completingResultIds, inspectorFindings, dismissing],
   );
 
   const advanceAfterAction = useCallback((resultId: string) => {
@@ -375,14 +415,14 @@ export function MonitoringBoard({
   }, [onRefresh, setResultCompleting]);
 
   const moveActive = useCallback((delta: -1 | 1) => {
-    if (displayFindings.length === 0) return;
+    if (inspectorFindings.length === 0) return;
     const current = activeId
-      ? displayFindings.findIndex((f) => f.result_id === activeId)
+      ? inspectorFindings.findIndex((f) => f.result_id === activeId)
       : -1;
-    const base = current >= 0 ? current : delta > 0 ? -1 : displayFindings.length;
-    const next = Math.max(0, Math.min(displayFindings.length - 1, base + delta));
-    setActiveFinding(displayFindings[next].result_id);
-  }, [activeId, displayFindings, setActiveFinding]);
+    const base = current >= 0 ? current : delta > 0 ? -1 : inspectorFindings.length;
+    const next = Math.max(0, Math.min(inspectorFindings.length - 1, base + delta));
+    setActiveFinding(inspectorFindings[next].result_id);
+  }, [activeId, inspectorFindings, setActiveFinding]);
 
   const handleDismiss = useCallback(async (
     f: IpReviewFinding,
@@ -399,13 +439,13 @@ export function MonitoringBoard({
     setResultCompleting(f.result_id, true);
     advanceAfterAction(f.result_id);
     try {
-      await dismissIpFinding(fipId, f.result_id, {
+      const decision = await dismissIpFinding(fipId, f.result_id, {
         reason,
         ...(reasonCode ? { reason_code: reasonCode } : {}),
       });
       onDismiss?.(f.result_id);
       recordLastAction({
-        label: `${dismissalDecisionLabel(reason, reasonCode)} applied`,
+        label: decision.remembered ? "Different product remembered" : `${dismissalDecisionLabel(reason, reasonCode)} applied`,
         detail: compactListingTitle(f),
         undo: { kind: "undismiss", ipId: fipId, resultId: f.result_id },
       });
@@ -465,7 +505,7 @@ export function MonitoringBoard({
 
   const rememberLicensedAction = useCallback((f: IpReviewFinding, dismissedCount: number) => {
     recordLastAction({
-      label: "Seller licensed",
+      label: "Seller authorized",
       detail:
         dismissedCount > 1
           ? `${dismissedCount} findings dismissed`
@@ -591,6 +631,7 @@ export function MonitoringBoard({
 
   // --- Multi-select + batch operations -------------------------------------
   const [confirmAction, setConfirmAction] = useState<BatchAction | null>(null);
+  const [legalReviewFinding,setLegalReviewFinding]=useState<IpReviewFinding | null>(null);
   const [shortcutSendFinding, setShortcutSendFinding] = useState<IpReviewFinding | null>(null);
   const [shortcutSending, setShortcutSending] = useState(false);
   const [shortcutSendError, setShortcutSendError] = useState("");
@@ -602,10 +643,17 @@ export function MonitoringBoard({
   const filterKey = JSON.stringify(filters);
   useEffect(() => {
     setReviewingSelection(false);
+    // Seller clicks open details and filter together. Keep that panel while its
+    // seller scope is active, including during the server's filtered-page fetch.
+    setGroupReference((previous) => previous?.group.kind === "seller"
+      && previous.ipId === filters.ip_id
+      && previous.group.findings[0]?.seller_name === filters.seller ? previous : null);
     setSelected(new Set());
     setSelectionExtras(new Map());
     setProductCorrectedResultIds(new Set());
     setBatchResult(null);
+    // filterKey represents every field used above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey]);
 
   function clearSelection() {
@@ -633,6 +681,15 @@ export function MonitoringBoard({
         if (checked) next.add(finding.result_id);
         else next.delete(finding.result_id);
       }
+      return next;
+    });
+  }
+  function selectGroup(ids: string[], checked: boolean) {
+    setReviewingSelection(false);
+    setBatchResult(null);
+    setSelected((previous) => {
+      const next = new Set(previous);
+      for (const id of ids) { if (checked) next.add(id); else next.delete(id); }
       return next;
     });
   }
@@ -668,8 +725,10 @@ export function MonitoringBoard({
   function partitionSelection(action: BatchAction) {
     const eligible: IpReviewFinding[] = [];
     const skipped: Record<string, number> = {};
-    const skip = (r: string) => {
+    const skippedByResultId: Record<string, string> = {};
+    const skip = (r: string, resultId?: string) => {
       skipped[r] = (skipped[r] ?? 0) + 1;
+      if (resultId) skippedByResultId[resultId] = r;
     };
     for (const f of selectedActionFindings) {
       if (!selected.has(f.result_id)) continue;
@@ -677,8 +736,8 @@ export function MonitoringBoard({
         ? "dismissed"
         : (f.review_status ?? "pending");
       if (action === "send") {
-        if (!isDecisionState(state)) skip("already sent or closed");
-        else if (!f.case_id) skip("still preparing");
+        if (!isDecisionState(state)) skip("already sent or closed", f.result_id);
+        else if (!f.case_id) skip("still preparing", f.result_id);
         else eligible.push(f);
       } else if (action === "submit") {
         if (state !== "takedown_pending") skip("not awaiting legal action");
@@ -702,7 +761,7 @@ export function MonitoringBoard({
         else eligible.push(f);
       }
     }
-    return { eligible, skipped };
+    return { eligible, skipped, skippedByResultId };
   }
 
   function partitionResort() {
@@ -728,12 +787,19 @@ export function MonitoringBoard({
     decisionReason?: string,
     associationScopes?: TakedownFeedbackAssociationScope[],
   ) {
-    const { eligible, skipped } = partitionSelection(action);
+    const { eligible, skipped, skippedByResultId } = partitionSelection(action);
     const skipCounts: Record<string, number> = { ...skipped };
     let ok = 0;
     let failed = 0;
     if (eligible.length === 0) {
-      setBatchResult(summarizeBatch(action, 0, skipCounts, 0));
+      setBatchResult(action === "send"
+        ? summarizeTakedownBatch(0, 0, {}, skipCounts, 0, takedownBatchListingResults(
+          selectedActionFindings,
+          { queued_case_ids: [], skipped: [], failed: [] },
+          skippedByResultId,
+          ipId,
+        ))
+        : summarizeBatch(action, 0, skipCounts, 0));
       return;
     }
     const bump = (reason: string) => {
@@ -791,6 +857,7 @@ export function MonitoringBoard({
           legalQueueCounts,
           skipCounts,
           failed,
+          takedownBatchListingResults(originalSelection, result, skippedByResultId, ipId),
         ));
         if (handledCaseIds.size > 0) onRefresh();
       } catch (error) {
@@ -840,7 +907,7 @@ export function MonitoringBoard({
               });
               ok++;
             } else if (action === "review") {
-              await markIpFindingNeedsReview((f.ip_id ?? ipId) as string, f.result_id);
+              await markIpFindingNeedsReview((f.ip_id ?? ipId) as string, f.result_id, decisionReason ?? "");
               ok++;
             } else {
               await markIpFindingEnforced((f.ip_id ?? ipId) as string, f.result_id);
@@ -951,6 +1018,10 @@ export function MonitoringBoard({
           { [result.reason]: 1 },
           {},
           0,
+          takedownBatchListingResults([targetFinding], {
+            queued_case_ids: [], skipped: [], failed: [],
+            legal_queue: [{ case_id: targetCaseId, reason: result.reason }],
+          }, {}, ipId),
         ));
       }
       setShortcutSendFinding(null);
@@ -1018,10 +1089,7 @@ export function MonitoringBoard({
           alert("Cannot update finding: finding has no associated IP.");
           return;
         }
-        await markIpFindingNeedsReview(fipId, targetFinding.result_id);
-        rememberNeedsReviewAction(targetFinding);
-        advanceAfterAction(targetFinding.result_id);
-        onRefresh(targetFinding.result_id);
+        setLegalReviewFinding(targetFinding);
         return;
       }
       const options = dismissalOptionsForBatchAction(action);
@@ -1030,12 +1098,9 @@ export function MonitoringBoard({
       alert(e instanceof Error ? e.message : "Failed to update finding");
     }
   }, [
-    advanceAfterAction,
     activeFinding,
     handleDismiss,
     ipId,
-    onRefresh,
-    rememberNeedsReviewAction,
     selected,
     visibleActionableFindings,
   ]);
@@ -1077,12 +1142,6 @@ export function MonitoringBoard({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeFinding, moveActive, runShortcutAction, setActiveFinding]);
 
-  useEffect(() => {
-    if (!reviewingSelection) return;
-    selectionReviewRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
-    selectionReviewRef.current?.focus({ preventScroll: true });
-  }, [reviewingSelection]);
-
   const hasActiveFilters = Boolean(filters.country || filters.query || filters.product_group_id || filters.catalog_product_id ||
     filters.source || filters.platform || filters.seller || filters.assignee || filters.priority ||
     filters.candidate_outcome || filters.dismissal_reason || filters.match_basis || filters.protected_term_id ||
@@ -1091,10 +1150,6 @@ export function MonitoringBoard({
     source: null, platform: null, seller: null, assignee: null, priority: null, candidate_outcome: null,
     dismissal_reason: null, min_price_usd: null, max_price_usd: null, match_basis: null, protected_term_id: null });
 
-  const selectedSummary = useMemo(
-    () => selectedFindingSummary(selectedActionFindings),
-    [selectedActionFindings],
-  );
   const selectedHasTakedownDecision = selectedActionFindings.some((finding) => {
     const state = finding.dismissed_at ? "dismissed" : (finding.review_status ?? "pending");
     return isDecisionState(state);
@@ -1102,50 +1157,34 @@ export function MonitoringBoard({
   const selectedHasLegalQueue = selectedActionFindings.some(
     (finding) => !finding.dismissed_at && finding.review_status === "takedown_pending",
   );
-  const resortSelectedTooltip = filters.candidate_outcome
-    ? `Resort selected findings out of ${CANDIDATE_OUTCOME_LABELS[filters.candidate_outcome]}`
-    : "Choose a candidate bucket, then select findings to resort them out of that bucket.";
-  const bulkSelectionBar = (
-    <BatchOperationBar
-      placement="inline"
-      selectedCount={selectedActionFindings.length}
-      selectedSummary={selectedSummary}
-      batchProgress={batchProgress}
-      onAction={setConfirmAction}
-      onResort={() => void runResort()}
-      resortDisabled={!filters.candidate_outcome}
-      resortTooltip={resortSelectedTooltip}
-      onClear={clearSelection}
-      showTakedown={selectedHasTakedownDecision}
-      showMarkSubmitted={selectedHasLegalQueue}
-      showPackagingOnly={selectedActionFindings.length > 0 && selectedActionFindings.every(
-        (finding) => finding.offer_subject === "packaging_only",
-      )}
-      assigneeOptions={tenantMembers.map((member) => ({
-        id: member.id,
-        label: member.id === currentTenantMember?.id
-          ? `Me — ${tenantMemberLabel(member)}`
-          : tenantMemberLabel(member),
-      }))}
-      onAssign={(assigneeId) => void runBatchAssignment(assigneeId)}
-    />
-  );
+  const selectionActions: BatchAction[] = ["do_not_pursue", "false_positive", "second_hand", "review", "enforce"];
+  if (selectedHasTakedownDecision) selectionActions.push("send");
+  if (selectedHasLegalQueue) selectionActions.push("submit");
+  if (selectedActionFindings.length > 0 && selectedActionFindings.every((finding) => finding.offer_subject === "packaging_only")) {
+    selectionActions.push("packaging_only");
+  }
 
   return (
     <>
-      <MonitoringFilters
+      {!reviewOnly && <MonitoringFilters
         filters={filters}
         facets={facets}
         onChange={onFiltersChange}
         ipId={filters.ip_id ?? ipId ?? null}
         showIpFilter={showIpFilter && ipAware}
+        showSearch={showSearch}
+        searchInputRef={searchInputRef}
         members={tenantMembers}
         membersLoading={tenantMembersLoading}
         membersError={tenantMembersError}
         currentMemberId={currentTenantMember?.id ?? null}
-      />
+        compact={unified}
+        workflowSummary={unified ? <><strong>{facets.total.toLocaleString()} matching {facets.total === 1 ? "task" : "tasks"}</strong>{updating && <span role="status"> · Updating…</span>}</> : undefined}
+        leadingControls={unified ? <label className="monitoring-group-control"><Layers size={14} aria-hidden /><span>Group by</span><select aria-label="Group by" value={groupBy} onChange={(event) => onGroupByChange?.(event.target.value as MonitoringGroupBy)}><option value="none">None</option><option value="seller">Seller</option><option value="product">Product</option></select></label> : undefined}
+        trailingControls={unified ? <MonitoringSortControl compact sort={filters.sort} onSort={(sort) => onFiltersChange({ sort })} /> : undefined}
+      />}
 
-      <div ref={queueRef} className="monitoring-results-queue">
+      <div ref={queueRef} className="monitoring-results-queue" aria-busy={updating}>
         {batchResult && (
           <BatchResultNotice
             result={batchResult}
@@ -1155,6 +1194,7 @@ export function MonitoringBoard({
           />
         )}
         <MonitoringResultList
+          hideSort={reviewOnly}
           findings={displayFindings}
           total={facets.total}
           sort={filters.sort}
@@ -1166,7 +1206,12 @@ export function MonitoringBoard({
           onSort={(sort) => onFiltersChange({ sort })}
           onSelect={toggleSelect}
           onSelectAll={selectAllLoaded}
-          onOpen={setActiveFinding}
+          onOpen={(resultId) => { closeGroup(); setReviewingSelection(false); setActiveFinding(resultId); }}
+          compact={unified}
+          groupBy={groupBy}
+          onSelectGroup={selectGroup}
+          onGroupOpen={unified ? openGroup : undefined}
+          onEntityOpen={unified ? (kind, finding) => { const group = groupMonitoringFindings([finding], kind)[0]; if (group) openGroup(group); } : undefined}
           emptyMessage={emptyStateMessage}
           onClearFilters={hasActiveFilters ? clearFilters : undefined}
         />
@@ -1174,6 +1219,7 @@ export function MonitoringBoard({
             page, end-of-list marker otherwise. Hidden when there are no rows. */}
         {displayFindings.length > 0 && (
           <div className="monitoring-results-pagination">
+            {unified && <span>{displayFindings.length.toLocaleString()} of {facets.total.toLocaleString()} matching tasks loaded{groupBy !== "none" ? " · Group counts cover loaded tasks" : ""}</span>}
             {nextCursor ? (
               <button
                 type="button"
@@ -1183,39 +1229,54 @@ export function MonitoringBoard({
                 {loadingMore ? "Loading…" : "Load more"}
               </button>
             ) : (
-              <span>End of list</span>
+              !unified && <span>End of list</span>
             )}
           </div>
         )}
       </div>
 
-      {selectedActionFindings.length > 0 && (
-        <div className="monitoring-selection-bar" aria-label="Selected listings">
-          <span aria-live="polite">{selectedActionFindings.length} {selectedActionFindings.length === 1 ? "listing" : "listings"} selected</span>
-          <button type="button" disabled={Boolean(batchProgress)} onClick={clearSelection}>Deselect</button>
-          <button type="button" disabled={Boolean(batchProgress)} onClick={() => setReviewingSelection(true)}>Review selection</button>
-        </div>
-      )}
-      {reviewingSelection && selectedActionFindings.length > 0 && (
-        <div ref={selectionReviewRef} className="monitoring-selection-review" tabIndex={-1} aria-label="Review selected listings">
-          <h2>Review {selectedActionFindings.length} selected {selectedActionFindings.length === 1 ? "listing" : "listings"}</h2>
-          <p>Open each listing to check its evidence before choosing a decision.</p>
-          <ul>{selectedActionFindings.map((finding) => <li key={finding.result_id}>
-            <button type="button" onClick={() => setActiveFinding(finding.result_id)}>{compactListingTitle(finding)} <small>· {finding.domain}</small></button>
-          </li>)}</ul>
-          {bulkSelectionBar}
-          <button type="button" className="monitoring-back-to-list" disabled={Boolean(batchProgress)} onClick={() => { setReviewingSelection(false); queueRef.current?.scrollIntoView({ block: "start", behavior: "instant" }); queueRef.current?.querySelector<HTMLSelectElement>('[aria-label="Sort listings"]')?.focus({ preventScroll: true }); }}>Back to listings</button>
-        </div>
-      )}
+      <MonitoringSelectionBar
+        selectedCount={selectedActionFindings.length}
+        actions={selectionActions}
+        progress={batchProgress}
+        onAction={setConfirmAction}
+        onClear={clearSelection}
+        onReview={() => {
+          const first = selectedActionFindings[0];
+          if (!first) return;
+          setReviewingSelection(true);
+          setActiveFinding(first.result_id);
+        }}
+        assignees={tenantMembers.map((member) => ({
+          id: member.id,
+          label: member.id === currentTenantMember?.id ? `Me — ${tenantMemberLabel(member)}` : tenantMemberLabel(member),
+        }))}
+        onAssign={(assigneeId) => void runBatchAssignment(assigneeId)}
+        onResort={filters.candidate_outcome ? () => void runResort() : undefined}
+      />
+
+      {activeGroup && <MonitoringGroupDetails group={activeGroup} sellerFiltered={activeGroup.kind === "seller" && Boolean(filters.seller)} onClose={closeGroup} onFilter={() => {
+        onFiltersChange(activeGroup.kind === "seller"
+          ? { seller: activeGroup.findings[0].seller_name, platform: null }
+          : { catalog_product_id: activeGroup.productId, product_group_id: null });
+        closeGroup();
+      }} />}
 
       {activeFinding && (
         <FindingInspector
+          preserveOnGrouping={unified}
           f={activeFinding}
           ipId={activeFinding.ip_id ?? ipId}
           showIp={ipAware}
           isDismissed={!!activeFinding.dismissed_at || dismissing.has(activeFinding.result_id)}
           isDismissing={dismissing.has(activeFinding.result_id) && !activeFinding.dismissed_at}
-          onClose={() => setActiveFinding(null)}
+          onClose={() => { setReviewingSelection(false); setActiveFinding(null); }}
+          navigation={{
+            position: activeIndex + 1,
+            total: inspectorFindings.length,
+            onPrevious: activeIndex > 0 ? () => moveActive(-1) : undefined,
+            onNext: activeIndex < inspectorFindings.length - 1 ? () => moveActive(1) : undefined,
+          }}
           onDismiss={(reason, reasonCode) => handleDismiss(activeFinding, reason, reasonCode)}
           onActionComplete={() => advanceAfterAction(activeFinding.result_id)}
           onNeedsReview={() => rememberNeedsReviewAction(activeFinding)}
@@ -1229,6 +1290,12 @@ export function MonitoringBoard({
         />
       )}
 
+      {legalReviewFinding && <LegalReviewDialog initialQuestion={legalReviewFinding.actionability?.question ?? ""}
+        onCancel={() => setLegalReviewFinding(null)} onConfirm={async question => {
+          await markIpFindingNeedsReview((legalReviewFinding.ip_id ?? ipId) as string,legalReviewFinding.result_id,question);
+          rememberNeedsReviewAction(legalReviewFinding);advanceAfterAction(legalReviewFinding.result_id);
+          onRefresh(legalReviewFinding.result_id);setLegalReviewFinding(null);
+        }} />}
       {shortcutSendFinding && (
         <ConfirmSendModal
           platform={shortcutSendFinding.domain}

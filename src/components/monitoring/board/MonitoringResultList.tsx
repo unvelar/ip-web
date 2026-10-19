@@ -1,6 +1,11 @@
+import { Fragment, useId, useMemo, useState } from "react";
+import { Box, ChevronRight, PanelRight, Store } from "lucide-react";
 import type { IpReviewFinding, MonitoringSortMode } from "../../../api";
+import { groupMonitoringFindings, hasProductGrouping, type MonitoringGroupBy, type MonitoringListingGroup } from "../../../lib/monitoringGrouping";
 import { FindingRow } from "./FindingRow";
 import { compactListingTitle } from "./utils";
+import { MarketplaceMark } from "../../MarketplaceMark";
+import { monitoringPlatformLabel } from "../../../lib/platforms";
 
 const sortOptions: Array<{ value: MonitoringSortMode; label: string }> = [
   { value: "score_desc", label: "Highest priority first" },
@@ -17,10 +22,23 @@ const sortOptions: Array<{ value: MonitoringSortMode; label: string }> = [
   { value: "platform_desc", label: "Website: Z to A" },
 ];
 
+export function MonitoringSortControl({ sort, onSort, compact = false }: { sort: MonitoringSortMode; onSort: (sort: MonitoringSortMode) => void; compact?: boolean }) {
+  const labels: Partial<Record<MonitoringSortMode, string>> = {
+    score_desc: "Priority", score_asc: "Lowest priority", found_desc: "Newest", found_asc: "Oldest",
+    updated_desc: "Recently updated", updated_asc: "Least recently updated", price_asc: "Price ↑", price_desc: "Price ↓",
+    seller_asc: "Seller A–Z", seller_desc: "Seller Z–A", platform_asc: "Website A–Z", platform_desc: "Website Z–A",
+  };
+  return <select aria-label="Sort listings" value={sort} onChange={(event) => onSort(event.target.value as MonitoringSortMode)}>
+    {sortOptions.map((option) => <option key={option.value} value={option.value}>{compact ? labels[option.value] ?? option.label : option.label}</option>)}
+  </select>;
+}
+
 /** A readable review queue. Filtering and sorting still cover the full server corpus. */
 export function MonitoringResultList({
   findings, total, sort, selected, activeId, dismissing, showIp, showStatus,
   onSort, onSelect, onSelectAll, onOpen, emptyMessage, onClearFilters,
+  groupBy = "none", compact = false, onSelectGroup, onGroupOpen, onEntityOpen,
+  hideSort = false,
 }: {
   findings: IpReviewFinding[];
   total: number;
@@ -36,17 +54,27 @@ export function MonitoringResultList({
   onOpen: (id: string) => void;
   emptyMessage?: string;
   onClearFilters?: () => void;
+  groupBy?: MonitoringGroupBy;
+  compact?: boolean;
+  onSelectGroup?: (ids: string[], checked: boolean) => void;
+  onGroupOpen?: (group: MonitoringListingGroup) => void;
+  onEntityOpen?: (kind: "seller" | "product", finding: IpReviewFinding) => void;
+  hideSort?: boolean;
 }) {
+  const groupId = useId();
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const groups = useMemo(() => groupMonitoringFindings(findings, groupBy), [findings, groupBy]);
   const allSelected = findings.length > 0 && findings.every((finding) => selected.has(finding.result_id));
   const partiallySelected = !allSelected && findings.some((finding) => selected.has(finding.result_id));
 
   return <>
-    <div className="monitoring-results-summary">
+    {!compact && <div className="monitoring-results-summary">
       <span aria-live="polite"><strong>{total.toLocaleString()} {total === 1 ? "listing" : "listings"}</strong> matching this view</span>
-      <select aria-label="Sort listings" value={sort} onChange={(event) => onSort(event.target.value as MonitoringSortMode)}>
-        {sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
-    </div>
+      {!hideSort && <MonitoringSortControl sort={sort} onSort={onSort} />}
+    </div>}
+    {groupBy === "product" && findings.length > 0 && !hasProductGrouping(findings) && <div className="monitoring-grouping-notice" role="status">
+      Product grouping needs the API update. Your filtered tasks remain below.
+    </div>}
     <table className="monitoring-result-list" aria-label="Monitoring listings">
       <colgroup><col className="monitoring-checkbox-column" /><col /><col className="monitoring-price-column" /><col className="monitoring-assessment-column" /></colgroup>
       <thead><tr>
@@ -66,7 +94,42 @@ export function MonitoringResultList({
         <th scope="col" className="monitoring-price-heading">Price (USD)</th>
         <th scope="col" className="monitoring-assessment-heading">Suggested action</th>
       </tr></thead>
-      <tbody>{findings.map((finding) => {
+      {groups.length > 0 ? groups.map((group, index) => {
+        const all = group.findings.every((finding) => selected.has(finding.result_id));
+        const some = !all && group.findings.some((finding) => selected.has(finding.result_id));
+        const expanded = !collapsed.has(group.key);
+        const id = `${groupId}-group-${index}`;
+        return <Fragment key={group.key}>
+          <tbody><tr className="monitoring-group-heading"><th colSpan={4} scope="rowgroup">
+            <div className="monitoring-group-heading-content">
+              <input type="checkbox" aria-label={`Select loaded tasks in ${group.label}`} checked={all}
+                ref={(element) => { if (element) element.indeterminate = some; }}
+                onChange={(event) => onSelectGroup?.(group.findings.map((finding) => finding.result_id), event.target.checked)} />
+              <button type="button" className="monitoring-group-toggle" aria-expanded={expanded} aria-controls={id}
+                aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label}`}
+                onClick={() => setCollapsed((previous) => { const next = new Set(previous); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })}>
+                <ChevronRight size={13} className={expanded ? "is-expanded" : ""} aria-hidden />
+              </button>
+              {onGroupOpen ? <button type="button" className="monitoring-group-name" onClick={() => onGroupOpen(group)}>
+                {group.kind === "seller" ? <Store size={14} aria-hidden /> : <Box size={14} aria-hidden />}
+                <span>{group.label}</span>
+              </button> : <span className="monitoring-group-name">{group.label}</span>}
+              <span className="monitoring-group-count">{group.findings.length} loaded</span>
+              {group.kind === "seller" && [...new Set(group.findings.map((finding) => finding.domain))].map((domain) => <span key={domain} className="monitoring-marketplace" role="img" aria-label={monitoringPlatformLabel(domain)} title={monitoringPlatformLabel(domain)}><MarketplaceMark source={{ domain, name: monitoringPlatformLabel(domain) }} /></span>)}
+              {onGroupOpen && <button type="button" className="monitoring-group-open" aria-label={`Open ${group.kind} details: ${group.label}`} onClick={() => onGroupOpen(group)}><PanelRight size={15} aria-hidden /></button>}
+            </div>
+          </th></tr></tbody>
+          <tbody id={id} hidden={!expanded}>{group.findings.map(renderFinding)}</tbody>
+        </Fragment>;
+      }) : <tbody>{findings.map(renderFinding)}</tbody>}
+    </table>
+    {findings.length === 0 && <div className="monitoring-results-empty">
+      <p>{onClearFilters ? "No listings match these filters" : emptyMessage ?? "No listings in this view yet"}</p>
+      {onClearFilters && <><span>Remove a filter to broaden this view.</span><button type="button" onClick={onClearFilters}>Clear filters</button></>}
+    </div>}
+  </>;
+
+  function renderFinding(finding: IpReviewFinding) {
         const active = finding.result_id === activeId;
         const title = compactListingTitle(finding);
         return <tr key={finding.result_id} tabIndex={0} aria-label={`Open task: ${title}`}
@@ -79,13 +142,7 @@ export function MonitoringResultList({
           <td className="monitoring-listing-checkbox" onClick={(event) => event.stopPropagation()}>
             <label><input type="checkbox" aria-label={`Select ${title}`} checked={selected.has(finding.result_id)} onChange={() => onSelect(finding.result_id)} /></label>
           </td>
-          <FindingRow f={finding} active={active} showIp={showIp} showStatus={showStatus} />
+          <FindingRow f={finding} active={active} showIp={showIp} showStatus={showStatus} onEntityOpen={onEntityOpen} />
         </tr>;
-      })}</tbody>
-    </table>
-    {findings.length === 0 && <div className="monitoring-results-empty">
-      <p>{onClearFilters ? "No listings match these filters" : emptyMessage ?? "No listings in this view yet"}</p>
-      {onClearFilters && <><span>Remove a filter to broaden this view.</span><button type="button" onClick={onClearFilters}>Clear filters</button></>}
-    </div>}
-  </>;
+  }
 }

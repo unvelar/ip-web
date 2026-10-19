@@ -385,7 +385,8 @@ function RegistryDetailContent({ id }: { id: string }) {
         </section>
         <section hidden={section !== "monitoring"} id="search" className="ip-settings-pane" aria-label="Monitoring">
           <div className="ip-pane-intro"><h2>Monitoring</h2><p>Choose what to look for and where to find it.</p></div>
-      <div id="keywords">
+      {ip.monitoring_owner && <div className="ip-pane-intro"><p>This record uses the brand or product configuration. Manage search keywords, selected marketplaces and the schedule together.</p><Link className="ip-button" to={`/monitoring/setup?brand=${ip.monitoring_owner.brand_scope_id}${ip.monitoring_owner.scope_kind === 'product' ? `&product=${ip.monitoring_owner.scope_id}` : ''}`}>Open monitoring configuration</Link></div>}
+      {!ip.monitoring_owner && <div id="keywords">
       <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
         <div>
           <IpSettingsHeading icon={Search} title="Search keywords" description="The words we use to find your products." />
@@ -437,11 +438,11 @@ function RegistryDetailContent({ id }: { id: string }) {
         </div>
       </div>
 
-      </div>
+      </div>}
       <ProtectedTermsSettings key={`terms-${ip.id}`} ip={ip} onSaved={(updated) => { setIp((current) => current ? { ...current, ...updated } : current); void refreshOnboarding(true); }} />
       <div id="matching-names"><MonitoringIdentitySettings key={ip.id} ip={ip} onSaved={(updated) => setIp((current) => current ? { ...current, ...updated } : current)} /></div>
 
-      <details className="ip-disclosure" id="keyword-learning"><summary><Sparkles size={17} aria-hidden="true" /><span>Keyword suggestions<small>Review phrases discovered in your results</small></span><Plus size={16} className="ip-disclosure-plus" aria-hidden="true" /></summary>
+      {!ip.monitoring_owner && <details className="ip-disclosure" id="keyword-learning"><summary><Sparkles size={17} aria-hidden="true" /><span>Keyword suggestions<small>Review phrases discovered in your results</small></span><Plus size={16} className="ip-disclosure-plus" aria-hidden="true" /></summary>
       <KeywordLearningPanel
         ipId={ip.id}
         onKeywordsChanged={(keywords) => {
@@ -449,16 +450,16 @@ function RegistryDetailContent({ id }: { id: string }) {
           void refreshOnboarding(true);
         }}
       />
-      </details>
+      </details>}
       {/* Monitoring — watched platforms + findings board */}
-      <div id="monitoring" className="scroll-mt-20">
+      {!ip.monitoring_owner && <div id="monitoring" className="scroll-mt-20">
         <MonitoringSection
           ip={ip}
           onFrequencyChanged={(monitoring_frequency) =>
             setIp((current) => (current ? { ...current, monitoring_frequency } : current))
           }
         />
-      </div>
+      </div>}
 
         </section>
         <section hidden={section !== "protection"} id="protection" className="ip-settings-pane" aria-label="Protection">

@@ -135,6 +135,7 @@ export function BatchOperationBar({
                 <button
                   type="button"
                   data-batch-action="false_positive"
+                  title="Dismiss these products and remember confirmed repeats for this IP"
                   onClick={() => onAction("false_positive")}
                   disabled={actionDisabled}
                   className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"

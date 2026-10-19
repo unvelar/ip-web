@@ -3,12 +3,11 @@ import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
+  ChevronDown,
   ChevronRight,
   ExternalLink,
-  Search,
   ShieldAlert,
   Store,
-  X,
 } from "lucide-react";
 import {
   listMonitoringSellers,
@@ -16,6 +15,8 @@ import {
   type MonitoringSellerSummary,
   type MonitoringSellersPage,
 } from "../api";
+import MonitoringToolbar from "../components/MonitoringToolbar";
+import MonitoringSearch from "../components/MonitoringSearch";
 import { useAuth } from "../context/AuthContext";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { monitoringPlatformLabel } from "../lib/platforms";
@@ -26,6 +27,8 @@ import { useSellerNavigation } from "../features/sellers/useSellerNavigation";
 import { SellerSales } from "../features/sellers/SellerSales";
 import { formatAgo, formatMoney } from "../components/monitoring/board/utils";
 import "../features/sellers/sellers.css";
+import "../components/monitoring/MonitoringWorkspace.css";
+import "../features/sellers/SellersMonitoring.css";
 
 const STATUS_OPTIONS: Array<{
   value: MonitoringSellerListStatus;
@@ -141,8 +144,7 @@ export default function Sellers() {
       next.delete("ip_id");
     } else {
       selectIp(value);
-      next.delete("scope");
-      next.set("ip_id", value);
+      return;
     }
     setParams(next);
   }
@@ -169,136 +171,119 @@ export default function Sellers() {
     }
   }
 
+  const scopeControl = <div className="brand-product-selector">
+    <select
+      value={allIps || !activeIpId ? "all" : activeIpId}
+      onChange={(event) => updateIp(event.target.value)}
+      disabled={loadingIps}
+      aria-label="Filter sellers by IP"
+    >
+      <option value="all">All IPs</option>
+      {ips.map((ip) => <option key={ip.id} value={ip.id}>{ip.name}</option>)}
+    </select>
+    <ChevronDown size={13} aria-hidden />
+  </div>;
+
   return (
-    <div className="sellers-page">
-      <header className="sellers-header">
-        <div className="sellers-title">
-          <h1>Sellers</h1>
-          {page && <span className="sellers-count">{page.total_sellers.toLocaleString()}</span>}
-        </div>
-        <p>Track marketplace accounts and review their listings.</p>
-      </header>
+    <>
+      <MonitoringToolbar title="Sellers" onRefresh={() => void refreshSellerSummaries()} refreshing={loading}
+        scopeControl={scopeControl}
+        showStatus={!allIps}
+        meta={<span role="status">{loading ? "Loading…" : page ? `${page.total_sellers.toLocaleString()} ${page.total_sellers === 1 ? "seller" : "sellers"}` : ""}</span>}
+        actions={<select aria-label="Seller status" value={status} onChange={(event) => updateParam("status", event.target.value, "open")}>
+          {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>}
+      >
+        <MonitoringSearch value={query} onChange={(value) => updateParam("q", value || null)} label="Search sellers" placeholder="Search sellers…" />
+      </MonitoringToolbar>
+      <div className="sellers-page sellers-monitoring-workspace monitoring-data-workspace">
 
-      {returnedSellerCount > 0 && (
-        <section className="sellers-notice" aria-label="Returned sellers">
-          <ShieldAlert size={18} aria-hidden />
-          <p><strong>{returnedSellerCount} {returnedSellerCount === 1 ? "seller has" : "sellers have"} returned.</strong>{" "}
-            New listings found after a previous takedown.
-          </p>
-          {status !== "returned" && (
-            <button type="button" onClick={() => updateParam("status", "returned")}>
-              Review <ArrowRight size={14} aria-hidden />
-            </button>
-          )}
-        </section>
-      )}
-
-      <nav className="sellers-tabs" aria-label="Seller status">
-        {STATUS_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={status === option.value}
-            onClick={() => updateParam("status", option.value, "open")}
-          >
-            {option.label}
-            {option.value === "returned" && returnedSellerCount > 0 && (
-              <span className="sellers-returned-count">{returnedSellerCount}</span>
+        {returnedSellerCount > 0 && (
+          <section className="sellers-notice" aria-label="Returned sellers">
+            <ShieldAlert size={18} aria-hidden />
+            <p><strong>{returnedSellerCount} {returnedSellerCount === 1 ? "seller has" : "sellers have"} returned.</strong>{" "}
+              New listings found after a previous takedown.
+            </p>
+            {status !== "returned" && (
+              <button type="button" onClick={() => updateParam("status", "returned")}>
+                Review <ArrowRight size={14} aria-hidden />
+              </button>
             )}
-          </button>
-        ))}
-      </nav>
+          </section>
+        )}
 
-      <div className="sellers-toolbar">
-        <div className="sellers-search">
-          <Search size={16} aria-hidden />
-          <input
-            value={query}
-            onChange={(event) => updateParam("q", event.target.value)}
-            placeholder="Search sellers…"
-            aria-label="Search sellers"
-            type="search"
-          />
-          {query && (
-            <button type="button" aria-label="Clear search" onClick={() => updateParam("q", null)}>
-              <X size={14} aria-hidden />
-            </button>
-          )}
-        </div>
-        <div className="sellers-filters">
-          <select
-            value={allIps || !activeIpId ? "all" : activeIpId}
-            onChange={(event) => updateIp(event.target.value)}
-            disabled={loadingIps}
-            aria-label="Filter sellers by IP"
-          >
-            <option value="all">All IPs</option>
-            {ips.map((ip) => <option key={ip.id} value={ip.id}>{ip.name}</option>)}
-          </select>
-          <select
-            value={platform}
-            onChange={(event) => updateParam("platform", event.target.value)}
-            aria-label="Filter sellers by marketplace"
-          >
-            <option value="">All marketplaces</option>
-            {platformOptions.map((domain) => (
-              <option key={domain} value={domain}>{monitoringPlatformLabel(domain)}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {error && <div className="sellers-error" role="alert">{error}</div>}
-
-      <div key={`${actingTenantId}:${effectiveIpId}:${status}`} className="sellers-results" aria-busy={loading}>
-        {loading ? (
-          <SellerListSkeleton />
-        ) : !page || page.sellers.length === 0 ? (
-          <div className="sellers-empty">
-            <Store size={25} aria-hidden />
-            <h2>{error ? "Sellers could not be loaded" : status === "returned" && !query && !platform ? "No returned sellers" : "No sellers found"}</h2>
-            <p>{error ? "Please try again in a moment." : status === "returned" && !query && !platform
-              ? "No new listings found after a previous takedown in this view."
-              : "Try a different search, marketplace, or IP."}</p>
+        <div className="sellers-toolbar">
+          <div className="sellers-filters">
+            <div className="sellers-mobile-scope">{scopeControl}</div>
+            <select
+              value={platform}
+              onChange={(event) => updateParam("platform", event.target.value)}
+              aria-label="Filter sellers by marketplace"
+            >
+              <option value="">All marketplaces</option>
+              {platformOptions.map((domain) => (
+                <option key={domain} value={domain}>{monitoringPlatformLabel(domain)}</option>
+              ))}
+            </select>
           </div>
-        ) : (
-          <>
-            {returnedSellers.length > 0 && (
-              <SellerSection title="Returned sellers" sellers={returnedSellers} ipId={effectiveIpId} listStatus={status} onChanged={() => void refreshSellerSummaries()} returned />
-            )}
-            {otherSellers.length > 0 && (
-              <SellerSection
-                title={returnedSellers.length > 0 ? "Other sellers" : status === "all" ? "Seller history" : "Sellers with open listings"}
-                sellers={otherSellers}
-                ipId={effectiveIpId} listStatus={status} onChanged={() => void refreshSellerSummaries()}
-              />
-            )}
-            <footer className="sellers-footer">
-              <span role="status">Showing {page.sellers.length.toLocaleString()} of {page.total_sellers.toLocaleString()} sellers</span>
-              {page.next_cursor && (
-                <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>
-                  {loadingMore ? "Loading…" : "Load more sellers"}
-                </button>
+        </div>
+
+        <div className="sellers-summary">
+          {loading ? "Loading sellers…" : page && <><strong>{page.total_sellers.toLocaleString()} {page.total_sellers === 1 ? "seller" : "sellers"}</strong> matching this view</>}
+        </div>
+
+        {error && <div className="sellers-error" role="alert">{error}</div>}
+
+        <div key={`${actingTenantId}:${effectiveIpId}:${status}`} className="sellers-results" aria-busy={loading}>
+          {loading ? (
+            <SellerListSkeleton />
+          ) : !page || page.sellers.length === 0 ? (
+            <div className="sellers-empty">
+              <Store size={25} aria-hidden />
+              <h2>{error ? "Sellers could not be loaded" : status === "returned" && !query && !platform ? "No returned sellers" : "No sellers found"}</h2>
+              <p>{error ? "Please try again in a moment." : status === "returned" && !query && !platform
+                ? "No new listings found after a previous takedown in this view."
+                : "Try a different search, marketplace, or IP."}</p>
+            </div>
+          ) : (
+            <>
+              {returnedSellers.length > 0 && (
+                <SellerSection title="Returned sellers" sellers={returnedSellers} ipId={effectiveIpId} listStatus={status} onChanged={() => void refreshSellerSummaries()} returned />
               )}
-            </footer>
-          </>
+              {otherSellers.length > 0 && (
+                <SellerSection
+                  title={returnedSellers.length > 0 ? "Other sellers" : status === "all" ? "Seller history" : "Sellers with open listings"}
+                  sellers={otherSellers}
+                  ipId={effectiveIpId} listStatus={status} onChanged={() => void refreshSellerSummaries()}
+                />
+              )}
+              <footer className="sellers-footer">
+                <span role="status">Showing {page.sellers.length.toLocaleString()} of {page.total_sellers.toLocaleString()} sellers</span>
+                {page.next_cursor && (
+                  <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>
+                    {loadingMore ? "Loading…" : "Load more sellers"}
+                  </button>
+                )}
+              </footer>
+            </>
+          )}
+        </div>
+        {/* Shared tasks remain accessible when their seller is filtered out or on a later page. */}
+        {findingId && (loading || !page?.sellers.some((seller) => seller.seller_key === findingSeller)) && createPortal(
+          <SellerFindingPanel
+            key={findingId}
+            findingId={findingId}
+            onClose={() => selectSeller(null)}
+            onResolved={() => {
+              selectSeller(null);
+              void refreshSellerSummaries();
+            }}
+            onFindingChange={() => void refreshSellerSummaries()}
+          />,
+          document.querySelector(".app-shell") ?? document.body,
         )}
       </div>
-      {/* Shared tasks remain accessible when their seller is filtered out or on a later page. */}
-      {findingId && (loading || !page?.sellers.some((seller) => seller.seller_key === findingSeller)) && createPortal(
-        <SellerFindingPanel
-          key={findingId}
-          findingId={findingId}
-          onClose={() => selectSeller(null)}
-          onResolved={() => {
-            selectSeller(null);
-            void refreshSellerSummaries();
-          }}
-          onFindingChange={() => void refreshSellerSummaries()}
-        />,
-        document.querySelector(".app-shell") ?? document.body,
-      )}
-    </div>
+    </>
   );
 }
 
@@ -319,7 +304,7 @@ function SellerSection({ title, sellers, ipId, listStatus, onChanged, returned =
           <tr>
             <th scope="col">Seller</th>
             <th scope="col">Open listings</th>
-            <th scope="col">Exposure <span>USD</span></th>
+            <th scope="col">Exposure (USD)</th>
             <th scope="col">Takedowns</th>
             <th scope="col">Latest finding</th>
             <th scope="col"><span className="sr-only">Expand listings</span></th>

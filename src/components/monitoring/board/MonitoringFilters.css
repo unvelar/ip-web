@@ -94,3 +94,28 @@
   .monitoring-listing-search input { font-size: 16px; }
 }
 @media (pointer: coarse) { .monitoring-filters button, .monitoring-filters select { min-height: 44px; } }
+
+.monitoring-filters.is-compact .monitoring-workflow { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 16px; }
+.monitoring-filters.is-compact .monitoring-workflow-tab,
+.monitoring-filters.is-compact .monitoring-workflow .monitoring-filter-trigger { min-height:38px; padding:9px 7px; }
+.monitoring-workflow-summary { color:#706d66; font-size:11px; white-space:nowrap; }
+.monitoring-workflow-summary strong { font-weight:400; color:#242320; }
+.monitoring-filters.is-compact .monitoring-filter-toolbar { padding:10px 20px; }
+.monitoring-filters.is-compact .monitoring-filter-toolbar:has(+ .monitoring-active-filters) { padding-bottom:8px; }
+.monitoring-filters.is-compact .monitoring-active-filters { padding:0 20px 10px; }
+.monitoring-filters.is-compact .monitoring-filter-tools { padding-top:0; gap:8px; }
+.monitoring-group-control { display:inline-flex; align-items:center; gap:6px; flex-shrink:0; min-height:34px; padding:4px 8px; border-radius:5px; background:#f5f4f0; color:#706d66; font-size:12px; }
+.monitoring-group-control select { border:0; background:transparent; color:#242320; font:inherit; font-weight:500; padding:0 2px; cursor:pointer; }
+.monitoring-group-control select:focus-visible { outline:2px solid #aaa59b; outline-offset:2px; }
+.monitoring-filter-trailing { margin-left:auto; }
+.monitoring-filter-trailing select { border:0; background:transparent; color:#706d66; font-size:12px; max-width:138px; padding:5px 0; }
+@media(max-width:780px) {
+  .monitoring-filters.is-compact .monitoring-workflow { flex-wrap:wrap; gap:0; }
+  .monitoring-workflow-summary { padding:0 7px 8px; }
+}
+@media(max-width:480px) {
+  .monitoring-filters.is-compact .monitoring-workflow { padding:0 6px; }
+  .monitoring-filters.is-compact .monitoring-filter-toolbar { padding:10px 12px; }
+  .monitoring-filters.is-compact .monitoring-active-filters { padding:0 12px 10px; }
+  .monitoring-group-control { margin-right:0; }
+}

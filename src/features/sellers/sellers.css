@@ -6,7 +6,7 @@
   width: 100%;
   max-width: 1480px;
   margin: 0 auto;
-  padding: 40px 40px 56px;
+  padding: 20px 40px 56px;
   color: var(--seller-ink);
   font-size: 14px;
   line-height: 1.5;
@@ -32,6 +32,8 @@
 .sellers-search input::-webkit-search-cancel-button { display: none; }
 .sellers-search button { display: grid; place-items: center; min-width: 26px; height: 30px; }
 .sellers-filters { display: flex; gap: 9px; min-width: 0; }
+.sellers-mobile-scope { display:none; }
+@media (max-width:1023px) { .sellers-mobile-scope { display:block; min-width:0; } }
 .sellers-filters select { min-width: 0; max-width: 230px; height: 38px; border: 1px solid var(--seller-line); border-radius: 7px; padding: 0 28px 0 10px; color: #57534e; background-color: transparent; font-size: 12px; cursor: pointer; }
 .sellers-notice { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; padding: 12px 14px; border-radius: 8px; background: #f7eee9; color: #924a31; font-size: 13px; }
 .sellers-notice > svg { flex-shrink: 0; }
@@ -233,6 +235,17 @@
 .seller-history summary { width: fit-content; padding: 2px 0; }
 .seller-history > div { max-width: 280px; padding: 6px 0 2px; line-height: 1.6; }
   .seller-history summary { min-height: 28px; display: list-item; padding-top: 6px; }
+
+.seller-policy { padding: 1rem 1.25rem; border: 1px solid #e7e5e4; border-radius: 1rem; background: #fff; }
+.seller-policy-button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; padding: .5rem .75rem; border: 1px solid #d6d3d1; border-radius: .5rem; background: #fff; color: #44403c; font-size: .75rem; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.seller-policy-button:hover { background: #fafaf9; border-color: #a8a29e; }
+.seller-policy-button:disabled { opacity: .5; cursor: default; }
+.seller-policy-button:focus-visible, .seller-policy-select:focus-visible { outline: 2px solid #059669; outline-offset: 2px; }
+.seller-policy-primary { background: #047857; border-color: #047857; color: #fff; }
+.seller-policy-primary:hover { background: #065f46; border-color: #065f46; }
+.seller-policy-dialog { width: min(32rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; padding: 1.5rem; border: 1px solid #e7e5e4; border-radius: 1rem; background: #fff; box-shadow: 0 24px 64px #0003; }
+.seller-policy-dialog::backdrop { background: #1c191766; }
+.seller-policy-select { display: block; width: 100%; margin-top: .5rem; padding: .625rem .75rem; border: 1px solid #d6d3d1; border-radius: .5rem; background: #fff; color: #292524; font-size: .875rem; }
 
 @container (max-width: 420px) {
   .seller-listing-filters { display: grid; grid-template-columns: minmax(0, 1fr); }

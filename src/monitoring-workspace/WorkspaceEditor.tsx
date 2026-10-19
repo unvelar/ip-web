@@ -9,14 +9,22 @@ import { useDraftNavigationGuard } from './useDraftNavigationGuard';
 import ImageUploader from '../components/ImageUploader';
 import MatchingReadiness from './MatchingReadiness';
 import { splitSearchKeywords } from './keywords';
+import HistoryLinks from './HistoryLinks';
+import EnforcementRules from './EnforcementRules';
 
 export default function WorkspaceEditor({ client, loaded, onLeave, embedded = false, tenantSwitcherLabel }: { client: WorkspaceClient; loaded: WorkspaceResponse; onLeave: () => void; embedded?: boolean; tenantSwitcherLabel?: string }) {
   const Content = embedded ? 'div' : 'main';
   const [settingsView, setSettingsView] = useState<'monitoring' | 'sellers'>(() => embedded && window.location.hash === '#authorized-sellers' ? 'sellers' : 'monitoring');
   const [saved, setSaved] = useState<Draft>(loaded);
   const [document, setDocument] = useState(loaded.document);
-  const [brandId, setBrandId] = useState<string | null>(null);
-  const [productId, setProductId] = useState<string | null>(null);
+  const [brandId, setBrandId] = useState<string | null>(() => {
+    const requested = new URLSearchParams(window.location.search).get('brand');
+    return loaded.document.brands.some(brand => brand.id === requested) ? requested : null;
+  });
+  const [productId, setProductId] = useState<string | null>(() => {
+    const requested = new URLSearchParams(window.location.search).get('product');
+    return loaded.document.brands.some(brand => brand.products.some(product => product.id === requested)) ? requested : null;
+  });
   const [plan, setPlan] = useState<Plan | null>(null);
   const [activationPlan, setActivationPlan] = useState<Plan | null>(null);
   const [previewError, setPreviewError] = useState('');
@@ -43,6 +51,8 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   const displayedReferenceIds = new Set(scopeReferenceImages.map(item => item.material.id));
   const ownedReferenceImages = referenceImages.filter(image => image.scope_id === scope?.id && !displayedReferenceIds.has(image.id));
   const dirty = JSON.stringify(document) !== JSON.stringify(saved.document);
+  const incompleteEnforcementRules = document.brands.some(brand => [brand, ...brand.products]
+    .some(scope => scope.enforcement_rules?.some(rule => rule.condition.trim().length < 10)));
   const matchingStates = plan?.matching_readiness ?? (!dirty ? loaded.matching_readiness : undefined);
   const matchingState = matchingStates?.find(item => item.scope_id === scope?.id);
   const productReferenceImages = brand && !productId ? [...new Map(brand.products.flatMap(product => [
@@ -57,6 +67,11 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   useDraftNavigationGuard(dirty);
 
   useEffect(() => {
+    if (incompleteEnforcementRules) {
+      setPlan(null);
+      setPreviewError('Describe every enforcement rule using at least 10 characters.');
+      return;
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => {
       void client.preview(document, brandId, productId, controller.signal).then(result => {
@@ -64,9 +79,13 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       }).catch(err => { if (!controller.signal.aborted) { setPlan(null); setPreviewError(err.message); } });
     }, 180);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [client, document, brandId, productId]);
+  }, [client, document, brandId, productId, incompleteEnforcementRules]);
 
   useEffect(() => {
+    if (incompleteEnforcementRules) {
+      setActivationPlan(null);
+      return;
+    }
     if (!brandId && !productId) {
       setActivationPlan(plan);
       return;
@@ -78,7 +97,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       }).catch(() => { if (!controller.signal.aborted) setActivationPlan(null); });
     }, 180);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [client, document, brandId, productId, plan]);
+  }, [client, document, brandId, productId, plan, incompleteEnforcementRules]);
 
   function refreshExpiredImageUrls() {
     if (imageRefresh.current || Date.now() - lastImageRefreshAt.current < 30_000) return;
@@ -93,11 +112,14 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
   }
 
   function updateDocument(next: Workspace) { setDocument(next); setPlan(null); setMessage(''); }
-  function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'monitoring_enabled' | 'reference_materials'>>) {
+  function updateScope(change: Partial<Pick<Product, 'name' | 'keywords' | 'monitoring_enabled' | 'reference_materials' | 'enforcement_rules'>>) {
     if (!brand) return;
     updateDocument({ ...document, brands: document.brands.map(item => item.id !== brand.id ? item : productId
       ? { ...item, products: item.products.map(product => product.id === productId ? { ...product, ...change } : product) }
-      : { ...item, ...change }) });
+      : { ...item, ...change, products: change.enforcement_rules ? item.products.map(product => ({ ...product,
+        enforcement_rules: product.enforcement_rules?.map(rule => rule.overrides_rule_id && !change.enforcement_rules!.some(parent => parent.id === rule.overrides_rule_id)
+          ? { ...rule, overrides_rule_id: null } : rule),
+      })) : item.products }) });
   }
   function selectAuthorizations(brand: string | null) { setBrandId(brand); setProductId(null); setSettingsView('sellers'); }
   function selectScope(brand: string | null, product: string | null = null) { setSettingsView('monitoring'); setBrandId(brand); setProductId(product); setPlan(null); setPreviewError(''); }
@@ -109,6 +131,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
       setMessage(result.execution.scopes > 0
         ? `Monitoring applied · Revision ${result.revision}. ${result.execution.scopes} scopes and ${result.execution.sources} sources are scheduled.`
         : `Monitoring paused · Revision ${result.revision}. Your brand and product setup has been kept.`);
+      if (result.execution.enforcement_checks_queued) setMessage(current => `${current} Enforcement checks queued for ${result.execution.enforcement_checks_queued} existing tasks.`);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); setConflict(err instanceof DraftError && err.status === 409); }
     finally { setBusy(false); }
   }
@@ -164,7 +187,7 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     <div className="eyebrow">Search preview</div><h2>{scope?.name ?? tenantName}</h2>
     <p>{!brandId ? 'All brands and products' : !scope?.monitoring_enabled ? 'Monitoring is off' : productId ? 'Uses shared brand coverage' : 'Brand-wide searches'}</p>
     <div className="search-number"><strong>{plan?.total_searches ?? '—'}</strong><span>requested searches</span></div>
-    <p>{plan ? `${plan.source_keys.length} websites · ${plan.countries.length} countries${plan.effective_coverage ? ` · ${plan.effective_coverage.frequency}` : ''}` : 'Updating preview…'}</p>
+    <p>{plan ? `${plan.source_keys.length} websites · ${plan.countries.length} countries${plan.effective_coverage ? ` · ${plan.effective_coverage.frequency}` : ''}` : incompleteEnforcementRules ? 'Complete enforcement rules to preview searches.' : 'Updating preview…'}</p>
     {!!plan?.combined_searches && <p className="impact">{plan.combined_searches} duplicate {plan.combined_searches === 1 ? 'search combined' : 'searches combined'} across scopes with the same schedule.</p>}
     {!!plan?.affected_products && <p className="impact">Coverage changes also apply to {plan.affected_products} {plan.affected_products === 1 ? 'product' : 'products'} using brand coverage.</p>}
     {plan?.issues.slice(0, 3).map(issue => <p className="notice" key={issue}>{issue}</p>)}
@@ -173,9 +196,13 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
     <button className="secondary" disabled={!plan?.total_searches} onClick={() => previewDialog.current?.showModal()}>Preview searches</button>
     <p className="field-note">Save and apply updates scheduled monitoring. If every scope is off, monitoring is paused.</p>
   </aside>;
-  const activationIssue = activationPlan?.issues[0] ?? '';
-  const activationBlocked = !activationPlan || activationPlan.issues.length > 0;
+  const activationIssue = incompleteEnforcementRules ? 'Complete enforcement rule conditions to apply monitoring.' : activationPlan?.issues[0] ?? '';
+  const activationBlocked = incompleteEnforcementRules || !activationPlan || activationPlan.issues.length > 0;
   const appliedState = activationPlan ? (activationPlan.scope_count > 0 ? 'active' : 'paused') : 'loading';
+  const scopesAfterApply = new Set(document.brands.flatMap(brand => [brand, ...brand.products])
+    .filter(scope => scope.monitoring_enabled).map(scope => scope.id));
+  const stoppingScopes = saved.document.brands.flatMap(brand => [brand, ...brand.products])
+    .filter(scope => scope.monitoring_enabled && !scopesAfterApply.has(scope.id));
   return <div className={`monitoring-workspace tenant-workspace-editor${embedded ? " embedded-workspace" : ""}`}>
     {!embedded && <div className="sandbox-banner"><strong>Local development</strong><span>Saved in your sandbox database · No monitoring jobs run</span></div>}
     <div className="shell">
@@ -192,14 +219,16 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
           {!brandId ? <div className="editor-grid company-overview"><section>
             <h3 className="tenant-overview-title">Coverage overview</h3><p className="field-note">A combined view of every brand and product’s searches. Set coverage once per brand. Each product has its own keywords and automatically uses its brand’s coverage.</p>
             <div className="company-totals"><span><strong>{document.brands.length}</strong> {document.brands.length === 1 ? 'brand' : 'brands'}</span><span><strong>{products.length}</strong> {products.length === 1 ? 'product' : 'products'}</span></div>
-            {document.brands.map(item => <div className="brand-plan-row" key={item.id}><div><strong>{item.name}</strong><span className={`scope-state ${item.monitoring_enabled ? 'is-on' : 'is-off'}`}>{item.monitoring_enabled ? 'Brand on' : 'Brand off'}</span><p>{item.keywords.filter(Boolean).length} brand keywords · {item.products.filter(product => product.monitoring_enabled).length} of {item.products.length} products on · {item.coverage.markets.length} {item.coverage.markets.length === 1 ? 'country' : 'countries'}</p></div><button className="secondary" onClick={() => selectScope(item.id)} aria-label={`Edit ${item.name}`}>Edit brand</button></div>)}
+            {document.brands.map(item => <div className="brand-plan-row" key={item.id}><div><strong>{item.name}</strong><span className={`scope-state ${item.monitoring_enabled ? 'is-on' : 'is-off'}`}>{item.monitoring_enabled ? 'Brand-wide searches on' : 'Brand-wide searches paused'}</span><p>{item.keywords.filter(Boolean).length} brand keywords · {item.products.filter(product => product.monitoring_enabled).length} of {item.products.length} products on · {item.coverage.markets.length} {item.coverage.markets.length === 1 ? 'country' : 'countries'}</p></div><button className="secondary" onClick={() => selectScope(item.id)} aria-label={`Edit ${item.name}`}>Edit brand</button></div>)}
             {!document.brands.length && <div className="empty-state"><p>No brand has been confirmed for this tenant yet.</p><p>Start with the brand that owns the search terms and coverage. Add products only when they need their own search terms.</p><button className="primary" onClick={() => openAdd('brand')}>Set up a brand</button></div>}
           </section>{summary}</div> : brand && scope && coverage ? <fieldset disabled={busy} className="editor-grid"><legend className="visually-hidden">Monitoring draft editor</legend><div>
-            <section className={`panel monitoring-control ${scope.monitoring_enabled ? 'is-on' : 'is-off'}`}><div><h2>Monitor this {productId ? 'product' : 'brand'}</h2><p>{scope.monitoring_enabled
+            <section className={`panel monitoring-control ${scope.monitoring_enabled ? 'is-on' : 'is-off'}`}><div><h2>{productId ? 'Monitor this product' : 'Run brand-wide searches'}</h2><p>{scope.monitoring_enabled
               ? `Searches for this ${productId ? 'product' : 'brand'} will run after you save and apply.`
               : productId ? 'No searches run for this product. Its settings and history are kept.' : 'No brand-wide searches run. Active products continue to use this brand’s shared coverage.'}</p></div><label className="monitoring-switch"><input type="checkbox" role="switch" checked={scope.monitoring_enabled} onChange={event => updateScope({ monitoring_enabled: event.target.checked })} /><span aria-hidden="true" /><strong>{scope.monitoring_enabled ? 'On' : 'Off'}</strong></label></section>
             <section className="panel"><label className="field-heading" htmlFor="scope-name">{productId ? 'Product name' : 'Brand name'}</label><input id="scope-name" className="full-width" maxLength={160} value={scope.name} onChange={event => updateScope({ name: event.target.value })} /></section>
             <section className="panel"><div className="section-heading"><div><h2>Search keywords</h2><p>{productId ? 'Phrases used to sell this product. Brand keywords are not added automatically.' : 'Optional phrases for brand-wide searches. Leave this empty to monitor only the brand’s products.'}</p></div></div><label className="visually-hidden" htmlFor="keywords">Search keywords, separated by commas or newlines</label><textarea id="keywords" rows={5} value={scope.keywords.join('\n')} onChange={event => updateScope({ keywords: splitSearchKeywords(event.target.value) })} /><div className="field-note">Separate phrases with commas or newlines. Each phrase is searched separately.</div></section>
+            <EnforcementRules rules={scope.enforcement_rules ?? []} inherited={productId ? brand.enforcement_rules ?? [] : []}
+              product={!!productId} supported={loaded.enforcement_rules_supported === true} onChange={enforcement_rules => updateScope({ enforcement_rules })} />
             <section className="panel"><div className="section-heading"><div><h2>Reference images</h2><p>Add one or more pictures that show what this {productId ? 'product' : 'brand'} looks like.</p></div></div>
               <MatchingReadiness state={matchingState} />
               <ImageUploader compact accept="image/png,image/jpeg,image/webp" uploading={busy} onUpload={files => void uploadReferences(files)} label="Add reference images" help="PNG, JPG or WebP · up to 50MB total" />
@@ -224,28 +253,34 @@ export default function WorkspaceEditor({ client, loaded, onLeave, embedded = fa
               </div>}
             </section>
             <section ref={coverageSection} tabIndex={-1} aria-label="Shared coverage" className="panel coverage-panel"><h2>Shared coverage</h2>
+              {!scope.monitoring_enabled && <p className="notice" role="status">{productId
+                ? 'This product is paused. The selected countries and marketplaces will be searched when you turn product monitoring on and apply.'
+                : brand.products.some(product => product.monitoring_enabled)
+                  ? `Brand-wide searches are paused. ${brand.products.filter(product => product.monitoring_enabled).length} active products continue searching all selected countries and marketplaces. Each product has its own monitoring switch.`
+                  : 'Brand-wide searches are paused and no products are active. The selected countries and marketplaces are kept, but searches will not run until you enable this brand or a product.'}</p>}
               {productId ? <>
                 <p className="field-note">This product uses {brand.name}’s countries, marketplaces and schedule whenever product monitoring is on.</p>
-                <div className="inherited-coverage-summary">{coverage.markets.length ? coverage.markets.map(market => <div className="inherited-market" key={market.country}><strong>{countryLabel(market.country)}</strong><span>{market.sources.length ? market.sources.map(key => loaded.sources.find(source => source.key === key)?.name ?? key).join(', ') : 'No marketplaces selected'}</span></div>) : <p>No countries selected yet.</p>}<p className="inherited-schedule">Schedule: {coverage.frequency}</p></div>
+                <div className="inherited-coverage-summary">{coverage.markets.length ? coverage.markets.map(market => <div className="inherited-market" key={market.country ?? 'anywhere'}><strong>{market.country === null ? 'Anywhere' : countryLabel(market.country)}</strong><span>{market.sources.length ? market.sources.map(key => loaded.sources.find(source => source.key === key)?.name ?? key).join(', ') : 'No marketplaces selected'}</span></div>) : <p>No countries selected yet.</p>}<p className="inherited-schedule">Schedule: {coverage.frequency}</p></div>
                 <button className="secondary" onClick={() => { selectScope(brand.id); requestAnimationFrame(() => { coverageSection.current?.focus(); coverageSection.current?.scrollIntoView({ block: 'start' }); }); }}>Edit shared coverage</button>
               </> : <>
-                <p className="field-note">Used by every active product and by brand-wide searches when brand monitoring is on.</p>
-                <CoverageEditor key={brandId} value={coverage} sources={loaded.sources} disabled={busy} onChange={value => updateDocument({ ...document, brands: document.brands.map(item => item.id === brand.id ? { ...item, coverage: value } : item) })} />
+                <p className="field-note">Used by every active product and by brand-wide searches when they are on.</p>
+                <CoverageEditor key={brandId} value={coverage} sources={loaded.sources} countries={loaded.countries} disabled={busy} onChange={value => updateDocument({ ...document, brands: document.brands.map(item => item.id === brand.id ? { ...item, coverage: value } : item) })} />
               </>}
             </section>
+            <HistoryLinks key={scope.id} scopeId={scope.id} name={scope.name} />
           </div>{summary}</fieldset> : null}
               </div>
             </div>
           </div>
           <div hidden={settingsView !== 'monitoring'}>
-          <div className="savebar"><div><span>{dirty ? 'Unsaved changes' : active ? (appliedState === 'active' ? `Active · Revision ${saved.revision}` : appliedState === 'paused' ? `Applied · Monitoring paused · Revision ${saved.revision}` : `Applied · Revision ${saved.revision}`) : activationBlocked ? 'Complete setup to apply' : `Ready to apply · Revision ${saved.revision}`}</span><p className="field-note">{activationIssue || (active ? (appliedState === 'active' ? 'This configuration runs scheduled searches.' : appliedState === 'paused' ? 'All brand and product monitoring is off. Your setup is kept.' : 'Checking scheduled monitoring…') : 'Apply this configuration to update scheduled monitoring.')}</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={busy || conflict || activationBlocked || (!dirty && active)} onClick={activate}>{busy ? 'Applying…' : 'Save and apply'}</button></div></div>
+          <div className="savebar"><div><p className="field-note">After apply: {activationPlan?.total_searches ?? "Checking"} scheduled searches across all active brands and products. All selected marketplaces are included.</p>{stoppingScopes.length > 0 && <p className="notice">Searches will stop for {stoppingScopes.map(scope => scope.name).join(", ")}. Their history is kept.</p>}<span>{dirty ? 'Unsaved changes' : active ? (appliedState === 'active' ? `Active · Revision ${saved.revision}` : appliedState === 'paused' ? `Applied · Monitoring paused · Revision ${saved.revision}` : `Applied · Revision ${saved.revision}`) : activationBlocked ? 'Complete setup to apply' : `Ready to apply · Revision ${saved.revision}`}</span><p className="field-note">{activationIssue || (active ? (appliedState === 'active' ? 'This configuration runs scheduled searches.' : appliedState === 'paused' ? 'All brand and product monitoring is off. Your setup is kept.' : 'Checking scheduled monitoring…') : 'Apply this configuration to update scheduled monitoring.')}</p></div><div className="actions"><button className="secondary" disabled={!dirty || busy} onClick={() => { setDocument(structuredClone(saved.document)); selectScope(null); if (!conflict) setError(''); setMessage('Unsaved changes discarded.'); }}>Discard changes</button><button className="primary" disabled={busy || conflict || activationBlocked || (!dirty && active)} onClick={activate}>{busy ? 'Applying…' : 'Save and apply'}</button></div></div>
           <div className="status" role="status">{message}</div>
           </div>
         </div>
       </Content>
     </div>
     <dialog ref={addDialog} aria-labelledby="add-heading"><h2 id="add-heading">Add {adding === 'brand' ? 'a brand' : 'a product'}</h2><p>{adding === 'product' ? 'All products automatically use their brand’s countries, marketplaces and schedule. Add search phrases now to turn monitoring on, or leave them empty and configure the product later.' : 'Brands group products and provide shared monitoring coverage. Add brand-wide search phrases only when you want to monitor the brand itself.'}</p><form onSubmit={add}><label htmlFor="new-name">{adding === 'brand' ? 'Brand' : 'Product'} name</label><input id="new-name" name="name" required maxLength={160} autoFocus /><label htmlFor="new-keywords">{adding === 'brand' ? 'Brand-wide search keywords · optional · commas or newlines' : 'Search keywords · optional · commas or newlines'}</label><textarea id="new-keywords" name="keywords" rows={3} /><div className="actions"><button type="button" className="secondary" onClick={() => addDialog.current?.close()}>Cancel</button><button type="submit" className="primary">Add {adding === 'brand' ? 'brand' : 'product'}</button></div></form></dialog>
-    <dialog ref={previewDialog} aria-labelledby="preview-heading"><div className="dialog-header"><h2 id="preview-heading">Requested searches · {plan?.total_searches ?? 0}</h2><button className="secondary" onClick={() => previewDialog.current?.close()}>Close</button></div><p>{plan?.coverage_notice}</p>{plan?.truncated && <p>Showing the first 500 searches.</p>}<div className="table-wrap"><table><thead><tr><th>Keyword</th><th>Website</th><th>Country</th><th>Schedule</th><th>Scope</th></tr></thead><tbody>{plan?.searches.map((item, i) => <tr key={i}><td>{item.keyword}</td><td>{item.source_name}<span className="preview-domain">{item.storefront_domain}</span></td><td>{countryLabel(item.country)}</td><td>{item.frequency}</td><td>{item.origins.map(origin => origin.name).join(", ")}</td></tr>)}</tbody></table></div></dialog>
+    <dialog ref={previewDialog} aria-labelledby="preview-heading"><div className="dialog-header"><h2 id="preview-heading">Requested searches · {plan?.total_searches ?? 0}</h2><button className="secondary" onClick={() => previewDialog.current?.close()}>Close</button></div><p>{plan?.coverage_notice}</p>{plan?.truncated && <p>Showing the first 500 searches.</p>}<div className="table-wrap"><table><thead><tr><th>Keyword</th><th>Website</th><th>Country</th><th>Schedule</th><th>Scope</th></tr></thead><tbody>{plan?.searches.map((item, i) => <tr key={i}><td>{item.keyword}</td><td>{item.source_name}<span className="preview-domain">{item.storefront_domain}</span></td><td>{item.country === null ? 'Anywhere' : countryLabel(item.country)}</td><td>{item.frequency}</td><td>{item.origins.map(origin => origin.name).join(", ")}</td></tr>)}</tbody></table></div></dialog>
     <dialog ref={leaveDialog} aria-labelledby="leave-heading"><h2 id="leave-heading">Unsaved monitoring changes</h2><p>Return to the editor to apply these changes, or discard them and switch tenant.</p><div className="actions"><button className="secondary" onClick={() => leaveDialog.current?.close()}>Keep editing</button><button className="primary" onClick={onLeave}>Discard and switch</button></div></dialog>
   </div>;
 }

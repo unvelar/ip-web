@@ -7,16 +7,19 @@ import {
   type Trademark,
 } from "../api";
 import { PlatformSelector } from "../components/monitoring/PlatformSelector";
-import { COUNTRIES, countryLabel } from "../lib/countries";
+import { countryLabel } from "../lib/countries";
+import { useMonitoringCountries } from "../hooks/useMonitoringCountries";
 import { monitoringPlatformOption } from "../lib/platforms";
 import { startMonitoringSources } from "../lib/startMonitoringSources";
+import { MonitoringConfigurationGate } from "../components/monitoring/MonitoringConfigurationGate";
 
-/**
- * Start monitoring a registered IP. Picks an IP not already watched and seeds
- * it with one or more selected platforms. Adding the first platform creates
- * the monitored-domain link. On success, lands on Monitoring settings.
- */
+/** Keep the per-IP setup available only to tenants without the shared configuration. */
 export default function MonitoringNew() {
+  return <MonitoringConfigurationGate><LegacyMonitoringNew /></MonitoringConfigurationGate>;
+}
+
+function LegacyMonitoringNew() {
+  const { countries, ready: countriesReady, error: countriesError } = useMonitoringCountries();
   const navigate = useNavigate();
   const [all, setAll] = useState<Trademark[] | null>(null);
   const [monitoredIds, setMonitoredIds] = useState<string[]>([]);
@@ -123,18 +126,20 @@ export default function MonitoringNew() {
             <Field label="Target country for selected sources (optional)">
               <select
                 aria-label="Target country for selected sources"
+                disabled={!countriesReady}
                 value={pickedCountry}
                 onChange={(e) => setPickedCountry(e.target.value)}
                 title="See the platform as a shopper in this country would — optional"
                 className="px-2.5 py-1.5 rounded-lg border border-stone-200 text-sm bg-white text-stone-700 w-full"
               >
                 <option value="">🌐 Anywhere</option>
-                {COUNTRIES.map((cn) => (
+                {countries.map((cn) => (
                   <option key={cn.code} value={cn.code}>
                     {countryLabel(cn.code)}
                   </option>
                 ))}
               </select>
+              {countriesError && <p role="alert" className="text-sm text-red-700">{countriesError}</p>}
             </Field>
 
             <div className="flex justify-end pt-1">

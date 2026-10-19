@@ -38,6 +38,7 @@ const AdminIpDetail = lazy(() => import("./pages/AdminIpDetail"));
 const AdminTenants = lazy(() => import("./pages/AdminTenants"));
 const AdminMonitoring = lazy(() => import("./pages/AdminMonitoring"));
 const AdminBrowserActivity = lazy(() => import("./pages/AdminBrowserActivity"));
+const AdminLlmActivity = lazy(() => import("./pages/AdminLlmActivity"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 
@@ -118,7 +119,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function AdminRoute({ children }: { children: React.ReactNode }) {
+export function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) {
@@ -204,6 +205,7 @@ export default function App() {
           <Route path="/admin/monitoring" element={<AdminMonitoring />} />
           <Route path="/admin/marketplaces" element={<AdminMarketplaces />} />
           <Route path="/admin/browser-activity" element={<AdminBrowserActivity />} />
+          <Route path="/admin/llm-activity" element={<AdminLlmActivity />} />
           <Route path="/admin/ips" element={<AdminCatalog />} />
           <Route path="/admin/ips/:id" element={<AdminIpDetail />} />
         </Route>

@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { LoaderCircle, X } from "lucide-react";
 import { getLoginSessions, loginSessionAction, saveWorkerCapacity, type ActivityWorker, type LoginSession } from "./api";
 
+import { COUNTRIES } from "../../lib/countries";
+
 const gib = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 
 export function WorkerSettings({worker,onClose,onSaved}: {worker:ActivityWorker;onClose:()=>void;onSaved:()=>void}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [limit,setLimit] = useState(String(worker.max_parallel_jobs ?? 1));
+  const [country,setCountry] = useState(worker.native_country ?? "");
+  const [savedCountry,setSavedCountry] = useState(worker.native_country ?? "");
   const [savedLimit,setSavedLimit] = useState(worker.max_parallel_jobs ?? 1);
   const [sessions,setSessions] = useState<LoginSession[] | null>(null);
   const [busy,setBusy] = useState<string | null>(null);
@@ -35,8 +39,8 @@ export function WorkerSettings({worker,onClose,onSaved}: {worker:ActivityWorker;
   const save=async()=>{
     if(!valid||busy)return;
     setBusy("capacity");setError(null);setNotice(null);
-    try {const result=await saveWorkerCapacity(worker.id,max);setSavedLimit(result.max_parallel_jobs);onSaved();setNotice("Capacity saved. Active jobs will finish normally.");}
-    catch(reason){setError(reason instanceof Error?reason.message:"Capacity could not be saved");}
+    try {const result=await saveWorkerCapacity(worker.id,max,country || null);setSavedLimit(result.max_parallel_jobs);setSavedCountry(result.native_country ?? "");onSaved();setNotice("Worker settings saved. Active jobs will finish normally.");}
+    catch(reason){setError(reason instanceof Error?reason.message:"Worker settings could not be saved");}
     finally {setBusy(null);}
   };
   const sessionAction=async(session:LoginSession,action:"pause"|"verify")=>{
@@ -52,12 +56,20 @@ export function WorkerSettings({worker,onClose,onSaved}: {worker:ActivityWorker;
     <header><div><h2 id="ba-settings-title">Worker settings</h2><p>{worker.hostname || worker.id}</p></div>
       <button className="admin-button" onClick={onClose} aria-label="Close worker settings"><X size={17}/></button></header>
     <section>
+      <label htmlFor="ba-country">Outbound country</label>
+      <p>The country of this worker's internet connection. Country-specific jobs require a matching worker or provider.</p>
+      <select id="ba-country" value={country} onChange={event=>setCountry(event.target.value)} disabled={!supported||Boolean(busy)}>
+        <option value="">Unknown</option>
+        {country&&!COUNTRIES.some(item=>item.code===country)&&<option value={country}>{country}</option>}
+        {COUNTRIES.map(item=><option key={item.code} value={item.code}>{item.name}</option>)}
+      </select>
+      <p className="ba-muted">Workers with an unknown country can serve unrestricted targets.</p>
       <label htmlFor="ba-capacity">Maximum parallel jobs</label>
       <p>Different websites can run together. Each marketplace keeps its existing login.</p>
       <div className="ba-capacity-control"><input id="ba-capacity" type="number" min={1} max={32} step={1}
         value={limit} onChange={event=>setLimit(event.target.value)} disabled={!supported||busy==="capacity"}/>
-        <button className="admin-button" disabled={!supported||!valid||Boolean(busy)||max===savedLimit} onClick={()=>void save()}>
-          {busy==="capacity"?<LoaderCircle size={14} className="ba-spin"/>:null}Save capacity</button></div>
+        <button className="admin-button" disabled={!supported||!valid||Boolean(busy)||(max===savedLimit&&country===savedCountry)} onClick={()=>void save()}>
+          {busy==="capacity"?<LoaderCircle size={14} className="ba-spin"/>:null}Save settings</button></div>
       {!supported?<p className="ba-reason">Update this worker before enabling parallel jobs.</p>:
         <p className="ba-muted">Running jobs: {worker.active_jobs?.length ?? (worker.current_job_id?1:0)}. Lowering the limit takes effect as jobs finish.</p>}
       {ram&&<div className="ba-memory"><div><span>Total RAM</span><strong>{gib(ram.total_bytes)}</strong></div>

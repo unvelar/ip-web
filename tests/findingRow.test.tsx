@@ -43,7 +43,7 @@ async function setup(initial = finding(), showStatus = false) {
       event.preventDefault();
       await act(async () => container.querySelector(selector)!.dispatchEvent(event));
     },
-    imageError: async () => { await act(async () => container.querySelector("img")!.dispatchEvent(new window.Event("error"))); },
+    imageError: async () => { await act(async () => container.querySelector(".monitoring-listing-thumbnail img")!.dispatchEvent(new window.Event("error"))); },
   };
 }
 
@@ -64,12 +64,13 @@ test("the compact row keeps the full listing and seller identity together and li
 test("thumbnail errors advance through real images and fall back without breaking the row", async () => {
   const ui = await setup(finding({ image_urls: ["https://images.example/two.jpg"] }));
   await ui.imageError();
-  expect(ui.container.querySelector("img")?.getAttribute("src")).toBe("https://images.example/two.jpg");
+  expect(ui.container.querySelector(".monitoring-listing-thumbnail img")?.getAttribute("src")).toBe("https://images.example/two.jpg");
   await ui.imageError();
-  expect(ui.container.querySelector("img")).toBeNull();
+  expect(ui.container.querySelector(".monitoring-listing-thumbnail img")).toBeNull();
   expect(ui.container.querySelector('[aria-label="No listing image"]')).not.toBeNull();
+  expect(ui.container.querySelector(".monitoring-marketplace img")?.getAttribute("src")).toBe("https://www.example.shop/favicon.ico");
   await ui.render(finding({ image_url: "https://images.example/new.jpg" }));
-  expect(ui.container.querySelector("img")?.getAttribute("src")).toBe("https://images.example/new.jpg");
+  expect(ui.container.querySelector(".monitoring-listing-thumbnail img")?.getAttribute("src")).toBe("https://images.example/new.jpg");
 });
 
 test("the USD column preserves cents and zero but never substitutes a native currency", async () => {
@@ -85,8 +86,8 @@ test("the USD column preserves cents and zero but never substitutes a native cur
 test("suggested actions preserve clearance guidance and describe takedown as a recommendation", async () => {
   const ui = await setup();
   for (const [key, expected] of [
-    ["send_takedown", "Takedown recommended"], ["licensed_seller", "Licensed seller"],
-    ["allowed_resale", "Second hand"], ["false_positive", "Different product"], ["needs_review", "Needs review"],
+    ["send_takedown", "Takedown recommended"], ["licensed_seller", "Authorized seller"],
+    ["allowed_resale", "Second hand"], ["false_positive", "Different product"], ["needs_review", "Legal review"],
   ] as const) {
     const f = finding();
     await ui.render(finding({ actionability: { ...f.actionability, key, label: "Likely counterfeit", reason: "Current backend recommendation." } }));
@@ -97,15 +98,31 @@ test("suggested actions preserve clearance guidance and describe takedown as a r
   expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Do not pursue");
   const f = finding();
   await ui.render(finding({ manual_candidate_outcome: "takedown", actionability: { ...f.actionability, key: "licensed_seller" } }));
-  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Licensed seller");
+  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Authorized seller");
 });
 
 test("mixed workflow views show lifecycle separately from suggested action", async () => {
   const ui = await setup(finding({ review_status: "takedown_sent" }), true);
   expect(ui.container.querySelector(".monitoring-listing-meta")?.textContent).toContain("Takedown sent");
-  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Needs review");
+  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Legal review");
   await ui.render(finding({ dismissed_at: "2026-09-21T14:00:00Z", dismissal_reason: "second_hand" }));
   expect(ui.container.querySelector(".monitoring-listing-meta")?.textContent).toContain("Dismissed");
   await ui.render(finding({ ready_for_review: false, review_status: "pending" }));
   expect(ui.container.querySelector(".monitoring-listing-meta")?.textContent).toContain("Preparing");
+});
+
+test("pending assessments have no suggested action and progress disappears when a conclusion arrives", async () => {
+  const f = finding();
+  const ui = await setup();
+  for (const label of ["Checking saved rules", "Investigating"]) {
+    await ui.render(finding({ suggested_review_outcome: "do_not_pursue", actionability: { ...f.actionability, key: "investigate", label } }));
+    const action = ui.container.querySelector(".monitoring-listing-assessment");
+    expect(action?.textContent).toBe("");
+    expect(action?.getAttribute("aria-label")).toBe("No suggested action yet");
+    expect(ui.container.querySelector(".monitoring-listing-copy .monitoring-assessment-pending")?.textContent).toBe("Assessment pending");
+    expect(ui.container.textContent).not.toContain(label);
+  }
+  await ui.render(finding({ actionability: { ...f.actionability, key: "do_not_pursue", label: "Do not pursue" } }));
+  expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Do not pursue");
+  expect(ui.container.querySelector(".monitoring-assessment-pending")).toBeNull();
 });

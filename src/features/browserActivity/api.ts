@@ -30,7 +30,7 @@ export type ActivityWorker = {
   kind: WorkerKind; scrape_provider: string | null;
   last_heartbeat_at: string | null; current_job_id: string | null; job_type: string | null;
   domain: string | null; current_action: string | null; activity_version: string | null;
-  max_parallel_jobs?: number; concurrency_version?: string | null;
+  max_parallel_jobs?: number; native_country?: string | null; concurrency_version?: string | null;
   active_jobs?: {id: string; type: string; domain: string | null; started_at: string | null}[];
   resources?: {total_bytes: number; available_bytes: number; process_tree_rss_bytes: number | null;
     reserve_bytes: number; memory_limited: boolean} | null;
@@ -67,8 +67,8 @@ export const getWorkers = (query="", state="", before?: string, signal?: AbortSi
 export const getHistory = (id: string, before?: string, signal?: AbortSignal) =>
   request<JobHistory>(`${root}/jobs/${id}?${params({before})}`,{signal});
 export const getCapture = (id: string, signal?: AbortSignal) => request<{url:string}>(`${root}/captures/${id}`,{signal});
-export const saveWorkerCapacity = (id: string, max: number) => request<{id:string;max_parallel_jobs:number}>(
-  `${root}/workers/${encodeURIComponent(id)}/settings`,{method:"PATCH",body:JSON.stringify({max_parallel_jobs:max})});
+export const saveWorkerCapacity = (id: string, max: number, nativeCountry: string | null) => request<{id:string;max_parallel_jobs:number;native_country:string|null}>(
+  `${root}/workers/${encodeURIComponent(id)}/settings`,{method:"PATCH",body:JSON.stringify({max_parallel_jobs:max,native_country:nativeCountry})});
 export const getLoginSessions = (id: string, signal?: AbortSignal) => request<{sessions:LoginSession[]}>(
   `${root}/workers/${encodeURIComponent(id)}/sessions`,{signal});
 export const loginSessionAction = (worker: string, session: string, action: "pause" | "verify") => request<{ok:true}>(

@@ -1,4 +1,4 @@
-import { Check, Clock3, Layers3, Link2, LoaderCircle, RefreshCw, RotateCcw, Search, Sparkles, X } from "lucide-react";
+import { Check, Clock3, Layers3, Link2, LoaderCircle, RotateCcw, Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { MonitoringDismissReasonCode, MonitoringReviewOutcome } from "../api/findingActions";
@@ -23,6 +23,8 @@ import { preferredAllowedProductImage } from "../components/monitoring/board/all
 import { BatchConfirmModal } from "../components/monitoring/board/batch";
 import { dismissalOptionsForBatchAction, runPool } from "../components/monitoring/board/batchUtils";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
+import MonitoringToolbar from "../components/MonitoringToolbar";
+import MonitoringSearch from "../components/MonitoringSearch";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
 import { BatchWorkspace } from "../features/products/BatchWorkspace";
@@ -40,8 +42,6 @@ import type {
 } from "../features/products/labDomain";
 import {
   appendPage,
-  buildProductCategoryTree,
-  expandedCategoryGroups,
   mergeRecentDecisions,
   messageFor,
   PAGE_SIZE,
@@ -49,7 +49,7 @@ import {
   RECENT_DECISION_STATUSES,
   reviewBucket,
 } from "../features/products/labDomain";
-import { ProductCategoryBranch } from "../features/products/ProductCategoryBranch";
+import { ProductRow } from "../features/products/ProductRow";
 import { ProductSettingsWorkspace } from "../features/products/ProductSettingsWorkspace";
 import { QueueSkeleton } from "../features/products/QueueSkeleton";
 import { QuietState } from "../features/products/QuietState";
@@ -67,7 +67,6 @@ import {
   resetOptimisticProductStateAfterUndo,
   scopeFindingsToCommercialSubgroup,
 } from "../features/products/reviewDecisions";
-import { ViewTab } from "../features/products/ViewTab";
 
 export default function ProductLab() {
   const { actingTenantId } = useAuth();
@@ -115,53 +114,37 @@ export default function ProductLab() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
   const [undoingResultIds, setUndoingResultIds] = useState<Set<string>>(() => new Set());
-  const [collapsedCategoryPaths, setCollapsedCategoryPaths] = useState<Set<string>>(
-    () => new Set(),
-  );
   const exactPendingCountsRef = useRef<Record<string, number>>({});
   const exactPendingCountsIpRef = useRef<string | null>(null);
   const batchScopeRef = useRef<string | null>(null);
   const commercialReviewScopeRef = useRef<string | null>(null);
   const optimisticallyProcessedIdsRef = useRef<Set<string>>(new Set());
+  const productListRef = useRef<HTMLDivElement>(null);
+  const productSearchRef = useRef<HTMLInputElement>(null);
+  const productWorkspaceRef = useRef<HTMLElement>(null);
+  const selectedRowVisibilityRef = useRef<string | null>(null);
+  const returnFocusGroupIdRef = useRef<string | null>(null);
 
   const requestedView = searchParams.get("view");
-  const view: ProductLabView = requestedView === "all" || requestedView === "history"
+  const view: ProductLabView = requestedView === "attention" || requestedView === "history"
     ? requestedView
-    : "attention";
-  const selectedGroupId = searchParams.get("group");
+    : "all";
+  const linkedGroupId = searchParams.get("group");
+  const productSelectionScope = `${actingTenantId ?? ""}:${activeIpId ?? ""}`;
+  const [productSelection, setProductSelection] = useState<{
+    scope: string;
+    linkedGroupId: string | null;
+    groupId: string | null;
+  } | null>(null);
+  // Local selection stays within the workspace; incoming links and scope changes
+  // still determine the initial product.
+  const selectedGroupId = productSelection?.scope === productSelectionScope &&
+      productSelection.linkedGroupId === linkedGroupId
+    ? productSelection.groupId
+    : linkedGroupId;
   const requestedFindingId = searchParams.get("finding");
   const requestedCommercialSubgroupKey = searchParams.get("offer");
   const showGroupSettings = searchParams.get("panel") === "settings";
-
-  useEffect(() => {
-    const closeCategoryMenusOutside = (event: PointerEvent) => {
-      if (!(event.target instanceof Node)) return;
-      const target = event.target;
-
-      document
-        .querySelectorAll<HTMLDetailsElement>("details[data-category-overflow-menu][open]")
-        .forEach((menu) => {
-          if (!menu.contains(target)) menu.removeAttribute("open");
-        });
-    };
-    const closeCategoryMenusOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-
-      document
-        .querySelectorAll<HTMLDetailsElement>("details[data-category-overflow-menu][open]")
-        .forEach((menu) => {
-          menu.removeAttribute("open");
-          menu.querySelector<HTMLElement>("summary")?.focus();
-        });
-    };
-
-    document.addEventListener("pointerdown", closeCategoryMenusOutside);
-    document.addEventListener("keydown", closeCategoryMenusOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeCategoryMenusOutside);
-      document.removeEventListener("keydown", closeCategoryMenusOnEscape);
-    };
-  }, []);
 
   useEffect(() => {
     if (view === "history") return;
@@ -172,21 +155,29 @@ export default function ProductLab() {
   }, [query, view]);
 
   const selectGroup = useCallback((groupId: string | null) => {
+    const hasWorkspaceParams = ["panel", "finding", "offer"].some((key) => searchParams.has(key));
+    if (groupId === selectedGroupId && !hasWorkspaceParams) return;
+    setProductSelection({ scope: productSelectionScope, linkedGroupId, groupId });
+    setBatchFindings(null);
+    setLoadingBatch(Boolean(groupId));
+    setActiveFinding(null);
     const next = new URLSearchParams(searchParams);
-    if (groupId) next.set("group", groupId);
-    else next.delete("group");
+    if (groupId) {
+      returnFocusGroupIdRef.current = groupId;
+    }
     next.delete("panel");
     next.delete("finding");
     next.delete("offer");
-    setSearchParams(next);
-  }, [searchParams, setSearchParams]);
+    if (hasWorkspaceParams) setSearchParams(next, { replace: true });
+  }, [linkedGroupId, productSelectionScope, searchParams, selectedGroupId, setSearchParams]);
 
   const openGroupSettings = useCallback(() => {
     const next = new URLSearchParams(searchParams);
+    if (selectedGroupId) next.set("group", selectedGroupId);
     next.set("panel", "settings");
     next.delete("finding");
     setSearchParams(next);
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, selectedGroupId, setSearchParams]);
 
   const openReviewQueue = useCallback(() => {
     const next = new URLSearchParams(searchParams);
@@ -197,10 +188,11 @@ export default function ProductLab() {
   const openFinding = useCallback((finding: IpReviewFinding) => {
     setActiveFinding(finding);
     const next = new URLSearchParams(searchParams);
+    if (selectedGroupId) next.set("group", selectedGroupId);
     next.set("finding", finding.result_id);
     next.delete("panel");
     setSearchParams(next);
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, selectedGroupId, setSearchParams]);
 
   const closeFinding = useCallback(() => {
     setActiveFinding(null);
@@ -336,33 +328,6 @@ export default function ProductLab() {
       });
   }, [overview, view]);
 
-  const pagedCategoryTrees = useMemo(
-    () => Array.from(
-      { length: Math.ceil(visibleGroups.length / PAGE_SIZE) },
-      (_, pageIndex) => buildProductCategoryTree(
-        visibleGroups.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE),
-      ),
-    ),
-    [visibleGroups],
-  );
-  const navigableGroups = useMemo(
-    () => pagedCategoryTrees.flatMap((categories) => expandedCategoryGroups(
-      categories,
-      collapsedCategoryPaths,
-      Boolean(query.trim()),
-    )),
-    [collapsedCategoryPaths, pagedCategoryTrees, query],
-  );
-
-  const toggleCategory = useCallback((path: string) => {
-    setCollapsedCategoryPaths((current) => {
-      const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-  }, []);
-
   const loadedSelectedGroup = selectedGroupId
     ? overview?.groups.find((group) =>
         group.id === selectedGroupId || group.canonical_product_id === selectedGroupId
@@ -447,13 +412,14 @@ export default function ProductLab() {
 
   const selectCommercialReviewLane = useCallback((subgroupKey: string | null) => {
     const next = new URLSearchParams(searchParams);
+    if (selectedGroupId) next.set("group", selectedGroupId);
     if (subgroupKey) next.set("offer", subgroupKey);
     else next.delete("offer");
     next.delete("finding");
     next.delete("panel");
     setActiveFinding(null);
     setSearchParams(next);
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, selectedGroupId, setSearchParams]);
 
   const updateSelectedGroup = useCallback((
     update: (current: PersistedProductGroup) => PersistedProductGroup,
@@ -647,7 +613,6 @@ export default function ProductLab() {
     setMergeSelectionError(null);
     setMergeNotice(null);
     setQuery("");
-    setCollapsedCategoryPaths(new Set());
   }
 
   function cancelProductMergeSelection() {
@@ -670,12 +635,14 @@ export default function ProductLab() {
 
   function changeView(nextView: ProductLabView) {
     const next = new URLSearchParams(searchParams);
-    if (nextView === "attention") next.delete("view");
-    else next.set("view", nextView);
-    next.delete("group");
+    next.set("view", nextView);
+    if (nextView === "history" || mergeSourceGroup) {
+      next.delete("group");
+      setProductSelection({ scope: productSelectionScope, linkedGroupId: null, groupId: null });
+    }
     next.delete("panel");
     next.delete("finding");
-    setQuery("");
+    if (nextView === "history" || view === "history") setQuery("");
     setActiveFinding(null);
     setMergeSourceGroup(null);
     setMergeTargetGroupIds(new Set());
@@ -702,7 +669,6 @@ export default function ProductLab() {
   }
 
   const attentionCount = overview?.triage_group_count ?? null;
-  const productCount = overview?.group_count ?? 0;
   const paginatedProductCount = view === "attention" && !mergeSourceGroup
     ? attentionCount ?? overview?.pagination_group_count ?? 0
     : overview?.pagination_group_count ?? 0;
@@ -722,6 +688,34 @@ export default function ProductLab() {
       window.scrollTo({ top: mobileListScrollRef.current, behavior: "instant" });
     }
   }, [showMobileInspector]);
+  const showProductWorkspace = view !== "history";
+  useEffect(() => {
+    if (selectedGroupId || !returnFocusGroupIdRef.current) return;
+    const returnedGroupId = returnFocusGroupIdRef.current;
+    returnFocusGroupIdRef.current = null;
+    const returnedRow = Array.from(
+      productListRef.current?.querySelectorAll<HTMLButtonElement>("button[data-product-id]") ?? [],
+    ).find((row) => row.dataset.productId === returnedGroupId);
+    (returnedRow ?? productSearchRef.current)?.focus();
+  }, [selectedGroupId, showProductWorkspace]);
+  useEffect(() => {
+    if (selectedGroupId) productWorkspaceRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [selectedGroupId]);
+  useEffect(() => {
+    if (!showProductWorkspace || !selectedGroupResolvedId) {
+      selectedRowVisibilityRef.current = null;
+      return;
+    }
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    if (selectedRowVisibilityRef.current === selectedGroupResolvedId) return;
+    const selectedRow = Array.from(
+      productListRef.current?.querySelectorAll<HTMLButtonElement>("button[data-product-id]") ?? [],
+    ).find((row) => row.dataset.productId === selectedGroupResolvedId);
+    if (selectedRow) {
+      selectedRow.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+      selectedRowVisibilityRef.current = selectedGroupResolvedId;
+    }
+  }, [selectedGroupResolvedId, showProductWorkspace, visibleGroups]);
   const matchingRecentDecisions = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     if (!needle) return recentDecisions;
@@ -893,7 +887,7 @@ export default function ProductLab() {
           try {
             const findingIpId = (finding.ip_id ?? activeIpId) as string;
             if (action === "review") {
-              await markIpFindingNeedsReview(findingIpId, finding.result_id);
+              await markIpFindingNeedsReview(findingIpId, finding.result_id, decisionReason ?? "");
             } else if (action === "allow_product") {
               await allowIpFindingProductImage(findingIpId, finding.result_id, {
                 image_url: preferredAllowedProductImage(finding),
@@ -1177,57 +1171,38 @@ export default function ProductLab() {
   }
 
   return (
-    <div className="min-h-[calc(100dvh_-_var(--app-shell-topbar-height)_-_var(--app-shell-banner-height))] bg-[#f7f6f3] text-stone-950 lg:h-[calc(100dvh_-_var(--app-shell-topbar-height)_-_var(--app-shell-banner-height))] lg:overflow-hidden">
-      <header className="border-b border-stone-200/80 bg-[#faf9f7] px-4 py-[7px] sm:px-6 lg:px-5">
-        <div className="flex min-h-[28px] items-center justify-between gap-4">
-          <div className="flex min-w-0 items-baseline gap-2.5">
-            <h1 className="shrink-0 text-[16px] font-semibold tracking-[-0.025em] text-stone-950">
-              Product Lab
-            </h1>
-            <p className="hidden truncate text-[11px] text-stone-500 sm:block">
-              {activeIp?.name ? `${activeIp.name} · ` : ""}Review what needs attention, then move on.
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setRefreshToken((token) => token + 1)}
-              disabled={loading || loadingHistory}
-              className="grid size-[28px] place-items-center rounded-md text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
-              aria-label="Refresh products"
-              title="Refresh products"
-            >
-              <RefreshCw size={14} className={loading || loadingHistory ? "animate-spin" : ""} />
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="product-lab-page flex flex-col min-h-[calc(100dvh_-_var(--app-shell-topbar-height)_-_var(--app-shell-banner-height))] bg-[#f7f6f3] text-stone-950 lg:h-[calc(100dvh_-_var(--app-shell-banner-height))] lg:overflow-hidden">
+      <MonitoringToolbar
+        title="Product Lab"
+        onRefresh={() => setRefreshToken((token) => token + 1)}
+        refreshing={loading || loadingHistory}
+        meta={view !== "history" && <span role="status" aria-live="polite">
+          {loading || query.trim() !== debouncedProductQuery
+            ? "Searching…"
+            : overview ? `${visibleGroups.length} of ${paginatedProductCount}${query.trim() ? " matches" : ""}` : ""}
+        </span>}
+        actions={<select aria-label="Product view" value={view} onChange={(event) => changeView(event.target.value as ProductLabView)}>
+          <option value="all">All products</option>
+          <option value="attention">Needs attention</option>
+          <option value="history">Recent decisions</option>
+        </select>}
+      >
+        <MonitoringSearch
+          inputRef={productSearchRef}
+          value={query}
+          onChange={setQuery}
+          label={view === "history" ? "Search decision history" : view === "all" || mergeSourceGroup ? "Search all products" : "Search products needing attention"}
+          placeholder={view === "history" ? "Search recent decisions" : mergeSourceGroup ? "Search all products to merge" : view === "all" ? "Search all products" : "Search by product name"}
+        />
+      </MonitoringToolbar>
 
-      <div className="lg:grid lg:h-[calc(100%-43px)] lg:grid-cols-[minmax(340px,0.82fr)_minmax(430px,1.18fr)]">
-        <section className={`${showMobileInspector ? "hidden lg:flex" : "flex"} min-h-0 flex-col border-stone-200/80 bg-[#faf9f7] lg:border-r`} aria-label="Products">
-          <div className="border-b border-stone-200/80 px-4 sm:px-6 lg:px-4">
-            <div className="flex items-center gap-4 overflow-x-auto" role="tablist" aria-label="Product views">
-              <ViewTab
-                active={view === "attention"}
-                label="Needs attention"
-                count={attentionCount}
-                onClick={() => changeView("attention")}
-              />
-              <ViewTab
-                active={view === "history"}
-                label="Recent decisions"
-                count={null}
-                onClick={() => changeView("history")}
-              />
-              <ViewTab
-                active={view === "all"}
-                label="All products"
-                count={view === "all" ? productCount : null}
-                onClick={() => changeView("all")}
-              />
-            </div>
-          </div>
-
+      <div className={`min-h-0 flex-1 ${showProductWorkspace ? "lg:grid lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
+        <section
+          className={`${showProductWorkspace && showMobileInspector ? "hidden lg:flex" : "flex"} min-h-0 flex-col bg-white ${showProductWorkspace
+            ? "lg:h-full lg:overflow-hidden lg:border-r lg:border-stone-200"
+            : "mx-auto max-w-[1100px]"}`}
+          aria-label="Products"
+        >
           {mergeSourceGroup && (
             <div
               role="region"
@@ -1282,47 +1257,6 @@ export default function ProductLab() {
               )}
             </div>
           )}
-
-          <div className="flex items-center gap-3 border-b border-stone-200/80 px-4 py-[7px] sm:px-6 lg:px-4">
-            <label className="relative block min-w-0 flex-1">
-              <Search
-                size={14}
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                aria-label={view === "history"
-                  ? "Search decision history"
-                  : view === "all" || mergeSourceGroup
-                    ? "Search all products"
-                    : "Search products needing attention"}
-                placeholder={view === "history"
-                  ? "Search recent decisions"
-                  : mergeSourceGroup
-                    ? "Search all products to merge"
-                    : view === "all"
-                      ? "Search all products"
-                      : "Search products"}
-                className="block h-[30px] w-full rounded-md border border-stone-200 bg-white pl-8 pr-3 text-[11px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/70"
-              />
-            </label>
-            {view !== "history" && overview && (
-              <div
-                className="shrink-0 text-[10px] leading-[14px] tabular-nums text-stone-500"
-                role="status"
-                aria-live="polite"
-              >
-                <span>
-                  {loading
-                    ? "Updating…"
-                    : `${visibleGroups.length} of ${paginatedProductCount}${query.trim() ? " matches" : ""}`}
-                </span>
-              </div>
-            )}
-          </div>
 
           <div className="min-h-0 flex-1 lg:overflow-y-auto lg:overscroll-contain">
             {view !== "history" && error && (
@@ -1421,45 +1355,43 @@ export default function ProductLab() {
               />
             ) : (
               <div
+                ref={productListRef}
                 role="listbox"
                 aria-label="Product list"
                 aria-multiselectable={Boolean(mergeSourceGroup)}
                 onKeyDown={(event) => {
                   if (mergeSourceGroup) return;
                   if (!["ArrowDown", "ArrowUp", "j", "k"].includes(event.key)) return;
-                  if (navigableGroups.length === 0) return;
+                  if (visibleGroups.length === 0) return;
                   event.preventDefault();
-                  const currentIndex = navigableGroups.findIndex((group) => group.id === selectedGroup?.id);
+                  const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button[role='option']"));
+                  const currentIndex = options.findIndex((option) => option.contains(event.target as Node));
                   const direction = event.key === "ArrowDown" || event.key === "j" ? 1 : -1;
-                  const nextIndex = Math.max(0, Math.min(navigableGroups.length - 1, currentIndex + direction));
-                  selectGroup(navigableGroups[nextIndex].id);
+                  const nextIndex = Math.max(0, Math.min(visibleGroups.length - 1, currentIndex + direction));
+                  options[nextIndex]?.focus();
                 }}
               >
-                {pagedCategoryTrees.map((categories, pageIndex) => (
-                  <div key={pageIndex}>
-                    {pageIndex > 0 && (
-                      <div className="border-y border-stone-200/80 bg-stone-50 px-4 py-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-stone-400 sm:px-6 lg:px-4">
-                        Page {pageIndex + 1}
-                      </div>
-                    )}
-                    {categories.map((category) => (
-                      <ProductCategoryBranch
-                        key={category.key}
-                        category={category}
-                        depth={0}
-                        collapsedPaths={collapsedCategoryPaths}
-                        forceExpanded={Boolean(query.trim())}
-                        showAllListings={view === "all" || Boolean(mergeSourceGroup)}
-                        selectedGroupId={selectedGroup?.id ?? null}
-                        mergeSourceGroupId={mergeSourceGroup?.id ?? null}
-                        mergeTargetGroupIds={mergeTargetGroupIds}
-                        mergeDisabled={savingMerge}
-                        onToggle={toggleCategory}
-                        onSelectGroup={selectGroup}
-                        onToggleMergeGroup={toggleMergeTarget}
-                      />
-                    ))}
-                  </div>
+                {visibleGroups.map((group, index) => (
+                  <ProductRow
+                    presentation={showProductWorkspace ? "rail" : "search"}
+                    key={group.id}
+                    group={group}
+                    index={index}
+                    listingCount={view === "all" || mergeSourceGroup
+                      ? group.member_count
+                      : group.triage_member_count ?? group.member_count}
+                    selected={selectedGroup?.id === group.id}
+                    mergeState={mergeSourceGroup
+                      ? mergeSourceGroup.id === group.id
+                        ? "source"
+                        : mergeTargetGroupIds.has(group.id)
+                          ? "selected"
+                          : "available"
+                      : null}
+                    mergeDisabled={savingMerge || loading || query.trim() !== debouncedProductQuery}
+                    onSelect={() => selectGroup(group.id)}
+                    onToggleMerge={() => toggleMergeTarget(group.id)}
+                  />
                 ))}
               </div>
             )}
@@ -1483,7 +1415,7 @@ export default function ProductLab() {
           </div>
         </section>
 
-        <section className={`${showMobileInspector ? "block" : "hidden lg:block"} min-h-0 lg:overflow-y-auto lg:overscroll-contain bg-white`} aria-label="Selected product">
+        <section ref={productWorkspaceRef} className={`${showProductWorkspace ? (showMobileInspector ? "block" : "hidden lg:block") : "hidden"} min-h-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain bg-white`} aria-label="Selected product">
           {view === "history" ? (
             <div className="grid h-full min-h-[420px] place-items-center px-8 text-center">
               <div className="max-w-xs">
@@ -1575,8 +1507,8 @@ export default function ProductLab() {
             <div className="grid h-full min-h-[420px] place-items-center px-8 text-center">
               <div>
                 <Sparkles size={20} className="mx-auto text-stone-300" />
-                <p className="mt-3 text-[13px] font-medium text-stone-700">Choose a product group</p>
-                <p className="mt-1 text-[12px] text-stone-400">Then process its listings as one batch.</p>
+                <p className="mt-3 text-[16px] font-medium text-stone-700">Select a product</p>
+                <p className="mt-2 text-[13px] text-stone-500">Its marketplace listings will appear here.</p>
               </div>
             </div>
           )}

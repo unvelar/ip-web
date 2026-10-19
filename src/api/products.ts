@@ -147,6 +147,9 @@ export interface ProductGroupRecommendationCounts {
   second_hand: number;
   might_be_ok: number;
   needs_review: number;
+  investigate?: number;
+  needs_triage?: number;
+  do_not_pursue?: number;
   /** @deprecated Backward-compatible aggregate from older API responses. */
   review?: number;
 }
@@ -664,7 +667,10 @@ function normalizeProductGroupRecommendationCounts(
     second_hand: Math.max(0, Math.trunc(counts.second_hand)),
     might_be_ok: Math.max(0, Math.trunc(mightBeOk)),
     needs_review: Math.max(0, Math.trunc(needsReview)),
-    review: Math.max(0, Math.trunc(mightBeOk + needsReview)),
+    investigate: isFiniteNumber(counts.investigate) ? Math.max(0,Math.trunc(counts.investigate)) : 0,
+    needs_triage: isFiniteNumber(counts.needs_triage) ? Math.max(0,Math.trunc(counts.needs_triage)) : 0,
+    do_not_pursue: isFiniteNumber(counts.do_not_pursue) ? Math.max(0,Math.trunc(counts.do_not_pursue)) : 0,
+    review: Math.max(0, Math.trunc(mightBeOk + needsReview + (counts.investigate ?? 0) + (counts.needs_triage ?? 0))),
   };
 }
 

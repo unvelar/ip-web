@@ -4,8 +4,9 @@ import type { MonitoringSellerProfilePage } from "../../api";
 import { formatAgo, formatMoney } from "../../components/monitoring/board/utils";
 import { monitoringPlatformLabel } from "../../lib/platforms";
 import { SellerSales } from "./SellerSales";
+import { SellerPolicyActions } from './SellerPolicyActions';
 
-export function SellerProfileHeader({ profile }: { profile: MonitoringSellerProfilePage }) {
+export function SellerProfileHeader({ profile,onChanged,ipId }: { profile: MonitoringSellerProfilePage;onChanged:()=>Promise<void>;ipId:string|null }) {
   const { seller, summary } = profile;
   const unknownAvailability = summary.blocked_listings + summary.unknown_availability;
   return (
@@ -49,7 +50,7 @@ export function SellerProfileHeader({ profile }: { profile: MonitoringSellerProf
           </div>
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-stone-100 sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
-          <Metric label="Open findings" value={summary.monitored_listings.toLocaleString()} icon={<ShoppingBag size={15} />} />
+          <Metric label="Findings" value={summary.monitored_listings.toLocaleString()} icon={<ShoppingBag size={15} />} />
           <Metric label="Available" value={summary.available_listings.toLocaleString()} icon={<PackageOpen size={15} />} />
           <Metric label="Availability unknown" value={unknownAvailability.toLocaleString()} />
           <Metric label="Market value" value={formatMoney(summary.monitored_market_usd, "USD")} />
@@ -57,6 +58,8 @@ export function SellerProfileHeader({ profile }: { profile: MonitoringSellerProf
           <Metric label="Prior enforcement" value={summary.prior_enforcement_count.toLocaleString()} icon={<ShieldCheck size={15} />} alert={summary.prior_enforcement_count > 0} />
         </div>
       </header>
+
+      <SellerPolicyActions profile={profile} onChanged={onChanged} ipId={ipId}/>
 
       {summary.returned_listing_count > 0 && (
         <section className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-red-950">

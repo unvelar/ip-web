@@ -70,6 +70,9 @@ export type ProductGroupRecommendationBucket =
   | "takedown"
   | "second_hand"
   | "might_be_ok"
+  | "investigate"
+  | "needs_triage"
+  | "do_not_pursue"
   | "needs_review";
 
 export const PRODUCT_GROUP_RECOMMENDATION_BUCKETS: Array<{
@@ -104,10 +107,11 @@ export const PRODUCT_GROUP_RECOMMENDATION_BUCKETS: Array<{
     labelClassName: "text-emerald-950",
     countClassName: "bg-white/80 text-emerald-800",
   },
+  ...([['investigate','Investigate','Automated evidence checks are needed.'],['needs_triage','Staff triage','Resolve facts or customer policy before legal escalation.'],['do_not_pursue','Do not pursue','The customer policy excludes this offer.']] as const).map(([key,label,description])=>({key,label,description,className:'border-stone-200 bg-stone-50/60',labelClassName:'text-stone-900',countClassName:'bg-white/80 text-stone-700'})),
   {
     key: "needs_review",
-    label: "Needs review",
-    description: "The current evidence is inconclusive and needs a reviewer decision.",
+    label: "Legal review",
+    description: "A specific legal question remains after investigation and customer policy.",
     className: "border-amber-200 bg-amber-50/60",
     labelClassName: "text-amber-950",
     countClassName: "bg-white/80 text-amber-800",
@@ -144,10 +148,10 @@ function decrementRecommendationCount(
 ) {
   const next = {
     ...counts,
-    [bucket]: Math.max(0, counts[bucket] - 1),
+    [bucket]: Math.max(0, (counts[bucket] ?? 0) - 1),
   };
   if (next.review != null) {
-    next.review = next.might_be_ok + next.needs_review;
+    next.review = next.might_be_ok + next.needs_review + (next.investigate ?? 0) + (next.needs_triage ?? 0);
   }
   return next;
 }
@@ -314,13 +318,16 @@ function recommendationCountsForFindings(findings: IpReviewFinding[]) {
     second_hand: 0,
     might_be_ok: 0,
     needs_review: 0,
+    investigate: 0,
+    needs_triage: 0,
+    do_not_pursue: 0,
     review: 0,
   };
   for (const finding of findings) {
     const bucket = recommendationBucketForFinding(finding);
-    counts[bucket] += 1;
+    counts[bucket] = (counts[bucket] ?? 0) + 1;
   }
-  counts.review = counts.might_be_ok + counts.needs_review;
+  counts.review = counts.might_be_ok + counts.needs_review + (counts.investigate ?? 0) + (counts.needs_triage ?? 0);
   return counts;
 }
 
@@ -567,7 +574,7 @@ export function productGroupPriceRange(group: PersistedProductGroup) {
 
 export function productGroupRecommendationBucket(key: ProductGroupRecommendationBucket) {
   return PRODUCT_GROUP_RECOMMENDATION_BUCKETS.find((bucket) => bucket.key === key) ??
-    PRODUCT_GROUP_RECOMMENDATION_BUCKETS[3];
+    PRODUCT_GROUP_RECOMMENDATION_BUCKETS.find(bucket=>bucket.key === "investigate")!;
 }
 
 function recommendationBucketForActionability(
@@ -576,7 +583,8 @@ function recommendationBucketForActionability(
   if (key === "send_takedown") return "takedown";
   if (key === "allowed_resale") return "second_hand";
   if (key === "licensed_seller" || key === "false_positive") return "might_be_ok";
-  return "needs_review";
+  if (key === "needs_review" || key === "needs_triage" || key === "do_not_pursue") return key;
+  return "investigate";
 }
 
 export function recommendationBucketForProfile(profile: ProductClusterProfile) {
@@ -811,7 +819,10 @@ export function productGroupRecommendationSummary(group: PersistedProductGroup) 
     { label: "Takedown recommended", count: counts.takedown },
     { label: "Second-hand", count: counts.second_hand },
     { label: "Might be OK", count: counts.might_be_ok },
-    { label: "Needs review", count: counts.needs_review },
+    { label: "Investigate", count: counts.investigate ?? 0 },
+    { label: "Staff triage", count: counts.needs_triage ?? 0 },
+    { label: "Do not pursue", count: counts.do_not_pursue ?? 0 },
+    { label: "Legal review", count: counts.needs_review },
   ].filter(({ count }) => count > 0);
 }
 

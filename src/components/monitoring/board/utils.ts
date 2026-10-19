@@ -116,7 +116,7 @@ export function statusBadge(s: CaseReviewStatus | null | undefined) {
   const status = (s ?? "pending") as CaseReviewStatus | "pending";
   switch (status) {
     case "review":
-      return { label: "Review", cls: "bg-sky-100 text-sky-700" };
+      return { label: "Legal review", cls: "bg-sky-100 text-sky-700" };
     case "takedown_pending":
       return { label: "Awaiting legal action", cls: "bg-violet-100 text-violet-700" };
     case "takedown_sent":
@@ -147,6 +147,8 @@ export function legalQueueReasonLabel(reason: string | null | undefined) {
       return "Automatic delivery could not be queued";
     case "automatic_delivery_failed":
       return "Automatic delivery failed";
+    case "enforcement_policy_changed":
+      return "Enforcement rules or listing evidence changed. Review and approve this notice again.";
     default:
       return reason ? reason.replace(/_/g, " ") : "Manual legal submission required";
   }
@@ -154,7 +156,7 @@ export function legalQueueReasonLabel(reason: string | null | undefined) {
 
 export function findingStatusBadge(f: IpReviewFinding) {
   if (f.dismissed_at) return dismissalBadge(f.dismissal_reason);
-  if (f.licensed_seller) return dismissalBadge("licensed");
+  if (f.licensed_seller && !f.takedown_sent_at && !f.enforced_at) return dismissalBadge("do_not_pursue");
   if ((!f.ready_for_review || !hasReviewAnalysis(f)) && (f.review_status ?? "pending") === "pending") {
     return { label: "Preparing", cls: "bg-stone-100 text-stone-500" };
   }
@@ -423,8 +425,8 @@ export function suggestionTitle(f: IpReviewFinding, shortcut: string) {
 
 export function actionabilityMeta(actionability: IpReviewFinding["actionability"] | null | undefined) {
   const value = actionability ?? {
-    key: "needs_review" as const,
-    label: "Needs review",
+    key: "investigate" as const,
+    label: "Investigate",
     reason: "Evidence is not decisive enough for an automatic recommendation.",
   };
   switch (value.key) {
@@ -436,6 +438,9 @@ export function actionabilityMeta(actionability: IpReviewFinding["actionability"
       return { ...value, cls: "bg-emerald-700 text-white", subtleCls: "border-emerald-300 bg-emerald-50 text-emerald-900" };
     case "false_positive":
       return { ...value, cls: "bg-stone-800 text-white", subtleCls: "border-stone-300 bg-stone-50 text-stone-800" };
+    case "investigate":
+    case "needs_triage":
+      return { ...value, cls: "bg-stone-600 text-white", subtleCls: "border-stone-300 bg-stone-50 text-stone-800" };
     case "needs_review":
     default:
       return { ...value, cls: "bg-amber-600 text-white", subtleCls: "border-amber-300 bg-amber-50 text-amber-900" };

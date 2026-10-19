@@ -4,13 +4,13 @@ import type { FirstScanSourceProgress, FirstScanSourceState } from "../../lib/fi
 export const SOURCE_STATE_COPY: Record<FirstScanSourceState, { label: string; detail: string }> = {
   connecting: { label: "Connecting", detail: "Preparing this website" },
   setup_processing: { label: "Preparing", detail: "Website setup is still running" },
-  waiting: { label: "Queued", detail: "Waiting for its first search" },
+  waiting: { label: "Waiting", detail: "This selected website is waiting for a search worker" },
   scanning: { label: "Scanning", detail: "Looking for listings now" },
   preparing: { label: "Pending", detail: "Waiting for listing checks to finish" },
-  ready: { label: "Ready", detail: "Latest results processed" },
-  retry_needed: { label: "Limited", detail: "Searches on this website have not completed" },
+  ready: { label: "Monitoring", detail: "Saved listings remain available as monitoring updates" },
+  retry_needed: { label: "Waiting", detail: "Waiting for updates from this website" },
   paused: { label: "Paused", detail: "Searches are disabled for this website" },
-  failed: { label: "Unavailable", detail: "The latest search did not complete" },
+  failed: { label: "Waiting", detail: "Waiting for updates from this website" },
 };
 
 export function sourceConnectionDetail(sources: FirstScanSourceProgress[], monitoringEnabled = true): string {

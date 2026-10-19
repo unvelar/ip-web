@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { IpReviewFinding, MonitoringDismissReasonCode, MonitoringReviewOutcome } from "../../../api";
 import { sellerProfilePath } from "../../../lib/sellers";
+import { assessmentPendingExplanation, assessmentPendingLabel, monitoringRecommendation } from "../../../lib/monitoringRecommendation";
 import { ActionabilityBadge } from "./ActionabilityBadge";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
@@ -54,6 +55,7 @@ export function GridFindingCard({
 }) {
   const status = findingStatusBadge(f);
   const actionability = actionabilityMeta(f.actionability);
+  const recommendation = monitoringRecommendation(f);
   const whyFlagged = findingFlaggedReason(f);
   const chips = findingChips(f, showIp);
   const similarity = f.similarity_score;
@@ -120,17 +122,17 @@ export function GridFindingCard({
       </div>
       <div className="p-3 space-y-2 flex flex-col grow">
         <div className="flex items-center gap-1 flex-wrap min-h-6">
-          {!active && (
+          {!active && (recommendation.label ? (
             <ActionabilityBadge
-              label={actionability.label}
-              reason={actionability.reason}
+              label={recommendation.label}
+              reason={recommendation.reason}
               source={f.actionability?.reason_category === "manual" ? "Reviewer suggestion" : "AI suggestion"}
               className="shrink-0 gap-1"
               badgeClassName={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${actionability.cls}`}
               iconClassName="h-3.5 w-3.5"
               iconSize={12}
             />
-          )}
+          ) : <span className="text-[11px] text-stone-500" title={recommendation.reason}>{assessmentPendingLabel}</span>)}
           {f.manual_candidate_outcome && (
             <span
               className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700"
@@ -233,12 +235,12 @@ export function GridFindingCard({
             {f.actionability && (
               <p className="space-y-1">
                 <span className="block">
-                  <span className="font-semibold text-stone-500">AI recommendation: </span>
-                  {actionability.label}
+                  <span className="font-semibold text-stone-500">{recommendation.label ? "AI recommendation: " : "Assessment: "}</span>
+                  {recommendation.label ?? assessmentPendingLabel}
                 </span>
                 <span className="block">
-                  <span className="font-semibold text-stone-500">Why recommended: </span>
-                  {actionability.reason}
+                  <span className="font-semibold text-stone-500">{recommendation.label ? "Why recommended: " : "Progress: "}</span>
+                  {recommendation.label ? recommendation.reason : assessmentPendingExplanation}
                 </span>
               </p>
             )}

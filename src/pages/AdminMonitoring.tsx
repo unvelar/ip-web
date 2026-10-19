@@ -16,8 +16,10 @@ import { ADMIN_JOB_COPY } from "../features/adminMonitoring/monitoringJobs";
 import { WorkerTypeBadge } from "../features/adminMonitoring/WorkerTypeBadge";
 import { useAdminMonitoringStatus, type AdminMonitoringWindow } from "../features/adminMonitoring/useAdminMonitoringStatus";
 import { WebsitePerformance } from "../features/adminMonitoring/WebsitePerformance";
+import {CoverageRecovery} from '../features/adminMonitoring/CoverageRecovery';
 import { recoveryLabel } from "../components/monitoring/recoveryPresentation";
 import { failureDetail } from "../components/monitoring/failureDetail";
+import { JobActivity } from "../features/adminMonitoring/JobActivity";
 
 const number = (value: number) => value.toLocaleString();
 const percentage = (value: number | null | undefined) => value == null ? "No data" : `${value.toFixed(1)}%`;
@@ -147,6 +149,12 @@ export default function AdminMonitoring() {
             />
           </section>
 
+          <JobActivity
+            key={`job-activity-${monitor.windowHours}`}
+            windowHours={monitor.windowHours}
+            refreshAt={monitor.status.generated_at}
+            demand={monitor.status.worker_demand}
+          />
           {monitor.status.setup_recovery && <SetupRecovery recovery={monitor.status.setup_recovery} />}
           <div className="admin-monitoring-content">
             <QueueHealth queues={monitor.status.queue} />
@@ -164,6 +172,7 @@ export default function AdminMonitoring() {
               />
             </div>
           </div>
+          <CoverageRecovery refreshAt={monitor.status.generated_at}/>
           <WebsitePerformance key={monitor.windowHours} windowHours={monitor.windowHours} asOf={monitor.status.generated_at} />
         </div>
       )}

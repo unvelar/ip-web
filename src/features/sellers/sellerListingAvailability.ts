@@ -11,14 +11,14 @@ export function sellerListingAvailability(value: string | null) {
     return {
       label: "Couldn't verify",
       cls: "bg-amber-50 text-amber-700",
-      title: "The website blocked our latest automated check. This finding remains open and will be checked again.",
+      title: "The website blocked our latest automated availability check.",
     };
   }
   if (!normalized || normalized === "unknown" || normalized === "unchecked" || normalized === "error") {
     return {
       label: "Not yet verified",
       cls: "bg-amber-50 text-amber-700",
-      title: "We do not have a reliable availability result yet. This finding remains open.",
+      title: "We do not have a reliable availability result yet.",
     };
   }
   return {

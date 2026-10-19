@@ -2,11 +2,12 @@ import { allowIpFindingProductImage, dismissIpFinding, markIpFindingEnforced, ma
 import { approveTakedownBatch, markTakedownsSubmitted, type TakedownFeedbackAssociationScope } from "../../api/takedowns";
 import type { IpReviewFinding } from "../../api/reviews";
 import { preferredAllowedProductImage } from "../../components/monitoring/board/allowedProduct";
-import { dismissalOptionsForBatchAction, runPool, summarizeBatch, summarizeTakedownBatch, type BatchAction, type BatchResult } from "../../components/monitoring/board/batchUtils";
+import { dismissalOptionsForBatchAction, runPool, summarizeBatch, summarizeTakedownBatch, takedownBatchListingResults, type BatchAction, type BatchResult } from "../../components/monitoring/board/batchUtils";
 
 export function partitionSellerListings(findings: IpReviewFinding[], action: BatchAction, ipId: string | null) {
   const eligible: IpReviewFinding[] = [];
   const skipped: Record<string, number> = {};
+  const skippedByResultId: Record<string, string> = {};
   for (const finding of findings) {
     const state = finding.dismissed_at ? "dismissed" : finding.review_status ?? "pending";
     let reason: string | null = null;
@@ -19,10 +20,13 @@ export function partitionSellerListings(findings: IpReviewFinding[], action: Bat
     else if (action !== "send" && action !== "submit" && !(finding.ip_id ?? ipId)) reason = "no associated IP";
     else if (action === "allow_product" && !preferredAllowedProductImage(finding)) reason = "no eligible product image";
     else if (action === "packaging_only" && finding.offer_subject !== "packaging_only") reason = "not packaging-only";
-    if (reason) skipped[reason] = (skipped[reason] ?? 0) + 1;
+    if (reason) {
+      skipped[reason] = (skipped[reason] ?? 0) + 1;
+      skippedByResultId[finding.result_id] = reason;
+    }
     else eligible.push(finding);
   }
-  return { eligible, skipped };
+  return { eligible, skipped, skippedByResultId };
 }
 
 /** Returns only acknowledged successes; callers keep failed/skipped rows selected. */
@@ -35,11 +39,16 @@ export async function runSellerListingBatch({ action, findings, ipId, decisionRe
   isActive: () => boolean;
   onProgress: (progress: { done: number; total: number }) => void;
 }): Promise<{ processed: Set<string>; result: BatchResult }> {
-  const { eligible, skipped } = partitionSellerListings(findings, action, ipId);
+  const { eligible, skipped, skippedByResultId } = partitionSellerListings(findings, action, ipId);
   const processed = new Set<string>();
   let failed = 0;
   let done = 0;
-  if (!isActive() || eligible.length === 0) return { processed, result: summarizeBatch(action, 0, skipped, 0) };
+  if (!isActive()) return { processed, result: summarizeBatch(action, 0, skipped, 0) };
+  if (eligible.length === 0) return { processed, result: action === "send"
+    ? summarizeTakedownBatch(0, 0, {}, skipped, 0, takedownBatchListingResults(
+      findings, { queued_case_ids: [], skipped: [], failed: [] }, skippedByResultId, ipId,
+    ))
+    : summarizeBatch(action, 0, skipped, 0) };
   onProgress({ done, total: eligible.length });
   if (action === "send" || action === "submit") {
     const caseIds = [...new Set(eligible.map((finding) => finding.case_id!))];
@@ -51,7 +60,7 @@ export async function runSellerListingBatch({ action, findings, ipId, decisionRe
       const legalReasons: Record<string, number> = {};
       for (const item of legal) legalReasons[item.reason] = (legalReasons[item.reason] ?? 0) + 1;
       for (const item of response.skipped) skipped[item.reason] = (skipped[item.reason] ?? 0) + 1;
-      return { processed, result: summarizeTakedownBatch(response.queued_case_ids.length, response.email_count, legalReasons, skipped, response.failed.length) };
+      return { processed, result: summarizeTakedownBatch(response.queued_case_ids.length, response.email_count, legalReasons, skipped, response.failed.length, takedownBatchListingResults(findings, response, skippedByResultId, ipId)) };
     }
     const response = await markTakedownsSubmitted(caseIds);
     const handled = new Set(response.submitted_case_ids);
@@ -63,7 +72,7 @@ export async function runSellerListingBatch({ action, findings, ipId, decisionRe
       if (!isActive()) return;
       try {
         const findingIpId = (finding.ip_id ?? ipId)!;
-        if (action === "review") await markIpFindingNeedsReview(findingIpId, finding.result_id);
+        if (action === "review") await markIpFindingNeedsReview(findingIpId, finding.result_id, decisionReason ?? "");
         else if (action === "enforce") await markIpFindingEnforced(findingIpId, finding.result_id);
         else if (action === "allow_product") await allowIpFindingProductImage(findingIpId, finding.result_id, { image_url: preferredAllowedProductImage(finding) });
         else await dismissIpFinding(findingIpId, finding.result_id, dismissalOptionsForBatchAction(action));

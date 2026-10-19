@@ -27,6 +27,8 @@ bun run build  # brand assets, TypeScript, Vite, static route entries
 ```
 
 Tests live in `tests/` and run with Bun; component tests use React and Happy DOM.
+The test preload creates browser storage before importing authentication
+singletons. Component suites can then install their own document and URL.
 The Validate workflow checks pull requests. Production deployment depends on
 validation, and PR previews run the same checks against the exact preview commit
 before publishing. Dependency installs in CI use the frozen lockfile.

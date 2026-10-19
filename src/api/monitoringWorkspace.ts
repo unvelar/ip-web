@@ -1,14 +1,22 @@
 import { ApiError, request } from './transport';
 import { isRecord, requireResponse } from './validation';
-import { DraftError, type Activation, type Brand, type Coverage, type MarketplaceClient, type MatchingReadiness, type Product,
+import { parseMonitoringCountries } from './monitoringCountries';
+import { DraftError, type Activation, type Brand, type Coverage, type EnforcementRule, type MarketplaceClient, type MatchingReadiness, type Product,
   type ReferenceImage, type ReferenceMaterial, type Source, type Workspace, type WorkspaceClient,
   type WorkspaceResponse } from '../monitoring-workspace/contracts';
 
 export type MonitoringSetupCapabilities = { workspace: boolean; marketplace_admin: boolean };
+export type EnforcementRuleTemplate = {id: NonNullable<EnforcementRule['template_id']>; name: string; condition: string; action: EnforcementRule['action']; explanation: string};
+export async function getEnforcementRuleTemplates(signal?: AbortSignal): Promise<EnforcementRuleTemplate[]> {
+  const result=await request<{templates:EnforcementRuleTemplate[]}>('/api/monitoring-workspace/enforcement-templates',{signal});
+  requireResponse(Array.isArray(result.templates) && result.templates.every(value=>value && typeof value==='object' && value.id==='existing_product_services' && typeof value.name==='string'
+    && typeof value.condition==='string' && typeof value.explanation==='string' && ['do_not_pursue','takedown','review'].includes(value.action)), 'enforcement rule templates');
+  return result.templates;
+}
 
-export async function getMonitoringSetupCapabilities(): Promise<MonitoringSetupCapabilities> {
+export async function getMonitoringSetupCapabilities(signal?: AbortSignal): Promise<MonitoringSetupCapabilities> {
   try {
-    const value = await request<MonitoringSetupCapabilities>('/api/monitoring-workspace/capabilities');
+    const value = await request<MonitoringSetupCapabilities>('/api/monitoring-workspace/capabilities', { signal });
     requireResponse(typeof value?.workspace === 'boolean' && typeof value?.marketplace_admin === 'boolean', 'monitoring setup availability');
     return value;
   } catch (error) {
@@ -46,10 +54,22 @@ function normalizeCoverage(value: unknown): Coverage {
   return {
     frequency: value.frequency as Coverage['frequency'],
     markets: value.markets.map(market => {
-      requireResponse(isRecord(market) && typeof market.country === 'string', 'monitoring market');
+      requireResponse(isRecord(market) && (market.country === null || typeof market.country === 'string'), 'monitoring market');
       return { country: market.country, sources: stringArray(market.sources, 'monitoring market sources') };
     }),
   };
+}
+
+function normalizeEnforcementRules(value: unknown): EnforcementRule[] | undefined {
+  if (value === undefined) return undefined;
+  requireResponse(Array.isArray(value) && value.length <= 30, 'enforcement rule list');
+  return value.map(rule => {
+    requireResponse(isRecord(rule) && typeof rule.id === 'string' && typeof rule.condition === 'string'
+      && ['do_not_pursue', 'takedown', 'review'].includes(String(rule.action)) && typeof rule.explanation === 'string'
+      && (rule.overrides_rule_id === null || typeof rule.overrides_rule_id === 'string')
+      && (rule.template_id === undefined || rule.template_id === 'existing_product_services'), 'enforcement rule');
+    return rule as EnforcementRule;
+  });
 }
 
 function normalizeProduct(value: unknown): Product {
@@ -58,7 +78,7 @@ function normalizeProduct(value: unknown): Product {
     && (value.catalog_product_id === null || typeof value.catalog_product_id === 'string'), 'monitoring product');
   return { id: value.id, name: value.name, keywords: stringArray(value.keywords, 'monitoring product keywords'),
     monitoring_enabled: value.monitoring_enabled, reference_materials: normalizeReferences(value.reference_materials),
-    coverage: null, catalog_product_id: value.catalog_product_id };
+    enforcement_rules: normalizeEnforcementRules(value.enforcement_rules), coverage: null, catalog_product_id: value.catalog_product_id };
 }
 
 function normalizeBrand(value: unknown): Brand {
@@ -66,7 +86,7 @@ function normalizeBrand(value: unknown): Brand {
     && typeof value.monitoring_enabled === 'boolean' && Array.isArray(value.products), 'monitoring brand');
   return { id: value.id, name: value.name, keywords: stringArray(value.keywords, 'monitoring brand keywords'),
     monitoring_enabled: value.monitoring_enabled, reference_materials: normalizeReferences(value.reference_materials),
-    coverage: normalizeCoverage(value.coverage), products: value.products.map(normalizeProduct) };
+    enforcement_rules: normalizeEnforcementRules(value.enforcement_rules), coverage: normalizeCoverage(value.coverage), products: value.products.map(normalizeProduct) };
 }
 
 function normalizeWorkspace(value: unknown): Workspace {
@@ -104,8 +124,9 @@ function normalizeLoadResponse(value: unknown): WorkspaceResponse {
     && typeof value.company.name === 'string' && Array.isArray(value.sources) && Array.isArray(value.reference_images)
     && (value.setup_state === 'required' || value.setup_state === 'configured'), 'monitoring setup');
   return { ...draft, company: { id: value.company.id, name: value.company.name }, sources: value.sources as Source[],
+    countries: parseMonitoringCountries(value.countries),
     reference_images: value.reference_images as ReferenceImage[], matching_readiness: normalizeMatchingReadiness(value.matching_readiness),
-    setup_state: value.setup_state };
+    setup_state: value.setup_state, enforcement_rules_supported: value.enforcement_rules_supported === true };
 }
 
 function normalizeActivation(value: unknown): Activation {
@@ -113,14 +134,15 @@ function normalizeActivation(value: unknown): Activation {
   requireResponse(isRecord(value) && isRecord(value.execution) && typeof value.execution.scopes === 'number'
     && typeof value.execution.sources === 'number', 'monitoring activation');
   return { ...draft, lifecycle: 'active', executable: true,
-    execution: { scopes: value.execution.scopes, sources: value.execution.sources },
+    execution: { scopes: value.execution.scopes, sources: value.execution.sources,
+      enforcement_checks_queued: typeof value.execution.enforcement_checks_queued === 'number' ? value.execution.enforcement_checks_queued : undefined },
     matching_readiness: normalizeMatchingReadiness(value.matching_readiness) };
 }
 
 // Uses the website's WorkOS session and acting-company header. The isolated
 // development client is deliberately a separate adapter with no shared login.
 export const monitoringSetupClient: WorkspaceClient & MarketplaceClient = {
-  load: async () => normalizeLoadResponse(await setupRequest<unknown>('/api/monitoring-workspace')),
+  load: async signal => normalizeLoadResponse(await setupRequest<unknown>('/api/monitoring-workspace', { signal })),
   uploadReferenceImages: async (scopeId, files) => {
     const body = new FormData();
     body.append('scope_id', scopeId);
@@ -130,7 +152,10 @@ export const monitoringSetupClient: WorkspaceClient & MarketplaceClient = {
   },
   activate: async (document, revision) => normalizeActivation(await setupRequest<unknown>('/api/monitoring-workspace/activate', { method: 'POST', body: JSON.stringify({ document, expected_revision: revision }) })),
   preview: (document, brandId, productId, signal) => setupRequest('/api/monitoring-workspace/preview', { method: 'POST', body: JSON.stringify({ document, brand_id: brandId, product_id: productId }), signal }),
-  catalog: () => setupRequest('/api/admin/monitoring-marketplaces'),
+  catalog: async () => {
+    const value = await setupRequest<Awaited<ReturnType<MarketplaceClient['catalog']>>>('/api/admin/monitoring-marketplaces');
+    return { ...value, countries: parseMonitoringCountries(value.countries) };
+  },
   saveMarketplace: value => setupRequest('/api/admin/monitoring-marketplaces', { method: 'PUT', body: JSON.stringify(value) }),
   addSector: name => setupRequest('/api/admin/monitoring-marketplaces/sectors', { method: 'POST', body: JSON.stringify({ name }) }),
 };

@@ -29,6 +29,7 @@ function count(items: IpFirstScanResult[]): IpFirstScanTotals {
 }
 const originalFetch = globalThis.fetch;
 const requests: URL[] = [];
+const runRequests: URL[] = [];
 let failNextPage = false;
 let delayNextFirstPage: Promise<void> | null = null;
 let feed: ReturnType<typeof useFirstScanFeed>;
@@ -69,7 +70,7 @@ async function mount(platforms = sources) {
           source_id: source.id, source_domain: source.domain, source_name: source.display_name })) };
     } else if (url.pathname.endsWith("/platforms")) body = { platforms };
     else if (url.pathname.endsWith("/onboarding-status")) body = { status: null };
-    else if (url.pathname.includes("/runs")) body = { runs: [] };
+    else if (url.pathname.includes("/runs")) { runRequests.push(url); body = { runs: [] }; }
     else if (url.pathname === "/api/ip/ip") body = { trademark: { id: "ip", name: "Brand", keywords: [], image_count: 0, indexed_count: 0 }, images: [] };
     else if (url.pathname === "/api/auth/me") body = { user: null };
     else throw new Error(`Unexpected request ${url.pathname}`);
@@ -81,7 +82,7 @@ async function mount(platforms = sources) {
 }
 afterEach(() => {
   if (root) act(() => root!.unmount()); root = undefined;
-  document.body.replaceChildren(); globalThis.fetch = originalFetch; requests.length = 0; failNextPage = false; delayNextFirstPage = null;
+  document.body.replaceChildren(); globalThis.fetch = originalFetch; requests.length = 0; runRequests.length = 0; failNextPage = false; delayNextFirstPage = null;
 });
 
 test("connected count follows source setup even when cached recipes and old results exist", async () => {
@@ -89,6 +90,8 @@ test("connected count follows source setup even when cached recipes and old resu
     ...source, setup_status: index ? "retry_needed" : "processing",
   }));
   await mount(platforms);
+  expect(runRequests.length).toBeGreaterThan(0);
+  expect(runRequests.every(url => url.searchParams.get("view") === "summary")).toBe(true);
   expect(feed.totals.connected).toBe(0);
   expect(feed.totals.discovered).toBe(1115);
   platforms[0]!.setup_status = "ready";
@@ -171,3 +174,31 @@ test("a changed filter replaces an in-flight refresh immediately and ignores its
   expect(feed.filteredTotal).toBe(515);
   expect(feed.visibleResults.every(row => row.source_id === sourceB)).toBe(true);
 });
+
+test("hidden first-scan tabs stop polling and resume once without overlapping requests", async () => {
+  await mount();
+  const descriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  let visibility = "hidden";
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+  try {
+    const before = requests.length;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 5_100)); });
+    expect(requests.length).toBe(before);
+    let release!: () => void;
+    delayNextFirstPage = new Promise<void>(resolve => { release = resolve; });
+    visibility = "visible";
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => requests.length === before + 1 && feed.refreshing);
+    await act(async () => { release(); });
+    await waitFor(() => !feed.refreshing);
+    expect(requests.length).toBe(before + 1);
+    expect(feed.totals.discovered).toBe(1115);
+  } finally {
+    if (descriptor) Object.defineProperty(document, "visibilityState", descriptor);
+    else Reflect.deleteProperty(document, "visibilityState");
+  }
+}, 10_000);

@@ -14,6 +14,9 @@ export type ReviewBucket =
   | "second_hand"
   | "different_product"
   | "licensed"
+  | "investigate"
+  | "needs_triage"
+  | "do_not_pursue"
   | "needs_review";
 export const PAGE_SIZE = 24;
 
@@ -119,14 +122,20 @@ export function messageFor(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function productName(group: PersistedProductGroup, index?: number) {
+export function productName(group: Pick<PersistedProductGroup,
+  "display_name" | "name_source" | "catalog_display_name" | "catalog_name_source" | "members" | "triage_members"
+>, index?: number) {
+  const manualName = group.name_source === "manual" ? group.display_name?.trim() : null;
+  const catalogName = group.catalog_name_source === "manual"
+    ? group.catalog_display_name?.trim()
+    : null;
   const representative = group.members[0] ?? group.triage_members[0] ?? null;
   const title = representative?.listing_title?.trim();
   const profileTitle = representative?.profile_text
     .split("\n")[0]
     ?.replace(/^Title:\s*/i, "")
     .trim();
-  return group.display_name?.trim() || title || profileTitle ||
+  return manualName || catalogName || group.display_name?.trim() || title || profileTitle ||
     (index == null ? "Untitled product" : `Product ${index + 1}`);
 }
 
@@ -199,7 +208,8 @@ export function reviewBucket(finding: IpReviewFinding): Exclude<ReviewBucket, "a
   if (key === "allowed_resale") return "second_hand";
   if (key === "licensed_seller") return "licensed";
   if (key === "false_positive") return "different_product";
-  return "needs_review";
+  if (key === "needs_review" || key === "needs_triage" || key === "do_not_pursue") return key;
+  return "investigate";
 }
 
 export const RECENT_DECISION_STATUSES = [
@@ -247,7 +257,7 @@ export function recentDecisionPresentation(finding: IpReviewFinding) {
     };
   }
   if (kind === "review") return {
-    label: "Needs review",
+    label: "Legal review",
     badge: "border-amber-200 bg-amber-50 text-amber-800",
     undoLabel: "Undo",
   };
@@ -301,5 +311,6 @@ export const REVIEW_BUCKETS: Array<{
   { key: "second_hand", label: "Second hand", badge: "border-violet-200 bg-violet-50 text-violet-800" },
   { key: "different_product", label: "Different product", badge: "border-sky-200 bg-sky-50 text-sky-800" },
   { key: "licensed", label: "Licensed seller", badge: "border-emerald-200 bg-emerald-50 text-emerald-800" },
-  { key: "needs_review", label: "Review", badge: "border-amber-200 bg-amber-50 text-amber-800" },
+  ...([['investigate','Investigate'],['needs_triage','Staff triage'],['do_not_pursue','Do not pursue']] as const).map(([key,label])=>({key,label,badge:"border-stone-200 bg-stone-50 text-stone-700"})),
+  { key: "needs_review", label: "Legal review", badge: "border-amber-200 bg-amber-50 text-amber-800" },
 ];

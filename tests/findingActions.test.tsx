@@ -170,7 +170,7 @@ describe("Grouped finding decisions", () => {
     const escapeReachedWindow = mock(() => undefined);
     window.addEventListener("keydown", escapeReachedWindow);
     act(() => button(container, "Dismiss").click());
-    expect(document.activeElement).toBe(button(container, "1Different product"));
+    expect(document.activeElement).toBe(container.querySelector('button[aria-keyshortcuts="1"]'));
     act(() => document.activeElement?.dispatchEvent(new happyWindow.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
     expect(escapeReachedWindow).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(button(container, "Dismiss"));
@@ -184,7 +184,7 @@ describe("Grouped finding decisions", () => {
     const options = container.querySelector<HTMLElement>('[role="group"][aria-label="More actions"]')!;
     expect(options.hidden).toBe(false);
     expect(button(options, "Allow product").disabled).toBe(false);
-    expect(button(options, "License seller").disabled).toBe(false);
+    expect(button(options, "Authorize seller").disabled).toBe(false);
     expect(allowProductImage).not.toHaveBeenCalled();
     const pending = renderActions({ grouped: true, isDismissing: true });
     for (const action of pending.container.querySelectorAll<HTMLButtonElement>(".finding-action-buttons button")) {
@@ -224,9 +224,9 @@ describe("FindingActions allow product", () => {
       "1Different product",
       "2Second hand",
       "3Do not pursue",
-      "RReview",
+      "RLegal review",
       "TTakedown",
-      "License seller",
+      "Authorize seller",
     ]) {
       expect(button(container, label).disabled).toBe(true);
     }

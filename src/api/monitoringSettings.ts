@@ -1,6 +1,12 @@
 import type { MonitoringSourceSetupStatus } from "./registry";
 import { request } from "./transport";
 
+export interface MonitoringSourceHealth {
+  source_id: string; label: string; country: string | null;
+  state: "monitoring" | "updating" | "delayed" | "paused";
+  last_checked_at: string | null;
+}
+
 // --- Brand monitoring (scrape target sites for IP infringements) ---
 
 export interface MonitoredDomain {
@@ -94,6 +100,7 @@ export function deleteMonitoredDomain(id: string) {
 
 export function listMonitoringRuns(opts: { domain_id?: string; limit?: number } = {}, signal?: AbortSignal) {
   const params = new URLSearchParams();
+  params.set("view", "summary");
   if (opts.domain_id) params.set("domain_id", opts.domain_id);
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
   const qs = params.toString();
@@ -113,8 +120,8 @@ export function triggerMonitoringRun(domainId: string, keyword?: string) {
   );
 }
 
-export function getMonitoringSettings() {
-  return request<{ settings: MonitoringSettings | null }>("/api/monitoring/settings");
+export function getMonitoringSettings(signal?: AbortSignal) {
+  return request<{ settings: MonitoringSettings | null }>("/api/monitoring/settings", { signal });
 }
 
 export function updateMonitoringSettings(patch: {

@@ -1,5 +1,6 @@
 import { CANDIDATE_OUTCOME_LABELS, type ResortTarget } from "./constants";
-import type { MonitoringDismissOptions } from "../../../api";
+import type { BatchTakedownSendResponse, IpReviewFinding, MonitoringDismissOptions, TakedownLegalQueueReason } from "../../../api";
+import { tableImageUrls } from "./utils";
 
 export type BatchAction =
   | "send"
@@ -23,7 +24,7 @@ export const BATCH_META: Record<
   allow_product: { label: "Allow product", verb: "Allowed product", gerund: "Allow product images for" },
   second_hand: { label: "Second hand", verb: "Marked second hand", gerund: "Mark second hand for" },
   packaging_only: { label: "Packaging only", verb: "Marked packaging only", gerund: "Mark packaging only for" },
-  review: { label: "Review", verb: "Moved to Review", gerund: "Move to Review" },
+  review: { label: "Legal review", verb: "Requested legal review for", gerund: "Request legal review for" },
   enforce: { label: "Mark enforced", verb: "Marked enforced", gerund: "Mark enforced" },
 };
 
@@ -86,9 +87,93 @@ export interface TakedownBatchSummary {
   details: string[];
   needsProfile: boolean;
   showLegalQueueLink: boolean;
+  listings: TakedownBatchListingResult[];
 }
 
 export type BatchResult = string | TakedownBatchSummary;
+
+export interface TakedownBatchListingResult {
+  resultId: string;
+  title: string;
+  url: string | null;
+  imageUrls: string[];
+  seller: string | null;
+  domain: string;
+  ipId: string | null;
+  outcome: "queued" | "legal_queue" | "skipped" | "failed";
+  reason: string;
+  needsProfile: boolean;
+}
+
+const LEGAL_QUEUE_REASONS: Record<TakedownLegalQueueReason, string> = {
+  legacy_unfulfilled_decision: "Earlier approved takedown has no completed delivery route.",
+  missing_required_information: "Missing required notice information.",
+  manual_submission_required: "Requires a marketplace form or another manual submission route.",
+  email_not_configured: "Automatic email delivery is not configured.",
+  missing_listing_url: "No usable listing URL is available.",
+  automatic_queue_failed: "Could not queue automatic delivery; preserved for legal follow-up.",
+  automatic_delivery_failed: "Automatic delivery failed; preserved for legal follow-up.",
+  enforcement_policy_changed: "Enforcement rules or listing evidence changed; review again.",
+};
+
+function skippedReason(reason: string): string {
+  if (reason === "already sent or closed") return "Already sent or no longer open for a takedown decision.";
+  if (reason === "still preparing") return "Still being prepared. Try again when processing finishes.";
+  if (reason === "needs manual compose") return "Requires manual submission; current status unchanged.";
+  if (reason === "not found") return "Listing was not found; current status unchanged.";
+  return reason;
+}
+
+/** Join results to the original selection before a refresh removes handled rows. */
+export function takedownBatchListingResults(
+  findings: IpReviewFinding[],
+  response: Pick<BatchTakedownSendResponse, "queued_case_ids" | "legal_queue" | "skipped" | "failed">,
+  locallySkipped: Record<string, string> = {},
+  fallbackIpId?: string | null,
+): TakedownBatchListingResult[] {
+  const queued = new Set(response.queued_case_ids);
+  const legal = new Map((response.legal_queue ?? []).map((item) => [item.case_id, item.reason]));
+  const skipped = new Map(response.skipped.map((item) => [item.case_id, item.reason]));
+  const failed = new Map(response.failed.map((item) => [item.case_id, item.reason]));
+  return findings.map((finding) => {
+    const caseId = finding.case_id ?? "";
+    const legalReason = legal.get(caseId);
+    const skipReason = locallySkipped[finding.result_id] ?? skipped.get(caseId);
+    const failure = failed.get(caseId);
+    let outcome: TakedownBatchListingResult["outcome"];
+    let reason: string;
+    if (skipReason) {
+      outcome = "skipped";
+      reason = skippedReason(skipReason);
+    } else if (legalReason) {
+      outcome = "legal_queue";
+      reason = LEGAL_QUEUE_REASONS[legalReason] ?? legalReason;
+    } else if (queued.has(caseId)) {
+      outcome = "queued";
+      reason = "Queued for background email delivery.";
+    } else {
+      outcome = "failed";
+      reason = failure ?? "No processing result was returned. Check the listing status before retrying.";
+    }
+    let url: string | null = null;
+    try {
+      const parsed = new URL(finding.page_url);
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") url = parsed.href;
+    } catch { /* Keep the listing identifiable even when its URL is unavailable. */ }
+    return {
+      resultId: finding.result_id,
+      title: finding.listing_title?.trim() || finding.page_url || "Untitled listing",
+      url,
+      imageUrls: tableImageUrls(finding),
+      seller: finding.seller_name,
+      domain: finding.domain,
+      ipId: finding.ip_id ?? fallbackIpId ?? null,
+      outcome,
+      reason,
+      needsProfile: outcome === "legal_queue" && legalReason === "missing_required_information",
+    };
+  });
+}
 
 function listingCount(count: number) {
   return `${count} listing${count === 1 ? "" : "s"}`;
@@ -100,6 +185,7 @@ export function summarizeTakedownBatch(
   legalQueue: Record<string, number>,
   skipped: Record<string, number>,
   failed: number,
+  listings: TakedownBatchListingResult[] = [],
 ): TakedownBatchSummary {
   const skipTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
   const legalQueueTotal = Object.values(legalQueue).reduce((a, b) => a + b, 0);
@@ -112,6 +198,7 @@ export function summarizeTakedownBatch(
   const missingUrl = legalQueue.missing_listing_url ?? 0;
   const automaticQueueFailed = legalQueue.automatic_queue_failed ?? 0;
   const automaticDeliveryFailed = legalQueue.automatic_delivery_failed ?? 0;
+  const policyChanged = legalQueue.enforcement_policy_changed ?? 0;
   const legacyManualCompose = skipped["needs manual compose"] ?? 0;
   const alreadyHandled = skipped["already sent or closed"] ?? 0;
   const stillPreparing = skipped["still preparing"] ?? 0;
@@ -178,10 +265,12 @@ export function summarizeTakedownBatch(
         "missing_listing_url",
         "automatic_queue_failed",
         "automatic_delivery_failed",
+        "enforcement_policy_changed",
       ].includes(reason)
     ) continue;
     details.push(`${listingCount(count)} entered the legal queue: ${reason}.`);
   }
+  if (policyChanged > 0) details.push(`${listingCount(policyChanged)} need another review because enforcement rules or listing evidence changed.`);
   if (alreadyHandled > 0) {
     details.push(
       `${listingCount(alreadyHandled)} ${alreadyHandled === 1 ? "was already sent or is" : "were already sent or are"} no longer open.`,
@@ -231,6 +320,7 @@ export function summarizeTakedownBatch(
     // queue by the current backend migration, so the same navigation remains
     // useful for both response shapes.
     showLegalQueueLink: legalQueueTotal > 0 || legacyManualCompose > 0,
+    listings,
   };
 }
 

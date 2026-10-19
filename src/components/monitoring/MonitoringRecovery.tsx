@@ -15,7 +15,7 @@ export function MonitoringRecoveryDetails({ sources, ipId }: { sources: Monitori
             <span className="font-semibold">{source.label}</span>
             <p className="mt-0.5">{recoveryLabel(source)}</p>
             {failureDetail(source.reason) && <p className="mt-1 text-stone-500">{failureDetail(source.reason)}</p>}
-            {ipId && source.reason && <div className="mt-2"><SourceAttemptDetails ipId={ipId} sourceId={source.source_id} /></div>}
+            {ipId && <div className="mt-2"><SourceAttemptDetails ipId={ipId} sourceId={source.source_id} label="View setup attempts" /></div>}
           </li>
         ))}
       </ul>

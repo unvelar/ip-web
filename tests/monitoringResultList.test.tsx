@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import type { IpReviewFinding } from "../src/api/reviews";
 import type { MonitoringSortMode } from "../src/api/monitoring";
 import { MonitoringResultList } from "../src/components/monitoring/board/MonitoringResultList";
+import type { MonitoringGroupBy } from "../src/lib/monitoringGrouping";
 
 let root: Root | undefined;
 afterEach(async () => {
@@ -26,7 +27,7 @@ function finding(id: string, title: string, price: number): IpReviewFinding {
 
 const listings = [finding("high", "Moisturizer, 50 ml", 30), finding("low", "Cleanser, 200 ml", 10)];
 
-async function setup(options: { findings?: IpReviewFinding[]; total?: number; clear?: boolean; emptyMessage?: string } = {}) {
+async function setup(options: { findings?: IpReviewFinding[]; total?: number; clear?: boolean; emptyMessage?: string; groupBy?: MonitoringGroupBy } = {}) {
   const window = new Window({ url: "http://localhost:5173" });
   Object.assign(globalThis, {
     window, document: window.document, navigator: window.navigator,
@@ -36,6 +37,7 @@ async function setup(options: { findings?: IpReviewFinding[]; total?: number; cl
   document.body.append(container);
   root = createRoot(container);
   let selected = new Set<string>();
+  let groupBy = options.groupBy ?? "none";
   const opened: string[] = [], selections: string[] = [], sorts: MonitoringSortMode[] = [];
   let clears = 0;
   function render() {
@@ -43,6 +45,12 @@ async function setup(options: { findings?: IpReviewFinding[]; total?: number; cl
       findings={options.findings ?? listings} total={options.total ?? 202}
       sort="score_desc" selected={selected} activeId={null} dismissing={new Set()}
       showIp={false} showStatus={false}
+      groupBy={groupBy}
+      onSelectGroup={(ids, checked) => {
+        selected = new Set(selected);
+        for (const id of ids) { if (checked) selected.add(id); else selected.delete(id); }
+        render();
+      }}
       onOpen={(id) => opened.push(id)}
       onSelect={(id) => {
         selections.push(id);
@@ -65,6 +73,7 @@ async function setup(options: { findings?: IpReviewFinding[]; total?: number; cl
   await act(async () => render());
   return {
     container, opened, selections, sorts, clears: () => clears,
+    regroup: async (value: MonitoringGroupBy) => { await act(async () => { groupBy = value; render(); }); },
     click: async (selector: string) => {
       await act(async () => (container.querySelector(selector) as HTMLElement).click());
     },
@@ -91,6 +100,19 @@ test("listing clicks and row Enter/Space open evidence without changing selectio
   await ui.key("tbody tr:first-child", "ArrowDown");
   expect(ui.opened).toEqual(["high", "high", "low"]);
   expect(ui.selections).toEqual([]);
+});
+
+test("group selection covers only loaded members and survives regrouping and collapse", async () => {
+  const ui = await setup({ groupBy: "seller" });
+  await ui.click('[aria-label="Select loaded tasks in Beauty seller"]');
+  expect(ui.container.querySelectorAll('tbody input:checked').length).toBe(3);
+  expect(ui.opened).toEqual([]);
+  await ui.click('.monitoring-group-toggle');
+  expect(ui.container.querySelector('tbody[hidden]')).not.toBeNull();
+  await ui.regroup("none");
+  expect(ui.container.querySelectorAll('tbody input:checked').length).toBe(2);
+  expect(ui.container.querySelectorAll('.monitoring-listing-row').length).toBe(2);
+  expect(ui.container.querySelector('.monitoring-results-summary')?.textContent).toContain("202 listings");
 });
 
 test("checking and unchecking a listing never opens its inspector", async () => {

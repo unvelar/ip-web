@@ -1,3 +1,4 @@
+import { LegalReviewDialog } from "./LegalReviewDialog";
 import { useState, type ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 import { ComposeModal, ConfirmSendModal } from "../../TakedownPanel";
@@ -68,6 +69,7 @@ export function FindingActions({
   grouped?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [requestingReview, setRequestingReview] = useState(false);
   const [licensing, setLicensing] = useState(false);
   const [composing, setComposing] = useState(false);
   const [composeDecisionReason, setComposeDecisionReason] = useState("");
@@ -173,7 +175,8 @@ export function FindingActions({
               ? f.offer_subject === "packaging_only"
                 ? "packaging_only"
                 : "false_positive"
-              : "review";
+              : f.actionability?.key === "do_not_pursue" ? "do_not_pursue"
+                : f.actionability?.key === "needs_review" ? "review" : null;
   const recommendationReason = f.actionability?.reason?.trim();
 
   const primaryCls =
@@ -226,14 +229,19 @@ export function FindingActions({
       {isDismissing ? (
         "Working…"
       ) : (
-        <>
+        <span className={grouped && action === "false_positive" ? "flex flex-col items-start gap-1" : undefined}>
           <ButtonWithShortcut
             label={label}
             shortcut={shortcut}
             dark={recommendedAction === action}
             leadingIcon={recommendedAction === action ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
           />
-        </>
+          {grouped && action === "false_positive" && (
+            <span className={`text-[10px] font-normal leading-4 ${recommendedAction === action ? "text-white/80" : "text-stone-500"}`}>
+              Remember confirmed repeats for this IP.
+            </span>
+          )}
+        </span>
       )}
     </button>
   );
@@ -243,7 +251,7 @@ export function FindingActions({
     "Different product",
     "false_positive",
     "different_product",
-    "Shortcut 1: the listing is for a different product",
+    "Shortcut 1: dismiss this product and remember confirmed repeats for this IP",
     "1",
   );
   const dontPursueBtn = outcomeButton(
@@ -313,19 +321,9 @@ export function FindingActions({
             ? "Cannot update finding: finding has no associated IP"
             : "Shortcut R: move this finding to the Review bucket for lawyer input",
       )}
-      onClick={() =>
-        ipId &&
-        run(
-          "review",
-          async () => {
-            await markIpFindingNeedsReview(ipId, f.result_id);
-            onNeedsReview();
-          },
-          { completeCurrent: true },
-        )
-      }
+      onClick={() => setRequestingReview(true)}
       className={actionClass("review")}
-      aria-label={actionAriaLabel("review", "Review")}
+      aria-label={actionAriaLabel("review", "Legal review")}
       aria-keyshortcuts={recommendedAction === "review" ? "Enter R" : "R"}
       data-recommended-action={recommendedAction === "review" ? "true" : undefined}
     >
@@ -334,7 +332,7 @@ export function FindingActions({
       ) : (
         <>
           <ButtonWithShortcut
-            label="Review"
+            label="Legal review"
             shortcut="R"
             dark={recommendedAction === "review"}
             leadingIcon={recommendedAction === "review" ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
@@ -369,7 +367,7 @@ export function FindingActions({
       disabled={actionPending}
       title={actionTitle(
         "license",
-        "Mark this seller as licensed on this domain — dismisses this and future findings from them",
+        "Authorize this seller on this marketplace for this brand, dismissing current and future findings as Do not pursue",
       )}
       className={
         recommendedAction === "license"
@@ -378,12 +376,12 @@ export function FindingActions({
             ? "px-1.5 py-1 rounded text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
             : ghostStone
       }
-      aria-label={actionAriaLabel("license", "Mark as licensed seller")}
+      aria-label={actionAriaLabel("license", "Authorize seller")}
       aria-keyshortcuts={recommendedAction === "license" ? "Enter" : undefined}
       data-recommended-action={recommendedAction === "license" ? "true" : undefined}
     >
       {recommendedAction === "license" && <Sparkles className="recommended-action-icon" aria-hidden="true" />}
-      {licensing ? "Marking…" : compact ? "Mark as licensed seller" : "License seller"}
+      {licensing ? "Marking…" : compact ? "Authorize seller" : "Authorize seller"}
     </button>
   ) : null;
 
@@ -432,7 +430,7 @@ export function FindingActions({
         }
         title="This seller matches a saved license rule for this IP and platform."
       >
-        Licensed seller
+        Authorized seller
       </span>
     );
   } else if (state === "pending") {
@@ -600,7 +598,7 @@ export function FindingActions({
         {buttons}
         {!compact && !grouped && utilityButtons}
         {grouped && !sellerLicensed && ["pending", "review", "takedown_pending"].includes(state) && (
-          <FindingActionPopover label="More actions" description="Allow product and License seller also affect future findings."
+          <FindingActionPopover label="More actions" description="Allow product and Authorize seller also affect future findings."
             disabled={actionPending} recommended={recommendedAction === "license"}>
             {allowProductBtn}
             {utilityButtons}
@@ -641,6 +639,11 @@ export function FindingActions({
           }}
         />
       )}
+      {requestingReview && ipId && <LegalReviewDialog initialQuestion={f.actionability?.question ?? ""}
+        onCancel={() => setRequestingReview(false)} onConfirm={async question => {
+          await markIpFindingNeedsReview(ipId,f.result_id,question);
+          setRequestingReview(false);onNeedsReview();onActionComplete();onUpdated({completed:true});
+        }} />}
       {composing && f.case_id && (
         <ComposeModal
           caseId={f.case_id}

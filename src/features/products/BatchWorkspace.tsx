@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUpRight, Check, Link2, LoaderCircle, Settings2, Square } from "lucide-react";
+import { ArrowUpRight, Check, Link2, LoaderCircle, Settings2, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { PersistedProductGroup, ProductGroupCommercialSubgroup } from "../../api/products";
 import type { IpReviewFinding } from "../../api/reviews";
@@ -94,10 +94,10 @@ export function BatchWorkspace({
         <button
           type="button"
           onClick={onBack}
-          className="mb-3 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-800 lg:hidden"
+          className="mb-3 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-800"
         >
-          <ArrowLeft size={14} />
-          Product groups
+          <X size={14} />
+          Clear selection
         </button>
         <div className="flex flex-wrap items-start gap-3">
           <div className="size-14 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-stone-100 sm:size-16">
@@ -114,7 +114,7 @@ export function BatchWorkspace({
               <span className={`size-1.5 rounded-full ${status.dotClass}`} />
               {status.label}
             </div>
-            <h2 className="mt-1 truncate text-[18px] font-semibold tracking-[-0.025em] text-stone-950 sm:text-[20px]">
+            <h2 className="mt-1 text-[18px] font-semibold leading-7 tracking-[-0.025em] text-stone-950 sm:text-[20px]">
               {productName(group)}
             </h2>
             <p className="mt-1 text-[10px] text-stone-500">

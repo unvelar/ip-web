@@ -76,7 +76,7 @@ export default function AuthorizedSellers({ brands, tenantName, scopeId, onScope
   }
   const visible = rules.filter(rule => scope === 'tenant' || rule.scope === 'tenant' || rule.brand_id === scope);
   return <section className="panel authorized-sellers" aria-label="Authorized resellers">
-    <h2>Authorized resellers</h2><p>Manage sellers you trust to sell your brands. Matching listings are automatically dismissed.</p>
+    <h2>Authorized resellers</h2><p>Manage sellers you trust to sell your brands. Matching current and future listings are automatically dismissed as Do not pursue.</p>
     <label htmlFor="authorization-scope">Authorization scope</label>
     <select id="authorization-scope" value={scope} onChange={event => (onScopeChange ?? setLocalScope)(event.target.value)}>
       <option value="tenant">Entire tenant · {tenantName}</option>{brands.map(brand => <option key={brand.id} value={brand.id}>Brand · {brand.name}</option>)}
@@ -96,6 +96,6 @@ export default function AuthorizedSellers({ brands, tenantName, scopeId, onScope
       <label>Seller name<input placeholder="Shop name" value={name} onChange={event => setName(event.target.value)} /></label>
       <label>Shop URL<input type="url" placeholder="https://…" value={url} onChange={event => setUrl(event.target.value)} /></label>
     </div><button className="primary" disabled={!available || loading || busy || !domain.trim() || (!name.trim() && !url.trim())}>Authorize seller</button></form>
-    <p className="field-note">Changes take effect immediately for the selected marketplace. Revoking authorization does not reopen previously dismissed listings.</p>
+    <p className="field-note">Changes take effect immediately for the selected marketplace. Revoking authorization returns findings dismissed by that authorization for review. Separate manual decisions remain recorded.</p>
   </section>;
 }

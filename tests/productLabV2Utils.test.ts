@@ -16,6 +16,32 @@ import {
   scopeFindingsToCommercialSubgroup,
 } from "../src/pages/productLabV2Utils";
 import { preferredAllowedProductImage } from "../src/components/monitoring/board/allowedProduct";
+import { productName } from "../src/features/products/labDomain";
+
+describe("product names", () => {
+  const group = {
+    display_name: "COMMISSION *** Rogal Dorn - Warhammer miniature, made to order",
+    name_source: "auto" as const,
+    catalog_display_name: "Rogal Dorn Battle Tank",
+    catalog_name_source: "manual" as const,
+    members: [],
+    triage_members: [],
+  };
+
+  test("shows a manually named catalog product instead of a marketplace title", () => {
+    expect(productName(group)).toBe("Rogal Dorn Battle Tank");
+  });
+
+  test("preserves a reviewer-created product name", () => {
+    expect(productName({ ...group, name_source: "manual", display_name: "Tank Mk II" })).toBe("Tank Mk II");
+  });
+
+  test("keeps recognizable title details until a catalog name is manually set", () => {
+    for (const source of ["identity_facts", "generated_traits", "fallback"] as const) {
+      expect(productName({ ...group, catalog_name_source: source, catalog_display_name: "Product A102" })).toBe(group.display_name);
+    }
+  });
+});
 
 describe("preferredAllowedProductImage", () => {
   test("uses the strongest eligible gallery image", () => {

@@ -2,13 +2,15 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { ArrowDownUp, Check, ChevronDown, Globe2, LoaderCircle, Pause, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import type { MonitoredDomain } from "../../api";
 import { getWebsiteCatalog, type WebsiteCatalog as Catalog } from "../../api/websiteCatalog";
-import { COUNTRIES, countryLabel } from "../../lib/countries";
+import { countryLabel, type Country } from "../../lib/countries";
 import { websiteHost, websiteOptions, type WebsiteOption } from "../../lib/websiteCatalog";
 import { sourceSetupPresentation } from "./platformSetupStatus";
 import "./MonitoringSources.css";
 
 interface Props {
   platforms: MonitoredDomain[];
+  countries: Country[];
+  countriesReady: boolean;
   patterns: string[];
   monitoringOn: boolean;
   hasKeywords: boolean;
@@ -24,7 +26,7 @@ interface Props {
   renderCustomSource: () => ReactNode;
 }
 
-export function MonitoringSources({ platforms, patterns, monitoringOn, hasKeywords, busy, loading,
+export function MonitoringSources({ platforms, countries, countriesReady, patterns, monitoringOn, hasKeywords, busy, loading,
   onAdd, onToggle, onRemove, onRefresh, onCountryChange, onPreparePattern, renderOpenWeb, renderCustomSource }: Props) {
   const id = useId();
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -196,8 +198,10 @@ export function MonitoringSources({ platforms, patterns, monitoringOn, hasKeywor
                   {!monitoringOn && platform.enabled && <p className="ms-detail-note">Automatic monitoring is off. Turn it on above to resume scheduled scans.</p>}
                   <div className="ms-detail-controls">
                     <label>Search from<select aria-label={`Target country for ${option.name}`} value={platform.country ?? ""}
-                      disabled={!!busy} onChange={e => onCountryChange(platform, e.target.value)}>
-                      <option value="">Anywhere</option>{COUNTRIES.map(country => <option key={country.code} value={country.code}>{countryLabel(country.code)}</option>)}
+                      disabled={!!busy || !countriesReady} onChange={e => onCountryChange(platform, e.target.value)}>
+                      <option value="">Anywhere</option>
+                      {platform.country && !countries.some(country => country.code === platform.country) && <option value={platform.country} disabled>{countryLabel(platform.country)}{countriesReady ? ' (unavailable)' : ''}</option>}
+                      {countries.map(country => <option key={country.code} value={country.code}>{countryLabel(country.code)}</option>)}
                     </select></label>
                     <span className="ms-last-run">{platform.last_run_at ? `Last run ${new Date(platform.last_run_at).toLocaleDateString()}` : "Not scanned yet"}</span>
                     <div className="ms-detail-buttons">

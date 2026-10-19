@@ -153,7 +153,7 @@ export function dismissIpFinding(
   resultId: string,
   opts: MonitoringDismissOptions = {},
 ) {
-  return request<{ ok: boolean }>(
+  return request<{ ok: boolean; remembered?: boolean; dismissed?: number }>(
     `/api/ip/${ipId}/monitoring/findings/${resultId}/dismiss`,
     { method: "POST", body: JSON.stringify(opts) },
   );
@@ -212,10 +212,10 @@ export function undismissIpFinding(ipId: string, resultId: string) {
 /** Monitoring finding state transitions (all require the finding to have a linked
  *  case). Triage can pause in review, wait in takedown_pending for legal handling,
  *  move to takedown_sent on submission, then enforced. Reopen returns to pending. */
-export function markIpFindingNeedsReview(ipId: string, resultId: string) {
+export function markIpFindingNeedsReview(ipId: string, resultId: string, question: string) {
   return request<{ ok: boolean }>(
     `/api/ip/${ipId}/monitoring/findings/${resultId}/review`,
-    { method: "POST" },
+    { method: "POST", body: JSON.stringify({question}) },
   );
 }
 export function markIpFindingEnforced(ipId: string, resultId: string) {

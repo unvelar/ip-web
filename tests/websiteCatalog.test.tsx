@@ -48,6 +48,7 @@ test("catalog boundary rejects invalid counts and scopes", () => {
 
 test("older API falls back to explicitly workspace-scoped activity with distinct IP counts", async () => {
   globalThis.fetch = (async (url) => {
+    if (String(url).endsWith("/countries")) return Response.json({countries: [{code: "US", name: "United States"}]});
     if (String(url).endsWith("website-catalog")) return Response.json({}, { status: 404 });
     if (String(url).endsWith("/domains")) return Response.json({ domains: [
       { domain: "www.market.shop", source_type: "domain", ip_catalog_id: "ip1", enabled: true },
@@ -91,6 +92,7 @@ test("one source list combines configured sources with discovery; web settings n
   const selected: string[] = [];
   const patterns: string[] = [];
   await act(async () => root?.render(createElement(MonitoringSources, {
+    countries: [{code: "US", name: "United States"}], countriesReady: true,
     platforms: [monitor("www.facebook.com"), monitor("private.shop", false)], patterns: [],
     monitoringOn: true, hasKeywords: true, busy: null, loading: false,
     onAdd: source => selected.push(source.value), onPreparePattern: pattern => patterns.push(pattern),
@@ -122,6 +124,7 @@ test("Add saves the catalog target and template, then the same row becomes activ
   const platforms: MonitoredDomain[] = [];
   const writes: unknown[] = [];
   globalThis.fetch = (async (url, init) => {
+    if (String(url).endsWith("/countries")) return Response.json({countries: [{code: "US", name: "United States"}]});
     if (String(url).endsWith("website-catalog")) return Response.json({ scope: "workspace", websites });
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body));
@@ -154,6 +157,7 @@ test("Add saves the catalog target and template, then the same row becomes activ
 test("a failed add keeps the source available and reports the failure", async () => {
   const container = mount();
   globalThis.fetch = (async (url, init) => {
+    if (String(url).endsWith("/countries")) return Response.json({countries: [{code: "US", name: "United States"}]});
     if (String(url).endsWith("website-catalog")) return Response.json({ scope: "workspace", websites });
     if (init?.method === "POST") return Response.json({ error: "Source could not be added" }, { status: 503 });
     return Response.json({ platforms: [] });

@@ -49,10 +49,12 @@ export type ResultFilter = "all" | "processing" | "ready" | "filtered" | "failed
 export function useFirstScanFeed(requestedIpId: string | null) {
   const { activeIpId, loading: loadingActiveIp } = useActiveIp();
   const ipId = requestedIpId ?? activeIpId;
-  const [snapshot, setSnapshot] = useState<FirstScanSnapshot | null>(null);
+  const [loadedSnapshot, setSnapshot] = useState<FirstScanSnapshot | null>(null);
+  const snapshot = loadedSnapshot?.trademark.id === ipId ? loadedSnapshot : null;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorState, setError] = useState<{ ipId: string | null; message: string | null }>({ ipId: null, message: null });
+  const error = errorState.ipId === ipId ? errorState.message : null;
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
@@ -65,6 +67,15 @@ export function useFirstScanFeed(requestedIpId: string | null) {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [query]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setSourceFilter("all");
+      setResultFilter("all");
+      setQuery("");
+      setDebouncedQuery("");
+    });
+  }, [ipId]);
 
   const refresh = useCallback(async (parentSignal?: AbortSignal, pageCount = loadedPages.current) => {
     if (!ipId) return;
@@ -162,10 +173,10 @@ export function useFirstScanFeed(requestedIpId: string | null) {
       if (signal?.aborted) return;
       loadedPages.current = pageCount;
       setSnapshot({ trademark, onboarding: onboardingFeed.status, sources, page: progressiveFeed.page, updatedAt: new Date() });
-      setError([...degradedReasons].join(" ") || null);
+      setError({ ipId, message: [...degradedReasons].join(" ") || null });
     } catch (caught) {
       if (signal?.aborted) return;
-      setError(caught instanceof Error ? caught.message : "Unable to load monitoring progress");
+      setError({ ipId, message: caught instanceof Error ? caught.message : "Unable to load monitoring progress" });
     } finally {
       if (activeRequest.current === controller) activeRequest.current = null;
       if (!signal?.aborted) {
@@ -185,17 +196,31 @@ export function useFirstScanFeed(requestedIpId: string | null) {
     let stopped = false;
     let timer: number | undefined;
     let controller: AbortController | null = null;
+    let polling = false;
     loadedPages.current = 1;
-    const poll = async () => {
+    const poll = async (initial = false) => {
+      if (stopped || polling || (!initial && document.visibilityState === "hidden")) return;
+      timer = undefined;
+      polling = true;
       if (!activeRequest.current || activeRequest.current.signal.aborted) {
         controller = new AbortController();
         await refresh(controller.signal);
       }
-      if (!stopped) timer = window.setTimeout(poll, POLL_INTERVAL_MS);
+      polling = false;
+      if (!stopped && document.visibilityState !== "hidden") {
+        timer = window.setTimeout(() => void poll(), POLL_INTERVAL_MS);
+      }
     };
-    void poll();
+    const onVisibilityChange = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+      if (document.visibilityState !== "hidden") void poll();
+    };
+    void poll(true);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       stopped = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (timer !== undefined) window.clearTimeout(timer);
       controller?.abort();
       activeRequest.current?.abort();
@@ -264,7 +289,7 @@ export function useFirstScanFeed(requestedIpId: string | null) {
   return {
     ipId,
     snapshot,
-    loading,
+    loading: loading || Boolean(ipId && !snapshot && !error),
     refreshing,
     error,
     query,

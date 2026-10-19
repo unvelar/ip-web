@@ -16,6 +16,7 @@ import { ListingDescription } from "./ListingDescription";
 import { SellerSales } from "../../../features/sellers/SellerSales";
 import { sellerProfilePath } from "../../../lib/sellers";
 import { listingAvailabilityMeta } from "../../../lib/listingAvailability";
+import { assessmentPendingExplanation, assessmentPendingLabel, monitoringRecommendation } from "../../../lib/monitoringRecommendation";
 import {
   actionabilityMeta,
   dismissalBadge,
@@ -150,6 +151,7 @@ export function FindingComparison({
 
   const sb = findingStatusBadge(f);
   const actionability = actionabilityMeta(f.actionability);
+  const recommendation = monitoringRecommendation(f);
   const authenticityLabel =
     f.authenticity_status === "likely_genuine"
       ? "Likely genuine"
@@ -302,7 +304,7 @@ export function FindingComparison({
               challenge
             </span>
           )}
-          {isDismissed && (
+          {isDismissed && sb.label !== dismissalBadge(f.dismissal_reason).label && (
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${dismissalBadge(f.dismissal_reason).cls}`}>
               {dismissalBadge(f.dismissal_reason).label}
             </span>
@@ -499,9 +501,10 @@ export function FindingComparison({
         whyFlagged || actionability.reason || authenticityLabel ||
         f.protected_term_assessment?.outcome === "matched" ||
         f.offer_subject === "packaging_only" || f.authenticity_reasoning) && (
-      <details className="finding-assessment" aria-label="AI assessment">
-        <summary>AI assessment · {actionability.label || "Needs review"}</summary>
+      <details className="finding-assessment" aria-label={recommendation.label ? "AI assessment" : "Assessment progress"}>
+        <summary>{recommendation.label ? `AI assessment · ${recommendation.label}` : assessmentPendingLabel}</summary>
         <div className="mt-3 space-y-3">
+          {!recommendation.label && <p className="text-sm text-stone-500">{assessmentPendingExplanation}</p>}
       {productAuthenticityAssessment &&
         productAuthenticityAssessment.rule_assessments.length > 0 && (
         <section className="rounded-lg border border-stone-200 bg-stone-50 p-3">
@@ -590,7 +593,7 @@ export function FindingComparison({
                 {whyFlagged}
               </p>
             )}
-            {actionability.reason && (
+            {recommendation.label && actionability.reason && (
               <p>
                 <span className="font-semibold text-stone-500">Why recommended: </span>
                 {actionability.reason}

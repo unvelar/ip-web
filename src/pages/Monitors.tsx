@@ -7,12 +7,14 @@ import {
   type MonitoredIpSummary,
 } from "../api";
 import { PlatformsPanel } from "../components/monitoring/PlatformsPanel";
+import { MonitoringConfigurationGate } from "../components/monitoring/MonitoringConfigurationGate";
 
-/**
- * Per-IP monitoring management page. Add new monitored IPs, see each IP's
- * watched platforms, link to Audit log.
- */
+/** Keep per-IP monitoring controls available only to tenants without the shared configuration. */
 export default function Monitors() {
+  return <MonitoringConfigurationGate><LegacyMonitors /></MonitoringConfigurationGate>;
+}
+
+function LegacyMonitors() {
   const [ips, setIps] = useState<MonitoredIpSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState("");
