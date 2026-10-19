@@ -29,6 +29,7 @@ test("editing colors preserves cotton, edition and exact measurement until appli
   const applied: Array<string | null> = [];
   root = createRoot(container);
   await act(async () => root!.render(<SemanticFilterPanel value={JSON.stringify(semantic)} ipId={null} onApply={value => applied.push(value)} />));
+  expect(document.activeElement).toBe(container.querySelector("input"));
   const button = (text: string) => Array.from(container.querySelectorAll("button")).find(item => item.textContent === text)!;
   await act(async () => { button("Red").click(); button("Blue").click(); });
   expect(applied).toEqual([]);
