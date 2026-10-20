@@ -99,21 +99,25 @@ export function MonitoringResultList({
         const some = !all && group.findings.some((finding) => selected.has(finding.result_id));
         const expanded = group.kind === "seller" ? toggled.has(group.key) : !toggled.has(group.key);
         const id = `${groupId}-group-${index}`;
+        const toggle = () => setToggled((previous) => { const next = new Set(previous); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; });
         return <Fragment key={group.key}>
-          <tbody><tr className="monitoring-group-heading"><th colSpan={4} scope="rowgroup">
+          <tbody><tr className="monitoring-group-heading" onClick={(event) => {
+            if ((event.target as Element).closest("button, input")) return;
+            toggle();
+          }}><th colSpan={4} scope="rowgroup">
             <div className="monitoring-group-heading-content">
               <input type="checkbox" aria-label={`Select loaded tasks in ${group.label}`} checked={all}
                 ref={(element) => { if (element) element.indeterminate = some; }}
                 onChange={(event) => onSelectGroup?.(group.findings.map((finding) => finding.result_id), event.target.checked)} />
               <button type="button" className="monitoring-group-toggle" aria-expanded={expanded} aria-controls={id}
                 aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label}`}
-                onClick={() => setToggled((previous) => { const next = new Set(previous); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })}>
+                onClick={toggle}>
                 <ChevronRight size={13} className={expanded ? "is-expanded" : ""} aria-hidden />
               </button>
-              {onGroupOpen ? <button type="button" className="monitoring-group-name" onClick={() => onGroupOpen(group)}>
+              <button type="button" className="monitoring-group-name" aria-expanded={expanded} aria-controls={id} onClick={toggle}>
                 {group.kind === "seller" ? <Store size={14} aria-hidden /> : <Box size={14} aria-hidden />}
                 <span>{group.label}</span>
-              </button> : <span className="monitoring-group-name">{group.label}</span>}
+              </button>
               <span className="monitoring-group-count">{group.findings.length} loaded</span>
               {group.kind === "seller" && [...new Set(group.findings.map((finding) => finding.domain))].map((domain) => <span key={domain} className="monitoring-marketplace" role="img" aria-label={monitoringPlatformLabel(domain)} title={monitoringPlatformLabel(domain)}><MarketplaceMark source={{ domain, name: monitoringPlatformLabel(domain) }} /></span>)}
               {onGroupOpen && <button type="button" className="monitoring-group-open" aria-label={`Open ${group.kind} details: ${group.label}`} onClick={() => onGroupOpen(group)}><PanelRight size={15} aria-hidden /></button>}

@@ -32,10 +32,24 @@ export function TaskGroupRows({
       selection.has(row.result_id),
     ).length;
     const bodyId = `${id}-${index}`;
+    const toggle = () => {
+      if (disabled) return;
+      setToggled((previous) => {
+        const next = new Set(previous);
+        if (next.has(group.key)) next.delete(group.key);
+        else next.add(group.key);
+        return next;
+      });
+      onToggle?.(group, !expanded);
+    };
     return (
       <Fragment key={group.key}>
         <tbody>
-          <tr className="monitoring-group-heading">
+          <tr className="monitoring-group-heading" data-disabled={disabled || undefined}
+            onClick={(event) => {
+              if ((event.target as Element).closest("button, input")) return;
+              toggle();
+            }}>
             <th colSpan={4} scope="rowgroup">
               <div className="monitoring-group-heading-content">
                 <input
@@ -61,15 +75,8 @@ export function TaskGroupRows({
                   aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label}`}
                   aria-expanded={expanded}
                   aria-controls={bodyId}
-                  onClick={() => {
-                    setToggled((previous) => {
-                      const next = new Set(previous);
-                      if (next.has(group.key)) next.delete(group.key);
-                      else next.add(group.key);
-                      return next;
-                    });
-                    onToggle?.(group, !expanded);
-                  }}
+                  disabled={disabled}
+                  onClick={toggle}
                 >
                   <ChevronRight
                     size={14}
@@ -81,7 +88,9 @@ export function TaskGroupRows({
                   type="button"
                   className="monitoring-group-name"
                   disabled={disabled}
-                  onClick={() => onOpen(group)}
+                  aria-expanded={expanded}
+                  aria-controls={bodyId}
+                  onClick={toggle}
                 >
                   {group.kind === "seller" ? (
                     <Store size={14} aria-hidden="true" />

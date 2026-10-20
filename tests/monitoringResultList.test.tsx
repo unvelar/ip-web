@@ -108,8 +108,10 @@ test("group selection covers only loaded members and survives regrouping and col
   await ui.click('[aria-label="Select loaded tasks in Beauty seller"]');
   expect(ui.container.querySelectorAll('tbody input:checked').length).toBe(3);
   expect(ui.opened).toEqual([]);
-  await ui.click('.monitoring-group-toggle');
-  await ui.click('.monitoring-group-toggle');
+  expect(ui.container.querySelector('.monitoring-group-toggle')?.getAttribute("aria-expanded")).toBe("false");
+  await ui.click('.monitoring-group-heading');
+  expect(ui.container.querySelector('.monitoring-group-toggle')?.getAttribute("aria-expanded")).toBe("true");
+  await ui.click('.monitoring-group-name');
   expect(ui.container.querySelector('tbody[hidden]')).not.toBeNull();
   await ui.regroup("none");
   expect(ui.container.querySelectorAll('tbody input:checked').length).toBe(2);

@@ -38,6 +38,7 @@ test("group collapse preserves row selection and group selection touches only th
   );
   let selection = new Set(["one"]);
   const opened: string[] = [];
+  const expansions: boolean[] = [];
   root = createRoot(container);
   const render = () =>
     root!.render(
@@ -55,6 +56,7 @@ test("group collapse preserves row selection and group selection touches only th
             render();
           }}
           onOpen={(group) => opened.push(group.key)}
+          onToggle={(_group, expanded) => expansions.push(expanded)}
           renderRow={(row) => (
             <tr key={row.task_id}>
               <td>{row.task_id}</td>
@@ -79,6 +81,15 @@ test("group collapse preserves row selection and group selection touches only th
     "onethree",
   );
   expect(selection).toEqual(new Set(["one"]));
+  const heading = container.querySelector<HTMLTableRowElement>(".monitoring-group-heading")!;
+  await act(async () => heading.click());
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  await act(async () => heading.querySelector<HTMLElement>(".monitoring-group-count")!.click());
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  await act(async () => heading.querySelector<HTMLButtonElement>(".monitoring-group-name")!.click());
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(expansions).toEqual([true, false, true, false, true]);
+  expect(opened).toEqual([]);
   await act(async () => groupCheckboxes[0].click());
   expect(selection).toEqual(new Set(["one", "three"]));
   expect(groupCheckboxes[1].checked).toBe(false);
@@ -90,4 +101,6 @@ test("group collapse preserves row selection and group selection touches only th
       .click(),
   );
   expect(opened).toEqual(["seller:seller-a"]);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(expansions).toEqual([true, false, true, false, true]);
 });

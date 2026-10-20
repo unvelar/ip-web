@@ -114,6 +114,8 @@
 .monitoring-results-queue[aria-busy="true"] { opacity:.6; pointer-events:none; }
 .monitoring-result-list tbody[hidden] { display:none; }
 .monitoring-result-list .monitoring-group-heading th { padding:0; background:#f5f4f0; border-bottom:1px solid #e9e6e0; }
+.monitoring-group-heading:not([data-disabled]) { cursor:pointer; }
+.monitoring-result-list .monitoring-group-heading:not([data-disabled]):hover th { background:#eeece7; }
 .monitoring-group-heading-content { display:flex; align-items:center; gap:12px; padding:8px 20px 8px 20px; font-size:12px; font-weight:400; }
 .monitoring-group-heading-content > input { flex-shrink:0; width:15px; height:15px; accent-color:#242320; cursor:pointer; }
 .monitoring-group-toggle { display:flex; align-items:center; gap:8px; min-width:0; color:#242320; text-align:left; }
