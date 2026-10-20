@@ -12,6 +12,7 @@ import {
   createTenant,
   deleteTenant,
   listTenants,
+  setTenantJobPriority,
   tenantLabel,
   type Tenant,
 } from "../api";
@@ -19,6 +20,7 @@ import { useAuth } from "../context/AuthContext";
 import { SimulatedLoginPanel } from "../features/auth/SimulatedLoginPanel";
 import { listTenantMonitoringSummaries, type TenantMonitoringSummary } from "../api/tenantMonitoring";
 import { TenantMonitoringStats } from "../features/adminMonitoring/TenantMonitoringStats";
+import { TENANT_JOB_PRIORITIES, type TenantJobPriority } from "../tenantJobPriority";
 
 import "./AdminTenants.css";
 
@@ -34,16 +36,19 @@ export default function AdminTenants() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [savingPriorityId, setSavingPriorityId] = useState("");
   const [monitoring, setMonitoring] = useState<Map<string, TenantMonitoringSummary>>(new Map());
   const [monitoringLoading, setMonitoringLoading] = useState(true);
   const [monitoringError, setMonitoringError] = useState("");
+  const [monitoringRevision, setMonitoringRevision] = useState(0);
+  const tenantIds = tenants.map((tenant) => tenant.id).join(",");
 
   useEffect(() => {
     void load();
   }, []);
 
   useEffect(() => {
-    if (tenants.length === 0) return;
+    if (!tenantIds) return;
     const controller = new AbortController();
     setMonitoring(new Map());
     setMonitoringLoading(true);
@@ -52,7 +57,7 @@ export default function AdminTenants() {
       if (controller.signal.aborted) return;
       const byTenant = new Map(summaries.map((summary) => [summary.tenant_id, summary]));
       setMonitoring(byTenant);
-      if (tenants.some((tenant) => !byTenant.has(tenant.id))) {
+      if (tenantIds.split(",").some((id) => !byTenant.has(id))) {
         setMonitoringError("Monitoring details are unavailable for some tenants. Refresh to retry.");
       }
     }).catch(() => {
@@ -63,7 +68,7 @@ export default function AdminTenants() {
       if (!controller.signal.aborted) setMonitoringLoading(false);
     });
     return () => controller.abort();
-  }, [tenants]);
+  }, [tenantIds, monitoringRevision]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -87,6 +92,7 @@ export default function AdminTenants() {
     try {
       const res = await listTenants();
       setTenants(res.tenants);
+      setMonitoringRevision((current) => current + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -110,6 +116,23 @@ export default function AdminTenants() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handlePriorityChange(tenant: Tenant, priority: TenantJobPriority) {
+    if (savingPriorityId || deletingId || tenant.job_priority === priority) return;
+    setSavingPriorityId(tenant.id);
+    setError("");
+    setSuccess("");
+    try {
+      const updated = await setTenantJobPriority(tenant.id, priority);
+      setTenants((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+      const label = TENANT_JOB_PRIORITIES.find((item) => item.value === updated.job_priority)!.label;
+      setSuccess(`${tenantLabel(updated)} job priority set to ${label}. Waiting jobs use this priority from the next claim.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingPriorityId("");
     }
   }
 
@@ -175,7 +198,7 @@ export default function AdminTenants() {
               ? `${filtered.length.toLocaleString()} of ${tenants.length.toLocaleString()}`
               : `${tenants.length.toLocaleString()} tenants`}
           </span>
-          <button type="button" onClick={() => void load()} disabled={loading}
+          <button type="button" onClick={() => void load()} disabled={loading || Boolean(savingPriorityId)}
             className="tenant-icon-button" title="Refresh tenants" aria-label="Refresh tenants">
             <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
           </button>
@@ -183,9 +206,17 @@ export default function AdminTenants() {
 
         {monitoringError && <div role="status" className="tenant-monitoring-notice">{monitoringError}</div>}
 
+        <p id="tenant-priority-help" className="tenant-priority-help">
+          Urgent jobs run before High, then Normal. Applies to eligible waiting jobs. Running jobs finish as usual.
+          {tenants.some((tenant) => tenant.job_priority === undefined) && (
+            <span className="tenant-priority-unavailable">Priority settings will be available after the server update.</span>
+          )}
+        </p>
+
         <div className="tenant-columns" aria-hidden="true">
           <span>Workspace</span>
           <div className="tenant-monitoring-columns"><span>Tasks <small>(completed / total)</small></span><span>Last monitoring</span></div>
+          <span>Job priority</span>
           <span />
         </div>
 
@@ -207,7 +238,23 @@ export default function AdminTenants() {
                   </div>
                 </div>
                 <TenantMonitoringStats summary={monitoring.get(tenant.id)} loading={monitoringLoading} />
-                <button type="button" disabled={Boolean(deletingId)}
+                <div className="tenant-priority" aria-busy={savingPriorityId === tenant.id}>
+                  <span className="tenant-priority-label">Job priority</span>
+                  <select aria-label={`Job priority for ${tenantLabel(tenant)}`}
+                    aria-describedby="tenant-priority-help"
+                    value={tenant.job_priority ?? "unavailable"}
+                    disabled={tenant.job_priority === undefined || Boolean(savingPriorityId) || Boolean(deletingId)}
+                    data-priority={tenant.job_priority}
+                    onChange={(event) => {
+                      const priority = TENANT_JOB_PRIORITIES.find((item) => String(item.value) === event.target.value);
+                      if (priority) void handlePriorityChange(tenant, priority.value);
+                    }}>
+                    {tenant.job_priority === undefined && <option value="unavailable">Unavailable</option>}
+                    {TENANT_JOB_PRIORITIES.map((priority) => <option key={priority.value} value={priority.value}>{priority.label}</option>)}
+                  </select>
+                  {savingPriorityId === tenant.id && <Loader2 size={13} className="animate-spin" aria-label="Saving priority" />}
+                </div>
+                <button type="button" disabled={Boolean(deletingId) || Boolean(savingPriorityId)}
                   onClick={() => void handleRemove(tenant)}
                   title={`Delete ${tenantLabel(tenant)}`} aria-label={`Delete ${tenantLabel(tenant)}`}
                   className="tenant-icon-button tenant-delete">

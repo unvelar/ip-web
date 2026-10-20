@@ -2,6 +2,7 @@ import { computeRuntimeSettingsPatchBody } from "../computeRuntimeSettings";
 import { API, authHeaders, request } from "./transport";
 import { isDiscoveryEvidence } from "./websiteDiscovery";
 import { requireResponse } from "./validation";
+import type { TenantJobPriority } from "../tenantJobPriority";
 
 // --- Admin (unified cross-source IP catalog management) ---
 
@@ -693,6 +694,8 @@ export interface TenantUsageStats {
 
 export interface Tenant {
   id: string;
+  /** Absent until the API supporting tenant priorities has been deployed. */
+  job_priority?: TenantJobPriority;
   name: string | null;
   public_slug: string | null;
   email_domain: string | null;
@@ -720,6 +723,15 @@ export function createTenant(name: string) {
     method: "POST",
     body: JSON.stringify({ name }),
   });
+}
+
+export async function setTenantJobPriority(id: string, priority: TenantJobPriority) {
+  const result = await request<{ tenant: Tenant }>(
+    `/api/admin/tenants/${encodeURIComponent(id)}/job-priority`,
+    { method: "PATCH", body: JSON.stringify({ job_priority: priority }) },
+  );
+  requireResponse(result.tenant?.id === id && result.tenant.job_priority === priority, "tenant job priority");
+  return result.tenant;
 }
 
 export function simulateSuccessfulLogin(email: string) {

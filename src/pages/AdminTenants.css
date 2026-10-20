@@ -1,6 +1,8 @@
 .tenant-page {
   --tenant-line: #e9e7e4;
   --tenant-muted: #85817c;
+  container-name: tenants;
+  container-type: inline-size;
   width: 100%;
   max-width: 1120px;
   margin: 0 auto;
@@ -29,7 +31,7 @@
 .tenant-icon-button:active { transform: scale(.94); }
 .tenant-icon-button:disabled { opacity: .4; cursor: default; }
 .tenant-page button:focus-visible, .tenant-disclosure summary:focus-visible { outline: 2px solid #a8a29e; outline-offset: 3px; }
-.tenant-columns, .tenant-row { display: grid; grid-template-columns: minmax(0, 1fr) 350px 32px; column-gap: 24px; align-items: center; padding-inline: 20px; }
+.tenant-columns, .tenant-row { display: grid; grid-template-columns: minmax(0, 1fr) 350px 136px 32px; column-gap: 20px; align-items: center; padding-inline: 20px; }
 .tenant-columns { min-height: 36px; border-block: 1px solid var(--tenant-line); background: #fcfcfb; color: var(--tenant-muted); font-size: 11px; }
 .tenant-monitoring-columns, .tenant-monitoring-stats { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; }
 .tenant-monitoring-columns small { color: #aaa49d; font-size: 10px; font-weight: 400; }
@@ -48,6 +50,15 @@
 .tenant-stat-count { color: #393632; font-size: 13px; font-weight: 500; }
 .tenant-task-total { color: #625e58; font-weight: 500; }
 .tenant-stat-muted { color: #96918a; font-size: 12px; font-weight: 400; }
+.tenant-priority-help { margin: 0; padding: 10px 20px; border-top: 1px solid var(--tenant-line); color: #77716a; font-size: 12px; }
+.tenant-priority-unavailable { display: block; margin-top: 4px; color: #8c7350; }
+.tenant-priority { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tenant-priority-label { display: none; }
+.tenant-priority select { width: 112px; height: 32px; border: 1px solid #dfdcd7; border-radius: 6px; padding: 0 8px; background: #fff; color: #625e58; font: inherit; font-size: 12px; cursor: pointer; }
+.tenant-priority select[data-priority="1"] { border-color: #d6c7a9; color: #866427; background: #fffcf4; }
+.tenant-priority select[data-priority="2"] { border-color: #e5b6ae; color: #a33f32; background: #fff6f4; }
+.tenant-priority select:focus-visible { outline: 2px solid #a8a29e; outline-offset: 3px; }
+.tenant-priority select:disabled { opacity: .6; cursor: default; }
 .tenant-delete { color: #aaa49d; }
 .tenant-delete:hover { background: #fff1ef; color: #c3483b; }
 .tenant-empty { min-height: 220px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--tenant-muted); }
@@ -75,19 +86,23 @@
 .tenant-login-panel input { height: 36px; padding-inline: 10px; font-size: 12px; }
 .tenant-login-panel button { height: 36px; padding-inline: 14px; background: #292725; font-size: 12px; font-weight: 400; }
 .tenant-login-panel input:focus-visible { outline: 2px solid #a8a29e; outline-offset: 2px; box-shadow: none; border-color: #a8a29e; }
-@media (max-width: 1100px) {
-  .tenant-columns, .tenant-row { grid-template-columns: minmax(0, 1fr) 300px 32px; gap: 16px; }
-  .tenant-monitoring-columns, .tenant-monitoring-stats { grid-template-columns: 150px minmax(0, 1fr); gap: 16px; }
+@container tenants (max-width: 950px) {
+  .tenant-columns, .tenant-row { grid-template-columns: minmax(0, 1fr) 280px 132px 32px; gap: 14px; }
+  .tenant-monitoring-columns, .tenant-monitoring-stats { grid-template-columns: 120px minmax(0, 1fr); gap: 16px; }
 }
 @media (max-width: 760px) {
   .tenant-page { padding: 28px 16px 48px; }
+}
+@container tenants (max-width: 820px) {
   .tenant-toolbar { gap: 10px; padding-inline: 14px; }
   .tenant-columns { display: none; }
   .tenant-rows { border-top: 1px solid var(--tenant-line); }
   .tenant-row { grid-template-columns: minmax(0, 1fr) 32px; gap: 14px; padding: 16px; }
   .tenant-identity { grid-column: 1; grid-row: 1; }
   .tenant-delete { grid-column: 2; grid-row: 1; }
-  .tenant-monitoring-stats { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 16px; }
+  .tenant-monitoring-stats { grid-column: 1 / -1; grid-row: 2; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 16px; }
+  .tenant-priority { grid-column: 1 / -1; grid-row: 3; gap: 12px; }
+  .tenant-priority-label { display: inline; color: var(--tenant-muted); font-size: 11px; }
   .tenant-stat-label { position: static; width: auto; height: auto; margin: 0 0 3px; overflow: visible; clip-path: none; white-space: normal; color: var(--tenant-muted); font-size: 11px; }
   .tenant-create-form { flex-direction: column; align-items: stretch; }
 }
