@@ -123,6 +123,28 @@ test("filter drafts cancel without applying or starting a search", async () => {
   );
 });
 
+test("marketplace country and seller origin are independent filters", async () => {
+  const ui = await setup();
+  await ui.click("Add filter");
+  await ui.click("Country");
+  expect(ui.container.querySelector('[role="dialog"]')?.textContent).toContain("marketplace");
+  await ui.setInput("Country", "Spain");
+  await ui.click("Apply filter");
+  await ui.click("Add filter");
+  await ui.click("Seller Origin");
+  await ui.setInput("Seller Origin", "China");
+  await ui.click("Apply filter");
+  await ui.submit();
+  expect(ui.requests[0]).toMatchObject({ country: "Spain", seller_origin: "China" });
+  await ui.click("Remove country filter");
+  await ui.submit();
+  expect(ui.requests[1]).not.toHaveProperty("country");
+  expect(ui.requests[1]).toHaveProperty("seller_origin", "China");
+  await ui.click("Clear filters");
+  await ui.submit();
+  expect(ui.requests[2]).not.toHaveProperty("seller_origin");
+});
+
 test("applied zero price survives editing, and removing a filter omits it from the search request", async () => {
   const ui = await setup();
   await ui.click("Add filter");
@@ -216,15 +238,16 @@ test("the merged search preserves staff-triage criteria and current suggestion c
 });
 
 test("changing the primary status preserves optional filters and uses the new status for search", async () => {
-  const ui = await setup("status=pending&country=Spain");
+  const ui = await setup("status=pending&country=Spain&seller_origin=China");
   await ui.changeStatus("review");
   expect(ui.container.textContent).toContain("Country: Spain");
   await ui.submit();
-  expect(ui.requests[0]).toMatchObject({ status: "review", country: "Spain" });
+  expect(ui.requests[0]).toMatchObject({ status: "review", country: "Spain", seller_origin: "China" });
   await ui.click("Clear filters");
   await ui.submit();
   expect(ui.requests[1]).toMatchObject({ status: "review" });
   expect(ui.requests[1]).not.toHaveProperty("country");
+  expect(ui.requests[1]).not.toHaveProperty("seller_origin");
   await ui.click("Add filter");
   expect(
     ui.container.querySelector('[role="dialog"]')?.textContent,

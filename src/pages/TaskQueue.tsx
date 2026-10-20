@@ -121,6 +121,7 @@ export default function TaskQueue({
     oldFilters.query ||
     oldFilters.seller ||
     oldFilters.country ||
+    params.get("seller_origin")?.trim() ||
     oldFilters.match_basis ||
     oldFilters.protected_term_id ||
     oldFilters.product_group_id ||

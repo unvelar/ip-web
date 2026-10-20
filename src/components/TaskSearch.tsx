@@ -77,6 +77,7 @@ const filters: Filter[] = [
   },
   { id: "assignee", label: "Assignee", fields: ["assignee"], kind: "select" },
   { id: "country", label: "Country", fields: ["country"], kind: "text" },
+  { id: "seller_origin", label: "Seller Origin", fields: ["seller_origin"], kind: "text" },
   {
     id: "evidence",
     label: "Evidence",
@@ -273,8 +274,8 @@ export default function TaskSearch({
       ? !invalidDates
       : activeFilter?.kind === "price"
         ? !invalidPrice && Boolean(draft.min_price_usd || draft.max_price_usd)
-        : activeFilter?.kind === "select"
-          ? Boolean(draft[activeFilter.id])
+        : activeFilter?.kind === "select" || activeFilter?.kind === "text"
+          ? Boolean(draft[activeFilter.id]?.trim())
           : activeFilter?.kind === "history"
             ? true
             : activeFilter
@@ -285,7 +286,10 @@ export default function TaskSearch({
       panel === "dates" ? ["from", "to"] : (activeFilter?.fields ?? []);
     setValues((current) => ({
       ...current,
-      ...Object.fromEntries(fields.map((field) => [field, draft[field] ?? ""])),
+      ...Object.fromEntries(fields.map((field) => {
+        const value = draft[field] ?? "";
+        return [field, activeFilter?.kind === "text" ? value.trim() : value];
+      })),
     }));
     if (activeFilter)
       setLabels((current) => ({ ...current, [activeFilter.id]: draftLabel }));
@@ -633,17 +637,26 @@ export default function TaskSearch({
                       </select>
                     </label>
                   ) : activeFilter?.kind === "text" ? (
-                    <label>
-                      Country
-                      <input
-                        autoFocus
-                        value={draft.country ?? ""}
-                        placeholder="Enter a country"
-                        onChange={(event) =>
-                          setDraft({ ...draft, country: event.target.value })
-                        }
-                      />
-                    </label>
+                    <>
+                      <label>
+                        {activeFilter.label}
+                        <input
+                          autoFocus
+                          maxLength={100}
+                          value={draft[activeFilter.id] ?? ""}
+                          placeholder="Country name or two-letter code"
+                          aria-describedby={`task-search-${activeFilter.id}-help`}
+                          onChange={(event) =>
+                            setDraft({ ...draft, [activeFilter.id]: event.target.value })
+                          }
+                        />
+                      </label>
+                      <p id={`task-search-${activeFilter.id}-help`}>
+                        {activeFilter.id === "country"
+                          ? "Filter by the country assigned to the marketplace or storefront."
+                          : 'Filter by the seller\'s recorded country. Enter "Unknown" for sellers without a known origin.'}
+                      </p>
+                    </>
                   ) : activeFilter?.kind === "price" ? (
                     <>
                       <div className="task-search-range">
