@@ -26,8 +26,11 @@ async function setup(query = "status=pending") {
   });
   const requests: Record<string, unknown>[] = [];
   const started: string[] = [];
-  globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+  const searching: boolean[] = [];
+  const cancelled: string[] = [];
+  globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
     if (init?.method === "POST") requests.push(JSON.parse(String(init.body)));
+    if (init?.method === "DELETE") cancelled.push(String(url));
     return new Response(
       JSON.stringify({
         id: "search-one",
@@ -58,6 +61,7 @@ async function setup(query = "status=pending") {
         onError={(error) => {
           if (error) throw new Error(error);
         }}
+        onSearching={(value) => searching.push(value)}
       />,
     );
   await act(async () => render());
@@ -100,12 +104,15 @@ async function setup(query = "status=pending") {
     container,
     requests,
     started,
+    searching,
+    cancelled,
     button,
     click,
     setInput,
     submit,
     changeStatus,
     window,
+    settleSearch: () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); }),
   };
 }
 
@@ -175,15 +182,20 @@ test("applied zero price survives editing, and removing a filter omits it from t
   expect(ui.requests[1]).not.toHaveProperty("max_price_usd");
 });
 
-test("Enter in a filter editor applies the draft without starting a background search", async () => {
+test("Enter in a filter editor applies the draft and automatically searches", async () => {
   const ui = await setup();
   await ui.click("Add filter");
   await ui.click("Country");
   await ui.setInput("Country", "Spain");
   await ui.submit();
-  expect(ui.container.textContent).toContain("Country: Spain");
+  expect(ui.button("Country: Spain")).toBeDefined();
   expect(ui.requests).toHaveLength(0);
   expect(ui.container.querySelector('[role="dialog"]')).toBeNull();
+  expect(ui.searching.at(-1)).toBe(true);
+  await ui.settleSearch();
+  expect(ui.requests).toHaveLength(1);
+  expect(ui.requests[0]).toMatchObject({ country: "Spain" });
+  expect(ui.searching.at(-1)).toBe(false);
 });
 
 test("linked filters remain in the request and clear keeps search scope and dates", async () => {
@@ -224,7 +236,7 @@ test("the queue's selected filter carries into search as the same identity", asy
 
 test("the merged search preserves staff-triage criteria and current suggestion choices", async () => {
   const ui = await setup("selector=suggestion&value=needs_triage");
-  expect(ui.container.textContent).toContain("Suggested action: Staff triage");
+  expect(ui.button("Suggested action: Staff triage")).toBeDefined();
   await ui.click("Suggested action: Staff triage");
   const choices = [...ui.container.querySelectorAll("option")].map(
     (option) => option.textContent,
@@ -240,7 +252,7 @@ test("the merged search preserves staff-triage criteria and current suggestion c
 test("changing the primary status preserves optional filters and uses the new status for search", async () => {
   const ui = await setup("status=pending&country=Spain&seller_origin=China");
   await ui.changeStatus("review");
-  expect(ui.container.textContent).toContain("Country: Spain");
+  expect(ui.button("Country: Spain")).toBeDefined();
   await ui.submit();
   expect(ui.requests[0]).toMatchObject({ status: "review", country: "Spain", seller_origin: "China" });
   await ui.click("Clear filters");
@@ -280,4 +292,68 @@ test("a delayed search response cannot restore a status the user has left", asyn
     );
   });
   expect(ui.started).toEqual([]);
+});
+
+test("rapid filter changes coalesce and automatically replace the previous search", async () => {
+  const ui = await setup();
+  await ui.settleSearch();
+  expect(ui.requests).toHaveLength(0);
+  await ui.submit();
+  await ui.click("Add filter");
+  await ui.click("Country");
+  await ui.setInput("Country", "Spain");
+  await ui.click("Apply filter");
+  await ui.click("Remove country filter");
+  await ui.settleSearch();
+  expect(ui.requests).toHaveLength(2);
+  expect(ui.requests[1]).not.toHaveProperty("country");
+  expect(ui.cancelled).toHaveLength(1);
+  expect(ui.cancelled[0]).toEndWith("/api/monitoring/tasks/searches/search-one");
+});
+
+test("a superseded response in the same scope is discarded and its job is cancelled", async () => {
+  const ui = await setup();
+  const fetch = globalThis.fetch;
+  let resolveRequest!: (response: Response) => void;
+  globalThis.fetch = ((url: unknown, init?: RequestInit) => init?.method === "POST"
+    ? new Promise<Response>((resolve) => { resolveRequest = resolve; })
+    : fetch(url as RequestInfo, init)) as typeof fetch;
+  await ui.submit();
+  await ui.click("Add filter");
+  await ui.click("Country");
+  await ui.setInput("Country", "Spain");
+  await ui.click("Apply filter");
+  await act(async () => {
+    resolveRequest(new Response(JSON.stringify({ id: "stale-search", state: "running", scanned: 5, matched: 0 })));
+  });
+  expect(ui.started).toEqual([]);
+  expect(ui.searching.at(-1)).toBe(true);
+  expect(ui.cancelled[0]).toEndWith("/api/monitoring/tasks/searches/stale-search");
+});
+
+test("slow creates are serialized so the replacement starts after cancelling the stale job", async () => {
+  const ui = await setup();
+  const fetch = globalThis.fetch;
+  let posts = 0;
+  let resolveFirst!: (response: Response) => void;
+  const order: string[] = [];
+  globalThis.fetch = ((url: unknown, init?: RequestInit) => {
+    order.push(init?.method ?? "GET");
+    if (init?.method === "POST" && ++posts === 1)
+      return new Promise<Response>((resolve) => { resolveFirst = resolve; });
+    return fetch(url as RequestInfo, init);
+  }) as typeof fetch;
+  await ui.submit();
+  await ui.click("Add filter");
+  await ui.click("Country");
+  await ui.setInput("Country", "Spain");
+  await ui.click("Apply filter");
+  await ui.settleSearch();
+  expect(posts).toBe(1);
+  await act(async () => {
+    resolveFirst(new Response(JSON.stringify({ id: "slow-search", state: "running", scanned: 0, matched: 0 })));
+  });
+  expect(order).toEqual(["POST", "DELETE", "POST"]);
+  expect(ui.requests[0]).toMatchObject({ country: "Spain" });
+  expect(ui.started).toEqual(["search-one"]);
 });
