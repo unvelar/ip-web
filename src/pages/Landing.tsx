@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Search, X } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, Check, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import Nav from "../components/Nav";
+import { PLATFORMS } from "./landingPlatforms";
 
 /* ---------- Scroll-triggered section reveal ---------- */
 function Reveal({
@@ -41,148 +42,219 @@ function Reveal({
   );
 }
 
-export default function Landing() {
-  const navigate = useNavigate();
-  const [scanProduct, setScanProduct] = useState("");
-  const [contactOpen, setContactOpen] = useState(false);
+/* ---------- Page content ---------- */
+const STATS = [
+  { value: "50M+", label: "infringing listings found" },
+  { value: "$150M+", label: "in counterfeits and infringements identified" },
+  { value: "20+", label: "brands, including listed companies and global law firms" },
+  { value: "5x", label: "lower brand protection costs, on average" },
+];
 
-  function handleHeroScan(e: React.FormEvent) {
-    e.preventDefault();
-    const productName = scanProduct.trim();
-    navigate("/monitor/start", { state: { productName } });
-  }
+const CONTRAST_ROWS: [string, string][] = [
+  ["Annual contracts priced for the biggest brands", "Monthly plans from $995"],
+  ["Reports that arrive weeks after a listing goes up", "A live dashboard, updated within minutes"],
+  [
+    "Fixed keyword searches that miss edited or redrawn copies",
+    "A self learning platform that runs specialised searches on its own",
+  ],
+  ["A fixed list of major marketplaces", "Unlimited"],
+  ["Takedowns counted one listing at a time", "Seller networks mapped, so you go after the source"],
+  ["Updates scattered across email threads", "Every case and escalation in one place"],
+];
+
+const SOURCE_POINTS = [
+  "Links stores that share photos, prices and seller details, even under different names",
+  "Ranks sellers by number of listings, reach and markets, so the biggest operations come first",
+  "Gives your counsel the full picture of a network, ready for a cease and desist or an investigation",
+];
+
+const STEPS = [
+  {
+    label: "Step One",
+    icon: "radar",
+    title: "Watch",
+    body: "Register your products, brands and artwork. Choose the markets, price points and sources you care about, and change them any time.",
+  },
+  {
+    label: "Step Two",
+    icon: "scan",
+    title: "Detect",
+    body: "Unvelar runs specialised searches on its own, based on what you register. Advanced models recognise patterns across listings, sellers and marketplaces, and computer vision models match visuals.",
+  },
+  {
+    label: "Step Three",
+    icon: "brain",
+    title: "Learn",
+    body: "Every case your team confirms or dismisses sharpens the next results. Your team always decides what gets taken down.",
+  },
+  {
+    label: "Step Four",
+    icon: "shield",
+    title: "Act",
+    body: "Cases arrive with the seller, listing and evidence attached. Assign them to colleagues, escalate to outside counsel, send takedown notices, and track every case to resolution.",
+  },
+];
+
+// Real customer quotes only.
+const QUOTES = [
+  {
+    quote:
+      "Fake serums kept popping up on several Chinese marketplaces at half the price. Unvelar helped us connect 600 listings to just 9 sellers using the same product photos, and get them taken down, removing over $3M in potential counterfeit sales.",
+    role: "In-house counsel",
+    company: "Skincare brand (EU)",
+  },
+  {
+    quote:
+      "Copies of the new home kit appeared on DHgate and Goofish two days before the official launch. Unvelar traced 70% of the 1,800 listings back to 12 seller networks, so the club had takedown notices ready on launch day.",
+    role: "Merchandise Manager",
+    company: "Football club, Italy",
+  },
+  {
+    quote:
+      "We run our full brand protection program with Unvelar at a third of what we paid our previous provider. And the results are better and more precise, because we can control the searches ourselves and nothing is left behind.",
+    role: "Brand Protection Manager",
+    company: "Fashion company, France",
+  },
+  {
+    quote:
+      "Switching to Unvelar from our previous provider was fast and smooth. The platform adapts to what we need, and the agentic approach makes our work much easier.",
+    role: "CEO",
+    company: "Gaming company, United Kingdom",
+  },
+];
+
+const BTN_PRIMARY =
+  "group inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-red-600 text-white rounded-full text-sm font-semibold shadow-lg shadow-red-600/25 hover:bg-red-700 hover:-translate-y-0.5 transition-all";
+const BTN_PRIMARY_ON_DARK =
+  "group inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-white text-stone-900 rounded-full text-sm font-semibold shadow-2xl shadow-black/40 hover:-translate-y-0.5 transition-all";
+
+export default function Landing() {
+  const [contactOpen, setContactOpen] = useState(false);
+  const openContact = () => setContactOpen(true);
 
   return (
     <div className="relative bg-cream text-stone-900 font-[Inter,system-ui,sans-serif]">
       <Nav />
       {/* ================= Hero ================= */}
       <section className="relative overflow-hidden min-h-[calc(100dvh-3.5rem)] flex items-center">
-        <div className="relative max-w-6xl mx-auto px-6 pt-8 lg:pt-10 pb-10 w-full">
-          <div className="grid lg:grid-cols-[0.95fr_1.05fr] gap-12 lg:gap-10 items-center lg:items-start">
+        <div className="relative max-w-6xl mx-auto px-6 pt-10 pb-14 w-full">
+          <div className="grid lg:grid-cols-[0.95fr_1.05fr] gap-12 lg:gap-10 items-center">
             <div className="min-w-0 text-center lg:text-left animate-fade-up">
+              <Eyebrow>Brand protection for in-house teams</Eyebrow>
               <h1 className="text-3xl sm:text-5xl lg:text-[3.25rem] font-black tracking-[-0.035em] leading-[1.15] sm:leading-[1.05] text-stone-900 text-balance">
-                Stop{" "}
-                <span className="text-gradient-red">infringement of your brand</span>
-                , before it spreads
+                Stop waiting for your next{" "}
+                <span className="text-gradient-red">brand protection report.</span>
               </h1>
-              <p className="mt-6 text-base text-stone-500 leading-relaxed max-w-md mx-auto lg:mx-0">
-                Unvelar scans the web around the clock for counterfeits and
-                brand misuse, and turns every match into a case ready to act
-                on.
+              <p className="mt-6 text-base sm:text-lg text-stone-500 leading-relaxed max-w-lg mx-auto lg:mx-0">
+                See every copy of your products as it appears on 250+
+                platforms. Change what you monitor whenever you want. Pay
+                monthly, from $995.
               </p>
-              <form
-                onSubmit={handleHeroScan}
-                className="mt-6 mx-auto lg:mx-0 max-w-md rounded-2xl sm:rounded-full border border-stone-900/10 bg-white/90 sm:bg-white/75 backdrop-blur p-1.5 shadow-lg shadow-stone-900/10 flex items-center gap-1.5 sm:gap-2"
-              >
-                <Search className="sm:hidden ml-2 h-4 w-4 shrink-0 text-stone-400" aria-hidden />
-                <input
-                  value={scanProduct}
-                  onChange={(e) => setScanProduct(e.target.value)}
-                  placeholder="Enter a brand or IP"
-                  aria-label="Enter a brand, product, or piece of IP"
-                  className="sm:hidden min-w-0 flex-1 h-11 bg-transparent px-1 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  aria-label="Start scan"
-                  className="sm:hidden h-11 w-11 shrink-0 rounded-xl bg-red-600 text-white shadow-md shadow-red-600/20 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 inline-flex items-center justify-center transition-colors"
-                >
-                  <ArrowRight className="h-4 w-4" aria-hidden />
+              <div className="mt-8 flex justify-center lg:justify-start">
+                <button type="button" onClick={openContact} className={BTN_PRIMARY}>
+                  Start a free pilot
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
                 </button>
-                <input
-                  value={scanProduct}
-                  onChange={(e) => setScanProduct(e.target.value)}
-                  placeholder="Enter a brand, product, or piece of IP"
-                  aria-label="Enter a brand, product, or piece of IP"
-                  className="hidden sm:block min-w-0 flex-1 h-11 rounded-full bg-transparent px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-red-500/25"
-                />
-                <button
-                  type="submit"
-                  className="hidden sm:inline-flex h-11 min-w-[5.25rem] rounded-full bg-stone-900 px-5 text-sm font-semibold text-white shadow-md shadow-stone-900/20 hover:bg-stone-800 items-center justify-center transition-colors"
-                >
-                  Scan
-                </button>
-              </form>
+              </div>
             </div>
 
-            <DashboardMockup />
+            <div className="min-w-0">
+              <DashboardMockup />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ================= Two features ================= */}
-      <Reveal
-        id="features"
-        className="relative bg-cream-dark scroll-mt-16 overflow-hidden rounded-t-[2.5rem]"
-      >
-        <div className="relative max-w-6xl mx-auto px-6 py-20">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
-              <span className="w-1 h-1 rounded-full bg-red-600 animate-pulse-dot" />
-              The platform
-            </div>
-            <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
-              Two ways to protect{" "}
-              <span className="text-gradient-red">your brand</span>, one
-              detection engine.
+      {/* ================= Stats + platforms ================= */}
+      <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
+        <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-16">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
+            {STATS.map((s) => (
+              <div key={s.value} className="text-center lg:text-left lg:border-l lg:border-stone-900/10 lg:pl-6 lg:first:border-l-0 lg:first:pl-0">
+                <div className="text-[clamp(1.25rem,8.5vw,2.25rem)] sm:text-5xl lg:text-[3.5rem] font-black tracking-[-0.04em] leading-none text-gradient-red tabular-nums whitespace-nowrap">
+                  {s.value}
+                </div>
+                <div className="mt-3 text-sm text-stone-500 leading-snug max-w-[14rem] mx-auto lg:mx-0">
+                  {s.label}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-16 pt-12 border-t border-stone-900/10">
+            <h2 className="text-center text-lg sm:text-xl font-bold tracking-tight text-stone-900">
+              250+ platforms covered. Add any site you want.
             </h2>
-            <p className="mt-4 text-stone-500 max-w-2xl mx-auto text-balance leading-relaxed">
-              Unvelar's detection engine works two ways: watching for
-              infringement that's already out there, and checking new work
-              before it goes out the door.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
-            <FeatureCard
-              icon="radar"
-              title="Monitoring"
-              tagline="Continuous monitoring & takedowns"
-              description="Register the IP you own and tell us where to look. Unvelar scans marketplaces, social platforms, and the open web around the clock, and turns what it finds into cases your team can review and act on."
-              mobileDescription="Scans marketplaces, social platforms, and the web, and turns hits into cases ready for review."
-              points={[
-                "Always-on scanning across marketplaces and platforms",
-                "Every match arrives as a reviewed case, with the evidence attached",
-                "Takedown notices ready to send, backed by the evidence behind them",
-              ]}
-            />
-            <FeatureCard
-              icon="shield"
-              title="Clearance Review"
-              tagline="Pre-release IP clearance"
-              description="Before a new design, asset, or piece of creative work goes out, run it against Unvelar's library of more than 200,000 protected references, and get a clear answer on where the risk is and why."
-              mobileDescription="Check new designs and assets against protected IP before they ship."
-              points={[
-                "Checked against a growing library of protected IP",
-                "Similarity measured across several dimensions, not one score",
-                "A plain result with the reasoning behind it, ready for legal review",
-              ]}
-            />
+            <PlatformMarquee />
           </div>
         </div>
       </Reveal>
 
-      {/* ================= Pricing ================= */}
+      {/* ================= Contrast ================= */}
       <Reveal className="relative bg-cream overflow-hidden rounded-t-[2.5rem]">
-        <div className="relative max-w-4xl mx-auto px-6 py-20 text-center">
-          <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
-            <span className="w-1 h-1 rounded-full bg-red-600 animate-pulse-dot" />
-            Pricing
-          </div>
-          <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
-            Full coverage,{" "}
-            <span className="text-gradient-red">priced to make sense.</span>
+        <div className="relative max-w-5xl mx-auto px-6 py-20">
+          <h2 className="text-center text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+            Most brand protection happens{" "}
+            <span className="text-gradient-red">out of sight.</span>
           </h2>
-          <p className="mt-5 text-stone-500 max-w-2xl mx-auto text-balance leading-relaxed">
-            Unvelar is priced well below what most teams expect to pay for
-            comprehensive monitoring and clearance review. You get full
-            coverage from day one, not a scaled-down plan trimmed to fit a
-            budget.
-          </p>
+
+          <div className="mt-12 rounded-3xl bg-white border border-stone-200/80 card-elevated overflow-hidden">
+            <div className="hidden sm:grid grid-cols-2 text-xs uppercase tracking-[0.2em] font-bold">
+              <div className="px-8 py-5 text-stone-500 bg-stone-100">Usually</div>
+              <div className="px-8 py-5 text-red-600 bg-red-50 border-l border-red-100">With Unvelar</div>
+            </div>
+            {CONTRAST_ROWS.map(([before, after]) => (
+              <div key={after} className="grid sm:grid-cols-2 border-t border-stone-200/70 first:border-t-0 sm:first:border-t">
+                <div className="px-6 sm:px-8 pt-5 pb-2 sm:py-6 sm:bg-stone-50 flex items-center gap-4 text-[15px] sm:text-base text-stone-600">
+                  <span className="w-6 h-6 shrink-0 rounded-full bg-stone-200 flex items-center justify-center">
+                    <X className="w-3.5 h-3.5 text-stone-500" strokeWidth={2.5} aria-label="Usually" />
+                  </span>
+                  <span>{before}</span>
+                </div>
+                <div className="px-6 sm:px-8 pt-1 pb-5 sm:py-6 sm:border-l sm:border-red-100 sm:bg-red-50/30 flex items-center gap-4 text-[15px] sm:text-base font-semibold text-stone-900">
+                  <span className="w-6 h-6 shrink-0 rounded-full bg-red-600 flex items-center justify-center">
+                    <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} aria-label="With Unvelar" />
+                  </span>
+                  <span>{after}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </Reveal>
 
-      {/* ================= How monitoring works (dark) ================= */}
+      {/* ================= Go after the source ================= */}
+      <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
+        <div className="relative max-w-6xl mx-auto px-6 py-20">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+                Stop chasing listings.{" "}
+                <span className="text-gradient-red">Find who's behind them.</span>
+              </h2>
+              <p className="mt-5 text-stone-500 leading-relaxed max-w-lg">
+                Take down one listing and the same seller is back tomorrow
+                under a new name. Unvelar shows you who's really running them.
+              </p>
+              <ul className="mt-7 space-y-3.5">
+                {SOURCE_POINTS.map((p) => (
+                  <li key={p} className="flex items-start gap-3">
+                    <Check className="w-4 h-4 mt-0.5 shrink-0 text-red-600" aria-hidden />
+                    <span className="text-sm sm:text-[15px] text-stone-700 leading-snug">{p}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-8 text-lg sm:text-xl font-bold tracking-tight text-stone-900 text-balance">
+                Spend your budget on the 20 sellers that matter, not the 2,000
+                listings they run.
+              </p>
+            </div>
+            <SellerNetworkIllustration />
+          </div>
+        </div>
+      </Reveal>
+
+      {/* ================= How it works (dark) ================= */}
       <Reveal
         id="how-it-works"
         className="relative bg-stone-950 text-white scroll-mt-16 overflow-hidden rounded-t-[2.5rem]"
@@ -193,185 +265,102 @@ export default function Landing() {
         </div>
 
         <div className="relative max-w-6xl mx-auto px-6 py-20">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-white/60 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
-              <span className="w-1 h-1 rounded-full bg-red-400 animate-pulse-dot" />
-              How monitoring works
-            </div>
-            <h2 className="text-3xl sm:text-[2.75rem] font-black tracking-[-0.03em] leading-[1.05] text-balance">
-              Watch the web,{" "}
-              <span className="text-gradient-cream">act on what you find.</span>
-            </h2>
-            <p className="mt-4 text-white/50 max-w-2xl mx-auto text-balance leading-relaxed">
-              Set it up once. From there, Unvelar scans on a schedule, flags
-              what matters, and gives your team everything it needs to
-              enforce.
-            </p>
-          </div>
+          <h2 className="text-center mb-14 text-3xl sm:text-[2.75rem] font-black tracking-[-0.03em] leading-[1.05]">
+            How it <span className="text-gradient-cream">works</span>
+          </h2>
 
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* Step 1 — Watch */}
-            <div className="relative isolate bg-white/[0.03] backdrop-blur-sm rounded-3xl p-6 gradient-border">
-              <StepHeader label="Step One" icon="radar" />
-              <h3 className="text-xl sm:text-2xl font-black tracking-tight mb-2">Watch</h3>
-              <p className="text-[13px] sm:text-sm text-white/50 mb-4 leading-relaxed">
-                Register the IP you own, along with the domains and platforms
-                you want covered. Unvelar checks them on a set schedule, so
-                nobody has to search by hand.
-              </p>
-              <div className="space-y-2.5">
-                <FlowRow
-                  icon="registry"
-                  title="Register your IP"
-                  description="Products, brands, and artwork, indexed for detection"
-                />
-                <FlowRow
-                  icon="globe"
-                  title="Choose what to watch"
-                  description="Marketplaces, social platforms, and the open web"
-                />
-                <FlowRow
-                  icon="clock"
-                  title="Always-on scanning"
-                  description="New listings get caught as they appear, not weeks later"
-                />
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {STEPS.map((s) => (
+              <div
+                key={s.title}
+                className="relative isolate bg-white/[0.03] backdrop-blur-sm rounded-3xl p-6 gradient-border transition-all duration-300 ease-out hover:bg-white/[0.07] hover:shadow-2xl hover:shadow-red-900/30 motion-safe:hover:-translate-y-2"
+              >
+                <StepHeader label={s.label} icon={s.icon} />
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight mb-2">{s.title}</h3>
+                <p className="text-[13px] sm:text-sm text-white/55 leading-relaxed">{s.body}</p>
               </div>
-            </div>
-
-            {/* Step 2 — Detect */}
-            <div className="relative isolate bg-white/[0.03] backdrop-blur-sm rounded-3xl p-6 gradient-border">
-              <StepHeader label="Step Two" icon="scan" />
-              <h3 className="text-xl sm:text-2xl font-black tracking-tight mb-2">Detect</h3>
-              <p className="text-[13px] sm:text-sm text-white/50 mb-4 leading-relaxed">
-                Every asset we find is checked across four dimensions, each
-                catching a different kind of similarity to what you've
-                registered.
-              </p>
-              <div className="space-y-2.5">
-                <FlowRow
-                  icon="eye"
-                  title="Visual Likeness"
-                  description="Shapes, layout, and silhouette"
-                />
-                <FlowRow
-                  icon="brain"
-                  title="Concept & Style"
-                  description="The same idea, even when it's redrawn or restyled"
-                />
-                <FlowRow
-                  icon="scanline"
-                  title="Pixel Comparison"
-                  description="A direct check against the original reference"
-                />
-                <FlowRow
-                  icon="type"
-                  title="Wordmarks & Text"
-                  description="Brand names, titles, and other text elements"
-                />
-              </div>
-            </div>
-
-            {/* Step 3 — Enforce */}
-            <div className="relative isolate bg-white/[0.03] backdrop-blur-sm rounded-3xl p-6 gradient-border">
-              <StepHeader label="Step Three" icon="shield" />
-              <h3 className="text-xl sm:text-2xl font-black tracking-tight mb-2">Enforce</h3>
-              <p className="text-[13px] sm:text-sm text-white/50 mb-4 leading-relaxed">
-                Likely infringements arrive as cases your team can review
-                right away, with the match, the source, and the evidence
-                already gathered.
-              </p>
-              <div className="space-y-2.5">
-                <FlowRow
-                  icon="inbox"
-                  title="Reviewed cases"
-                  description="With seller, listing, and evidence included"
-                />
-                <FlowRow
-                  icon="megaphone"
-                  title="Takedown notices ready to send"
-                  description="With the proof attached"
-                />
-                <FlowRow
-                  icon="check"
-                  title="Track to resolution"
-                  description="Dismissed, escalated, or resolved"
-                />
-                <FlowRow
-                  icon="users"
-                  title="Work cases as a team"
-                  description="Assign, comment, and track status together in one shared queue"
-                />
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </Reveal>
 
-      {/* ================= Use cases ================= */}
-      <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
+      {/* ================= Customer quotes ================= */}
+      <Reveal className="relative bg-cream overflow-hidden rounded-t-[2.5rem]">
         <div className="relative max-w-6xl mx-auto px-6 py-20">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
-              <span className="w-1 h-1 rounded-full bg-red-600 animate-pulse-dot" />
-              Who it's for
+          <h2 className="text-center mb-12 text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05]">
+            What companies <span className="text-gradient-red">say about us</span>
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-4 sm:gap-5">
+            {QUOTES.map((q) => (
+              <figure
+                key={q.company}
+                className="relative flex flex-col bg-white rounded-2xl sm:rounded-3xl border border-stone-200/80 p-6 sm:p-8 card-elevated"
+              >
+                <span className="text-5xl font-black leading-none text-gradient-red select-none" aria-hidden>
+                  “
+                </span>
+                <blockquote className="mt-1 flex-1 text-[15px] sm:text-base text-stone-700 leading-relaxed">
+                  {q.quote}
+                </blockquote>
+                <figcaption className="mt-6 pt-5 border-t border-stone-100">
+                  <div className="text-sm font-bold text-stone-900">{q.role}</div>
+                  <div className="text-sm text-stone-500">{q.company}</div>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </div>
+      </Reveal>
+
+      {/* ================= Pricing ================= */}
+      <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
+        <div className="relative max-w-4xl mx-auto px-6 py-20 text-center">
+          <Eyebrow>Pricing</Eyebrow>
+          <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+            Pricing <span className="text-gradient-red">you can see,</span> too.
+          </h2>
+
+          <div className="mt-10 mx-auto max-w-md rounded-3xl bg-white border border-stone-200/80 card-elevated p-5 sm:p-10">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">From</div>
+            <div className="mt-2 flex items-baseline justify-center gap-1">
+              <span className="text-[2.4rem] sm:text-6xl font-black tracking-[-0.04em] text-stone-900">$995</span>
+              <span className="text-base font-semibold text-stone-500">/month</span>
             </div>
+            <p className="mt-3 text-sm font-semibold text-stone-700">
+              Monthly billing. No annual contract.
+            </p>
+            <div className="my-7 h-px bg-stone-100" />
+            <p className="text-sm text-stone-500 leading-relaxed">
+              Start with a free pilot on your own products. No commitment.
+            </p>
+            <button type="button" onClick={openContact} className={`${BTN_PRIMARY} mt-6 w-full`}>
+              Start a free pilot
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+            </button>
+          </div>
+        </div>
+      </Reveal>
+
+      {/* ================= Who it's for ================= */}
+      <Reveal className="relative bg-cream overflow-hidden rounded-t-[2.5rem]">
+        <div className="relative max-w-6xl mx-auto px-6 py-20">
+          <div className="text-center mb-12">
+            <Eyebrow>Who it's for</Eyebrow>
             <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
               Built for the teams{" "}
               <span className="text-gradient-red">that protect brands.</span>
             </h2>
-            <p className="mt-4 text-stone-500 max-w-2xl mx-auto text-balance leading-relaxed">
-              You might be managing IP in-house, or protecting it on behalf of
-              clients. Either way, Unvelar handles monitoring, evidence, and
-              takedown prep from one place.
-            </p>
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
             <UseCaseCard
               icon="registry"
-              title="In-house legal & IP teams"
-              description="Cover your whole portfolio, trademarks, copyrighted work, and registered designs, across marketplaces, social platforms, and the open web. Turn scattered infringement reports into a single queue, with the evidence already gathered."
+              title="In-house legal, IP and brand teams"
+              description="Cover your whole portfolio (trademarks, copyright and registered designs) across marketplaces, social platforms and the open web. One queue, with the evidence already gathered."
             />
             <UseCaseCard
               icon="megaphone"
               title="Law firms"
-              description="Run enforcement for every client from one dashboard. Continuous monitoring, evidence your client can rely on, and takedown notices ready to send, so your team spends time on strategy instead of searching marketplaces by hand."
-            />
-          </div>
-        </div>
-      </Reveal>
-
-      {/* ================= Solutions ================= */}
-      <Reveal className="relative bg-cream overflow-hidden rounded-t-[2.5rem]">
-        <div className="relative max-w-6xl mx-auto px-6 py-20">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
-              <span className="w-1 h-1 rounded-full bg-red-600 animate-pulse-dot" />
-              How you can use it
-            </div>
-            <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
-              Fits how{" "}
-              <span className="text-gradient-red">you already work.</span>
-            </h2>
-            <p className="mt-4 text-stone-500 max-w-2xl mx-auto text-balance leading-relaxed">
-              Run it as your own platform, plug it into the systems you
-              already have, or offer it to your clients under your own brand.
-            </p>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-4">
-            <UseCaseCard
-              icon="layers"
-              title="Full Platform"
-              description="Monitoring, clearance review, and takedown prep in one dashboard, ready to use as it is."
-            />
-            <UseCaseCard
-              icon="plug"
-              title="API & Data Integration"
-              description="Detections delivered straight into the systems you already run, filtered and scored, ready for your team to act on."
-            />
-            <UseCaseCard
-              icon="tag"
-              title="White Label"
-              description="Run Unvelar under your own brand, configured separately for each client, so your team keeps the relationship."
+              description="Protecting brands on behalf of clients? We work with firms on referral and white label partnerships."
             />
           </div>
         </div>
@@ -384,41 +373,18 @@ export default function Landing() {
         </div>
         <div className="relative max-w-4xl mx-auto px-6 py-20 text-center">
           <h2 className="text-3xl sm:text-[2.75rem] font-black tracking-[-0.03em] leading-[1.05] text-balance">
-            See it work on{" "}
-            <span className="text-gradient-cream">your own brand.</span>
+            See what's out there{" "}
+            <span className="text-gradient-cream">on your brand.</span>
           </h2>
           <p className="mt-5 text-white/55 max-w-lg mx-auto text-balance leading-relaxed">
-            Let's run a free pilot on your brand. Reach out and tell us what
-            you want protected and where you're already seeing risk, we'll
-            take it from there.
+            Tell us what you want protected. We'll run a free pilot and show
+            you what we find.
           </p>
-          <div className="mt-10 flex flex-wrap justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setContactOpen(true)}
-              className="group relative inline-flex items-center gap-2 px-8 py-3.5 bg-white text-stone-900 rounded-full text-sm font-semibold shadow-2xl shadow-black/40 hover:-translate-y-0.5 transition-all"
-            >
-              Contact us
-              <svg
-                className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M17 8l4 4m0 0l-4 4m4-4H3"
-                />
-              </svg>
+          <div className="mt-10 flex justify-center">
+            <button type="button" onClick={openContact} className={BTN_PRIMARY_ON_DARK}>
+              Start a free pilot
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </button>
-            <a
-              href="#how-it-works"
-              className="inline-flex items-center gap-2 px-6 py-3.5 bg-white/5 border border-white/15 backdrop-blur-sm text-white/80 rounded-full text-sm font-semibold hover:bg-white/10 hover:border-white/25 transition-all"
-            >
-              How it works
-            </a>
           </div>
         </div>
       </Reveal>
@@ -483,6 +449,91 @@ export default function Landing() {
       </footer>
 
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} />}
+    </div>
+  );
+}
+
+/* ---------- Section eyebrow pill ---------- */
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
+      <span className="w-1 h-1 rounded-full bg-red-600 animate-pulse-dot" />
+      {children}
+    </div>
+  );
+}
+
+/* ---------- Auto-scrolling platform strip ---------- */
+function PlatformMarquee() {
+  const items = [...PLATFORMS, { name: "and more", path: undefined }];
+  return (
+    <div className="marquee mt-8">
+      <div className="marquee-track">
+        {[0, 1].map((copy) => (
+          <ul key={copy} className="marquee-group" aria-hidden={copy === 1 ? true : undefined}>
+            {items.map((p) => (
+              <li
+                key={p.name}
+                className={`flex items-center gap-2 whitespace-nowrap ${
+                  p.name === "and more"
+                    ? "text-stone-400 italic font-medium"
+                    : "text-stone-500 font-semibold"
+                }`}
+              >
+                {p.path && (
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current shrink-0" aria-hidden>
+                    <path d={p.path} />
+                  </svg>
+                )}
+                <span className="text-[15px] tracking-tight">{p.name}</span>
+              </li>
+            ))}
+          </ul>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Seller network illustration ---------- */
+// Illustrative UI only, not customer data.
+const NETWORK_ROWS = [
+  { name: "Seller A", stores: 6, listings: 412, exposure: "$384,986", share: 100 },
+  { name: "Seller B", stores: 4, listings: 268, exposure: "$250,429", share: 65 },
+  { name: "Seller C", stores: 3, listings: 141, exposure: "$131,755", share: 34 },
+];
+
+function SellerNetworkIllustration() {
+  return (
+    <div className="relative rounded-3xl bg-white border border-stone-200/80 card-elevated p-5 sm:p-6" aria-hidden>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-bold text-stone-900">Seller networks</div>
+          <div className="text-xs text-stone-400">Ranked by exposure</div>
+        </div>
+      </div>
+      <div className="mt-5 space-y-3">
+        {NETWORK_ROWS.map((r, i) => (
+          <div key={r.name} className="rounded-2xl border border-stone-100 bg-stone-50/60 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <div className="flex items-center gap-3">
+                <span className="w-7 h-7 shrink-0 rounded-lg bg-stone-900 text-white text-xs font-bold flex items-center justify-center">
+                  {i + 1}
+                </span>
+                <span className="text-sm font-semibold text-stone-900 whitespace-nowrap">{r.name}</span>
+              </div>
+              <span className="text-sm font-bold text-stone-900 tabular-nums">{r.exposure} Exposure</span>
+            </div>
+            <div className="mt-3 h-1.5 rounded-full bg-stone-200/70 overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-red-500 to-red-700" style={{ width: `${r.share}%` }} />
+            </div>
+            <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500">
+              <span>{r.stores} linked stores</span>
+              <span>{r.listings} listings</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -721,80 +772,7 @@ function DashboardMockup() {
   );
 }
 
-/* ---------- Feature pillar card ---------- */
-function FeatureCard({
-  tag,
-  icon,
-  title,
-  tagline,
-  description,
-  mobileDescription,
-  points,
-}: {
-  tag?: string;
-  icon: string;
-  title: string;
-  tagline: string;
-  description: string;
-  mobileDescription: string;
-  points: string[];
-}) {
-  return (
-    <div className="group relative bg-white rounded-2xl sm:rounded-3xl border border-stone-200/80 p-5 sm:p-8 card-elevated card-elevated-hover transition-all overflow-hidden">
-      <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full bg-gradient-to-br from-red-100 to-orange-100 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-3xl" />
-      <div className="relative">
-        <div className="hidden sm:flex items-center justify-between mb-5">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-stone-100 to-stone-50 border border-stone-200/60 flex items-center justify-center group-hover:from-red-50 group-hover:to-orange-50 group-hover:border-red-200/60 transition-colors">
-            <svg
-              className="w-4 h-4 sm:w-5 sm:h-5 text-stone-600 group-hover:text-red-600 transition-colors"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.6}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d={ICONS[icon]} />
-            </svg>
-          </div>
-          {tag && (
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-red-700 bg-red-50 border border-red-200/70 px-2.5 py-1 rounded-full">
-              {tag}
-            </span>
-          )}
-        </div>
-        <h3 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">
-          {title}
-        </h3>
-        <div className="hidden sm:block mt-1 text-xs font-semibold text-stone-400 uppercase tracking-[0.14em]">
-          {tagline}
-        </div>
-        <p className="sm:hidden mt-3 text-[13px] text-stone-500 leading-[1.55]">
-          {mobileDescription}
-        </p>
-        <p className="hidden sm:block mt-4 text-sm text-stone-500 leading-relaxed">
-          {description}
-        </p>
-        <ul className="mt-5 sm:mt-6 space-y-2 sm:space-y-2.5">
-          {points.map((p) => (
-            <li key={p} className="flex items-start gap-2 sm:gap-2.5">
-              <svg
-                className="shrink-0 w-3.5 h-3.5 sm:w-4 sm:h-4 mt-0.5 text-red-500"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="text-[13px] sm:text-sm text-stone-600 leading-snug">{p}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Monitoring step header (dark) ---------- */
+/* ---------- Step header (dark) ---------- */
 function StepHeader({
   label,
   icon,
@@ -822,84 +800,21 @@ function StepHeader({
   );
 }
 
-/* ---------- Flow row (dark, monitoring steps) ---------- */
-function FlowRow({
-  icon,
-  title,
-  description,
-}: {
-  icon: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="group/row flex items-start gap-3">
-      <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-white/10 to-white/[0.02] border border-white/10 flex items-center justify-center group-hover/row:border-red-400/40 group-hover/row:from-red-500/10 transition-all">
-        <svg
-          className="w-4 h-4 text-white/60 group-hover/row:text-red-300 transition-colors"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={1.6}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d={ICONS[icon]} />
-        </svg>
-      </div>
-      <div className="pt-0.5">
-        <div className="text-[13px] sm:text-sm font-semibold text-white/85">{title}</div>
-        <div className="text-[11px] sm:text-xs text-white/45 mt-0.5 leading-relaxed">
-          {description}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------- Shared icon set ---------- */
 const ICONS: Record<string, string> = {
-  // features / steps
   radar:
     "M12 12l6-3M12 21a9 9 0 110-18 9 9 0 010 18z M12 12a4 4 0 104 4",
   shield: "M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3z",
-  globe:
-    "M12 21a9 9 0 100-18 9 9 0 000 18z M3.5 9h17M3.5 15h17 M12 3c2.5 2.5 2.5 15 0 18 M12 3c-2.5 2.5-2.5 15 0 18",
-  clock: "M12 7v5l3 2 M12 21a9 9 0 100-18 9 9 0 000 18z",
-  inbox:
-    "M3 13h4l1 3h8l1-3h4 M5 13l2-8h10l2 8 M3 13v5a1 1 0 001 1h16a1 1 0 001-1v-5",
-  check: "M5 13l4 4L19 7",
-  // detection dimensions
-  eye: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z",
+  scan: "M4 4h4m8 0h4v4m0 8v4h-4M8 20H4v-4M9 12h6",
   brain:
     "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z",
-  scanline: "M4 4h4m8 0h4v4m0 8v4h-4M8 20H4v-4M9 12h6",
-  scan: "M4 4h4m8 0h4v4m0 8v4h-4M8 20H4v-4M9 12h6",
-  type: "M4 6h16M4 12h8m-8 6h16",
-  megaphone:
-    "M11 5L6 9H2v6h4l5 4V5z M15.54 8.46a5 5 0 010 7.07 M19.07 4.93a10 10 0 010 14.14",
   registry:
     "M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z M8 8h8M8 12h8M8 16h5",
-  users:
-    "M8 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7z M15.5 11a3 3 0 100-6 3 3 0 000 6z M2.5 19c.5-3.5 3-5.5 5.5-5.5s5 2 5.5 5.5 M14 14c2 .2 4 1.8 4.5 5",
+  megaphone:
+    "M11 5L6 9H2v6h4l5 4V5z M15.54 8.46a5 5 0 010 7.07 M19.07 4.93a10 10 0 010 14.14",
 };
 
 /* ---------- Use case card ---------- */
-const USE_CASE_ICONS: Record<string, string> = {
-  controller:
-    "M6 10h.01M10 8v4m-2-2h4m6 0h.01M16 12h.01M7 16h10a4 4 0 004-4 4 4 0 00-4-4H7a4 4 0 00-4 4 4 4 0 004 4z",
-  sparkles:
-    "M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z",
-  registry:
-    "M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z M8 8h8M8 12h8M8 16h5",
-  megaphone:
-    "M11 5L6 9H2v6h4l5 4V5z M15.54 8.46a5 5 0 010 7.07 M19.07 4.93a10 10 0 010 14.14",
-  layers:
-    "M12 3l8 4.5-8 4.5-8-4.5L12 3z M4 12l8 4.5 8-4.5 M4 16l8 4.5 8-4.5",
-  plug:
-    "M9 2v4M15 2v4M7 6h10v4a5 5 0 01-5 5 5 5 0 01-5-5V6z M12 15v3M9 21h6",
-  tag:
-    "M11 3h6a2 2 0 012 2v6a2 2 0 01-.6 1.4l-8 8a2 2 0 01-2.8 0l-6-6a2 2 0 010-2.8l8-8A2 2 0 0111 3z M15.5 8.5h.01",
-};
-
 function UseCaseCard({
   icon,
   title,
@@ -910,7 +825,7 @@ function UseCaseCard({
   description: string;
 }) {
   return (
-    <div className="group relative bg-white rounded-2xl border border-stone-200/80 p-6 card-elevated card-elevated-hover transition-all overflow-hidden">
+    <div className="group relative bg-white rounded-2xl border border-stone-200/80 p-6 sm:p-7 card-elevated card-elevated-hover transition-all overflow-hidden flex flex-col">
       <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-gradient-to-br from-red-100 to-orange-100 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl" />
       <div className="relative w-11 h-11 rounded-xl bg-gradient-to-br from-stone-100 to-stone-50 border border-stone-200/60 flex items-center justify-center mb-5 group-hover:from-red-50 group-hover:to-orange-50 group-hover:border-red-200/60 transition-colors">
         <svg
@@ -920,19 +835,13 @@ function UseCaseCard({
           stroke="currentColor"
           strokeWidth={1.6}
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d={USE_CASE_ICONS[icon]}
-          />
+          <path strokeLinecap="round" strokeLinejoin="round" d={ICONS[icon]} />
         </svg>
       </div>
-      <h3 className="relative font-bold text-stone-900 text-sm sm:text-base mb-1.5 tracking-tight">
+      <h3 className="relative font-bold text-stone-900 text-base sm:text-lg mb-2 tracking-tight">
         {title}
       </h3>
-      <p className="relative text-[11px] sm:text-xs text-stone-500 leading-relaxed">
-        {description}
-      </p>
+      <p className="relative text-sm text-stone-500 leading-relaxed">{description}</p>
     </div>
   );
 }

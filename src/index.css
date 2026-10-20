@@ -4,7 +4,7 @@
 html {
   min-height: 100%;
   background: #FAF7F2;
-  font-size: 137.5%;  /* 22px base — scales all rem-based sizing ~1.375x */
+  font-size: 137.5%;  /* 22px base, scales all rem-based sizing ~1.375x */
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -32,7 +32,7 @@ body {
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 }
 
-/* Radial fade mask — lets a pattern fade at the edges */
+/* Radial fade mask, lets a pattern fade at the edges */
 .mask-radial {
   -webkit-mask-image: radial-gradient(ellipse at center, #000 40%, transparent 75%);
           mask-image: radial-gradient(ellipse at center, #000 40%, transparent 75%);
@@ -219,7 +219,7 @@ body {
   transform: translateY(-2px);
 }
 
-/* Gradient border via ::before — use with `relative isolate` */
+/* Gradient border via ::before, use with `relative isolate` */
 .gradient-border::before {
   content: "";
   position: absolute;
@@ -236,3 +236,33 @@ body {
 
 /* Selection */
 ::selection { background: #fecaca; color: #7f1d1d; }
+
+/* Auto-scrolling logo strip (landing page) */
+.marquee {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+          mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 50s linear infinite;
+}
+.marquee:hover .marquee-track { animation-play-state: paused; }
+.marquee-group {
+  display: flex;
+  align-items: center;
+  gap: 2.75rem;
+  padding-right: 2.75rem;
+  flex-shrink: 0;
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee { -webkit-mask-image: none; mask-image: none; }
+  .marquee-track { animation: none; width: auto; justify-content: center; }
+  .marquee-group { flex-wrap: wrap; justify-content: center; row-gap: 1rem; flex-shrink: 1; }
+  .marquee-group[aria-hidden] { display: none; }
+}
