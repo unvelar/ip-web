@@ -14,8 +14,10 @@ async function setup(fail=false) {
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div"); document.body.replaceChildren(container);
   const requests:URL[]=[];
+  let respond: ((url:URL)=>Response | Promise<Response>) | undefined;
   globalThis.fetch=(async(input)=>{
     const url=new URL(String(input),"http://localhost:5173"); requests.push(url);
+    if(respond) return respond(url);
     if(fail) return new Response(JSON.stringify({error:"Missing"}),{status:404});
     if(url.pathname.endsWith("/listings")) {
       const more=url.searchParams.get("offset")==="50";
@@ -24,14 +26,16 @@ async function setup(fail=false) {
     return Response.json({groups:[{seller_key:"shop",seller_name:"Shop",article_count:72,priced_article_count:70,exposure_usd:5432.10}],total_groups:99,next_offset:50,partial:false,updating:false});
   }) as typeof fetch;
   let query:TaskSellerGroupsQuery={ip_id:"ip",status:"pending",sort:"priority",group_sort:"exposure",search_id:"saved-search"};
-  let selected=new Set<string>(); let ungrouped=false;
+  let selected=new Set<string>(); let ungrouped=false; let revision=0;
   root=createRoot(container);
-  const render=()=>root!.render(<SellerGroupedQueue key={JSON.stringify(query)} query={query} revision="0" selection={selected}
+  const render=()=>root!.render(<SellerGroupedQueue key={JSON.stringify(query)} query={query} revision={String(revision)} selection={selected}
     onSelect={(ids,checked)=>{ selected=new Set(selected); for(const id of ids){if(checked) selected.add(id);else selected.delete(id);} render(); }}
     renderRow={row=><tr key={row.result_id}><td>{row.result_id}</td></tr>}
     onUngroup={()=>{ungrouped=true;}} onOpenGroup={()=>{}} />);
   await act(async()=>render());
   return {container,requests,selected:()=>selected,ungrouped:()=>ungrouped,
+    respondWith:(handler:typeof respond)=>{respond=handler;},
+    refresh:async()=>{await act(async()=>{revision++;render();});},
     change:async()=>{await act(async()=>{query={...query,group_sort:"articles",status:"review"};render();});},
     click:async(selector:string)=>{await act(async()=>container.querySelector<HTMLButtonElement>(selector)!.click());}};
 }
@@ -59,6 +63,57 @@ test("server totals stay visible while seller articles start collapsed and load 
   expect(ui.requests.at(-1)?.searchParams.get("group_sort")).toBe("articles");
   expect(ui.requests.at(-1)?.searchParams.get("status")).toBe("review");
   expect(ui.container.querySelector('[aria-expanded]')?.getAttribute("aria-expanded")).toBe("false");
+});
+
+test("action revalidation keeps the seller page and expanded table mounted, and replaces every loaded article page",async()=>{
+  const ui=await setup();
+  await ui.click('.monitoring-results-pagination button:last-child');
+  let ids=Array.from({length:72},(_,i)=>`article-${i}`);
+  const listings=(url:URL)=>{
+    const offset=Number(url.searchParams.get("offset")??0);
+    return Response.json({rows:ids.slice(offset,offset+50).map(id=>({result_id:id,task_id:id})),next_offset:offset+50<ids.length?offset+50:null});
+  };
+  ui.respondWith(url=>listings(url));
+  await ui.click('[aria-label="Expand Shop"]');
+  await ui.click('.monitoring-group-footer button');
+  const table=ui.container.querySelector("table");
+  const heading=ui.container.querySelector(".monitoring-group-heading");
+  const body=ui.container.querySelector('tbody[id]');
+  let finish!: (response:Response)=>void;
+  ui.respondWith(url=>url.pathname.endsWith('/listings')?listings(url):new Promise(resolve=>{finish=resolve;}));
+  const before=ui.requests.length;
+  await ui.refresh();
+  expect(ui.requests.at(-1)?.searchParams.get("offset")).toBe("50");
+  expect(ui.container.querySelector("table")).toBe(table);
+  expect(ui.container.querySelector('tbody[id]')).toBe(body);
+  expect(body?.hasAttribute("hidden")).toBe(false);
+  expect(ui.container.textContent).toContain("article-0");
+  ids=ids.slice(1);
+  await act(async()=>finish(Response.json({groups:[{seller_key:"shop",seller_name:"Shop",article_count:71,priced_article_count:71,exposure_usd:5300}],total_groups:99,next_offset:null,partial:false,updating:false})));
+  expect(ui.container.querySelector(".monitoring-group-heading")).toBe(heading);
+  expect(body?.hasAttribute("hidden")).toBe(false);
+  expect(ui.container.textContent).toContain("Page 2");
+  expect(ui.container.textContent).toContain("71 articles");
+  expect(ui.container.textContent).toContain("$5,300.00");
+  expect([...body!.querySelectorAll("td:not(.monitoring-group-footer)")].map(row=>row.textContent)).toEqual(ids);
+  expect(ui.requests.slice(before).map(url=>url.searchParams.get("offset"))).toEqual(["50","0","50"]);
+});
+
+test("a failed background totals refresh keeps the open seller visible and can retry",async()=>{
+  const ui=await setup();
+  await ui.click('[aria-label="Expand Shop"]');
+  const table=ui.container.querySelector("table");
+  ui.respondWith(()=>Response.json({error:"Refresh failed"},{status:500}));
+  await ui.refresh();
+  expect(ui.container.querySelector("table")).toBe(table);
+  expect(ui.container.querySelector('[aria-label="Collapse Shop"]')).not.toBeNull();
+  expect(ui.container.querySelector('[role="alert"]')?.textContent).toContain("Refresh failed");
+  expect(ui.container.textContent).toContain("first");
+  ui.respondWith(undefined);
+  await ui.click('[role="alert"] button');
+  expect(ui.container.querySelector('[role="alert"]')).toBeNull();
+  expect(ui.container.querySelector("table")).toBe(table);
+  expect(ui.container.querySelector('[aria-label="Collapse Shop"]')).not.toBeNull();
 });
 
 test("seller pagination requests pages of groups instead of pages of articles",async()=>{

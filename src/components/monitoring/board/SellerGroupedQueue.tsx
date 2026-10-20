@@ -32,20 +32,54 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const key = JSON.stringify(query);
   const close = useCallback(() => setActiveKey(null), []);
+  const scope = `${key}:${offset}`;
+  const previousScope = useRef("");
+  const loadedMembers = useRef(members);
+  const memberController = useRef<AbortController | null>(null);
+  useEffect(() => { loadedMembers.current = members; }, [members]);
   useEffect(() => {
     const controller = new AbortController();
-    setPage(null); setError(""); setMembers({}); setMemberErrors({}); setLoadingMembers(new Set()); setActiveKey(null);
+    memberController.current = controller;
+    const scopeChanged = previousScope.current !== scope;
+    previousScope.current = scope;
+    const cached = scopeChanged ? {} : loadedMembers.current;
+    if (scopeChanged) {
+      setPage(null); setMembers({}); setActiveKey(null);
+    }
+    setError(""); setMemberErrors({}); setLoadingMembers(new Set());
     void taskSellerGroups({ ...JSON.parse(key), offset }, controller.signal)
-      .then(result => { if (!controller.signal.aborted) setPage(result); })
+      .then(async result => {
+        if (controller.signal.aborted) return;
+        setPage(result);
+        // Keep the table mounted during action/search updates. Re-fetch every
+        // previously loaded page so removed rows cannot leave gaps or duplicates
+        // when the reviewer subsequently loads more articles.
+        await Promise.all(result.groups.map(async group => {
+          const groupKey = group.seller_key ? `seller:${group.seller_key}` : "seller:unidentified";
+          const loaded = cached[groupKey];
+          if (!loaded) return;
+          setLoadingMembers(previous => new Set(previous).add(groupKey));
+          try {
+            const through = loaded.next_offset ?? loaded.rows.length;
+            let refreshed: TaskSellerGroupListingsPage = { ...loaded, rows:[] };
+            let next = 0;
+            do {
+              const batch = await taskSellerGroupListings({ ...JSON.parse(key), seller_key:group.seller_key ?? "", offset:next }, controller.signal);
+              if (controller.signal.aborted) return;
+              refreshed = { ...batch, rows:[...refreshed.rows, ...batch.rows] };
+              next = batch.next_offset ?? through;
+            } while (refreshed.next_offset !== null && next < through);
+            setMembers(previous => ({ ...previous, [groupKey]:refreshed }));
+          } catch (reason) {
+            if (!controller.signal.aborted) setMemberErrors(previous => ({ ...previous, [groupKey]:message(reason) }));
+          } finally {
+            if (!controller.signal.aborted) setLoadingMembers(previous => { const next = new Set(previous); next.delete(groupKey); return next; });
+          }
+        }));
+      })
       .catch(reason => { if (!controller.signal.aborted) setError(message(reason)); });
     return () => controller.abort();
-  }, [key, offset, revision, retry]);
-  // Row requests are tied to the same scope/revision as the seller page.
-  const memberController = useRef<AbortController | null>(null);
-  useEffect(() => {
-    const next = new AbortController(); memberController.current = next;
-    return () => next.abort();
-  }, [key, offset, revision, retry]);
+  }, [key, scope, offset, revision, retry]);
   const groups: MonitoringListingGroup<TaskSummary>[] = (page?.groups ?? []).map(group => {
     const key = group.seller_key ? `seller:${group.seller_key}` : "seller:unidentified";
     return { key, kind:"seller", label:group.seller_key ? group.seller_name : "Seller identity unavailable",

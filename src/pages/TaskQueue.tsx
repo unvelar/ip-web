@@ -15,6 +15,7 @@ import {
 import { useTaskProductIdentities } from "../hooks/useTaskProductIdentities";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
 import { FindingInspector } from "../components/monitoring/board/FindingInspector";
+import type { FindingUpdateOptions } from "../components/monitoring/board/FindingActions";
 import { useTenantMembers } from "../hooks/useTenantMembers";
 import {
   getMonitoringFinding,
@@ -182,7 +183,8 @@ export default function TaskQueue({
     ),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useState(0),
+    [queueReset, setQueueReset] = useState(0);
   const [selection, setSelection] = useState<Set<string>>(new Set()),
     [review, setReview] = useState<IpReviewFinding[] | null>(null),
     [reviewLoading, setReviewLoading] = useState(false);
@@ -260,7 +262,16 @@ export default function TaskQueue({
     setPaging({ key, cursors: [undefined], index: 0 });
     setSelection(new Set());
     setRevision((value) => value + 1);
+    setQueueReset((value) => value + 1);
     scrollToQueue();
+  }
+  function refreshAfterAction(options?: FindingUpdateOptions) {
+    if (options?.completed && taskId) setSelection((previous) => {
+      const next = new Set(previous);
+      next.delete(taskId);
+      return next;
+    });
+    setRevision((value) => value + 1);
   }
   async function stopSearch() {
     if (!search?.id || searchStopping) return;
@@ -410,7 +421,7 @@ export default function TaskQueue({
         reason_code: reasonCode,
       });
       open(null);
-      refresh();
+      refreshAfterAction({ completed:true });
     } catch (error) {
       setDetailError(errorText(error));
     } finally {
@@ -807,8 +818,8 @@ export default function TaskQueue({
         ) : groupBy === "seller" && !searchStarting && (!search || Boolean(search.id)) ? (
           <>
             {selection.size > 0 && <div className="monitoring-results-summary"><button className="task-queue-button" disabled={reviewLoading} onClick={() => void reviewSelected()}>{reviewLoading ? "Loading evidence…" : `Review ${selection.size} selected`}</button></div>}
-            <SellerGroupedQueue key={`${JSON.stringify(sellerQuery)}:${revision}:${search?.matched}:${search?.state}`}
-              query={sellerQuery} revision={String(revision)} selection={selection} renderRow={renderTaskRow} activeFindingId={taskId}
+            <SellerGroupedQueue key={`${JSON.stringify(sellerQuery)}:${queueReset}`}
+              query={sellerQuery} revision={`${revision}:${search?.matched}:${search?.state}`} selection={selection} renderRow={renderTaskRow} activeFindingId={taskId}
               onUngroup={() => { const next = new URLSearchParams(params); next.delete("group_by"); setParams(next); }}
               onOpenGroup={() => { closeGroup(); if (taskId) open(null); }}
               onSelect={(ids, selected) => setSelection(previous => { const next = new Set(previous); for (const id of ids) { if (selected) next.add(id); else next.delete(id); } return next; })} />
@@ -1037,7 +1048,7 @@ export default function TaskQueue({
         )}
         {taskId && !review && (
           <>
-            {detailError ? (
+            {!active && detailError ? (
               <p role="alert" className="task-queue-notice">
                 {detailError}{" "}
                 <button onClick={() => open(null)}>Close task</button>
@@ -1057,13 +1068,14 @@ export default function TaskQueue({
                 onDismiss={(reason, code) => void dismiss(reason, code)}
                 onActionComplete={() => {
                   open(null);
-                  refresh();
                 }}
-                onNeedsReview={refresh}
-                onTakedownSent={refresh}
-                onEnforced={refresh}
-                onLicensed={refresh}
-                onUpdated={refresh}
+                // FindingActions also calls onUpdated after these notifications.
+                // Revalidate once, without resetting the reviewer's position.
+                onNeedsReview={() => undefined}
+                onTakedownSent={() => undefined}
+                onEnforced={() => undefined}
+                onLicensed={() => undefined}
+                onUpdated={refreshAfterAction}
                 onAddRelatedToBatch={(findings) => {
                   if (findings.length > 50) {
                     setError(
