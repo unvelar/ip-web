@@ -120,8 +120,7 @@
 }
 /* Search stays compact; filter editors only appear when requested. */
 .task-search {
-  padding: 18px 20px;
-  border-bottom: 1px solid #e7e5e4;
+  padding: 16px 20px 8px;
   background: #fff;
   font-size: 13px;
   color: #44403c;
@@ -130,11 +129,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 46px;
-  padding: 5px 5px 5px 14px;
-  border: 1px solid #d6d3d1;
-  border-radius: 8px;
-  box-shadow: 0 1px 2px #29252405;
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid #e7e5e4;
+  border-radius: 7px;
 }
 .task-search-bar:focus-within {
   border-color: #78716c;
@@ -173,7 +171,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 9px;
 }
 .task-search-filter-trigger,
 .task-search-chip,
@@ -201,7 +199,7 @@
   color: #78716c;
 }
 .task-search-chip {
-  background: #f5f5f4;
+  background: #fff;
   border: 1px solid #e7e5e4;
 }
 .task-search-chip > .task-search-filter-trigger {
@@ -250,6 +248,43 @@
   gap: 8px;
   margin-left: auto;
   font-size: 12px;
+}
+.task-search-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 14px 20px 10px;
+  background: #fff;
+  color: #292524;
+  font-size: 13px;
+}
+.task-search-matches { font-weight: 500; }
+.task-search-matches > span { margin-left: 6px; font-size: 12px; font-weight: 400; color: #78716c; }
+.task-search-progress { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: #78716c; font-size: 12px; font-variant-numeric: tabular-nums; }
+.task-search-phase { display: inline-flex; align-items: center; gap: 6px; }
+.task-search-phase > .lucide-loader-circle { animation: task-search-spin 1s linear infinite; }
+.task-search-progress > button { padding: 3px 7px; border: 1px solid #e7e5e4; border-radius: 5px; color: #44403c; background: #fff; transition: background .15s, transform .15s; }
+.task-search-progress > button:hover { background: #f5f5f4; }
+.task-search-progress > button:active { transform: scale(.97); }
+.task-search-progress > button:disabled { opacity: .5; cursor: default; }
+.task-search-progress-scope { position: relative; }
+.task-search-progress-scope > summary { cursor: pointer; list-style: none; border-bottom: 1px dotted #d6d3d1; }
+.task-search-progress-scope > summary::-webkit-details-marker { display: none; }
+.task-search-scope-detail { position: absolute; z-index: 40; top: calc(100% + 10px); right: 0; width: 260px; max-width: calc(100vw - 40px); padding: 12px 14px; border: 1px solid #e7e5e4; border-radius: 8px; background: #fff; box-shadow: 0 4px 16px #29252412; color: #57534e; font-variant-numeric: normal; }
+.task-search-scope-detail strong { color: #292524; font-weight: 500; }
+.task-search-scope-detail p { margin: 6px 0 0; }
+.task-search-activity { height: 2px; margin: 0 20px; background: #e7e5e4; overflow: hidden; }
+.task-search-activity::before { content: ""; display: block; height: 100%; width: 25%; background: #57534e; animation: task-search-travel 1.8s ease-in-out infinite; }
+.task-search-failure { margin: 0; padding: 10px 20px; color: #b91c1c; font-size: 12px; }
+.task-search-status button:focus-visible,
+.task-search-status summary:focus-visible { outline: 2px solid #78716c; outline-offset: 3px; }
+@keyframes task-search-spin { to { transform: rotate(360deg); } }
+@keyframes task-search-travel { from { transform: translateX(-100%); } to { transform: translateX(500%); } }
+@media (prefers-reduced-motion: reduce) {
+  .task-search-phase > .lucide-loader-circle, .task-search-activity::before { animation: none; }
+  .task-search-progress > button { transition: none; }
 }
 .task-search-scope > button,
 .task-search-scope select {
@@ -432,7 +467,7 @@
 }
 @media (max-width: 640px) {
   .task-search {
-    padding: 14px;
+    padding: 14px 12px 6px;
   }
   .task-search-bar {
     gap: 8px;
@@ -459,6 +494,10 @@
     margin-left: 0;
     width: 100%;
   }
+  .task-search-status { padding: 12px; }
+  .task-search-activity { margin: 0 12px; }
+  .task-search-scope-detail { position: fixed; top: auto; right: 12px; bottom: 12px; left: 12px; width: auto; max-width: none; }
+  .task-search-status button, .task-search-status summary { min-height: 32px; display: inline-flex; align-items: center; }
   .task-search-scope > button,
   .task-search-scope select,
   .task-queue-statuses button,

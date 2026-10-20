@@ -1,6 +1,6 @@
 import { SemanticFilterPanel } from "./monitoring/board/SemanticFilterPanel";
 import { readSemanticFilters, semanticFilterLabel } from "../lib/semanticFilters";
-import { useRef, useState, useEffect, type ReactNode } from "react";
+import { useCallback, useRef, useState, useEffect, type ReactNode, type SetStateAction } from "react";
 import {
   Search,
   Plus,
@@ -17,6 +17,7 @@ import {
   taskOptions,
   taskCatalogOptions,
   startTaskSearch,
+  cancelTaskSearch,
   type TaskSearchResult,
   type TaskQueueQuery,
 } from "../api/taskQueue";
@@ -141,6 +142,7 @@ export default function TaskSearch({
   controls,
   onStart,
   onError,
+  onSearching,
 }: {
   ipId: string;
   product?: string;
@@ -150,6 +152,7 @@ export default function TaskSearch({
   controls?: ReactNode;
   onStart: (result: TaskSearchResult) => void;
   onError: (error: string) => void;
+  onSearching?: (searching: boolean) => void;
 }) {
   const [values, setValues] = useState<Values>(() => {
     const initial: Values = {
@@ -188,15 +191,91 @@ export default function TaskSearch({
   const [draft, setDraft] = useState<Values>({});
   const [draftLabel, setDraftLabel] = useState("");
   const [filterQuery, setFilterQuery] = useState("");
-  const [starting, setStarting] = useState(false);
   const scope = JSON.stringify([ipId, product, status]);
+  const callbacks = useRef({ onStart, onError, onSearching });
+  useEffect(() => { callbacks.current = { onStart, onError, onSearching }; });
+  const autoSearch = useRef(false);
+  const generation = useRef(0);
+  const invalidateRequests = useCallback(() => { generation.current++; }, []);
+  const activeSearch = useRef<string | null>(params.get("task_search"));
+  const requestQueue = useRef<Promise<void>>(Promise.resolve());
+  const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latestScope = useRef<string | null>(scope);
   useEffect(() => {
     latestScope.current = scope;
     return () => {
       latestScope.current = null;
+      invalidateRequests();
+      clearTimeout(debounce.current);
     };
-  }, [scope]);
+  }, [scope, invalidateRequests]);
+  const updateValues = (next: SetStateAction<Values>) => {
+    autoSearch.current = true;
+    generation.current++;
+    callbacks.current.onSearching?.(true);
+    setValues(next);
+  };
+  const runSearch = useCallback(() => {
+    clearTimeout(debounce.current);
+    autoSearch.current = true;
+    const requestGeneration = ++generation.current;
+    const request: Record<string, unknown> = {
+      ip_id: ipId,
+      catalog_product_id: product,
+      status,
+      from: `${values.from}T00:00:00.000Z`,
+      to: `${values.to}T00:00:00.000Z`,
+      history: values.history === "on",
+    };
+    if (values.semantic && !readSemanticFilters(values.semantic)) {
+      callbacks.current.onError("Choose valid product detail filters before searching.");
+      callbacks.current.onSearching?.(false);
+      return;
+    }
+    for (const [field, value] of Object.entries(values)) {
+      if (!value || ["status", "from", "to", "history"].includes(field)) continue;
+      request[field] = field === "semantic" ? JSON.parse(value)
+        : ["min_price_usd", "max_price_usd"].includes(field) ? Number(value) : value;
+    }
+    callbacks.current.onSearching?.(true);
+    callbacks.current.onError("");
+    const current = () => latestScope.current === scope && generation.current === requestGeneration;
+    const execute = async () => {
+      if (!current()) return;
+      // The API allows two active searches per account. Replace this form's
+      // previous search before starting another; never accumulate typing jobs.
+      const previous = activeSearch.current;
+      if (previous) {
+        await cancelTaskSearch(previous);
+        if (activeSearch.current === previous) activeSearch.current = null;
+      }
+      if (!current()) return;
+      const result = await startTaskSearch(request);
+      activeSearch.current = result.id;
+      if (!current()) {
+        if (result.id && ["pending", "running"].includes(result.state)) {
+          await cancelTaskSearch(result.id);
+          if (activeSearch.current === result.id) activeSearch.current = null;
+        }
+        return;
+      }
+      callbacks.current.onStart(result);
+    };
+    // Serialize creates as well as cancellation, including slow POST responses.
+    const executing = requestQueue.current.then(execute);
+    requestQueue.current = executing.catch(() => {});
+    void executing
+      .catch((error) => {
+        if (current()) callbacks.current.onError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => { if (current()) callbacks.current.onSearching?.(false); });
+  }, [ipId, product, status, scope, values]);
+  useEffect(() => {
+    if (!autoSearch.current) return;
+    callbacks.current.onSearching?.(true);
+    debounce.current = setTimeout(runSearch, 450);
+    return () => clearTimeout(debounce.current);
+  }, [runSearch]);
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const close = (restoreFocus = false) => {
@@ -284,7 +363,7 @@ export default function TaskSearch({
   const apply = () => {
     const fields =
       panel === "dates" ? ["from", "to"] : (activeFilter?.fields ?? []);
-    setValues((current) => ({
+    updateValues((current) => ({
       ...current,
       ...Object.fromEntries(fields.map((field) => {
         const value = draft[field] ?? "";
@@ -299,41 +378,14 @@ export default function TaskSearch({
     <form
       className="task-search"
       aria-label="Task search"
+      aria-description="Keywords and filters apply automatically."
       onSubmit={(event) => {
         event.preventDefault();
         if (panel) {
           if (panel !== "add" && canApply) apply();
           return;
         }
-        const request: Record<string, unknown> = {
-          ip_id: ipId,
-          catalog_product_id: product,
-          status,
-          from: `${values.from}T00:00:00.000Z`,
-          to: `${values.to}T00:00:00.000Z`,
-          history: values.history === "on",
-        };
-        if (values.semantic && !readSemanticFilters(values.semantic)) {
-          onError("Choose valid product detail filters before searching."); return;
-        }
-        for (const [field, value] of Object.entries(values)) {
-          if (!value || ["status", "from", "to", "history"].includes(field))
-            continue;
-          request[field] = field === "semantic" ? JSON.parse(value) : ["min_price_usd", "max_price_usd"].includes(field)
-            ? Number(value)
-            : value;
-        }
-        setStarting(true);
-        onError("");
-        void startTaskSearch(request)
-          .then((result) => {
-            if (latestScope.current === scope) onStart(result);
-          })
-          .catch((error) => {
-            if (latestScope.current === scope)
-              onError(error instanceof Error ? error.message : String(error));
-          })
-          .finally(() => setStarting(false));
+        runSearch();
       }}
     >
       <div className="task-search-bar">
@@ -343,15 +395,8 @@ export default function TaskSearch({
           aria-label="Search listings or sellers"
           placeholder="Search listings or sellers…"
           value={values.q}
-          onChange={(event) => setValues({ ...values, q: event.target.value })}
+          onChange={(event) => updateValues({ ...values, q: event.target.value })}
         />
-        <button
-          className="task-search-submit"
-          type="submit"
-          disabled={starting}
-        >
-          {starting ? "Searching…" : "Search"}
-        </button>
       </div>
       <div
         className="task-search-filter-row"
@@ -367,6 +412,7 @@ export default function TaskSearch({
           type="button"
           className="task-search-filter-trigger task-search-date"
           aria-expanded={panel === "dates"}
+          aria-label={`First detected: ${dateLabel}`}
           aria-haspopup="dialog"
           onClick={(event) =>
             panel === "dates" ? close() : open("dates", event.currentTarget)
@@ -374,7 +420,7 @@ export default function TaskSearch({
         >
           <CalendarDays size={14} aria-hidden="true" />
           <span>
-            First detected: <strong>{dateLabel}</strong>
+            <strong>{dateLabel}</strong>
           </span>
           <ChevronDown size={12} aria-hidden="true" />
         </button>
@@ -387,6 +433,7 @@ export default function TaskSearch({
                 className="task-search-filter-trigger"
                 aria-haspopup="dialog"
                 aria-expanded={panel === filter.id}
+                aria-label={`${filter.label}: ${description(filter)}`}
                 onClick={(event) =>
                   panel === filter.id
                     ? close()
@@ -394,14 +441,14 @@ export default function TaskSearch({
                 }
               >
                 <span>
-                  {filter.label}: <strong>{description(filter)}</strong>
+                  <strong>{description(filter)}</strong>
                 </span>
               </button>
               <button
                 type="button"
                 aria-label={`Remove ${filter.label.toLowerCase()} filter`}
                 onClick={() => {
-                  setValues((current) => ({
+                  updateValues((current) => ({
                     ...current,
                     ...Object.fromEntries(
                       filter.fields.map((field) => [field, ""]),
@@ -432,7 +479,7 @@ export default function TaskSearch({
             type="button"
             className="task-search-clear"
             onClick={() => {
-              setValues((current) => ({
+              updateValues((current) => ({
                 q: current.q,
                 from: current.from,
                 to: current.to,

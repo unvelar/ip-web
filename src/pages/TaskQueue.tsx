@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ImageOff } from "lucide-react";
 import MonitoringToolbar from "../components/MonitoringToolbar";
 import TaskSearch from "../components/TaskSearch";
+import TaskSearchStatus from "../components/TaskSearchStatus";
 import { TaskGroupRows } from "../components/monitoring/board/TaskGroupRows";
 import { MonitoringGroupDetails } from "../components/monitoring/board/MonitoringGroupDetails";
 import {
@@ -85,6 +86,7 @@ export default function TaskQueue({
     navigate = useNavigate(),
     { taskId } = useParams<{ taskId?: string }>();
   const workspaceRef = useRef<HTMLDivElement>(null);
+  const searchPoll = useRef<AbortController | null>(null);
   const statusRef = useRef<HTMLElement>(null);
   const scrollToQueue = () =>
     workspaceRef.current?.scrollIntoView({ block: "start" });
@@ -195,6 +197,9 @@ export default function TaskQueue({
     ),
     [productOpen, setProductOpen] = useState(false);
   const [searchState, setSearch] = useState<TaskSearchResult | null>(null),
+    [searchStarting, setSearchStarting] = useState(false),
+    [searchStopping, setSearchStopping] = useState(false),
+    [searchReset, setSearchReset] = useState(0),
     [searchAfter, setSearchAfter] = useState(0),
     [searchStack, setSearchStack] = useState<number[]>([]);
   const { members } = useTenantMembers();
@@ -207,7 +212,7 @@ export default function TaskQueue({
   const waitingForPage =
     !search &&
     (loading || (Boolean(urlSearchId) && !error) || (!page && !error));
-  const rows = urlSearchId
+  const rows = searchStarting ? [] : urlSearchId
     ? (search?.rows ?? [])
     : (search?.rows ?? page?.rows ?? []);
   const groupBy = parseMonitoringGroupBy(params.get("group_by"));
@@ -230,6 +235,7 @@ export default function TaskQueue({
       else next.delete(name);
     }
     setSearch(null);
+    setSearchStarting(false);
     setReview(null);
     setSelection(new Set());
     setParams(next);
@@ -238,6 +244,8 @@ export default function TaskQueue({
     const next = new URLSearchParams(params);
     next.delete("task_search");
     setSearch(null);
+    setSearchStarting(false);
+    setSearchReset((value) => value + 1);
     setSelection(new Set());
     setReview(null);
     setParams(next);
@@ -248,6 +256,22 @@ export default function TaskQueue({
     setSelection(new Set());
     setRevision((value) => value + 1);
     scrollToQueue();
+  }
+  async function stopSearch() {
+    if (!search?.id || searchStopping) return;
+    const id = search.id;
+    searchPoll.current?.abort();
+    setSearchStopping(true);
+    try {
+      await cancelTaskSearch(id);
+      const result = await getTaskSearch(id, searchAfter);
+      setSearch((current) => current?.id === id ? result : current);
+    } catch (error) {
+      setError(errorText(error));
+      setRevision((value) => value + 1);
+    } finally {
+      setSearchStopping(false);
+    }
   }
   function open(id: string | null) {
     if (id) closeGroup();
@@ -334,6 +358,7 @@ export default function TaskQueue({
     if (!search?.id) return;
     const id = search.id,
       controller = new AbortController();
+    searchPoll.current = controller;
     let timer: number | undefined;
     async function poll() {
       try {
@@ -581,6 +606,7 @@ export default function TaskQueue({
           </nav>
         </div>
         <TaskSearch
+          key={searchReset}
           ipId={ipId}
           product={query.catalog_product_id}
           params={params}
@@ -658,7 +684,23 @@ export default function TaskQueue({
             setSearchStack([]);
             setSelection(new Set());
           }}
-          onError={setError}
+          onError={(message) => {
+            setError(message);
+            if (message) {
+              searchPoll.current?.abort();
+              setSearch({ id: null, state: "failed", scanned: 0, matched: 0 });
+              const next = new URLSearchParams(params);
+              next.delete("task_search");
+              setParams(next);
+            }
+          }}
+          onSearching={(starting) => {
+            setSearchStarting(starting);
+            if (starting) {
+              setSelection(new Set());
+              setReview(null);
+            }
+          }}
         />
         {productOpen && (
           <div className="task-queue-product-picker">
@@ -694,29 +736,6 @@ export default function TaskQueue({
             <span>
               {error ? "Saved search unavailable." : "Loading saved search…"}
             </span>
-            <button onClick={returnToQueue}>Return to queue</button>
-          </div>
-        )}
-        {search && (
-          <div className="task-queue-notice" role="status">
-            <span>
-              Search {search.state}. {Number(search.scanned).toLocaleString()}{" "}
-              candidates checked, {search.matched.toLocaleString()} matches so
-              far. {search.error}
-            </span>
-            {(search.state === "pending" || search.state === "running") &&
-              search.id && (
-                <button
-                  onClick={() =>
-                    void cancelTaskSearch(search.id!)
-                      .then(() => getTaskSearch(search.id!, searchAfter))
-                      .then(setSearch)
-                      .catch((error) => setError(errorText(error)))
-                  }
-                >
-                  Cancel search
-                </button>
-              )}
             <button onClick={returnToQueue}>Return to queue</button>
           </div>
         )}
@@ -761,10 +780,24 @@ export default function TaskQueue({
           <>
             <div
               className="monitoring-results-queue"
-              aria-busy={waitingForPage}
+              aria-busy={waitingForPage || searchStarting}
             >
+              {(search || searchStarting) && (
+                <TaskSearchStatus
+                  search={search}
+                  starting={searchStarting}
+                  queueTotal={page ? query.status === "all"
+                    ? taskStates.filter((state) => state !== "dismissed").reduce((sum, state) => sum + page.counts[state], 0)
+                    : page.counts[query.status] : undefined}
+                  queueLabel={query.status === "all" ? "All open" : taskStateLabels[query.status]}
+                  stopping={searchStopping}
+                  onStop={() => void stopSearch()}
+                  onReturn={returnToQueue}
+                />
+              )}
+              {(!search && !searchStarting || selection.size > 0) && (
               <div className="monitoring-results-summary">
-                <span>
+                {!search && !searchStarting && <span>
                   {!search && !urlSearchId ? "Current queue · " : ""}
                   {waitingForPage
                     ? "Loading…"
@@ -774,7 +807,7 @@ export default function TaskQueue({
                   {secondary
                     ? " · Status counts ignore this additional filter"
                     : ""}
-                </span>
+                </span>}
                 {selection.size > 0 && (
                   <button
                     className="task-queue-button"
@@ -787,6 +820,7 @@ export default function TaskQueue({
                   </button>
                 )}
               </div>
+              )}
               {groupBy !== "none" && rows.length > 0 && (
                 <div className="monitoring-grouping-notice" role="status">
                   {productGroups.loading ? (
@@ -896,10 +930,14 @@ export default function TaskQueue({
               {!waitingForPage && !error && !rows.length && (
                 <div className="monitoring-results-empty">
                   <p>
-                    {search && ["pending", "running"].includes(search.state)
-                      ? "Searching. Matches will appear here."
+                    {searchStarting || search && ["pending", "running"].includes(search.state)
+                      ? "Matching tasks will appear here as the search continues."
                       : search?.state === "limited"
                         ? "Search stopped at its work limit. Narrow the date range to continue."
+                        : search?.state === "cancelled" || search?.state === "failed"
+                          ? "Search incomplete. Search again to check the remaining tasks."
+                          : search?.state === "completed"
+                            ? "No matches found. Try expanding the date range or changing a filter."
                         : "No tasks in this view."}
                   </p>
                 </div>
