@@ -137,11 +137,10 @@ export default function TaskQueue({
     ip_id: ipId,
     status:
       params.get("status") === "all" ? "all" : (oldFilters.status ?? "pending"),
-    sort: secondary
-      ? "newest"
-      : params.get("queue_sort") === "priority"
-        ? "priority"
-        : "newest",
+    sort: params.get("queue_sort") === "newest" ||
+          (!params.has("queue_sort") && params.get("sort") === "found_desc")
+        ? "newest"
+        : "priority",
     catalog_product_id: oldFilters.catalog_product_id ?? undefined,
     ...(secondary?.value
       ? { selector: secondary.selector as TaskSelector, value: secondary.value }
@@ -636,20 +635,14 @@ export default function TaskQueue({
                   Sort{" "}
                   <select
                     aria-label="Sort tasks"
-                    title={
-                      secondary
-                        ? "Additional filters use newest-first ordering."
-                        : undefined
-                    }
+                    title="Takedown recommendations first, then seller takedown history and inventory. Newer listings break ties."
                     value={query.sort}
                     onChange={(event) =>
                       change({ queue_sort: event.target.value })
                     }
                   >
+                    <option value="priority">Highest priority</option>
                     <option value="newest">Newest first detected</option>
-                    {!secondary && (
-                      <option value="priority">Highest priority</option>
-                    )}
                   </select>
                 </label>
               )}
