@@ -4,9 +4,11 @@ import { FindingActionPopover } from "./FindingActionPopover";
 /** Selection controls stay with the queue; actions still open the board's confirmations. */
 export function MonitoringSelectionBar({
   selectedCount, actions, progress, onAction, onReview, onClear,
-  assignees, onAssign, onResort,
+  assignees, onAssign, onResort, loading = false, disabled = false,
 }: {
   selectedCount: number;
+  loading?: boolean;
+  disabled?: boolean;
   actions: readonly BatchAction[];
   progress: { done: number; total: number } | null;
   onAction: (action: BatchAction) => void;
@@ -17,18 +19,19 @@ export function MonitoringSelectionBar({
   onResort?: () => void;
 }) {
   if (selectedCount === 0) return null;
-  const busy = Boolean(progress);
+  const busy = Boolean(progress) || loading || disabled;
   const primary = actions.includes("do_not_pursue") ? "do_not_pursue" : actions[0];
   const remaining = actions.filter((action) => action !== primary);
 
   return (
     <div className="monitoring-selection-bar" role="region" aria-label="Selected listings">
       <span aria-live="polite">{selectedCount} {selectedCount === 1 ? "listing" : "listings"} selected</span>
+      {loading && <span role="status">Loading selected listings…</span>}
       {progress && <span className="monitoring-selection-progress" role="status">
         {progress.total === 0 ? "Refreshing listings…" : `Processing ${progress.done}/${progress.total}`}
       </span>}
       <div className="monitoring-selection-actions">
-        <button type="button" disabled={busy} onClick={onClear}>Deselect</button>
+        <button type="button" disabled={Boolean(progress)} onClick={onClear}>Deselect</button>
         <button type="button" disabled={busy} onClick={onReview}>Review individually</button>
         {primary && <button type="button" className="monitoring-selection-primary" disabled={busy}
           onClick={() => onAction(primary)}>{BATCH_META[primary].label}</button>}

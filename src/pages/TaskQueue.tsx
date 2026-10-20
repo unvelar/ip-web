@@ -186,8 +186,33 @@ export default function TaskQueue({
     [revision, setRevision] = useState(0),
     [queueReset, setQueueReset] = useState(0);
   const [selection, setSelection] = useState<Set<string>>(new Set()),
-    [review, setReview] = useState<IpReviewFinding[] | null>(null),
-    [reviewLoading, setReviewLoading] = useState(false);
+    [review, setReview] = useState<IpReviewFinding[] | null>(null);
+  const [selectionData, setSelectionData] = useState<{
+    key: string; findings: IpReviewFinding[]; loading: boolean; error: string;
+  } | null>(null);
+  const [selectionRetry, setSelectionRetry] = useState(0);
+  const selectionKey = JSON.stringify([...selection].sort());
+  const selectedData = selectionData?.key === selectionKey ? selectionData : null;
+  const selectionError = selection.size > 50 ? "Select at most 50 articles to act on at once." : selectedData?.error;
+  const selectionLoading = selection.size > 0 && selection.size <= 50 && (!selectedData || selectedData.loading);
+  const reviewing = review !== null;
+  useEffect(() => {
+    const ids = JSON.parse(selectionKey) as string[];
+    if (reviewing || ids.length === 0 || ids.length > 50) return;
+    const controller = new AbortController();
+    setSelectionData({ key:selectionKey, findings:[], loading:true, error:"" });
+    void taskDetails(ids, controller.signal)
+      .then(({ findings }) => {
+        if (controller.signal.aborted) return;
+        const found = new Set(findings.map(finding => finding.result_id));
+        if (ids.some(id => !found.has(id))) throw new Error("Some selected articles could not be loaded. Retry or deselect them.");
+        setSelectionData({ key:selectionKey, findings, loading:false, error:"" });
+      })
+      .catch(error => {
+        if (!controller.signal.aborted) setSelectionData({ key:selectionKey, findings:[], loading:false, error:errorText(error) });
+      });
+    return () => controller.abort();
+  }, [selectionKey, selectionRetry, reviewing, revision]);
   const [detail, setDetail] = useState<{
       id: string;
       finding: IpReviewFinding;
@@ -393,21 +418,9 @@ export default function TaskQueue({
       window.clearTimeout(timer);
     };
   }, [search?.id, searchAfter, revision]);
-  async function reviewSelected() {
-    if (selection.size > 50) {
-      setError("Select at most 50 articles to review at once.");
-      return;
-    }
-    setReviewLoading(true);
-    setError("");
-    try {
-      const result = await taskDetails([...selection]);
-      setReview(result.findings);
-    } catch (error) {
-      setError(errorText(error));
-    } finally {
-      setReviewLoading(false);
-    }
+  function reviewSelected() {
+    if (!selectedData || selectionLoading || selectionError) return;
+    setReview(selectedData.findings);
   }
   async function dismiss(
     reason: MonitoringReviewOutcome,
@@ -796,6 +809,7 @@ export default function TaskQueue({
             </div>
             <MonitoringBoard
               reviewOnly
+              selectionControls={{ ids:selection, onChange:setSelection }}
               findings={review}
               facets={reviewFacets}
               filters={reviewFilters}
@@ -817,7 +831,6 @@ export default function TaskQueue({
           </>
         ) : groupBy === "seller" && !searchStarting && (!search || Boolean(search.id)) ? (
           <>
-            {selection.size > 0 && <div className="monitoring-results-summary"><button className="task-queue-button" disabled={reviewLoading} onClick={() => void reviewSelected()}>{reviewLoading ? "Loading evidence…" : `Review ${selection.size} selected`}</button></div>}
             <SellerGroupedQueue key={`${JSON.stringify(sellerQuery)}:${queueReset}`}
               query={sellerQuery} revision={`${revision}:${search?.matched}:${search?.state}`} selection={selection} renderRow={renderTaskRow} activeFindingId={taskId}
               onUngroup={() => { const next = new URLSearchParams(params); next.delete("group_by"); setParams(next); }}
@@ -843,17 +856,6 @@ export default function TaskQueue({
                     ? " · Status counts ignore this additional filter"
                     : ""}
                 </span>}
-                {selection.size > 0 && (
-                  <button
-                    className="task-queue-button"
-                    disabled={reviewLoading}
-                    onClick={() => void reviewSelected()}
-                  >
-                    {reviewLoading
-                      ? "Loading evidence…"
-                      : `Review ${selection.size} selected`}
-                  </button>
-                )}
               </div>
               )}
               {groupBy !== "none" && rows.length > 0 && (
@@ -1039,6 +1041,25 @@ export default function TaskQueue({
             </div>
           </>
         )}
+        {!review && <>
+          {selection.size > 0 && selectionError && <p className="task-queue-notice" role="alert">
+            {selectionError} {selection.size <= 50 && <button onClick={() => setSelectionRetry(value => value + 1)}>Retry selected articles</button>}
+          </p>}
+          <MonitoringBoard
+            selectionOnly
+            findings={selectedData?.findings ?? []}
+            selectionControls={{ ids:selection, onChange:setSelection, loading:selectionLoading, disabled:Boolean(selectionError), onReview:reviewSelected }}
+            facets={reviewFacets}
+            filters={reviewFilters}
+            onFiltersChange={() => {}}
+            nextCursor={null}
+            loadingMore={false}
+            onLoadMore={() => {}}
+            onRefresh={() => setRevision(value => value + 1)}
+            ipId={ipId}
+            showIpColumn
+          />
+        </>}
         {activeGroup && !review && groupBy !== "seller" && (
           <MonitoringGroupDetails
             group={activeGroup}

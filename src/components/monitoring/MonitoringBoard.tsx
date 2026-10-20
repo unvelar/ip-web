@@ -1,5 +1,5 @@
 import { LegalReviewDialog } from "./board/LegalReviewDialog";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { CircleCheck, Layers, X } from "lucide-react";
 import {
   dismissIpFinding,
@@ -125,6 +125,8 @@ function tenantMemberLabel(member: { display_name: string | null; email: string 
 export function MonitoringBoard({
   findings,
   reviewOnly = false,
+  selectionOnly = false,
+  selectionControls,
   facets,
   filters,
   onFiltersChange,
@@ -147,6 +149,15 @@ export function MonitoringBoard({
 }: {
   findings: IpReviewFinding[];
   reviewOnly?: boolean;
+  /** Reuse batch decisions for a queue that owns its rows and selection. */
+  selectionOnly?: boolean;
+  selectionControls?: {
+    ids: Set<string>;
+    onChange: Dispatch<SetStateAction<Set<string>>>;
+    loading?: boolean;
+    disabled?: boolean;
+    onReview?: () => void;
+  };
   facets: MonitoringFacets;
   filters: BoardFilters;
   onFiltersChange: (next: Partial<BoardFilters>) => void;
@@ -275,7 +286,9 @@ export function MonitoringBoard({
   // Selection is keyed by result_id. Related-items can add rows that are not
   // currently loaded in the visible page, so keep their full finding payloads
   // in a small side map without reordering the visible page.
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [localSelected, setLocalSelected] = useState<Set<string>>(new Set());
+  const selected = selectionControls?.ids ?? localSelected;
+  const setSelected = selectionControls?.onChange ?? setLocalSelected;
   const [reviewingSelection, setReviewingSelection] = useState(false);
   const [selectionExtras, setSelectionExtras] = useState<Map<string, IpReviewFinding>>(new Map());
 
@@ -648,7 +661,7 @@ export function MonitoringBoard({
     setGroupReference((previous) => previous?.group.kind === "seller"
       && previous.ipId === filters.ip_id
       && previous.group.findings[0]?.seller_name === filters.seller ? previous : null);
-    setSelected(new Set());
+    if (!selectionControls) setSelected(new Set());
     setSelectionExtras(new Map());
     setProductCorrectedResultIds(new Set());
     setBatchResult(null);
@@ -1106,6 +1119,7 @@ export function MonitoringBoard({
   ]);
 
   useEffect(() => {
+    if (selectionOnly) return;
     function editableTarget(target: EventTarget | null) {
       if (!(target instanceof HTMLElement)) return false;
       const tag = target.tagName.toLowerCase();
@@ -1140,7 +1154,7 @@ export function MonitoringBoard({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeFinding, moveActive, runShortcutAction, setActiveFinding]);
+  }, [activeFinding, moveActive, runShortcutAction, setActiveFinding, selectionOnly]);
 
   const hasActiveFilters = Boolean(filters.country || filters.query || filters.product_group_id || filters.catalog_product_id ||
     filters.source || filters.platform || filters.seller || filters.assignee || filters.priority ||
@@ -1166,7 +1180,7 @@ export function MonitoringBoard({
 
   return (
     <>
-      {!reviewOnly && <MonitoringFilters
+      {!reviewOnly && !selectionOnly && <MonitoringFilters
         filters={filters}
         facets={facets}
         onChange={onFiltersChange}
@@ -1193,7 +1207,7 @@ export function MonitoringBoard({
             className="m-3"
           />
         )}
-        <MonitoringResultList
+        {!selectionOnly && <MonitoringResultList
           hideSort={reviewOnly}
           findings={displayFindings}
           total={facets.total}
@@ -1214,10 +1228,10 @@ export function MonitoringBoard({
           onEntityOpen={unified ? (kind, finding) => { const group = groupMonitoringFindings([finding], kind)[0]; if (group) openGroup(group); } : undefined}
           emptyMessage={emptyStateMessage}
           onClearFilters={hasActiveFilters ? clearFilters : undefined}
-        />
+        />}
         {/* Pagination footer: Load more when the server says there's another
             page, end-of-list marker otherwise. Hidden when there are no rows. */}
-        {displayFindings.length > 0 && (
+        {!selectionOnly && displayFindings.length > 0 && (
           <div className="monitoring-results-pagination">
             {unified && <span>{displayFindings.length.toLocaleString()} of {facets.total.toLocaleString()} matching tasks loaded{groupBy !== "none" ? " · Group counts cover loaded tasks" : ""}</span>}
             {nextCursor ? (
@@ -1236,17 +1250,19 @@ export function MonitoringBoard({
       </div>
 
       <MonitoringSelectionBar
-        selectedCount={selectedActionFindings.length}
+        selectedCount={selectionControls ? selected.size : selectedActionFindings.length}
+        loading={selectionControls?.loading}
+        disabled={selectionControls?.disabled}
         actions={selectionActions}
         progress={batchProgress}
         onAction={setConfirmAction}
         onClear={clearSelection}
-        onReview={() => {
+        onReview={selectionControls?.onReview ?? (() => {
           const first = selectedActionFindings[0];
           if (!first) return;
           setReviewingSelection(true);
           setActiveFinding(first.result_id);
-        }}
+        })}
         assignees={tenantMembers.map((member) => ({
           id: member.id,
           label: member.id === currentTenantMember?.id ? `Me — ${tenantMemberLabel(member)}` : tenantMemberLabel(member),
