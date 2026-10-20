@@ -92,12 +92,42 @@ export interface TaskSearchResult {
   rows?: TaskSummary[];
   next?: number | null;
 }
+export type SellerGroupSort = "exposure" | "articles" | "priority" | "newest";
+export interface TaskSellerGroup {
+  seller_key: string | null;
+  seller_name: string;
+  article_count: number;
+  priced_article_count: number;
+  exposure_usd: number | null;
+}
+export interface TaskSellerGroupsPage {
+  groups: TaskSellerGroup[];
+  total_groups: number;
+  next_offset: number | null;
+  as_of: string | null;
+  updating: boolean;
+  partial: boolean;
+}
+export interface TaskSellerGroupListingsPage {
+  rows: TaskSummary[];
+  next_offset: number | null;
+  partial: boolean;
+}
+export type TaskSellerGroupsQuery = Omit<TaskQueueQuery, "cursor"> & {
+  search_id?: string;
+  group_sort: SellerGroupSort;
+  offset?: number;
+};
 const queryString = (query: object) =>
   new URLSearchParams(
     Object.entries(query)
       .filter(([, value]) => value !== undefined && value !== null)
       .map(([key, value]) => [key, String(value)]),
   ).toString();
+export const taskSellerGroups = (query: TaskSellerGroupsQuery, signal?: AbortSignal) =>
+  request<TaskSellerGroupsPage>("/api/monitoring/tasks/seller-groups?" + queryString(query), { signal });
+export const taskSellerGroupListings = (query: TaskSellerGroupsQuery & { seller_key: string }, signal?: AbortSignal) =>
+  request<TaskSellerGroupListingsPage>("/api/monitoring/tasks/seller-groups/listings?" + queryString(query), { signal });
 export const taskCapability = (ip_id: string, signal?: AbortSignal) =>
   request<TaskCapability>(
     "/api/monitoring/tasks/capability?" + queryString({ ip_id }),

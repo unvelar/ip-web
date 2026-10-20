@@ -16,7 +16,7 @@ export function MonitoringGroupDetails({ group, sellerFiltered = false, onClose,
   sellerFiltered?: boolean;
   onClose: () => void;
   onFilter?: () => void;
-  scope?: "loaded" | "page";
+  scope?: "loaded" | "page" | "matching";
 }) {
   const panel = useRef<HTMLElement>(null);
   useOutsideDismiss(panel, onClose, ".monitoring-group-control");
@@ -44,7 +44,7 @@ export function MonitoringGroupDetails({ group, sellerFiltered = false, onClose,
       </header>
       <div className="finding-inspector-scroll monitoring-group-detail-body">
         <h2>{group.label}</h2>
-        <p>{group.findings.length} matching {group.findings.length === 1 ? "task" : "tasks"} {scope === "page" ? "on this page" : "in the loaded results"}</p>
+        <p>{group.totals?.articles ?? group.findings.length} matching articles {group.totals?.partial ? "found so far" : scope === "matching" ? "across all pages" : scope === "page" ? "on this page" : "in the loaded results"}</p>
         <dl><div><dt>Sources</dt><dd className="monitoring-marketplace-list">{domains.map((domain) => <span key={domain} className="monitoring-marketplace"><MarketplaceMark source={{ domain, name: monitoringPlatformLabel(domain) }} /><span>{monitoringPlatformLabel(domain)}</span></span>)}</dd></div>{!seller && <div><dt>Identified sellers</dt><dd>{sellers}</dd></div>}</dl>
         {seller && group.sellerKey && <SellerDetailsFacts key={`${group.sellerKey}:${group.ipId}`} sellerKey={group.sellerKey} ipId={group.ipId} />}
         {destination && <div className="monitoring-group-detail-actions">
@@ -52,7 +52,7 @@ export function MonitoringGroupDetails({ group, sellerFiltered = false, onClose,
             : onFilter && <button type="button" onClick={onFilter}>Filter to this {seller ? "seller" : "product"}</button>}
           <Link to={destination}>{seller ? "Seller profile & history" : "Product grouping & rules"}</Link>
         </div>}
-        <p className="monitoring-group-detail-note">{scope === "page" ? "Counts cover tasks on this page. Other pages may contain more tasks in this group." : "Counts cover loaded tasks matching the current filters. Load more to expand this group."} Each task keeps its own evidence, assignment, and review decision.</p>
+        <p className="monitoring-group-detail-note">{group.totals?.partial ? "Search results are incomplete. Totals cover matches found so far." : scope === "matching" ? "Totals cover every matching task in this view, across all pages." : scope === "page" ? "Counts cover tasks on this page. Other pages may contain more tasks in this group." : "Counts cover loaded tasks matching the current filters. Load more to expand this group."} Each task keeps its own evidence, assignment, and review decision.</p>
       </div>
     </aside>
   </div>;

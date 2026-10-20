@@ -68,10 +68,13 @@ test("group collapse preserves row selection and group selection touches only th
     ...container.querySelectorAll<HTMLInputElement>('[type="checkbox"]'),
   ];
   expect(groupCheckboxes[0].indeterminate).toBe(true);
-  const collapse = container.querySelector<HTMLButtonElement>(
-    '[aria-label="Collapse Same name"]',
+  expect(container.querySelectorAll("tbody[hidden]")).toHaveLength(2);
+  const toggle = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Expand Same name"]',
   )!;
-  await act(async () => collapse.click());
+  await act(async () => toggle.click());
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  await act(async () => toggle.click());
   expect(container.querySelector("tbody[hidden]")?.textContent).toBe(
     "onethree",
   );

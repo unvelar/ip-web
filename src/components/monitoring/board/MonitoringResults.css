@@ -124,6 +124,14 @@
 button.monitoring-group-name:hover { text-decoration:underline; text-underline-offset:3px; }
 .monitoring-group-name svg { flex-shrink:0; color:#706d66; }
 .monitoring-group-count { flex-shrink:0; border-radius:4px; padding:1px 5px; color:#706d66; background:#fff; font-size:11px; font-variant-numeric:tabular-nums; }
+.monitoring-seller-columns { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-right:33px; }
+.monitoring-group-listing-columns { background:#faf9f7; border-bottom:1px solid #e9e6e0; color:#706d66; font-size:11px; }
+.monitoring-group-exposure { display:flex; gap:6px; align-items:baseline; margin-left:auto; white-space:nowrap; color:#706d66; font-variant-numeric:tabular-nums; }
+.monitoring-group-exposure strong { color:#242320; font-size:13px; font-weight:500; }
+.monitoring-group-exposure + .monitoring-group-open { margin-left:0; }
+.monitoring-group-footer { padding:10px 20px; color:#706d66; font-size:12px; }
+.monitoring-group-footer:empty { padding:0; }
+.monitoring-group-footer button { text-decoration:underline; text-underline-offset:3px; }
 .monitoring-group-open { display:grid; place-items:center; margin-left:auto; padding:3px; color:#706d66; }
 .monitoring-grouping-notice { padding:10px 20px; border-bottom:1px solid #e9e6e0; color:#706d66; font-size:12px; }
 .monitoring-grouping-notice a { color:#242320; text-decoration:underline; text-underline-offset:3px; }
@@ -144,6 +152,8 @@ button.monitoring-group-name:hover { text-decoration:underline; text-underline-o
 .monitoring-seller-shop { font-size:12px; text-decoration:underline; text-underline-offset:3px; }
 @media(max-width:780px) { .monitoring-group-inspector { width:calc(100vw - 16px); } }
 @media(max-width:480px) {
+  .monitoring-result-list thead th:has(.monitoring-seller-columns) { display:block; }
+  .monitoring-group-listing-columns { display:none; }
   .monitoring-task-page > .monitoring-results-workspace { margin:0; }
   .monitoring-result-list .monitoring-group-heading th { display:block; }
   .monitoring-group-heading-content { padding:9px 12px; gap:10px; }

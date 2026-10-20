@@ -14,6 +14,8 @@ export interface MonitoringListingGroup<T extends MonitoringGroupFinding = IpRev
   sellerKey: string | null;
   productId: string | null;
   ipId: string | null;
+  /** Server aggregates over every matching task, before group pagination. */
+  totals?: { articles: number; pricedArticles: number; exposureUsd: number | null; partial?: boolean };
 }
 
 /** Presentation state stays outside the server filter contract. */

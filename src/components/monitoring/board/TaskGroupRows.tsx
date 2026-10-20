@@ -10,6 +10,9 @@ export function TaskGroupRows({
   onSelect,
   onOpen,
   renderRow,
+  onToggle,
+  renderFooter,
+  groupColumns,
 }: {
   groups: MonitoringListingGroup<TaskSummary>[];
   selection: Set<string>;
@@ -17,11 +20,14 @@ export function TaskGroupRows({
   onSelect: (ids: string[], selected: boolean) => void;
   onOpen: (group: MonitoringListingGroup<TaskSummary>) => void;
   renderRow: (row: TaskSummary) => ReactNode;
+  onToggle?: (group: MonitoringListingGroup<TaskSummary>, expanded: boolean) => void;
+  renderFooter?: (group: MonitoringListingGroup<TaskSummary>) => ReactNode;
+  groupColumns?: ReactNode;
 }) {
   const id = useId();
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [toggled, setToggled] = useState<Set<string>>(new Set());
   return groups.map((group, index) => {
-    const expanded = !collapsed.has(group.key);
+    const expanded = group.kind === "seller" ? toggled.has(group.key) : !toggled.has(group.key);
     const selected = group.findings.filter((row) =>
       selection.has(row.result_id),
     ).length;
@@ -34,9 +40,9 @@ export function TaskGroupRows({
               <div className="monitoring-group-heading-content">
                 <input
                   type="checkbox"
-                  aria-label={`Select tasks in ${group.label} on this page`}
-                  disabled={disabled}
-                  checked={selected === group.findings.length}
+                  aria-label={`Select ${group.totals ? "loaded articles" : "tasks"} in ${group.label}${group.totals ? "" : " on this page"}`}
+                  disabled={disabled || group.findings.length === 0}
+                  checked={group.findings.length > 0 && selected === group.findings.length}
                   ref={(node) => {
                     if (node)
                       node.indeterminate =
@@ -55,14 +61,15 @@ export function TaskGroupRows({
                   aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label}`}
                   aria-expanded={expanded}
                   aria-controls={bodyId}
-                  onClick={() =>
-                    setCollapsed((previous) => {
+                  onClick={() => {
+                    setToggled((previous) => {
                       const next = new Set(previous);
                       if (next.has(group.key)) next.delete(group.key);
                       else next.add(group.key);
                       return next;
-                    })
-                  }
+                    });
+                    onToggle?.(group, !expanded);
+                  }}
                 >
                   <ChevronRight
                     size={14}
@@ -84,8 +91,11 @@ export function TaskGroupRows({
                   <span>{group.label}</span>
                 </button>
                 <span className="monitoring-group-count">
-                  {group.findings.length} on this page
+                  {group.totals ? `${group.totals.articles.toLocaleString()} ${group.totals.articles === 1 ? "article" : "articles"}` : `${group.findings.length} on this page`}
                 </span>
+                {group.totals && <span className="monitoring-group-exposure" title={`Estimated exposure in USD across all matching articles, using the same price × quantity policy as seller profiles. ${group.totals.pricedArticles} of ${group.totals.articles} articles have a known USD price.`}>
+                  <strong>{group.totals.exposureUsd === null ? "Unknown" : new Intl.NumberFormat("en-US", {style:"currency",currency:"USD"}).format(group.totals.exposureUsd)}{group.totals.exposureUsd !== null && group.totals.pricedArticles < group.totals.articles ? "+" : ""}</strong>
+                </span>}
                 <button
                   type="button"
                   className="monitoring-group-open"
@@ -100,7 +110,9 @@ export function TaskGroupRows({
           </tr>
         </tbody>
         <tbody id={bodyId} hidden={!expanded}>
+          {group.findings.length > 0 && groupColumns}
           {group.findings.map(renderRow)}
+          {renderFooter?.(group)}
         </tbody>
       </Fragment>
     );

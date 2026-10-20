@@ -62,7 +62,7 @@ export function MonitoringResultList({
   hideSort?: boolean;
 }) {
   const groupId = useId();
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [toggled, setToggled] = useState<Set<string>>(new Set());
   const groups = useMemo(() => groupMonitoringFindings(findings, groupBy), [findings, groupBy]);
   const allSelected = findings.length > 0 && findings.every((finding) => selected.has(finding.result_id));
   const partiallySelected = !allSelected && findings.some((finding) => selected.has(finding.result_id));
@@ -97,7 +97,7 @@ export function MonitoringResultList({
       {groups.length > 0 ? groups.map((group, index) => {
         const all = group.findings.every((finding) => selected.has(finding.result_id));
         const some = !all && group.findings.some((finding) => selected.has(finding.result_id));
-        const expanded = !collapsed.has(group.key);
+        const expanded = group.kind === "seller" ? toggled.has(group.key) : !toggled.has(group.key);
         const id = `${groupId}-group-${index}`;
         return <Fragment key={group.key}>
           <tbody><tr className="monitoring-group-heading"><th colSpan={4} scope="rowgroup">
@@ -107,7 +107,7 @@ export function MonitoringResultList({
                 onChange={(event) => onSelectGroup?.(group.findings.map((finding) => finding.result_id), event.target.checked)} />
               <button type="button" className="monitoring-group-toggle" aria-expanded={expanded} aria-controls={id}
                 aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label}`}
-                onClick={() => setCollapsed((previous) => { const next = new Set(previous); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })}>
+                onClick={() => setToggled((previous) => { const next = new Set(previous); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })}>
                 <ChevronRight size={13} className={expanded ? "is-expanded" : ""} aria-hidden />
               </button>
               {onGroupOpen ? <button type="button" className="monitoring-group-name" onClick={() => onGroupOpen(group)}>

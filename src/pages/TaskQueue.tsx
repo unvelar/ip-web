@@ -4,6 +4,7 @@ import { ImageOff } from "lucide-react";
 import MonitoringToolbar from "../components/MonitoringToolbar";
 import TaskSearch from "../components/TaskSearch";
 import { TaskGroupRows } from "../components/monitoring/board/TaskGroupRows";
+import { SellerGroupedQueue } from "../components/monitoring/board/SellerGroupedQueue";
 import { MonitoringGroupDetails } from "../components/monitoring/board/MonitoringGroupDetails";
 import {
   groupMonitoringFindings,
@@ -41,6 +42,7 @@ import {
   type TaskQueueQuery,
   type TaskSelector,
   type TaskSearchResult,
+  type SellerGroupSort,
 } from "../api/taskQueue";
 import "../components/monitoring/board/MonitoringResults.css";
 import "../components/monitoring/MonitoringWorkspace.css";
@@ -211,6 +213,9 @@ export default function TaskQueue({
     ? (search?.rows ?? [])
     : (search?.rows ?? page?.rows ?? []);
   const groupBy = parseMonitoringGroupBy(params.get("group_by"));
+  const sellerSort = (["exposure", "articles", "priority", "newest"].includes(params.get("group_sort") ?? "")
+    ? params.get("group_sort") : "exposure") as SellerGroupSort;
+  const sellerQuery = { ...query, group_sort: sellerSort, ...(urlSearchId ? { search_id:urlSearchId } : {}) };
   const productGroups = useTaskProductIdentities(
     groupBy === "product",
     ipId,
@@ -353,6 +358,10 @@ export default function TaskQueue({
     };
   }, [search?.id, searchAfter, revision]);
   async function reviewSelected() {
+    if (selection.size > 50) {
+      setError("Select at most 50 articles to review at once.");
+      return;
+    }
     setReviewLoading(true);
     setError("");
     try {
@@ -630,17 +639,23 @@ export default function TaskQueue({
                   <option value="product">Product</option>
                 </select>
               </label>
-              {!search && !urlSearchId && (
+              {(groupBy === "seller" || (!search && !urlSearchId)) && (
                 <label>
                   Sort{" "}
                   <select
                     aria-label="Sort tasks"
-                    title="Takedown recommendations first, then seller takedown history and inventory. Newer listings break ties."
-                    value={query.sort}
-                    onChange={(event) =>
-                      change({ queue_sort: event.target.value })
-                    }
+                    title={groupBy === "seller" ? "Rank sellers across all matching tasks before pagination. Exposure uses USD price × quantity." : "Takedown recommendations first, then seller takedown history and inventory. Newer listings break ties."}
+                    value={groupBy === "seller" ? sellerSort : query.sort}
+                    onChange={(event) => {
+                      if (groupBy !== "seller") { change({ queue_sort:event.target.value }); return; }
+                      const next = new URLSearchParams(params);
+                      next.set("group_sort",event.target.value);
+                      if (["priority","newest"].includes(event.target.value)) next.set("queue_sort",event.target.value);
+                      setSelection(new Set());
+                      setParams(next);
+                    }}
                   >
+                    {groupBy === "seller" && <><option value="exposure">Seller exposure: highest first</option><option value="articles">Seller articles: most first</option></>}
                     <option value="priority">Highest priority</option>
                     <option value="newest">Newest first detected</option>
                   </select>
@@ -757,6 +772,15 @@ export default function TaskQueue({
               onActiveFindingChange={open}
             />
           </>
+        ) : groupBy === "seller" ? (
+          <>
+            {selection.size > 0 && <div className="monitoring-results-summary"><button className="task-queue-button" disabled={reviewLoading} onClick={() => void reviewSelected()}>{reviewLoading ? "Loading evidence…" : `Review ${selection.size} selected`}</button></div>}
+            <SellerGroupedQueue key={`${JSON.stringify(sellerQuery)}:${revision}:${search?.matched}:${search?.state}`}
+              query={sellerQuery} revision={String(revision)} selection={selection} renderRow={renderTaskRow} activeFindingId={taskId}
+              onUngroup={() => { const next = new URLSearchParams(params); next.delete("group_by"); setParams(next); }}
+              onOpenGroup={() => { closeGroup(); if (taskId) open(null); }}
+              onSelect={(ids, selected) => setSelection(previous => { const next = new Set(previous); for (const id of ids) { if (selected) next.add(id); else next.delete(id); } return next; })} />
+          </>
         ) : (
           <>
             <div
@@ -813,7 +837,7 @@ export default function TaskQueue({
                       </button>{" "}
                     </>
                   ) : (
-                    `${groups.length} ${groupBy === "seller" ? "seller" : "product"} ${groups.length === 1 ? "group" : "groups"} on this page. Counts cover these ${rows.length} tasks.`
+                    `${groups.length} product ${groups.length === 1 ? "group" : "groups"} on this page. Counts cover these ${rows.length} tasks.`
                   )}
                 </div>
               )}
@@ -966,7 +990,7 @@ export default function TaskQueue({
             </div>
           </>
         )}
-        {activeGroup && !review && (
+        {activeGroup && !review && groupBy !== "seller" && (
           <MonitoringGroupDetails
             group={activeGroup}
             scope="page"

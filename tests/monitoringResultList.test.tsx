@@ -104,9 +104,11 @@ test("listing clicks and row Enter/Space open evidence without changing selectio
 
 test("group selection covers only loaded members and survives regrouping and collapse", async () => {
   const ui = await setup({ groupBy: "seller" });
+  expect(ui.container.querySelector('.monitoring-group-toggle')?.getAttribute("aria-expanded")).toBe("false");
   await ui.click('[aria-label="Select loaded tasks in Beauty seller"]');
   expect(ui.container.querySelectorAll('tbody input:checked').length).toBe(3);
   expect(ui.opened).toEqual([]);
+  await ui.click('.monitoring-group-toggle');
   await ui.click('.monitoring-group-toggle');
   expect(ui.container.querySelector('tbody[hidden]')).not.toBeNull();
   await ui.regroup("none");
