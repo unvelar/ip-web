@@ -754,6 +754,19 @@ export default function TaskQueue({
             <button onClick={returnToQueue}>Return to queue</button>
           </div>
         )}
+        {!review && (search || searchStarting) && (
+          <TaskSearchStatus
+            search={search}
+            starting={searchStarting}
+            queueTotal={page ? query.status === "all"
+              ? taskStates.filter((state) => state !== "dismissed").reduce((sum, state) => sum + page.counts[state], 0)
+              : page.counts[query.status] : undefined}
+            queueLabel={query.status === "all" ? "All open" : taskStateLabels[query.status]}
+            stopping={searchStopping}
+            onStop={() => void stopSearch()}
+            onReturn={returnToQueue}
+          />
+        )}
         {review ? (
           <>
             <div className="task-queue-controls">
@@ -791,7 +804,7 @@ export default function TaskQueue({
               onActiveFindingChange={open}
             />
           </>
-        ) : groupBy === "seller" ? (
+        ) : groupBy === "seller" && !searchStarting && (!search || Boolean(search.id)) ? (
           <>
             {selection.size > 0 && <div className="monitoring-results-summary"><button className="task-queue-button" disabled={reviewLoading} onClick={() => void reviewSelected()}>{reviewLoading ? "Loading evidence…" : `Review ${selection.size} selected`}</button></div>}
             <SellerGroupedQueue key={`${JSON.stringify(sellerQuery)}:${revision}:${search?.matched}:${search?.state}`}
@@ -806,19 +819,6 @@ export default function TaskQueue({
               className="monitoring-results-queue"
               aria-busy={waitingForPage || searchStarting}
             >
-              {(search || searchStarting) && (
-                <TaskSearchStatus
-                  search={search}
-                  starting={searchStarting}
-                  queueTotal={page ? query.status === "all"
-                    ? taskStates.filter((state) => state !== "dismissed").reduce((sum, state) => sum + page.counts[state], 0)
-                    : page.counts[query.status] : undefined}
-                  queueLabel={query.status === "all" ? "All open" : taskStateLabels[query.status]}
-                  stopping={searchStopping}
-                  onStop={() => void stopSearch()}
-                  onReturn={returnToQueue}
-                />
-              )}
               {(!search && !searchStarting || selection.size > 0) && (
               <div className="monitoring-results-summary">
                 {!search && !searchStarting && <span>
