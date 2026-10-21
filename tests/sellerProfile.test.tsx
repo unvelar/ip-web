@@ -29,8 +29,11 @@ async function setup(query = "") {
     IS_REACT_ACT_ENVIRONMENT: true,
   });
   const requests: { url: URL; signal: AbortSignal; resolve: (response: Response) => void }[] = [];
+  const intelligenceRequests: typeof requests = [];
   globalThis.fetch = ((url, options) => new Promise<Response>((resolve) => {
-    requests.push({ url: new URL(String(url), window.location.origin), signal: options?.signal as AbortSignal, resolve });
+    const parsed = new URL(String(url), window.location.origin);
+    const pending = parsed.pathname.endsWith('/intelligence') ? intelligenceRequests : requests;
+    pending.push({ url: parsed, signal: options?.signal as AbortSignal, resolve });
   })) as typeof fetch;
   const container = document.createElement("div");
   container.className = "app-shell";
@@ -66,8 +69,36 @@ async function setup(query = "") {
     });
   };
   const button = (label: string) => [...container.querySelectorAll("button")].find((item) => item.textContent === label)!;
-  return { container, requests, respond, select, button };
+  return { container, requests, intelligenceRequests, respond, select, button };
 }
+
+test("seller comparisons load independently, survive listing filters, and retry without replacing listings", async () => {
+  const { container, requests, intelligenceRequests, respond, select, button } = await setup("?ip_id=ip-one");
+  expect(requests).toHaveLength(1);
+  expect(intelligenceRequests).toHaveLength(1);
+  await respond(0, ["First"]);
+  expect(container.querySelector("h1")?.textContent).toBe("Seller One");
+  expect(container.querySelector('[aria-label="Seller profile evidence"]')?.textContent).toContain("Loading seller profile");
+  await select("Listing status", "all");
+  await respond(1, ["Filtered"]);
+  expect(intelligenceRequests).toHaveLength(1);
+  await act(async () => intelligenceRequests[0].resolve(Response.json({error:"Comparisons temporarily busy"}, {status:503})));
+  expect(container.querySelector('[aria-label="Seller profile evidence"] [role="alert"]')?.textContent).toContain("Comparisons temporarily busy");
+  expect(container.querySelector("h1")?.textContent).toBe("Seller One");
+  await act(async () => button("Retry").click());
+  expect(intelligenceRequests).toHaveLength(2);
+  await act(async () => intelligenceRequests[1].resolve(Response.json({error:"Not found"}, {status:404})));
+  expect(container.querySelector('[aria-label="Seller profile evidence"]')).toBeNull();
+  expect(container.textContent).toContain("Filtered");
+});
+
+test("leaving a seller profile cancels its pending comparison", async () => {
+  const { intelligenceRequests, respond } = await setup();
+  await respond(0, ["First"]);
+  await act(async () => root?.unmount());
+  root = undefined;
+  expect(intelligenceRequests[0].signal.aborted).toBe(true);
+});
 
 test("profile shares one listing request, keeps URL filters and IP scope, and restores browser history", async () => {
   const { container, requests, respond, select, button } = await setup("?status=all&sort=risk_desc&availability=blocked&ip_id=ip-one");
