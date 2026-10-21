@@ -44,5 +44,5 @@ export interface SellerIntelligence {
 
 export function getSellerIntelligence(sellerKey: string, signal?: AbortSignal) {
   return request<{intelligence: SellerIntelligence}>(
-    `/api/monitoring/sellers/${encodeURIComponent(sellerKey)}/intelligence`,{signal},{readTimeoutMs:30_000});
+    `/api/monitoring/sellers/${encodeURIComponent(sellerKey)}/intelligence`,{signal},{readTimeoutMs:45_000});
 }
