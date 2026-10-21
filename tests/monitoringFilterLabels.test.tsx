@@ -49,6 +49,11 @@ async function setup(initial: Partial<InboxFilters> = { catalog_product_id: "pro
         ungrouped_count: 0, next_cursor: null, catalog_categories: [],
       })));
     },
+    respondTaxonomy: async (index: number, label: string) => {
+      await act(async () => requests[index].resolve(Response.json({
+        categories: [{ key: "ae_2_2_8", label, supports_color_variants: true }],
+      })));
+    },
   };
 }
 
@@ -90,4 +95,18 @@ test("visual group labels use existing facets without fetching product catalog d
   const ui = await setup({ product_group_id: "visual-one" });
   expect(ui.requests).toHaveLength(0);
   expect(ui.container.textContent).toContain("Blue bottles");
+});
+
+test("product type labels ignore responses from a previous brand", async () => {
+  const ui = await setup({ semantic: JSON.stringify({ categories: ["ae_2_2_8"] }) });
+  expect(ui.container.textContent).toContain("Product type");
+  expect(ui.container.textContent).not.toContain("ae 2 2 8");
+  expect(ui.requests[0].url.pathname).toBe("/api/product-clusters/ip-one/semantic-taxonomy");
+  await ui.update({}, "ip-two");
+  expect(ui.requests[0].signal.aborted).toBe(true);
+  await ui.respondTaxonomy(0, "Stale category");
+  expect(ui.container.textContent).not.toContain("Stale category");
+  await ui.respondTaxonomy(1, "Scale Models");
+  expect(ui.container.textContent).toContain("Scale Models");
+  expect(ui.requests).toHaveLength(2);
 });

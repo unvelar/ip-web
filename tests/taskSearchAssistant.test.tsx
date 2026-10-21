@@ -9,7 +9,7 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean}={}) {
+async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
@@ -17,13 +17,14 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
   const cancelled:string[]=[];
   const applied:AppliedTaskSearch[]=[];const errors:string[]=[];
   let release:((response:Response)=>void)|undefined;
-  const filters:ListingFilters=options.title?{...emptyListingFilters(ip),query:"old",title_contains:"L261"}:{...emptyListingFilters(ip),semantic:{categories:["miniature"]},seller_listing_count:{gt:10},countries:["CN","FR"],price:{currency:"EUR",lt:"40"}};
+  const filters:ListingFilters=options.title?{...emptyListingFilters(ip),query:"old",title_contains:"L261"}:{...emptyListingFilters(ip),semantic:{categories:[options.categoryKey??"miniature"]},seller_listing_count:{gt:10},countries:["CN","FR"],price:{currency:"EUR",lt:"40"}};
   const translated=()=>Response.json({version:1,jobs_started:0,filters,query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
   globalThis.fetch=(async(input,init)=>{
     const url=new URL(String(input),"http://localhost:5174");
     if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,country_labels:{CN:"China",FR:"France"}});
     if(url.pathname.endsWith("/tasks/capability"))return Response.json({active:true,ready:true,...(options.titleSupported===false?{}:{title_search_policy_version:"literal-title-substring-v1"}),...(options.extended===false?{}:{listing_search_policy_version:"task-listing-search-v1"})});
     if(init?.method==="DELETE"){cancelled.push(url.pathname);return new Response(null,{status:204});}
+    if(url.pathname.endsWith("/semantic-taxonomy"))return options.taxonomyUnavailable?Response.json({error:"Unavailable"},{status:503}):Response.json({categories:[{key:"miniature",label:"Miniature"},{key:"ae_2_2_8",label:"Scale Models"}]});
     const body=JSON.parse(String(init?.body));requests.push({path:url.pathname,body});
     if(url.pathname.endsWith("/translate"))return options.hold?await new Promise<Response>(resolve=>{release=resolve;}):translated();
     if(url.pathname.endsWith("/searches"))return options.holdCreation?await new Promise<Response>(resolve=>{release=resolve;}):options.fail?Response.json({error:"Search temporarily unavailable"},{status:503}):Response.json({id:"saved-search",state:"pending",scanned:0,matched:0});
@@ -100,4 +101,17 @@ test("title-only filters cannot silently become a broad text search on older API
   const ui=await setup({title:true,titleSupported:false});await ui.click("Ask");await ui.fill("Ask about listings","L261 codes");await ui.click("Apply assistant search");
   expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");
   expect(ui.container.textContent).toContain("Title filtering is not available");
+});
+
+test("category labels replace internal keys without changing filters or starting another search",async()=>{
+  const ui=await setup({categoryKey:"ae_2_2_8"});await ui.click("Ask");await ui.fill("Ask about listings","miniatures");await ui.click("Apply assistant search");
+  expect(ui.container.textContent).toContain("Scale Models");expect(ui.container.textContent).not.toContain("ae 2 2 8");
+  expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
+  await ui.settle();expect(ui.requests).toHaveLength(2);
+});
+test("unavailable category labels keep a removable filter without exposing its internal key",async()=>{
+  const ui=await setup({categoryKey:"ae_2_2_8",taxonomyUnavailable:true});await ui.click("Ask");await ui.fill("Ask about listings","miniatures");await ui.click("Apply assistant search");
+  expect(ui.container.textContent).toContain("Product type");expect(ui.container.textContent).not.toContain("ae 2 2 8");
+  expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
+  expect(ui.container.querySelector('button[aria-label="Remove product details filter"]')).not.toBeNull();
 });

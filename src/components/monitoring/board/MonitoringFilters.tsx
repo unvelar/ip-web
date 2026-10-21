@@ -1,5 +1,6 @@
 import { SemanticFilterPanel } from "./SemanticFilterPanel";
-import { semanticFilterLabel } from "../../../lib/semanticFilters";
+import { readSemanticFilters, semanticFilterLabel } from "../../../lib/semanticFilters";
+import { useProductSemanticTaxonomy } from "../../../hooks/useProductSemanticTaxonomy";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Banknote, Globe, Package, Search, SlidersHorizontal, X } from "lucide-react";
 import type { MonitoringFacets, MonitoringSourceFacet, TenantMember } from "../../../api";
@@ -86,6 +87,7 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
   compact?: boolean;
 }) {
   const [panel, setPanel] = useState<Panel | null>(null);
+  const { labels: categoryLabels } = useProductSemanticTaxonomy(ipId, readSemanticFilters(filters.semantic)?.categories);
   const [search, setSearch] = useState(filters.query ?? "");
   const [productLabel, setProductLabel] = useState<{ ipId: string; id: string; label: string } | null>(null);
   useEffect(() => {
@@ -189,7 +191,7 @@ export function MonitoringFilters({ filters, facets, onChange, ipId, showIpFilte
   const chips: Array<{ key: string; label: string; edit?: () => void; remove: () => void }> = filters.query
     ? [{ key: "search", label: `Search: ${filters.query}`, edit: () => setPanel(null), remove: () => { setSearch(""); onChange({ query: null }); } }] : [];
   if (hasProduct) chips.push({ key: "product", label: `${filters.catalog_product_id ? "Product" : "Visual group"}: ${selectedProductLabel}`, edit: () => setPanel("product"), remove: () => onChange({ catalog_product_id: null, product_group_id: null }) });
-  if (filters.semantic) chips.push({ key: "semantic", label: `Details: ${semanticFilterLabel(filters.semantic)}`, edit: () => setPanel("semantic"), remove: () => onChange({ semantic: null }) });
+  if (filters.semantic) chips.push({ key: "semantic", label: `Details: ${semanticFilterLabel(filters.semantic, categoryLabels)}`, edit: () => setPanel("semantic"), remove: () => onChange({ semantic: null }) });
   if (hasPrice) chips.push({ key: "price", label: `Price: ${priceLabel} USD`, edit: () => setPanel("price"), remove: () => onChange({ min_price_usd: null, max_price_usd: null }) });
   if (filters.source) chips.push({ key: "source", label: `Found via: ${activeSourceLabel}`, edit: () => setPanel("source"), remove: () => onChange({ source: null, platform: null }) });
   if (filters.country) chips.push({ key: "country", label: `Country: ${filters.country === "Unknown" ? "Unknown location" : filters.country}`, remove: () => onChange({ country: null }) });

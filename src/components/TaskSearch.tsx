@@ -3,7 +3,8 @@ import { QueueSearchBar } from "./QueueSearchBar";
 import { savedTaskSearchValues, taskSearchRequest, type AppliedTaskSearch } from "../lib/taskSearchAssistant";
 import type { SellerRanking } from "../lib/listingSearch";
 import { SemanticFilterPanel } from "./monitoring/board/SemanticFilterPanel";
-import { semanticFilterLabel } from "../lib/semanticFilters";
+import { readSemanticFilters, semanticFilterLabel } from "../lib/semanticFilters";
+import { useProductSemanticTaxonomy } from "../hooks/useProductSemanticTaxonomy";
 import { useCallback, useMemo, useRef, useState, useEffect, type ReactNode, type SetStateAction } from "react";
 import {
   Plus,
@@ -197,6 +198,7 @@ export default function TaskSearch({
     return initial;
   });
   const [titleSearch, setTitleSearch] = useState(false);
+  const { labels: categoryLabels } = useProductSemanticTaxonomy(ipId, readSemanticFilters(values.semantic)?.categories);
   const [extended, setExtended] = useState(false);
   const [labels, setLabels] = useState<Values>({});
   const [panel, setPanel] = useState<string | null>(null);
@@ -340,7 +342,7 @@ export default function TaskSearch({
         : (filter.options ?? []);
   const description = (filter: Filter) => {
     if (filter.id === "title_contains") return `Title contains: ${values.title_contains}`;
-    if (filter.id === "semantic") return semanticFilterLabel(values.semantic);
+    if (filter.id === "semantic") return semanticFilterLabel(values.semantic, categoryLabels);
     if (filter.id === "listing_countries") { try { return (JSON.parse(values.listing_countries) as string[]).map(code=>new Intl.DisplayNames(["en"],{type:"region"}).of(code)??code).join(" or "); } catch { return "Listing locations"; } }
     if (filter.id === "seller_listing_count" || filter.id === "price" && values.listing_price) {
       try { const range=JSON.parse(values[filter.id === "price"?"listing_price":filter.id]); const ops:Record<string,string>={gt:">",gte:"≥",lt:"<",lte:"≤"};
