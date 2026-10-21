@@ -4,6 +4,7 @@ import type { MonitoringSellerProfilePage } from "../../api";
 import { formatAgo, formatMoney } from "../../components/monitoring/board/utils";
 import { monitoringPlatformLabel } from "../../lib/platforms";
 import { SellerSales } from "./SellerSales";
+import { SellerContacts } from "./SellerContacts";
 import { SellerPolicyActions } from './SellerPolicyActions';
 
 export function SellerProfileHeader({ profile,onChanged,ipId }: { profile: MonitoringSellerProfilePage;onChanged:()=>Promise<void>;ipId:string|null }) {
@@ -58,6 +59,8 @@ export function SellerProfileHeader({ profile,onChanged,ipId }: { profile: Monit
           <Metric label="Prior enforcement" value={summary.prior_enforcement_count.toLocaleString()} icon={<ShieldCheck size={15} />} alert={summary.prior_enforcement_count > 0} />
         </div>
       </header>
+
+      <SellerContacts contacts={seller.contacts} />
 
       <SellerPolicyActions profile={profile} onChanged={onChanged} ipId={ipId}/>
 

@@ -501,6 +501,17 @@ export interface MonitoringSellersPage {
   platforms: string[];
 }
 
+export interface SellerContact {
+  kind: "email" | "phone" | "whatsapp" | "telegram" | "wechat" | "qq" | "signal" | "skype"
+    | "website" | "social" | "contact_name" | "business_name" | "address" | "registration_id" | "other";
+  label: string;
+  value: string;
+  url: string | null;
+  source_url: string;
+  source_quote: string;
+  observed_at: string;
+}
+
 export interface MonitoringSellerProfilePage {
   policy?: SellerPolicy;
   seller: {
@@ -508,6 +519,7 @@ export interface MonitoringSellerProfilePage {
     name: string;
     domain: string;
     profile_url: string | null;
+    contacts?: SellerContact[];
     rating: number | null;
     rating_count: number | null;
     sales: number | null;

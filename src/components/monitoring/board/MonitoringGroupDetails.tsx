@@ -7,6 +7,7 @@ import { useOutsideDismiss } from "../../../hooks/useOutsideDismiss";
 import { APP_SHELL_OVERLAY_TOP } from "../../appShellLayout";
 import { getMonitoringSellerProfile, type MonitoringSellerProfilePage } from "../../../api";
 import { SellerSales } from "../../../features/sellers/SellerSales";
+import { SellerContacts } from "../../../features/sellers/SellerContacts";
 import { MarketplaceMark } from "../../MarketplaceMark";
 import { monitoringPlatformLabel } from "../../../lib/platforms";
 import "./FindingInspector.css";
@@ -82,5 +83,6 @@ function SellerDetailsFacts({ sellerKey, ipId }: { sellerKey: string; ipId: stri
       <div><dt>Returned listings</dt><dd>{summary.returned_listing_count.toLocaleString()}</dd></div>
     </dl>
     {seller.profile_url && <a href={seller.profile_url} target="_blank" rel="noreferrer" className="monitoring-seller-shop">Marketplace shop ↗</a>}
+    <SellerContacts contacts={seller.contacts} compact />
   </section>;
 }
