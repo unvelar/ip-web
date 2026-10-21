@@ -38,6 +38,40 @@ branch protection if merges should also be blocked before deployment.
 To update dependencies intentionally, run `bun install` and commit `bun.lock`
 alongside `package.json`.
 
+## Conversational review queue search
+
+Use **Monitoring → Review queue** (`/monitoring/tasks`). Its search bar has
+**Search** for literal keywords and **Ask** for explicitly submitted language
+requests. Both use the queue's manual filters, current dates and review results.
+Conversation history is collapsible. Requests such as “L261 codes” use a literal, case-insensitive **Title contains** predicate; L261 also matches longer codes such as L261012. Seller names, descriptions and URLs do not qualify. The condition has an editable/removable chip and remains active during follow-ups. This requires the API policy `literal-title-substring-v1`. Model configuration and credentials stay
+on the API; the MCP stdio package is not bundled in the frontend.
+
+Successful search creation commits the confirmed filter draft in `queue_filters`
+and its saved membership in `task_search`. Catalog ambiguity requires a choice.
+Newer manual edits, scope changes and cancellation invalidate older translations.
+Rejected requests keep the previous confirmed filters and results. Queue-specific
+predicates (marketplace country, seller origin, evidence, source and assignment)
+remain active while language refines the supported listing predicates.
+
+Top N requests select **Group by Seller**, sort by matching article count, and
+save `top_sellers` (1–100). The backend ranks identified sellers over the complete
+search before pagination; it deduplicates canonical listings and breaks ties by
+seller identity. Rankings stay hidden until a background search completes.
+Seller-count thresholds also wait for completion, including when viewing listing
+rows. A limited, failed or cancelled scan cannot claim exact matching counts.
+
+The additive API capability `task-listing-search-v1` enables exact currency bounds,
+listing locations, typed catalog selections and seller counts. Marketplace country
+and listing location have distinct controls and meanings. Advanced requests fail
+closed against older APIs. Searches use the existing bounded task-search scanner;
+they create temporary saved search membership, never investigation jobs. Historical
+FX, canonical catalog membership and same-component semantic predicates reuse the
+listing search contracts. Existing `/monitoring/search` links retain the earlier
+read-only prototype for compatibility; new navigation opens the queue.
+
+Combined image/text similarity, investigation to-dos and the official public `/v1`
+MCP boundary remain separate work. Translation failures never broaden a search.
+
 ## Code organization
 
 - `src/App.tsx`: route definitions and lazy route loading, with a recoverable

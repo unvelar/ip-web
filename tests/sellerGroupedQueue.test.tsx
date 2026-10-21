@@ -9,7 +9,7 @@ let root: Root | undefined;
 const originalFetch=globalThis.fetch;
 afterEach(async()=>{ if(root) await act(async()=>root?.unmount()); root=undefined; globalThis.fetch=originalFetch; });
 
-async function setup(fail=false) {
+async function setup(fail=false, partial=false) {
   const window=new Window({url:"http://localhost:5173"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div"); document.body.replaceChildren(container);
@@ -23,12 +23,12 @@ async function setup(fail=false) {
       const more=url.searchParams.get("offset")==="50";
       return Response.json({rows:[{result_id:more?"second":"first",task_id:more?"second":"first"}],next_offset:more?null:50});
     }
-    return Response.json({groups:[{seller_key:"shop",seller_name:"Shop",article_count:72,priced_article_count:70,exposure_usd:5432.10}],total_groups:99,next_offset:50,partial:false,updating:false});
+    return Response.json({groups:[{seller_key:"shop",seller_name:"Shop",article_count:72,priced_article_count:70,exposure_usd:5432.10}],total_groups:99,next_offset:50,partial,updating:false});
   }) as typeof fetch;
   let query:TaskSellerGroupsQuery={ip_id:"ip",status:"pending",sort:"priority",group_sort:"exposure",search_id:"saved-search"};
   let selected=new Set<string>(); let ungrouped=false; let revision=0;
   root=createRoot(container);
-  const render=()=>root!.render(<SellerGroupedQueue key={JSON.stringify(query)} query={query} revision={String(revision)} selection={selected}
+  const render=()=>root!.render(<SellerGroupedQueue key={JSON.stringify(query)} query={query} requireComplete={partial} topLimit={partial?10:null} revision={String(revision)} selection={selected}
     onSelect={(ids,checked)=>{ selected=new Set(selected); for(const id of ids){if(checked) selected.add(id);else selected.delete(id);} render(); }}
     renderRow={row=><tr key={row.result_id}><td>{row.result_id}</td></tr>}
     onUngroup={()=>{ungrouped=true;}} onOpenGroup={()=>{}} />);
@@ -130,4 +130,12 @@ test("an older API cannot masquerade page counts as global seller totals",async(
   expect(ui.container.querySelector('table')).toBeNull();
   await ui.click('[role="alert"] button:last-child');
   expect(ui.ungrouped()).toBe(true);
+});
+
+
+test("top seller rankings wait for the complete search instead of displaying provisional groups",async()=>{
+  const ui=await setup(false,true);
+  expect(ui.container.querySelector("table")).toBeNull();
+  expect(ui.container.textContent).toContain("ranking will appear when the full search completes");
+  expect(ui.requests).toHaveLength(1);
 });

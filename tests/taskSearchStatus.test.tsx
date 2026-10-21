@@ -8,7 +8,7 @@ import type { TaskSearchResult } from "../src/api/taskQueue";
 let root: Root | undefined;
 afterEach(async () => { if (root) await act(async () => root?.unmount()); root = undefined; });
 
-async function render(state: TaskSearchResult["state"], starting = false, scanned = 5) {
+async function render(state: TaskSearchResult["state"], starting = false, scanned = 5, requiresComplete = false) {
   const window = new Window();
   Object.assign(globalThis, { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement("div");
@@ -16,7 +16,7 @@ async function render(state: TaskSearchResult["state"], starting = false, scanne
   root = createRoot(container);
   let stops = 0;
   await act(async () => root!.render(<TaskSearchStatus
-    search={{ id: "search-one", state, scanned, matched: 0, error: state === "failed" ? "Search timed out" : undefined }}
+    search={{ id: "search-one", state, scanned, matched: 0, requires_complete:requiresComplete, error: state === "failed" ? "Search timed out" : undefined }}
     starting={starting} queueTotal={5264} queueLabel="To triage" stopping={false}
     onStop={() => { stops++; }} onReturn={() => {}}
   />));
@@ -72,4 +72,15 @@ test("a search that fails to start does not claim to have found zero matches", a
   expect(ui.container.querySelector(".task-search-matches")?.textContent).toBe("Results");
   expect(ui.container.textContent).toContain("Search failed");
   expect(ui.container.textContent).not.toContain("0 matches");
+});
+
+
+test("seller thresholds do not present provisional zero counts as results",async()=>{
+  const running=await render("running",false,50,true);
+  expect(running.container.querySelector(".task-search-matches")?.textContent).toBe("Counting seller matches…");
+  expect(running.container.textContent).not.toContain("0 matches");
+  await act(async()=>root?.unmount());root=undefined;
+  const limited=await render("limited",false,50,true);
+  expect(limited.container.querySelector(".task-search-matches")?.textContent).toBe("Seller counts unavailable");
+  expect(limited.container.textContent).toContain("Work limit reached");
 });

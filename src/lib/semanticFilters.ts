@@ -26,10 +26,10 @@ export function semanticFingerprint(value: unknown): string {
   if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${semanticFingerprint(item)}`).join(",")}}`;
   return JSON.stringify(value);
 }
-export function semanticFilterLabel(raw: string): string {
+export function semanticFilterLabel(raw: string, categoryLabels?: Record<string, string>): string {
   const value = readSemanticFilters(raw);
   if (!value) return "Product details";
-  const parts = [...value.colors ?? [], ...value.materials ?? [], ...value.categories ?? [],
+  const parts = [...value.colors ?? [], ...value.materials ?? [], ...value.categories?.map(key => categoryLabels?.[key] ?? (categoryLabels ? "Product type" : key)) ?? [],
     ...value.form_factors ?? [], ...value.identity_facts?.map(fact => fact.value) ?? [],
     ...value.variant_attributes?.map(attribute => attribute.unit === "text" ? attribute.value ?? "" : `${attribute.values?.join(" × ")} ${attribute.unit}`) ?? []];
   return parts.map(part => part.replaceAll("_", " ")).join(" · ") || "Product details";

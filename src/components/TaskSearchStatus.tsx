@@ -30,8 +30,8 @@ export default function TaskSearchStatus({
     <>
       <div className="task-search-status" role="status" aria-live="polite">
         <span className="task-search-matches">
-          {starting || failedBeforeScan ? "Results" : `${search?.matched.toLocaleString() ?? 0} ${search?.matched === 1 ? "match" : "matches"}`}
-          {!starting && !complete && !failedBeforeScan && <> <span>{partial ? "partial" : "so far"}</span></>}
+          {search?.requires_complete && !complete ? partial ? "Seller counts unavailable" : "Counting seller matches…" : starting || failedBeforeScan ? "Results" : `${search?.matched.toLocaleString() ?? 0} ${search?.matched === 1 ? "match" : "matches"}`}
+          {!starting && !complete && !failedBeforeScan && !search?.requires_complete && <> <span>{partial ? "partial" : "so far"}</span></>}
         </span>
         <div className="task-search-progress">
           <span className="task-search-phase">

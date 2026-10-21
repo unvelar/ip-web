@@ -1,8 +1,11 @@
+import { QueueConstraintEditor } from "./QueueConstraintEditor";
+import { QueueSearchBar } from "./QueueSearchBar";
+import { savedTaskSearchValues, taskSearchRequest, type AppliedTaskSearch } from "../lib/taskSearchAssistant";
+import type { SellerRanking } from "../lib/listingSearch";
 import { SemanticFilterPanel } from "./monitoring/board/SemanticFilterPanel";
-import { readSemanticFilters, semanticFilterLabel } from "../lib/semanticFilters";
-import { useCallback, useRef, useState, useEffect, type ReactNode, type SetStateAction } from "react";
+import { semanticFilterLabel } from "../lib/semanticFilters";
+import { useCallback, useMemo, useRef, useState, useEffect, type ReactNode, type SetStateAction } from "react";
 import {
-  Search,
   Plus,
   X,
   ChevronDown,
@@ -43,11 +46,14 @@ type Filter = {
   id: string;
   label: string;
   fields: string[];
-  kind: "select" | "lookup" | "text" | "price" | "history" | "semantic";
+  kind: "select" | "lookup" | "text" | "price" | "history" | "semantic" | "locations" | "count";
   options?: string[][];
   lookup?: "website" | "source" | "seller" | "visual_group";
 };
 const filters: Filter[] = [
+  {id:"title_contains",label:"Title contains",fields:["title_contains"],kind:"text"},
+  { id:"listing_countries", label:"Listing locations",fields:["listing_countries"],kind:"locations" },
+  { id:"seller_listing_count",label:"Matching listings per seller",fields:["seller_listing_count"],kind:"count" },
   { id: "semantic", label: "Product details", fields: ["semantic"], kind: "semantic" },
   {
     id: "website",
@@ -73,7 +79,7 @@ const filters: Filter[] = [
   {
     id: "price",
     label: "Price",
-    fields: ["min_price_usd", "max_price_usd"],
+    fields: ["min_price_usd", "max_price_usd", "listing_price"],
     kind: "price",
   },
   { id: "assignee", label: "Assignee", fields: ["assignee"], kind: "select" },
@@ -140,6 +146,7 @@ export default function TaskSearch({
   members,
   status,
   controls,
+  ranking = null,
   onStart,
   onError,
   onSearching,
@@ -150,11 +157,14 @@ export default function TaskSearch({
   members: TenantMember[];
   status: TaskQueueQuery["status"];
   controls?: ReactNode;
-  onStart: (result: TaskSearchResult) => void;
+  ranking?: SellerRanking | null;
+  onStart: (result: TaskSearchResult, applied: AppliedTaskSearch) => void;
   onError: (error: string) => void;
   onSearching?: (searching: boolean) => void;
 }) {
   const [values, setValues] = useState<Values>(() => {
+    const saved = savedTaskSearchValues(params);
+    if (saved) return saved;
     const initial: Values = {
       q: params.get("q") ?? "",
       from: dateString(-29),
@@ -186,15 +196,22 @@ export default function TaskSearch({
     }
     return initial;
   });
+  const [titleSearch, setTitleSearch] = useState(false);
+  const [extended, setExtended] = useState(false);
   const [labels, setLabels] = useState<Values>({});
   const [panel, setPanel] = useState<string | null>(null);
   const [draft, setDraft] = useState<Values>({});
   const [draftLabel, setDraftLabel] = useState("");
   const [filterQuery, setFilterQuery] = useState("");
+  const rankingLimit = ranking?.limit;
+  const stableRanking = useMemo(() => rankingLimit ? {limit:rankingLimit} : null,[rankingLimit]);
+  const rankingRef = useRef(stableRanking);
+  useEffect(() => { rankingRef.current = stableRanking; },[stableRanking]);
+  const skipAutomatic = useRef<string | null>(null);
   const scope = JSON.stringify([ipId, product, status]);
   const callbacks = useRef({ onStart, onError, onSearching });
   useEffect(() => { callbacks.current = { onStart, onError, onSearching }; });
-  const autoSearch = useRef(false);
+  const autoSearch = useRef(Boolean(params.get("queue_filters")) && !params.has("task_search"));
   const generation = useRef(0);
   const invalidateRequests = useCallback(() => { generation.current++; }, []);
   const activeSearch = useRef<string | null>(params.get("task_search"));
@@ -209,37 +226,46 @@ export default function TaskSearch({
       clearTimeout(debounce.current);
     };
   }, [scope, invalidateRequests]);
+  const savedDraft = params.get("queue_filters");
+  useEffect(() => {
+    if (!savedDraft) return;
+    const saved = savedTaskSearchValues(new URLSearchParams({queue_filters:savedDraft}));
+    if (!saved) return;
+    setValues(current => {
+      if (JSON.stringify(current) === JSON.stringify(saved)) return current;
+      autoSearch.current = false;
+      invalidateRequests();
+      return saved;
+    });
+  },[savedDraft,invalidateRequests]);
+  const previousScope = useRef(scope);
+  useEffect(() => {
+    if (previousScope.current !== scope && savedDraft) autoSearch.current = true;
+    previousScope.current = scope;
+  },[scope,savedDraft]);
   const updateValues = (next: SetStateAction<Values>) => {
     autoSearch.current = true;
     generation.current++;
     callbacks.current.onSearching?.(true);
     setValues(next);
   };
-  const runSearch = useCallback(() => {
+  const runSearch = useCallback((applied?: AppliedTaskSearch, signal?: AbortSignal): Promise<boolean> => {
+    const next = applied ?? { values, status, product, ranking:rankingRef.current };
+    const candidate = next.values;
     clearTimeout(debounce.current);
     autoSearch.current = true;
     const requestGeneration = ++generation.current;
-    const request: Record<string, unknown> = {
-      ip_id: ipId,
-      catalog_product_id: product,
-      status,
-      from: `${values.from}T00:00:00.000Z`,
-      to: `${values.to}T00:00:00.000Z`,
-      history: values.history === "on",
-    };
-    if (values.semantic && !readSemanticFilters(values.semantic)) {
-      callbacks.current.onError("Choose valid product detail filters before searching.");
+    let request: Record<string, unknown>;
+    try { request = taskSearchRequest(candidate, ipId, next.status, next.product); }
+    catch (error) {
+      callbacks.current.onError(error instanceof Error ? error.message : String(error));
       callbacks.current.onSearching?.(false);
-      return;
-    }
-    for (const [field, value] of Object.entries(values)) {
-      if (!value || ["status", "from", "to", "history"].includes(field)) continue;
-      request[field] = field === "semantic" ? JSON.parse(value)
-        : ["min_price_usd", "max_price_usd"].includes(field) ? Number(value) : value;
+      return Promise.resolve(false);
     }
     callbacks.current.onSearching?.(true);
     callbacks.current.onError("");
-    const current = () => latestScope.current === scope && generation.current === requestGeneration;
+    const relevant = () => latestScope.current === scope && generation.current === requestGeneration;
+    const current = () => relevant() && !signal?.aborted;
     const execute = async () => {
       if (!current()) return;
       // The API allows two active searches per account. Replace this form's
@@ -259,23 +285,32 @@ export default function TaskSearch({
         }
         return;
       }
-      callbacks.current.onStart(result);
+      if (applied) {
+        skipAutomatic.current = JSON.stringify([JSON.stringify([ipId,next.product,next.status]),candidate]);
+        setValues(candidate);
+      }
+      callbacks.current.onStart(result, next);
+      return true;
     };
     // Serialize creates as well as cancellation, including slow POST responses.
     const executing = requestQueue.current.then(execute);
-    requestQueue.current = executing.catch(() => {});
-    void executing
+    requestQueue.current = executing.then(() => {}, () => {});
+    return executing
       .catch((error) => {
         if (current()) callbacks.current.onError(error instanceof Error ? error.message : String(error));
+        return false;
       })
-      .finally(() => { if (current()) callbacks.current.onSearching?.(false); });
+      .then(result => result === true)
+      .finally(() => { if (relevant()) callbacks.current.onSearching?.(false); });
   }, [ipId, product, status, scope, values]);
   useEffect(() => {
     if (!autoSearch.current) return;
+    const automaticKey = JSON.stringify([scope,values]);
+    if (skipAutomatic.current === automaticKey) { skipAutomatic.current = null; return; }
     callbacks.current.onSearching?.(true);
-    debounce.current = setTimeout(runSearch, 450);
+    debounce.current = setTimeout(() => void runSearch(), 450);
     return () => clearTimeout(debounce.current);
-  }, [runSearch]);
+  }, [runSearch, scope, values]);
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const close = (restoreFocus = false) => {
@@ -304,7 +339,14 @@ export default function TaskSearch({
         ? [[params.get("protected_term_id") ?? "", "Linked protected term"]]
         : (filter.options ?? []);
   const description = (filter: Filter) => {
+    if (filter.id === "title_contains") return `Title contains: ${values.title_contains}`;
     if (filter.id === "semantic") return semanticFilterLabel(values.semantic);
+    if (filter.id === "listing_countries") { try { return (JSON.parse(values.listing_countries) as string[]).map(code=>new Intl.DisplayNames(["en"],{type:"region"}).of(code)??code).join(" or "); } catch { return "Listing locations"; } }
+    if (filter.id === "seller_listing_count" || filter.id === "price" && values.listing_price) {
+      try { const range=JSON.parse(values[filter.id === "price"?"listing_price":filter.id]); const ops:Record<string,string>={gt:">",gte:"≥",lt:"<",lte:"≤"};
+        return Object.entries(range).filter(([key])=>key!=="currency").map(([key,value])=>`${ops[key]} ${value}`).join(" · ")+(range.currency?` ${range.currency}`:" matching listings / seller");
+      } catch { return filter.label; }
+    }
     if (filter.id === "price") {
       const min = values.min_price_usd,
         max = values.max_price_usd;
@@ -335,6 +377,8 @@ export default function TaskSearch({
   const available = filters.filter(
     (filter) =>
       !isActive(filter, values) &&
+      (titleSearch || filter.id !== "title_contains") &&
+      (extended || !["listing_countries","seller_listing_count"].includes(filter.id)) &&
       (filter.id !== "protected_term_id" || params.get("protected_term_id")),
   );
   const invalidDates = !draft.from || !draft.to || draft.from >= draft.to;
@@ -388,16 +432,8 @@ export default function TaskSearch({
         runSearch();
       }}
     >
-      <div className="task-search-bar">
-        <Search size={18} aria-hidden="true" />
-        <input
-          type="search"
-          aria-label="Search listings or sellers"
-          placeholder="Search listings or sellers…"
-          value={values.q}
-          onChange={(event) => updateValues({ ...values, q: event.target.value })}
-        />
-      </div>
+      <QueueSearchBar onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
+        onChange={q => updateValues({ ...values, q })} onApply={runSearch} />
       <div
         className="task-search-filter-row"
         onKeyDown={(event) => {
@@ -462,6 +498,7 @@ export default function TaskSearch({
               </button>
             </span>
           ))}
+        {values.catalog_selection && <span className="task-search-chip"><span>Catalog selection</span><button type="button" aria-label="Remove catalog selection" onClick={()=>updateValues(current=>({...current,catalog_selection:""}))}><X size={12}/></button></span>}
         <button
           type="button"
           className="task-search-filter-trigger task-search-add"
@@ -580,8 +617,12 @@ export default function TaskSearch({
                   ) && <p>No more matching filters.</p>}
                 </div>
               </>
+            ) : activeFilter?.kind === "locations" || activeFilter?.kind === "count" || activeFilter?.id === "price" && values.listing_price ? (
+              <QueueConstraintEditor key={activeFilter.id} kind={activeFilter.kind === "locations" ? "locations" : activeFilter.kind === "count" ? "count" : "price"}
+                value={values[activeFilter.id === "price" ? "listing_price" : activeFilter.id] ?? ""}
+                onCancel={() => close(true)} onApply={value => { updateValues(current => ({...current,[activeFilter.id === "price" ? "listing_price" : activeFilter.id]:value})); close(true); }}/>
             ) : activeFilter?.kind === "semantic" ? (
-              <SemanticFilterPanel value={values.semantic} ipId={ipId} onApply={semantic => { setValues(current => ({ ...current, semantic: semantic ?? "" })); close(true); }} />
+              <SemanticFilterPanel value={values.semantic} ipId={ipId} onApply={semantic => { updateValues(current => ({ ...current, semantic: semantic ?? "" })); close(true); }} />
             ) : (
               <>
                 <div className="task-search-editor" key={panel}>
@@ -691,7 +732,7 @@ export default function TaskSearch({
                           autoFocus
                           maxLength={100}
                           value={draft[activeFilter.id] ?? ""}
-                          placeholder="Country name or two-letter code"
+                          placeholder={activeFilter.id === "title_contains" ? "Text or code anywhere in the title" : "Country name or two-letter code"}
                           aria-describedby={`task-search-${activeFilter.id}-help`}
                           onChange={(event) =>
                             setDraft({ ...draft, [activeFilter.id]: event.target.value })
@@ -699,7 +740,7 @@ export default function TaskSearch({
                         />
                       </label>
                       <p id={`task-search-${activeFilter.id}-help`}>
-                        {activeFilter.id === "country"
+                        {activeFilter.id === "title_contains" ? "Matches this text anywhere in listing titles, including longer codes. Case-insensitive; seller names and URLs are excluded." : activeFilter.id === "country"
                           ? "Filter by the country assigned to the marketplace or storefront."
                           : 'Filter by the seller\'s recorded country. Enter "Unknown" for sellers without a known origin.'}
                       </p>

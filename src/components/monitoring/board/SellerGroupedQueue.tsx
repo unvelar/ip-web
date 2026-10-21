@@ -12,8 +12,10 @@ const message = (error: unknown) => isApiError(error, 404)
   ? "Seller totals are unavailable. Try again or view ungrouped tasks."
   : error instanceof Error ? error.message : "Could not load seller totals.";
 
-export function SellerGroupedQueue({ query, revision, selection, onSelect, renderRow, onUngroup, onOpenGroup, activeFindingId }: {
+export function SellerGroupedQueue({ query, revision, selection, onSelect, renderRow, onUngroup, onOpenGroup, activeFindingId, topLimit = null, requireComplete = false }: {
   query: TaskSellerGroupsQuery;
+  topLimit?: number | null;
+  requireComplete?: boolean;
   revision: string;
   selection: Set<string>;
   onSelect: (ids: string[], selected: boolean) => void;
@@ -80,7 +82,8 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
       .catch(reason => { if (!controller.signal.aborted) setError(message(reason)); });
     return () => controller.abort();
   }, [key, scope, offset, revision, retry]);
-  const groups: MonitoringListingGroup<TaskSummary>[] = (page?.groups ?? []).map(group => {
+  const completePage = requireComplete && page?.partial ? null : page;
+  const groups: MonitoringListingGroup<TaskSummary>[] = (completePage?.groups ?? []).map(group => {
     const key = group.seller_key ? `seller:${group.seller_key}` : "seller:unidentified";
     return { key, kind:"seller", label:group.seller_key ? group.seller_name : "Seller identity unavailable",
       findings:members[key]?.rows ?? [], sellerKey:group.seller_key, ipId:query.ip_id, productId:null,
@@ -103,11 +106,11 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
     }
   }
   return <div className="monitoring-results-queue" aria-busy={!page && !error}>
-    <div className="monitoring-results-summary"><span>{page ? `${page.total_groups.toLocaleString()} seller groups · ${page.partial ? "Totals cover matches found so far" : "Totals cover all matching tasks across pages"}` : error ? "Seller totals unavailable" : "Loading seller totals…"}</span></div>
+    <div className="monitoring-results-summary"><span>{page ? `${topLimit ? `Top ${Math.min(topLimit,page.total_groups)} of ` : ""}${page.total_groups.toLocaleString()} seller groups · ${page.partial ? "Search incomplete" : "Totals cover all matching tasks across pages"}` : error ? "Seller totals unavailable" : "Loading seller totals…"}</span></div>
     {error && <p className="task-queue-notice" role="alert">{error} <button onClick={() => setRetry(value => value + 1)}>Retry</button> · <button onClick={onUngroup}>Ungroup tasks</button></p>}
-    {page?.partial && <p className="task-queue-notice" role="status">Search results are incomplete. Seller totals and ranking cover matches found so far.</p>}
+    {page?.partial && <p className="task-queue-notice" role="status">{requireComplete ? "The ranking will appear when the full search completes. Narrow the dates or filters if the search reaches its limit." : "Search results are incomplete. Seller totals and ranking cover matches found so far."}</p>}
     {page?.updating && <p className="task-queue-notice" role="status">Tasks are updating. Seller totals may lag recent changes.</p>}
-    {page && <>
+    {completePage && <>
       <table className="monitoring-result-list" aria-label="Monitoring tasks grouped by seller">
         <colgroup><col className="monitoring-checkbox-column" /><col /><col className="monitoring-price-column" /><col className="monitoring-assessment-column" /></colgroup>
         <thead><tr><th colSpan={4} scope="colgroup"><div className="monitoring-seller-columns"><span>Seller / articles</span><span>Exposure (USD)</span></div></th></tr></thead>
@@ -122,7 +125,7 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
           </td></tr>} />
       </table>
       {groups.length === 0 && <div className="monitoring-results-empty"><p>No sellers match this view.</p></div>}
-      <div className="monitoring-results-pagination"><button disabled={offset === 0} onClick={() => { setOffset(Math.max(0,offset - 50)); onSelect([...selection],false); }}>Previous sellers</button><span>Page {Math.floor(offset / 50) + 1}</span><button disabled={page.next_offset === null} onClick={() => { setOffset(page.next_offset!); onSelect([...selection],false); }}>Next sellers</button></div>
+      <div className="monitoring-results-pagination"><button disabled={offset === 0} onClick={() => { setOffset(Math.max(0,offset - 50)); onSelect([...selection],false); }}>Previous sellers</button><span>Page {Math.floor(offset / 50) + 1}</span><button disabled={completePage.next_offset === null} onClick={() => { setOffset(completePage.next_offset!); onSelect([...selection],false); }}>Next sellers</button></div>
     </>}
     {active && !activeFindingId && <MonitoringGroupDetails group={active} scope="matching" onClose={close} />}
   </div>;

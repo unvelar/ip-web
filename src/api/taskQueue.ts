@@ -74,6 +74,8 @@ export interface TaskCapability {
   as_of: string | null;
   updating: boolean;
   reason: string | null;
+  listing_search_policy_version?: string;
+  title_search_policy_version?: string;
 }
 export interface TaskPage {
   rows: TaskSummary[];
@@ -89,6 +91,7 @@ export interface TaskSearchResult {
   scanned: string | number;
   matched: number;
   error?: string | null;
+  requires_complete?: boolean;
   rows?: TaskSummary[];
   next?: number | null;
 }
@@ -115,6 +118,7 @@ export interface TaskSellerGroupListingsPage {
 }
 export type TaskSellerGroupsQuery = Omit<TaskQueueQuery, "cursor"> & {
   search_id?: string;
+  ranking_limit?: number;
   group_sort: SellerGroupSort;
   offset?: number;
 };

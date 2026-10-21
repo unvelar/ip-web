@@ -102,6 +102,7 @@ function AppShellContent() {
   const { pathname, hash } = useLocation();
   const toolbarPath = pathname.replace(/\/$/, "");
   const unifiedMonitoringToolbar = toolbarPath === "/monitoring/products" ||
+    toolbarPath === "/monitoring/search" ||
     toolbarPath === "/monitoring/sellers" || toolbarPath === "/monitoring/tasks" ||
     pathname.startsWith("/monitoring/tasks/");
   const [monitoringCount, setMonitoringCount] = useState(0);
@@ -264,6 +265,7 @@ function AppShellContent() {
             active={isActive("/monitoring/setup")}
             collapsed={collapsed}
           />
+
         </NavGroup>
 
         </nav>

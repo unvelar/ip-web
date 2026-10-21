@@ -1,3 +1,4 @@
+import { queueSearchParams } from "../lib/taskSearchAssistant";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ImageOff } from "lucide-react";
@@ -247,7 +248,8 @@ export default function TaskQueue({
   const groupBy = parseMonitoringGroupBy(params.get("group_by"));
   const sellerSort = (["exposure", "articles", "priority", "newest"].includes(params.get("group_sort") ?? "")
     ? params.get("group_sort") : "exposure") as SellerGroupSort;
-  const sellerQuery = { ...query, group_sort: sellerSort, ...(urlSearchId ? { search_id:urlSearchId } : {}) };
+  const topSellers = /^([1-9]\d?|100)$/.test(params.get("top_sellers") ?? "") ? Number(params.get("top_sellers")) : null;
+  const sellerQuery = { ...query, group_sort: sellerSort, ...(topSellers ? { ranking_limit:topSellers } : {}), ...(urlSearchId ? { search_id:urlSearchId } : {}) };
   const productGroups = useTaskProductIdentities(
     groupBy === "product",
     ipId,
@@ -275,6 +277,8 @@ export default function TaskQueue({
   function returnToQueue() {
     const next = new URLSearchParams(params);
     next.delete("task_search");
+    next.delete("queue_filters");
+    next.delete("top_sellers");
     setSearch(null);
     setSearchStarting(false);
     setSearchReset((value) => value + 1);
@@ -645,6 +649,7 @@ export default function TaskQueue({
           params={params}
           members={members}
           status={query.status}
+          ranking={topSellers ? {limit:topSellers} : null}
           controls={
             <div className="task-search-scope">
               <button
@@ -671,6 +676,7 @@ export default function TaskQueue({
                   Clear product
                 </button>
               )}
+              {topSellers && <span className="task-search-chip"><span>Top {topSellers} sellers</span><button type="button" aria-label="Remove top seller limit" onClick={()=>{const next=new URLSearchParams(params);next.delete("top_sellers");setParams(next);}}>×</button></span>}
               <label>
                 Group by
                 <select
@@ -678,6 +684,7 @@ export default function TaskQueue({
                   value={groupBy}
                   onChange={(event) => {
                     const next = new URLSearchParams(params);
+                    next.delete("top_sellers");
                     if (event.target.value === "none") next.delete("group_by");
                     else next.set("group_by", event.target.value);
                     closeGroup();
@@ -699,6 +706,7 @@ export default function TaskQueue({
                     onChange={(event) => {
                       if (groupBy !== "seller") { change({ queue_sort:event.target.value }); return; }
                       const next = new URLSearchParams(params);
+                      next.delete("top_sellers");
                       next.set("group_sort",event.target.value);
                       if (["priority","newest"].includes(event.target.value)) next.set("queue_sort",event.target.value);
                       setSelection(new Set());
@@ -713,26 +721,15 @@ export default function TaskQueue({
               )}
             </div>
           }
-          onStart={(result) => {
+          onStart={(result, applied) => {
             setSearch(result);
-            const next = new URLSearchParams(params);
-            if (result.id) next.set("task_search", result.id);
-            else next.delete("task_search");
-            setParams(next);
+            setSearchStarting(false);
+            setParams(queueSearchParams(params, applied, result.id));
             setSearchAfter(0);
             setSearchStack([]);
             setSelection(new Set());
           }}
-          onError={(message) => {
-            setError(message);
-            if (message) {
-              searchPoll.current?.abort();
-              setSearch({ id: null, state: "failed", scanned: 0, matched: 0 });
-              const next = new URLSearchParams(params);
-              next.delete("task_search");
-              setParams(next);
-            }
-          }}
+          onError={setError}
           onSearching={(starting) => {
             setSearchStarting(starting);
             if (starting) {
@@ -831,9 +828,9 @@ export default function TaskQueue({
           </>
         ) : groupBy === "seller" && !searchStarting && (!search || Boolean(search.id)) ? (
           <>
-            <SellerGroupedQueue key={`${JSON.stringify(sellerQuery)}:${queueReset}`}
+            <SellerGroupedQueue topLimit={topSellers} requireComplete={Boolean(topSellers)} key={`${JSON.stringify(sellerQuery)}:${queueReset}`}
               query={sellerQuery} revision={`${revision}:${search?.matched}:${search?.state}`} selection={selection} renderRow={renderTaskRow} activeFindingId={taskId}
-              onUngroup={() => { const next = new URLSearchParams(params); next.delete("group_by"); setParams(next); }}
+              onUngroup={() => { const next = new URLSearchParams(params); next.delete("group_by"); next.delete("top_sellers"); setParams(next); }}
               onOpenGroup={() => { closeGroup(); if (taskId) open(null); }}
               onSelect={(ids, selected) => setSelection(previous => { const next = new Set(previous); for (const id of ids) { if (selected) next.add(id); else next.delete(id); } return next; })} />
           </>

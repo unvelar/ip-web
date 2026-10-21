@@ -1,0 +1,103 @@
+import { afterEach, expect, test } from "bun:test";
+import { Window } from "happy-dom";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import TaskSearch from "../src/components/TaskSearch";
+import { emptyListingFilters, type ListingFilters } from "../src/lib/listingSearch";
+import { queueSearchParams, taskAssistantFilters, taskSearchRequest, type AppliedTaskSearch } from "../src/lib/taskSearchAssistant";
+const ip="10000000-0000-4000-8000-000000000001";
+const originalFetch=globalThis.fetch;
+let root:Root|undefined;
+afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
+async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean}={}) {
+  const window=new Window({url:"http://localhost:5174"});
+  Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
+  const container=document.createElement("div");document.body.replaceChildren(container);
+  const requests:Array<{path:string;body:Record<string,unknown>}> = [];
+  const cancelled:string[]=[];
+  const applied:AppliedTaskSearch[]=[];const errors:string[]=[];
+  let release:((response:Response)=>void)|undefined;
+  const filters:ListingFilters=options.title?{...emptyListingFilters(ip),query:"old",title_contains:"L261"}:{...emptyListingFilters(ip),semantic:{categories:["miniature"]},seller_listing_count:{gt:10},countries:["CN","FR"],price:{currency:"EUR",lt:"40"}};
+  const translated=()=>Response.json({version:1,jobs_started:0,filters,query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
+  globalThis.fetch=(async(input,init)=>{
+    const url=new URL(String(input),"http://localhost:5174");
+    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,country_labels:{CN:"China",FR:"France"}});
+    if(url.pathname.endsWith("/tasks/capability"))return Response.json({active:true,ready:true,...(options.titleSupported===false?{}:{title_search_policy_version:"literal-title-substring-v1"}),...(options.extended===false?{}:{listing_search_policy_version:"task-listing-search-v1"})});
+    if(init?.method==="DELETE"){cancelled.push(url.pathname);return new Response(null,{status:204});}
+    const body=JSON.parse(String(init?.body));requests.push({path:url.pathname,body});
+    if(url.pathname.endsWith("/translate"))return options.hold?await new Promise<Response>(resolve=>{release=resolve;}):translated();
+    if(url.pathname.endsWith("/searches"))return options.holdCreation?await new Promise<Response>(resolve=>{release=resolve;}):options.fail?Response.json({error:"Search temporarily unavailable"},{status:503}):Response.json({id:"saved-search",state:"pending",scanned:0,matched:0});
+    return Response.json({options:[]});
+  }) as typeof fetch;
+  let params=new URLSearchParams("country=Spain&source=source-one&q=old&history=on");
+  root=createRoot(container);
+  const render=()=>root!.render(<TaskSearch ipId={ip} status="pending" params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
+  await act(async()=>render());
+  const button=(name:string)=>[...container.querySelectorAll<HTMLButtonElement>("button")].find(el=>el.getAttribute("aria-label")===name||el.textContent?.trim()===name)!;
+  const click=async(name:string)=>{await act(async()=>button(name).click());};
+  const fill=async(label:string,value:string)=>{
+    const input=container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+    await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value")!.set!.call(input,value);input.dispatchEvent(new window.Event("input",{bubbles:true}));input.dispatchEvent(new window.Event("change",{bubbles:true}));});
+  };
+  return {container,requests,applied,errors,cancelled,params:()=>params,click,fill,release:async()=>{await act(async()=>release?.(options.holdCreation?Response.json({id:"cancelled-search",state:"pending",scanned:0,matched:0}):translated()));},settle:async()=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,500));});}};
+}
+
+test("Ask submits only explicitly and commits the same scoped filters, dates and seller view once",async()=>{
+  const ui=await setup();await ui.click("Ask");await ui.fill("Ask about listings","Top 10 miniature sellers under 40 euros in China or France with more than 10 matches");
+  expect(ui.requests).toHaveLength(0);
+  await ui.click("Apply assistant search");
+  expect(ui.requests.map(item=>item.path)).toEqual(["/api/monitoring/listings/translate","/api/monitoring/tasks/searches"]);
+  expect(ui.requests[1].body).toMatchObject({ip_id:ip,status:"pending",country:"Spain",source:"source-one",semantic:{categories:["miniature"]},listing_constraints:{countries:["CN","FR"],price:{currency:"EUR",lt:"40"},seller_listing_count:{gt:10}}});
+  expect(ui.requests[1].body.from).toBeDefined();expect(ui.requests[1].body.to).toBeDefined();
+  expect(ui.params().get("group_by")).toBe("seller");expect(ui.params().get("group_sort")).toBe("articles");expect(ui.params().get("top_sellers")).toBe("10");
+  expect(ui.container.textContent).toContain("< 40 EUR");expect(ui.container.textContent).toContain("> 10 matching listings / seller");
+  await ui.settle();expect(ui.requests).toHaveLength(2);
+  await ui.click("Search");expect(ui.container.querySelector('input[aria-label="Search listings or sellers"]')).not.toBeNull();
+});
+test("an older server keeps advanced translated filters out of the queue",async()=>{
+  const ui=await setup({extended:false});await ui.click("Ask");await ui.fill("Ask about listings","Find sellers with more than 10 matches");await ui.click("Apply assistant search");
+  expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");expect(ui.container.textContent).toContain("not available in this queue yet");
+});
+test("unsupported requests clarify without changing filters or launching a search",async()=>{
+  const ui=await setup({clarify:true});await ui.click("Ask");await ui.fill("Ask about listings","Ships to France");await ui.click("Apply assistant search");
+  expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.container.textContent).toContain("Shipping destinations");expect(ui.container.textContent).toContain("Your filters were kept");
+});
+test("a manual edit invalidates an in-flight assistant translation",async()=>{
+  const ui=await setup({hold:true});await ui.click("Ask");await ui.fill("Ask about listings","top sellers");await ui.click("Apply assistant search");
+  await ui.click("Search");await ui.fill("Search listings or sellers","new literal");await ui.release();
+  expect(ui.applied).toHaveLength(0);await ui.settle();expect(ui.applied).toHaveLength(1);expect(ui.requests.at(-1)?.body.q).toBe("new literal");expect(ui.requests.at(-1)?.body).not.toHaveProperty("listing_constraints");
+});
+test("a rejected search leaves confirmed controls and URL unchanged",async()=>{
+  const ui=await setup({fail:true});await ui.click("Ask");await ui.fill("Ask about listings","top sellers");await ui.click("Apply assistant search");
+  expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");expect(ui.container.textContent).not.toContain("< 40 EUR");expect(ui.container.textContent).toContain("latest request was not applied");expect(ui.errors).toHaveLength(1);
+});
+test("manual and translated constraints have one canonical request meaning",()=>{
+  const values={q:"figure",from:"2026-10-01",to:"2026-10-21",min_price_usd:"0",max_price_usd:"10",country:"Spain",seller_origin:"China",semantic:'{"colors":["red"]}',seller_listing_count:'{"gte":10,"lt":20}'};
+  const filters=taskAssistantFilters(values,ip,"pending");expect(filters.price).toEqual({currency:"USD",gte:"0",lte:"10"});expect(filters.countries).toEqual([]);
+  expect(taskSearchRequest(values,ip,"pending")).toMatchObject({country:"Spain",seller_origin:"China",listing_constraints:{seller_listing_count:{gte:10,lt:20}}});
+});
+
+
+test("cancelling while a saved-search create is pending discards and cancels its acknowledgement",async()=>{
+  const ui=await setup({holdCreation:true});await ui.click("Ask");await ui.fill("Ask about listings","top sellers");await ui.click("Apply assistant search");
+  expect(ui.requests).toHaveLength(2);
+  await ui.click("Cancel assistant request");await ui.release();
+  expect(ui.applied).toHaveLength(0);expect(ui.cancelled).toEqual(["/api/monitoring/tasks/searches/cancelled-search"]);
+  expect(ui.params().get("q")).toBe("old");
+});
+
+
+test("code requests become removable title-only filters without replacing other queue conditions",async()=>{
+  const ui=await setup({title:true});await ui.click("Ask");await ui.fill("Ask about listings","L261 codes");await ui.click("Apply assistant search");
+  expect(ui.requests.at(-1)?.body).toMatchObject({q:"old",country:"Spain",source:"source-one",listing_constraints:{title_contains:"L261"}});
+  expect(ui.params().get("top_sellers")).toBeNull();
+  expect(ui.container.textContent).toContain("Title contains: L261");
+  await ui.click("Remove title contains filter");await ui.settle();
+  expect(ui.requests.at(-1)?.body).not.toHaveProperty("listing_constraints");
+  expect(ui.requests.at(-1)?.body).toMatchObject({q:"old",country:"Spain",source:"source-one"});
+});
+test("title-only filters cannot silently become a broad text search on older APIs",async()=>{
+  const ui=await setup({title:true,titleSupported:false});await ui.click("Ask");await ui.fill("Ask about listings","L261 codes");await ui.click("Apply assistant search");
+  expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");
+  expect(ui.container.textContent).toContain("Title filtering is not available");
+});

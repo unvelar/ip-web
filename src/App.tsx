@@ -16,6 +16,7 @@ const ClearanceTasks = lazy(() => import("./pages/ClearanceTasks"));
 const IpReviewDetail = lazy(() => import("./pages/IpReviewDetail"));
 const Findings = lazy(() => import("./pages/Findings"));
 const MonitoringTasks = lazy(() => import("./pages/MonitoringTasks"));
+const ListingSearch = lazy(() => import("./pages/ListingSearch"));
 const MonitoringFirstScan = lazy(() => import("./pages/MonitoringFirstScan"));
 const MonitoringCampaigns = lazy(() => import("./pages/MonitoringCampaigns"));
 const ProductLab = lazy(() => import("./pages/ProductLabV2"));
@@ -166,6 +167,7 @@ export default function App() {
           <Route path="/ips/:id/audit" element={<RegistryAudit />} />
           {/* Canonical task/admin entrypoints for each pipeline. */}
           <Route path="/monitoring/tasks" element={<MonitoringTasks />} />
+          <Route path="/monitoring/search" element={<ListingSearch />} />
           <Route path="/monitoring/tasks/:taskId" element={<MonitoringTasks />} />
           <Route path="/monitoring/first-scan" element={<MonitoringFirstScan />} />
           <Route path="/monitoring/campaigns" element={<MonitoringCampaigns />} />

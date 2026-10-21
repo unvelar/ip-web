@@ -430,6 +430,7 @@ export function MonitoringInboxView() {
     <>
       <MonitoringToolbar title="Monitoring" onRefresh={() => refresh()} refreshing={!loaded || updating}
         actions={<details className="monitoring-workspace-tools"><summary>Tools</summary><div>
+          <Link to={`/monitoring/tasks?ask=1${activeIpId ? `&ip_id=${encodeURIComponent(activeIpId)}` : ""}`}>Ask listings</Link>
           <Link to={`/monitoring/sellers${location.search}`}>Seller history</Link>
           <Link to={`/monitoring/products${activeIpId ? `?ip_id=${encodeURIComponent(activeIpId)}` : ""}`}>Product grouping &amp; rules</Link>
         </div></details>}>
