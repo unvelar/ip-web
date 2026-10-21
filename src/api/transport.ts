@@ -54,7 +54,7 @@ export function authHeaders(headers: Record<string, string>) {
 }
 
 /** Read requests have a deadline; mutations are never retried automatically. */
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit, options: {readTimeoutMs?:number} = {}): Promise<T> {
   const headers = new Headers(init?.headers);
   const credentials: Record<string, string> = {};
   authHeaders(credentials);
@@ -76,6 +76,6 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   };
   const method = (init?.method ?? "GET").toUpperCase();
   return method === "GET" || method === "HEAD"
-    ? withRequestTimeout(send, { signal: init?.signal ?? undefined, timeoutMs: 15_000 })
+    ? withRequestTimeout(send, { signal: init?.signal ?? undefined, timeoutMs: options.readTimeoutMs ?? 15_000 })
     : send(init?.signal ?? undefined);
 }

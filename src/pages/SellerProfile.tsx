@@ -2,6 +2,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { SellerListings } from "../features/sellers/SellerListings";
 import { SellerProfileHeader } from "../features/sellers/SellerProfileHeader";
+import { SellerIntelligence } from "../features/sellers/SellerIntelligence";
 import { sellerListingFilters, writeSellerListingFilters } from "../features/sellers/filters";
 import "../features/sellers/sellers.css";
 
@@ -34,6 +35,7 @@ export default function SellerProfile() {
         }}
         renderHeader={(profile,onChanged) => <SellerProfileHeader profile={profile} onChanged={onChanged} ipId={ipId}/>}
       />
+      <SellerIntelligence sellerKey={sellerKey}/>
     </div>
   );
 }
