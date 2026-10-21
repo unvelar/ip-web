@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { DEFAULT_PRODUCT_SEMANTIC_COLORS, getProductSemanticTaxonomy, type ProductSemanticCategory } from "../../../api/products";
-import { readSemanticFilters, type SemanticFilters } from "../../../lib/semanticFilters";
+import { useState } from "react";
+import { DEFAULT_PRODUCT_SEMANTIC_COLORS } from "../../../api/products";
+import { readSemanticFilters, semanticCategoryLabel, type SemanticFilters } from "../../../lib/semanticFilters";
+import { useProductSemanticTaxonomy } from "../../../hooks/useProductSemanticTaxonomy";
 import "./SemanticFilterPanel.css";
 
 const factKinds = ["brand", "maker", "product_name", "model", "part_number", "function", "compatibility", "formula", "contents", "specification", "edition"];
@@ -14,16 +15,11 @@ export function SemanticFilterPanel({ value, ipId, available = true, onApply }: 
   const [initial] = useState(() => readSemanticFilters(value) ?? {});
   const [colors, setColors] = useState(initial.colors ?? []);
   const [categories, setCategories] = useState(initial.categories ?? []);
-  const [taxonomy, setTaxonomy] = useState<ProductSemanticCategory[]>([]);
+  const { categories: taxonomy, labels: categoryLabels } = useProductSemanticTaxonomy(ipId, categories, true);
   const [material, setMaterial] = useState(initial.materials?.join(", ") ?? "");
   const [form, setForm] = useState(initial.form_factors?.join(", ") ?? "");
   const [facts, setFacts] = useState(initial.identity_facts ?? []);
   const [variants, setVariants] = useState(() => initial.variant_attributes?.map(item => ({ key: item.key, value: item.unit === "text" ? item.value ?? "" : item.values?.join(", ") ?? "" })) ?? []);
-  useEffect(() => {
-    let active = true;
-    if (ipId) void getProductSemanticTaxonomy(ipId).then(result => { if (active) setTaxonomy(result.categories); }).catch(() => {});
-    return () => { active = false; };
-  }, [ipId]);
   const semantic: SemanticFilters = {};
   if (colors.length) semantic.colors = colors;
   if (categories.length) semantic.categories = categories;
@@ -38,13 +34,13 @@ export function SemanticFilterPanel({ value, ipId, available = true, onApply }: 
     || semantic.variant_attributes?.some(item => item.unit === "text" ? !item.value || item.value.length > 240
       : !item.values || item.values.some(value => !Number.isFinite(value) || value <= 0 || value > 1e9 || item.unit === "count" && !Number.isInteger(value))
         || (item.key === "dimensions" ? item.values.length < 2 || item.values.length > 3 : item.values.length !== 1));
-  const categoryOptions = [...taxonomy, ...categories.filter(key => !taxonomy.some(item => item.key === key)).map(key => ({ key, label: label(key), supports_color_variants: true }))];
+  const categoryOptions = [...taxonomy, ...categories.filter(key => !taxonomy.some(item => item.key === key)).map(key => ({ key, label: semanticCategoryLabel(key, categoryLabels), supports_color_variants: true }))];
   return <div className="semantic-filter-panel">
     <p>Match product details recorded in the listing. Combine fields to narrow results; listings without those details are excluded.</p>
     {!available && <p role="status">Product detail filtering is not available yet.</p>}
     <fieldset disabled={!available}><legend>Offered colors</legend><div className="semantic-color-options">{DEFAULT_PRODUCT_SEMANTIC_COLORS.map(color => <button key={color.key} type="button" aria-pressed={colors.includes(color.key)} onClick={() => setColors(current => current.includes(color.key) ? current.filter(key => key !== color.key) : [...current, color.key])}>{color.label}</button>)}</div></fieldset>
     <label>Product type<select value="" disabled={!available || categories.length >= 20} onChange={event => { if (event.target.value && !categories.includes(event.target.value)) setCategories([...categories, event.target.value]); }}><option value="">{categoryOptions.length ? "Choose a type…" : "Select a brand to choose types"}</option>{categoryOptions.filter(item => !categories.includes(item.key)).map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
-    {categories.length > 0 && <div className="semantic-color-options">{categories.map(key => <button key={key} type="button" aria-label={`Remove ${categoryOptions.find(item => item.key === key)?.label ?? label(key)} type`} onClick={() => setCategories(categories.filter(item => item !== key))}>{categoryOptions.find(item => item.key === key)?.label ?? label(key)} ×</button>)}</div>}
+    {categories.length > 0 && <div className="semantic-color-options">{categories.map(key => <button key={key} type="button" aria-label={`Remove ${semanticCategoryLabel(key, categoryLabels)} type`} onClick={() => setCategories(categories.filter(item => item !== key))}>{semanticCategoryLabel(key, categoryLabels)} ×</button>)}</div>}
     <label>Material<input autoFocus disabled={!available} value={material} placeholder="Cotton, polyester…" onChange={event => setMaterial(event.target.value)} /><span>Separate alternatives with commas.</span></label>
     <label>Product form<input disabled={!available} value={form} placeholder="Jersey, bottle…" onChange={event => setForm(event.target.value)} /></label>
     {facts.map((fact, index) => <div className="semantic-detail-row" key={index}><label>Identity detail<select value={fact.kind} onChange={event => setFacts(facts.map((item, i) => i === index ? { ...item, kind: event.target.value } : item))}>{factKinds.map(kind => <option key={kind} value={kind}>{label(kind)}</option>)}</select></label><label>Exact value<input value={fact.value} maxLength={240} placeholder={fact.kind === "edition" ? "Away 2026" : "Value…"} onChange={event => setFacts(facts.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} /></label><button type="button" aria-label={`Remove identity detail ${index + 1}`} onClick={() => setFacts(facts.filter((_, i) => i !== index))}>Remove</button></div>)}

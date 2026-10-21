@@ -5,7 +5,7 @@ import MonitoringToolbar from "../components/MonitoringToolbar";
 import { SemanticFilterPanel } from "../components/monitoring/board/SemanticFilterPanel";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { useAuth } from "../context/AuthContext";
-import { getProductSemanticTaxonomy } from "../api/products";
+import { useProductSemanticTaxonomy } from "../hooks/useProductSemanticTaxonomy";
 import { listingCapability, rankSellers, resolveListingCatalog, searchListings, translateListingSearch, type CatalogMatch, type ListingPage } from "../api/listingSearch";
 import { listingSearchKey, parseSellerRanking, type SellerRanking, listingSearchParams, listingStatuses, parseListingFilters, readListingSearch, type ListingFilters, type ListingPrice } from "../lib/listingSearch";
 import { readSemanticFilters, semanticFilterLabel } from "../lib/semanticFilters";
@@ -69,8 +69,7 @@ function SearchWorkspace({ ipId, ipName }: { ipId: string; ipName: string }) {
   currentKey.current = filterKey;
   const [capability, setCapability] = useState<Awaited<ReturnType<typeof listingCapability>> | null>(null);
   const [capabilityError, setCapabilityError] = useState("");
-  const [categoryLabels, setCategoryLabels] = useState<Record<string,string>>({});
-  const typeKeys = filters.semantic?.categories?.join(",") ?? "";
+  const { labels: categoryLabels } = useProductSemanticTaxonomy(ipId, filters.semantic?.categories);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [result, setResult] = useState<{ key: string; page: ListingPage } | null>(null);
@@ -100,16 +99,6 @@ function SearchWorkspace({ ipId, ipName }: { ipId: string; ipName: string }) {
     });
     return () => controller.abort();
   }, []);
-
-  useEffect(() => {
-    if (!typeKeys) return;
-    let active=true;
-    void getProductSemanticTaxonomy(ipId).then(value => {
-      if (!active || !value || !Array.isArray(value.categories)) return;
-      setCategoryLabels(Object.fromEntries(value.categories.filter(item => item && typeof item.key === "string" && typeof item.label === "string" && item.label.length > 0 && item.label.length <= 120).map(item=>[item.key,item.label])));
-    }).catch(()=>{});
-    return ()=>{active=false;};
-  },[ipId,typeKeys]);
 
   function begin(label: string) {
     request.current?.abort();

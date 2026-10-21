@@ -461,12 +461,13 @@ export function listProductClusterScopes(signal?: AbortSignal) {
   return request<{ scopes: ProductClusterScope[] }>("/api/product-clusters/scopes", { signal });
 }
 
-export function getProductSemanticTaxonomy(ipId: string) {
+export function getProductSemanticTaxonomy(ipId: string, signal?: AbortSignal) {
   return request<{
     categories: ProductSemanticCategory[];
     colors?: ProductSemanticColor[];
   }>(
     `/api/product-clusters/${encodeURIComponent(ipId)}/semantic-taxonomy`,
+    { signal },
   );
 }
 
