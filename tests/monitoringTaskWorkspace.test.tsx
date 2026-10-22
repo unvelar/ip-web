@@ -37,12 +37,12 @@ test('Listings restores the manual search; AI chats preserve independent history
  await ui.click('AI searchNew');expect(ui.host.querySelector('textarea')).not.toBeNull();expect(ui.host.querySelector('.task-search-modes')).toBeNull();expect(ui.host.querySelector('.task-search-filter-row')?.hasAttribute('hidden')).toBe(true);expect(ui.host.textContent).toContain('A place for your findings');
  await ui.fill('First question');await ui.click('Send message');expect(ui.host.textContent).toContain('Which category should I use?');await ui.fill('Follow-up draft');
  await ui.click('New chat');expect(ui.host.querySelector('textarea')?.value).toBe('');await ui.fill('Second question');await ui.click('Send message');
- await ui.click('First question');expect(ui.host.querySelector('textarea')?.value).toBe('Follow-up draft');expect(ui.host.querySelector('[aria-label="Clarification answers"]')).not.toBeNull();
+ await ui.click('History');await ui.click('First question');expect(ui.host.querySelector('textarea')?.value).toBe('Follow-up draft');expect(ui.host.querySelector('[aria-label="Clarification answers"]')).not.toBeNull();
  localStorage.setItem(aiHistoryKey('owner','tenant','10000000-0000-4000-8000-000000000001')+':listings','ip_id=foreign&task_search=foreign');
- await ui.remount();expect(ui.host.querySelector('textarea')?.value).toBe('Follow-up draft');expect(ui.host.textContent).toContain('First question');expect(ui.host.textContent).toContain('Second question');
+ await ui.remount();expect(ui.host.querySelector('textarea')?.value).toBe('Follow-up draft');await ui.click('History');expect(ui.host.textContent).toContain('First question');expect(ui.host.textContent).toContain('Second question');await ui.click('Close chat history');
  await ui.click('Listings');expect(new URLSearchParams(ui.location()).get('task_search')).toBe('saved');expect(ui.host.querySelector('input[aria-label="Search listings or sellers"]')?.getAttribute('value')).toBe('existing');expect(ui.host.querySelector('.task-search-chat')).toBeNull();
  await ui.click('AI searchNew');expect(ui.host.querySelector('textarea')?.value).toBe('Follow-up draft');
- await ui.click('Actions for First question');await ui.click('Rename');await ui.rename('Asia review');await ui.click('Save chat name');expect(ui.host.querySelector('.ai-history-row.is-active')?.textContent).toContain('Asia review');
+ await ui.click('History');await ui.click('Actions for First question');await ui.click('Rename');await ui.rename('Asia review');await ui.click('Save chat name');expect(ui.host.querySelector('.ai-history-row.is-active')?.textContent).toContain('Asia review');
  await ui.click('Actions for Asia review');await ui.click('Remove');expect(ui.host.querySelector('.ai-history-list')?.textContent).not.toContain('Asia review');await ui.click('Undo');await ui.click('Asia review');expect(ui.host.querySelector('textarea')?.value).toBe('Follow-up draft');
  expect(ui.requests.filter(r=>r.method==='POST'&&r.path.endsWith('/searches'))).toHaveLength(0);
 });
@@ -50,7 +50,7 @@ test('updates from another tab do not overwrite this chat or resurrect a removed
  const ui=await setup();await ui.click('AI searchNew');await ui.fill('First question');await ui.click('Send message');
  const key=aiHistoryKey('owner','tenant','10000000-0000-4000-8000-000000000001');const current=readAiHistory(key)[0];
  const other={...current,id:'other-tab-chat',title:'Other tab conversation'};
- await ui.externalStorage(aiChatRecordKey(key,other.id),JSON.stringify(other));expect(ui.host.querySelector('.ai-history-list')?.textContent).toContain('Other tab conversation');
+ await ui.externalStorage(aiChatRecordKey(key,other.id),JSON.stringify(other));await ui.click('History');expect(ui.host.querySelector('.ai-history-list')?.textContent).toContain('Other tab conversation');await ui.click('Close chat history');
  await ui.fill('Local draft');expect(readAiHistory(key).map(chat=>chat.id).sort()).toEqual([current.id,other.id].sort());
  await ui.externalStorage(aiChatRecordKey(key,current.id),null);expect(ui.host.querySelector('textarea')?.value).toBe('');expect(readAiHistory(key).some(chat=>chat.id===current.id)).toBe(false);
  await ui.fill('A new draft');expect(readAiHistory(key).some(chat=>chat.id===current.id)).toBe(false);expect(readAiHistory(key).some(chat=>chat.id===other.id)).toBe(true);
@@ -60,7 +60,25 @@ test('restoring an executed AI chat restores its confirmed filters and saved mem
  const ui=await setup(true);await ui.click('AI searchNew');await ui.fill('Listings in China under $40');await ui.click('Send message');
  expect(new URLSearchParams(ui.location()).get('task_search')).toBe('created-search');expect(ui.host.textContent).toContain('China');
  const creates=()=>ui.requests.filter(r=>r.method==='POST'&&r.path.endsWith('/searches')).length;expect(creates()).toBe(1);
- await ui.click('New chat');await ui.click('Listings in China under $40');expect(new URLSearchParams(ui.location()).get('task_search')).toBe('created-search');expect(ui.host.textContent).toContain('Listing locations: China');
+ await ui.click('New chat');await ui.click('History');await ui.click('Listings in China under $40');expect(new URLSearchParams(ui.location()).get('task_search')).toBe('created-search');expect(ui.host.textContent).toContain('Listing locations: China');
  await ui.remount();expect(ui.host.textContent).toContain('Listing locations: China');expect(creates()).toBe(1);
  await ui.click('Listings');expect(new URLSearchParams(ui.location()).get('task_search')).toBe('saved');expect(creates()).toBe(1);
+});
+
+test('history and focused results preserve the current chat draft, filters and search without starting work',async()=>{
+ const ui=await setup(true);await ui.click('AI searchNew');
+ expect(ui.host.querySelector('dialog')).toBeNull();
+ await ui.fill('Listings in China under $40');await ui.click('Send message');await ui.fill('Keep this follow-up draft');
+ const before=ui.location();const posts=ui.requests.filter(r=>r.method==='POST').length;
+ const composer=ui.host.querySelector('textarea');
+ await ui.click('Focus results');expect(ui.host.querySelector('.task-ai-conversation')?.hasAttribute('hidden')).toBe(true);
+ expect(ui.host.querySelector('.task-ai-results')?.hasAttribute('hidden')).toBe(false);
+ await ui.click('Show chat');expect(ui.host.querySelector('textarea')).toBe(composer);expect(composer?.value).toBe('Keep this follow-up draft');
+ const historyButton=[...ui.host.querySelectorAll('button')].find(b=>b.textContent==='History')!;historyButton.focus();
+ await ui.click('History');expect(ui.host.querySelector('dialog')?.open).toBe(true);expect(document.activeElement?.getAttribute('aria-label')).toBe('Search chat history');
+ await act(async()=>{ui.host.querySelector('dialog')!.dispatchEvent(new window.Event('cancel',{cancelable:true}));});
+ expect(ui.host.querySelector('dialog')).toBeNull();expect(document.activeElement).toBe(historyButton);
+ expect(ui.location()).toBe(before);expect(ui.requests.filter(r=>r.method==='POST')).toHaveLength(posts);
+ expect(ui.host.querySelector('textarea')?.value).toBe('Keep this follow-up draft');
+ expect(ui.host.querySelectorAll('.task-search-matches')).toHaveLength(1);
 });

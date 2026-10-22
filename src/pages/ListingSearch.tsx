@@ -166,6 +166,7 @@ function SearchWorkspace({ ipId, ipName }: { ipId: string; ipName: string }) {
       if (!operation.current()) return;
       if(translation.name==="rank_categories"){setError("Category rankings are available in the review queue. Your filters were kept.");return;}
       if(translation.name==="set_queue_view"){setError("Queue display controls are available in the review queue. Your filters were kept.");return;}
+      if(translation.name==="answer_question"){setError("Conversational replies are available in AI search.");return;}
       if (translation.name === "request_clarification") {
         say(translation.reason === "unsupported_capability"
           ? (({ seller_metrics: "Seller counts and ranking use all active listing filters. Other seller metrics, including total inventory outside these filters, need an API extension.", similarity: "Image and text similarity search is not available here yet.", shipping: "Shipping-destination filtering is not available here yet. Listing location is supported.", live_fx: "Live exchange rates are not available. Price filters use the disclosed historical snapshot.", investigation: "Investigation actions are not available in listing search." } as Record<string,string>)[translation.capability ?? ""] ?? "This request needs a capability that is not available. Please clarify the filter you need.") + " Your filters were kept."
