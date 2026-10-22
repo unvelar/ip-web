@@ -13,7 +13,7 @@ import TaskQueue from "./TaskQueue";
  */
 export default function MonitoringTasks() {
   const { activeIpId } = useActiveIp(),
-    { actingTenantId } = useAuth();
+    { actingTenantId, user } = useAuth();
   const key = actingTenantId + ":" + activeIpId;
   const [capability, setCapability] = useState<{
     key: string;
@@ -62,7 +62,7 @@ export default function MonitoringTasks() {
   if (activeIpId && capability?.key === key && capability.value?.active)
     return (
       <div className="monitoring-task-page">
-        <TaskQueue key={key} ipId={activeIpId} onUnavailable={renegotiate} />
+        <TaskQueue key={key} ipId={activeIpId} conversationOwner={user?.id} onUnavailable={renegotiate} />
       </div>
     );
   return (

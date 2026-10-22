@@ -47,7 +47,7 @@ export function parseListingFilters(value: unknown): ListingFilters {
   requireResponse((value.ip_id === null || uuid(value.ip_id)) && (value.catalog_product_id === null || uuid(value.catalog_product_id)), context);
   requireResponse(value.title_contains === undefined || value.title_contains === null || validText(value.title_contains,100) && value.title_contains.trim().length > 0 && [...value.title_contains].every(character=>character.charCodeAt(0)>31 && character.charCodeAt(0)!==127), context);
   requireResponse(value.query === null || validText(value.query, 100), context);
-  requireResponse(Array.isArray(value.countries) && value.countries.length <= 20 && value.countries.every(item => typeof item === "string" && /^[A-Z]{2}$/.test(item)), context);
+  requireResponse(Array.isArray(value.countries) && value.countries.length <= 250 && value.countries.every(item => typeof item === "string" && /^[A-Z]{2}$/.test(item)), context);
   requireResponse(listingStatuses.includes(value.status as ListingFilters["status"]) && ["found_desc", "found_asc", "score_desc"].includes(String(value.sort)), context);
   const semantic = value.semantic === null ? null : readSemanticFilters(JSON.stringify(value.semantic));
   requireResponse(value.semantic === null || semantic && Object.keys(semantic).every(key => ["categories", "colors", "materials", "form_factors", "identity_facts", "variant_attributes"].includes(key)), context);

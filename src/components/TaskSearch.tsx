@@ -52,6 +52,7 @@ type Filter = {
   lookup?: "website" | "source" | "seller" | "visual_group";
 };
 const filters: Filter[] = [
+  {id:"q",label:"Listing or seller text",fields:["q"],kind:"text"},
   {id:"title_contains",label:"Title contains",fields:["title_contains"],kind:"text"},
   { id:"listing_countries", label:"Listing locations",fields:["listing_countries"],kind:"locations" },
   { id:"seller_listing_count",label:"Matching listings per seller",fields:["seller_listing_count"],kind:"count" },
@@ -142,6 +143,7 @@ const isActive = (filter: Filter, values: Values) =>
 
 export default function TaskSearch({
   ipId,
+  conversationOwner,
   product,
   params,
   members,
@@ -153,6 +155,7 @@ export default function TaskSearch({
   onSearching,
 }: {
   ipId: string;
+  conversationOwner?:string;
   product?: string;
   params: URLSearchParams;
   members: TenantMember[];
@@ -341,6 +344,7 @@ export default function TaskSearch({
         ? [[params.get("protected_term_id") ?? "", "Linked protected term"]]
         : (filter.options ?? []);
   const description = (filter: Filter) => {
+    if (filter.id === "q") return `Text contains: ${values.q}`;
     if (filter.id === "title_contains") return `Title contains: ${values.title_contains}`;
     if (filter.id === "semantic") return semanticFilterLabel(values.semantic, categoryLabels);
     if (filter.id === "listing_countries") { try { return (JSON.parse(values.listing_countries) as string[]).map(code=>new Intl.DisplayNames(["en"],{type:"region"}).of(code)??code).join(" or "); } catch { return "Listing locations"; } }
@@ -378,6 +382,7 @@ export default function TaskSearch({
           : `${new Date(values.from + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" })} – before ${new Date(values.to + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" })}`;
   const available = filters.filter(
     (filter) =>
+      filter.id !== "q" &&
       !isActive(filter, values) &&
       (titleSearch || filter.id !== "title_contains") &&
       (extended || !["listing_countries","seller_listing_count"].includes(filter.id)) &&
@@ -434,7 +439,7 @@ export default function TaskSearch({
         runSearch();
       }}
     >
-      <QueueSearchBar onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
+      <QueueSearchBar key={`${conversationOwner??"temporary"}:${ipId}`} conversationOwner={conversationOwner} onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
         onChange={q => updateValues({ ...values, q })} onApply={runSearch} />
       <div
         className="task-search-filter-row"
@@ -519,7 +524,6 @@ export default function TaskSearch({
             className="task-search-clear"
             onClick={() => {
               updateValues((current) => ({
-                q: current.q,
                 from: current.from,
                 to: current.to,
               }));

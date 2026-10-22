@@ -5,11 +5,12 @@ import { createRoot, type Root } from "react-dom/client";
 import TaskSearch from "../src/components/TaskSearch";
 import { emptyListingFilters, type ListingFilters } from "../src/lib/listingSearch";
 import { queueSearchParams, taskAssistantFilters, taskSearchRequest, type AppliedTaskSearch } from "../src/lib/taskSearchAssistant";
+import type { TaskQueueQuery } from "../src/api/taskQueue";
 const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean}={}) {
+async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
@@ -17,22 +18,35 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
   const cancelled:string[]=[];
   const applied:AppliedTaskSearch[]=[];const errors:string[]=[];
   let release:((response:Response)=>void)|undefined;
+  const agentId="40000000-0000-4000-8000-000000000001",searchId="50000000-0000-4000-8000-000000000001";
+  let agentRevision=0;
+  let translationTurn=0;
   const filters:ListingFilters=options.title?{...emptyListingFilters(ip),query:"old",title_contains:"L261"}:{...emptyListingFilters(ip),semantic:{categories:[options.categoryKey??"miniature"]},seller_listing_count:{gt:10},countries:["CN","FR"],price:{currency:"EUR",lt:"40"}};
+  if(options.agentReview)filters.status="review";
   const translated=()=>Response.json({version:1,jobs_started:0,filters,query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
   globalThis.fetch=(async(input,init)=>{
     const url=new URL(String(input),"http://localhost:5174");
-    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,country_labels:{CN:"China",FR:"France"}});
+    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{})});
     if(url.pathname.endsWith("/tasks/capability"))return Response.json({active:true,ready:true,...(options.titleSupported===false?{}:{title_search_policy_version:"literal-title-substring-v1"}),...(options.extended===false?{}:{listing_search_policy_version:"task-listing-search-v1"})});
-    if(init?.method==="DELETE"){cancelled.push(url.pathname);return new Response(null,{status:204});}
     if(url.pathname.endsWith("/semantic-taxonomy"))return options.taxonomyUnavailable?Response.json({error:"Unavailable"},{status:503}):Response.json({categories:[{key:"miniature",label:"Miniature"},{key:"ae_2_2_8",label:"Scale Models"}]});
+    if(url.pathname.includes("/agent/runs")){
+      const body=init?.body?JSON.parse(String(init.body)):{};requests.push({path:url.pathname,body});
+      if(init?.method==="DELETE")cancelled.push(url.pathname);
+      if(url.pathname.endsWith("/advance"))agentRevision++;
+      const state=init?.method==="DELETE"?"cancelled":agentRevision>=2&&!options.agentWaiting?"completed":agentRevision?"waiting":"working";
+      return Response.json({version:1,policy:"listing-search-agent-v1",id:agentId,revision:agentRevision,status:state,
+        progress:"Searching the queue…",message:state==="completed"?"7 matches. 42 candidates checked.":"",filters,ranking:null,
+        search:state==="working"?null:{id:searchId,state:state==="completed"?"completed":"running",scanned:42,matched:state==="completed"?7:0,rows:[]}});
+    }
+    if(init?.method==="DELETE"){cancelled.push(url.pathname);return new Response(null,{status:204});}
     const body=JSON.parse(String(init?.body));requests.push({path:url.pathname,body});
-    if(url.pathname.endsWith("/translate"))return options.hold?await new Promise<Response>(resolve=>{release=resolve;}):translated();
+    if(url.pathname.endsWith("/translate")){translationTurn++;return options.hold?await new Promise<Response>(resolve=>{release=resolve;}):options.translation?options.translation(body,translationTurn):translated();}
     if(url.pathname.endsWith("/searches"))return options.holdCreation?await new Promise<Response>(resolve=>{release=resolve;}):options.fail?Response.json({error:"Search temporarily unavailable"},{status:503}):Response.json({id:"saved-search",state:"pending",scanned:0,matched:0});
     return Response.json({options:[]});
   }) as typeof fetch;
   let params=new URLSearchParams("country=Spain&source=source-one&q=old&history=on");
   root=createRoot(container);
-  const render=()=>root!.render(<TaskSearch ipId={ip} status="pending" params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
+  const render=()=>root!.render(<TaskSearch conversationOwner={options.conversation?"test-account":undefined} ipId={ip} status={(params.get("status")??"pending") as TaskQueueQuery["status"]} params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
   await act(async()=>render());
   const button=(name:string)=>[...container.querySelectorAll<HTMLButtonElement>("button")].find(el=>el.getAttribute("aria-label")===name||el.textContent?.trim()===name)!;
   const click=async(name:string)=>{await act(async()=>button(name).click());};
@@ -40,7 +54,9 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
     const input=container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
     await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value")!.set!.call(input,value);input.dispatchEvent(new window.Event("input",{bubbles:true}));input.dispatchEvent(new window.Event("change",{bubbles:true}));});
   };
-  return {container,requests,applied,errors,cancelled,params:()=>params,click,fill,release:async()=>{await act(async()=>release?.(options.holdCreation?Response.json({id:"cancelled-search",state:"pending",scanned:0,matched:0}):translated()));},settle:async()=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,500));});}};
+  return {container,requests,applied,errors,cancelled,params:()=>params,click,fill,
+    remount:async()=>{await act(async()=>root!.unmount());root=createRoot(container);await act(async()=>render());},
+    release:async()=>{await act(async()=>release?.(options.holdCreation?Response.json({id:"cancelled-search",state:"pending",scanned:0,matched:0}):translated()));},settle:async(ms=500)=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,ms));});}};
 }
 
 test("Ask submits only explicitly and commits the same scoped filters, dates and seller view once",async()=>{
@@ -58,6 +74,32 @@ test("Ask submits only explicitly and commits the same scoped filters, dates and
 test("an older server keeps advanced translated filters out of the queue",async()=>{
   const ui=await setup({extended:false});await ui.click("Ask");await ui.fill("Ask about listings","Find sellers with more than 10 matches");await ui.click("Apply assistant search");
   expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");expect(ui.container.textContent).toContain("not available in this queue yet");
+});
+test("category labels replace internal keys without changing filters or starting another search",async()=>{
+  const ui=await setup({categoryKey:"ae_2_2_8"});await ui.click("Ask");await ui.fill("Ask about listings","miniatures");await ui.click("Apply assistant search");
+  expect(ui.container.textContent).toContain("Scale Models");expect(ui.container.textContent).not.toContain("ae 2 2 8");
+  expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
+  await ui.settle();expect(ui.requests).toHaveLength(2);
+});
+test("unavailable category labels keep a removable filter without exposing its internal key",async()=>{
+  const ui=await setup({categoryKey:"ae_2_2_8",taxonomyUnavailable:true});await ui.click("Ask");await ui.fill("Ask about listings","miniatures");await ui.click("Apply assistant search");
+  expect(ui.container.textContent).toContain("Product type");expect(ui.container.textContent).not.toContain("ae 2 2 8");
+  expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
+  expect(ui.container.querySelector('button[aria-label="Remove product details filter"]')).not.toBeNull();
+});
+test("Ask reveals the active literal text filter and carries it into an empty draft without submitting",async()=>{
+  const ui=await setup();await ui.click("Ask");
+  expect(ui.container.querySelector<HTMLInputElement>('[aria-label="Ask about listings"]')?.value).toBe("old");
+  expect(ui.container.textContent).toContain("Text contains: old");expect(ui.requests).toHaveLength(0);
+  await ui.click("Remove listing or seller text filter");await ui.settle();
+  expect(ui.requests.at(-1)?.body).not.toHaveProperty("q");
+  expect(ui.params().get("queue_filters")).not.toContain('"q":"old"');
+});
+test("switching modes preserves an Ask draft and does not overwrite it with literal search",async()=>{
+  const ui=await setup();await ui.click("Ask");await ui.fill("Ask about listings","Only miniatures below 50 dollars");
+  await ui.click("Search");await ui.click("Ask");
+  expect(ui.container.querySelector<HTMLInputElement>('[aria-label="Ask about listings"]')?.value).toBe("Only miniatures below 50 dollars");
+  expect(ui.requests).toHaveLength(0);
 });
 test("unsupported requests clarify without changing filters or launching a search",async()=>{
   const ui=await setup({clarify:true});await ui.click("Ask");await ui.fill("Ask about listings","Ships to France");await ui.click("Apply assistant search");
@@ -103,15 +145,63 @@ test("title-only filters cannot silently become a broad text search on older API
   expect(ui.container.textContent).toContain("Title filtering is not available");
 });
 
-test("category labels replace internal keys without changing filters or starting another search",async()=>{
-  const ui=await setup({categoryKey:"ae_2_2_8"});await ui.click("Ask");await ui.fill("Ask about listings","miniatures");await ui.click("Apply assistant search");
-  expect(ui.container.textContent).toContain("Scale Models");expect(ui.container.textContent).not.toContain("ae 2 2 8");
-  expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
-  await ui.settle();expect(ui.requests).toHaveLength(2);
+const conversationTranslation=(body:Record<string,unknown>,turn:number)=>{
+  const filters=body.filters as ListingFilters;
+  if(turn===2)return Response.json({version:1,jobs_started:0,filters,query:{name:"request_clarification",arguments:{reason:"ambiguous_request",question:"Below 40 and above 60 conflict. Replace the previous price range?",options:["Replace the previous price range","Keep the current search"],conflict_field:"price"}}});
+  return Response.json({version:1,jobs_started:0,filters:{...filters,price:turn===1?{currency:"USD",lt:"40"}:{currency:"USD",gt:"60"}},query:{name:"search_listings",arguments:{changes:{}}}});
+};
+test("new AI search clears previous search predicates only on submit and Undo restores the exact previous scope",async()=>{
+  const ui=await setup({conversation:true,translation:conversationTranslation});await ui.click("Ask");await ui.click("New AI search");
+  expect(ui.requests).toHaveLength(0);expect(ui.params().get("q")).toBe("old");
+  await ui.fill("Ask about listings","Items below 40 dollars");await ui.click("Apply assistant search");
+  expect(ui.requests[0].body.filters).toMatchObject({ip_id:ip,query:null,catalog_product_id:null,catalog_selection:null,countries:[],price:null,semantic:null,status:"pending"});
+  expect(ui.requests[0].body.conversation).toEqual({mode:"new",messages:[]});
+  expect(ui.requests[1].body).not.toHaveProperty("country");expect(ui.requests[1].body).not.toHaveProperty("source");expect(ui.requests[1].body).not.toHaveProperty("q");
+  expect(ui.container.textContent).toContain("Started a new AI search");
+  await ui.click("Undo last change");
+  expect(ui.requests.at(-1)?.body).toMatchObject({q:"old",country:"Spain",source:"source-one"});
+  expect(ui.requests.at(-1)?.body).not.toHaveProperty("listing_constraints");
+  expect(ui.container.textContent).toContain("Restored the previous search conditions");
 });
-test("unavailable category labels keep a removable filter without exposing its internal key",async()=>{
-  const ui=await setup({categoryKey:"ae_2_2_8",taxonomyUnavailable:true});await ui.click("Ask");await ui.fill("Ask about listings","miniatures");await ui.click("Apply assistant search");
-  expect(ui.container.textContent).toContain("Product type");expect(ui.container.textContent).not.toContain("ae 2 2 8");
-  expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
-  expect(ui.container.querySelector('button[aria-label="Remove product details filter"]')).not.toBeNull();
+test("clarification keeps confirmed results and filters; an explicit reply carries history and executes once",async()=>{
+  const ui=await setup({conversation:true,translation:conversationTranslation});await ui.click("Ask");await ui.click("New AI search");
+  await ui.fill("Ask about listings","Below 40 dollars");await ui.click("Apply assistant search");
+  const confirmed=ui.params().toString();
+  await ui.fill("Ask about listings","Also above 60");await ui.click("Apply assistant search");
+  expect(ui.applied).toHaveLength(1);expect(ui.params().toString()).toBe(confirmed);expect(ui.requests.filter(r=>r.path.endsWith("/searches"))).toHaveLength(1);
+  expect(ui.container.textContent).toContain("Below 40 and above 60 conflict");
+  await ui.click("Replace the previous price range");
+  expect(ui.applied).toHaveLength(2);expect(ui.requests.filter(r=>r.path.endsWith("/searches"))).toHaveLength(2);
+  const request=ui.requests.filter(r=>r.path.endsWith("/translate")).at(-1)!;
+  expect(request.body.message).toBe("Replace the previous price range");
+  expect(request.body.conversation).toMatchObject({mode:"continue",resolution:"price"});
+  expect(JSON.stringify(request.body.conversation)).toContain("Also above 60");expect(JSON.stringify(request.body.conversation)).toContain("Below 40 and above 60 conflict");
+  expect(ui.requests.at(-1)?.body.listing_constraints).toMatchObject({price:{currency:"USD",gt:"60"}});
+});
+test("a pending clarification survives reload and keeping the search starts no additional request",async()=>{
+  const ui=await setup({conversation:true,translation:conversationTranslation});await ui.click("Ask");await ui.click("New AI search");
+  await ui.fill("Ask about listings","Below 40 dollars");await ui.click("Apply assistant search");await ui.fill("Ask about listings","Above 60 too");await ui.click("Apply assistant search");
+  const requests=ui.requests.length;await ui.remount();await ui.click("Ask");
+  expect(ui.container.textContent).toContain("Below 40 and above 60 conflict");
+  await ui.click("Keep the current search");expect(ui.requests).toHaveLength(requests);expect(ui.applied).toHaveLength(1);
+});
+test("continuing a legacy literal query asks before retaining or removing its text",async()=>{
+  const ui=await setup({conversation:true,translation:conversationTranslation});await ui.click("Ask");await ui.fill("Ask about listings","Items under 40 in Europe");await ui.click("Apply assistant search");
+  expect(ui.requests).toHaveLength(0);expect(ui.container.textContent).toContain("literal text “old”");
+  await ui.click("Remove text filter");expect((ui.requests[0].body.filters as ListingFilters).query).toBeNull();
+  expect(ui.requests[1].body).not.toHaveProperty("q");expect(ui.requests[1].body).toMatchObject({country:"Spain",source:"source-one"});
+});
+test("switching to a new query invalidates an in-flight reply without launching a stale search",async()=>{
+  const ui=await setup({conversation:true,hold:true});await ui.click("Ask");await ui.click("New AI search");await ui.fill("Ask about listings","below 40");await ui.click("Apply assistant search");
+  await ui.click("New AI search");await ui.release();await ui.settle();
+  expect(ui.applied).toHaveLength(0);expect(ui.requests).toHaveLength(1);
+});
+
+test("a free-text answer after reload retains new-search intent and the original clarification context",async()=>{
+  const ui=await setup({conversation:true,translation:(body,turn)=>turn===1?Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"request_clarification",arguments:{reason:"ambiguous_request",question:"Which product type did you mean?",options:["Scale Models","Action Figures"]}}}):Response.json({version:1,jobs_started:0,filters:{...body.filters as ListingFilters,semantic:{categories:["ae_2_2_8"]}},query:{name:"search_listings",arguments:{changes:{}}}})});
+  await ui.click("Ask");await ui.click("New AI search");await ui.fill("Ask about listings","Miniatures");await ui.click("Apply assistant search");
+  expect(ui.applied).toHaveLength(0);await ui.remount();await ui.click("Ask");await ui.fill("Ask about listings","I mean scale models");await ui.click("Apply assistant search");
+  expect(ui.applied).toHaveLength(1);expect(ui.requests[1].body.filters).toMatchObject({query:null,countries:[],price:null});
+  expect(ui.requests[1].body.conversation).toMatchObject({mode:"new"});expect(JSON.stringify(ui.requests[1].body.conversation)).toContain("Which product type");
+  expect(ui.requests[2].body).not.toHaveProperty("country");expect(ui.requests[2].body.semantic).toEqual({categories:["ae_2_2_8"]});
 });

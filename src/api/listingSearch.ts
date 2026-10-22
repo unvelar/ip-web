@@ -9,7 +9,9 @@ export interface RankedSeller { sellerKey:string; name:string|null; domain:strin
 export interface ListingPage { sellers?: RankedSeller[]; rows: ListingRow[]; total: number; nextCursor: string | null; catalog: CatalogMatch | null; fx: { asOf: string; basis: string } | null }
 export type Translation = { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; catalogQuery?: string | null }
   | { name: "next_listing_page" }
-  | { name: "request_clarification"; reason: string; capability?: string };
+  | { name: "request_clarification"; reason: string; capability?: string; question?:string; options?:string[]; conflictField?:"price"|"seller_listing_count" };
+export const listingConversationPolicy = "listing-conversation-v1";
+export type SearchConversation = {mode:"new"|"continue";messages:Array<{role:"user"|"assistant";content:string}>;resolution?:"price"|"seller_listing_count"};
 const text = (value: unknown): value is string => typeof value === "string" && value.length <= 4000;
 const nullableText = (value: unknown): value is string | null => value === null || text(value);
 const count = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -29,15 +31,21 @@ export async function listingCapability(signal: AbortSignal) {
     && Object.entries(value.country_labels).every(([key, label]) => /^[A-Z]{2}$/.test(key) && text(label)), "search capability");
   requireResponse(value.seller_count_policy_version === undefined || value.seller_count_policy_version === sellerCountPolicy, "seller-count policy");
   requireResponse(value.seller_ranking_policy_version === undefined || value.seller_ranking_policy_version === sellerRankingPolicy, "seller-ranking policy");
-  return { titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
+  return { conversation:value.conversation_policy_version === listingConversationPolicy, searchAgent:value.search_agent_policy_version === "listing-search-agent-v1", titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
 }
-export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null): Promise<Translation> {
-  const value = await read("translate", { message, filters, ...(ranking ? {ranking} : {}) }, signal);
+export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null, conversation?:SearchConversation): Promise<Translation> {
+  const value = await read("translate", { message, filters, ...(ranking ? {ranking} : {}),...(conversation?{conversation}:{}) }, signal);
   requireResponse(isRecord(value) && value.version === 1 && value.jobs_started === 0 && isRecord(value.query) && isRecord(value.query.arguments), "search translation");
   const query = value.query;
   const args = query.arguments;
   requireResponse(isRecord(args), "search translation");
-  if (query.name === "request_clarification") return { name: query.name, reason: String(args.reason ?? ""), capability: typeof args.capability === "string" ? args.capability : undefined };
+  if (query.name === "request_clarification") {
+    requireResponse(args.question===undefined||typeof args.question==="string"&&args.question.trim().length>0&&args.question.length<=1000,"clarification question");
+    requireResponse(args.options===undefined||Array.isArray(args.options)&&args.options.length>=2&&args.options.length<=3&&args.options.every(option=>typeof option==="string"&&option.trim().length>0&&option.length<=160),"clarification options");
+    requireResponse(args.conflict_field===undefined||["price","seller_listing_count"].includes(String(args.conflict_field)),"clarification conflict");
+    return { name: query.name, reason: String(args.reason ?? ""), capability: typeof args.capability === "string" ? args.capability : undefined,
+      question:args.question as string|undefined,options:args.options as string[]|undefined,conflictField:args.conflict_field as "price"|"seller_listing_count"|undefined };
+  }
   if (query.name === "next_listing_page") return { name: query.name };
   requireResponse((query.name === "search_listings" || query.name === "rank_sellers") && (args.catalog_query === undefined || nullableText(args.catalog_query)), "search translation");
   const next = parseListingFilters(value.filters);

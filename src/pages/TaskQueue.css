@@ -530,6 +530,11 @@
 .task-search .task-ask-send { display: grid; flex-shrink: 0; place-items: center; width: 28px; height: 28px; border-radius: 5px; color: #fff; background: #44403c; }
 .task-search-conversation { margin: 8px 0 12px; padding: 10px 12px; border: 1px solid #e7e5e4; border-radius: 7px; font-size: 12px; color: #57534e; }
 .task-search-conversation > summary { cursor: pointer; }
+.task-search-conversation-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0; font-size:12px; }
+.task-search-conversation-actions button, .task-search-clarification button { padding:6px 10px; border:1px solid #d6d3d1; border-radius:6px; background:#fff; color:#44403c; }
+.task-search-conversation-actions button[aria-pressed="true"] { background:#292524; color:#fff; border-color:#292524; }
+.task-search-conversation-actions small { flex-basis:100%; color:#78716c; }
+.task-search-clarification { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
 .task-search-conversation [role="log"] { max-height: 260px; overflow: auto; margin-top: 12px; }
 .task-search-conversation small { display: block; margin-top: 12px; color: #a8a29e; }
 .task-search-message { margin: 10px 0; max-width: 740px; }
