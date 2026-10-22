@@ -27,6 +27,8 @@ export function TaskGroupRows({
   const id = useId();
   const [toggled, setToggled] = useState<Set<string>>(new Set());
   return groups.map((group, index) => {
+    const totalPrice=group.totals&&Object.hasOwn(group.totals,"totalPriceUsd");
+    const value=totalPrice?group.totals?.totalPriceUsd:group.totals?.exposureUsd;
     const expanded = group.kind === "seller" ? toggled.has(group.key) : !toggled.has(group.key);
     const selected = group.findings.filter((row) =>
       selection.has(row.result_id),
@@ -102,8 +104,8 @@ export function TaskGroupRows({
                 <span className="monitoring-group-count">
                   {group.totals ? `${group.totals.articles.toLocaleString()} ${group.totals.articles === 1 ? "article" : "articles"}` : `${group.findings.length} on this page`}
                 </span>
-                {group.totals && <span className="monitoring-group-exposure" title={`Estimated exposure in USD across all matching articles, using the same price × quantity policy as seller profiles. ${group.totals.pricedArticles} of ${group.totals.articles} articles have a known USD price.`}>
-                  <strong>{group.totals.exposureUsd === null ? "Unknown" : new Intl.NumberFormat("en-US", {style:"currency",currency:"USD"}).format(group.totals.exposureUsd)}{group.totals.exposureUsd !== null && group.totals.pricedArticles < group.totals.articles ? "+" : ""}</strong>
+                {group.totals && <span className="monitoring-group-exposure" title={`${totalPrice?"Total known listing price in USD, once per canonical matching listing; quantities are not multiplied.":"Estimated exposure in USD across all matching articles, using the same price × quantity policy as seller profiles."} ${group.totals.pricedArticles} of ${group.totals.articles} articles have a known USD price.`}>
+                  <strong>{value == null ? "Unknown" : new Intl.NumberFormat("en-US", {style:"currency",currency:"USD"}).format(value!)}{value != null && group.totals.pricedArticles < group.totals.articles ? "+" : ""}</strong>
                 </span>}
                 <button
                   type="button"

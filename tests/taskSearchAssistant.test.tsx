@@ -12,7 +12,7 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
+async function setup(options:{actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
@@ -29,7 +29,7 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
   const translated=()=>Response.json({version:1,jobs_started:0,filters,query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
   globalThis.fetch=(async(input,init)=>{
     const url=new URL(String(input),"http://localhost:5174");
-    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
+    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,...(options.actionFeatures?{seller_value_policy_version:"task-seller-value-v1",conversation_actions_policy_version:"listing-conversation-actions-v1"}:{}),country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
     if(url.pathname.endsWith("/tasks/capability"))return Response.json({active:true,ready:true,...(options.titleSupported===false?{}:{title_search_policy_version:"literal-title-substring-v1"}),...(options.extended===false?{}:{listing_search_policy_version:"task-listing-search-v1"})});
     if(url.pathname.endsWith("/semantic-taxonomy"))return options.taxonomyUnavailable?Response.json({error:"Unavailable"},{status:503}):Response.json({categories:[{key:"miniature",label:"Miniature"},{key:"ae_2_2_8",label:"Scale Models"}]});
     if(url.pathname.includes("/agent/runs")){
@@ -56,7 +56,8 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
   if(options.cleanScope){params.delete("country");params.delete("source");params.set("q","");}
   if(options.viewRanked){params.set("group_by","seller");params.set("group_sort","articles");params.set("top_sellers","10");}
   root=createRoot(container);
-  const render=()=>root!.render(<TaskSearch ranking={options.viewRanked&&params.has("top_sellers")?{limit:Number(params.get("top_sellers"))}:null} onViewChange={options.queueView?async view=>{viewChanges.push(view);params=queueViewParams(params,view);render();return true;}:undefined} conversationOwner={options.conversation?"test-account":undefined} ipId={ip} status={(params.get("status")??"pending") as TaskQueueQuery["status"]} params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
+  const shownReports:unknown[]=[];
+  const render=()=>root!.render(<TaskSearch onShowCategoryReport={options.categoryTable?report=>shownReports.push(report):undefined} ranking={options.viewRanked&&params.has("top_sellers")&&params.get("group_sort")!=="total_price"?{limit:Number(params.get("top_sellers"))}:null} onViewChange={options.queueView?async view=>{viewChanges.push(view);params=queueViewParams(params,view);render();return true;}:undefined} conversationOwner={options.conversation?"test-account":undefined} ipId={ip} status={(params.get("status")??"pending") as TaskQueueQuery["status"]} params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
   await act(async()=>render());
   const button=(name:string)=>[...container.querySelectorAll<HTMLButtonElement>("button")].find(el=>el.getAttribute("aria-label")===name||el.textContent?.trim()===name)!;
   const click=async(name:string)=>{await act(async()=>button(name).click());};
@@ -64,7 +65,7 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
     const input=container.querySelector<HTMLInputElement|HTMLTextAreaElement>(`[aria-label="${label}"]`)!;
     await act(async()=>{Object.getOwnPropertyDescriptor(input.tagName==="TEXTAREA"?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype,"value")!.set!.call(input,value);input.dispatchEvent(new window.Event("input",{bubbles:true}));input.dispatchEvent(new window.Event("change",{bubbles:true}));});
   };
-  return {container,requests,applied,viewChanges,errors,cancelled,params:()=>params,click,fill,
+  return {container,requests,applied,viewChanges,errors,cancelled,shownReports,params:()=>params,click,fill,
     send:()=>click(button("Send message")?"Send message":"Reply"),
     remount:async()=>{await act(async()=>root!.unmount());root=createRoot(container);await act(async()=>render());},
     release:async()=>{await act(async()=>release?.(options.holdCreation?Response.json({id:"cancelled-search",state:"pending",scanned:0,matched:0}):translated()));},settle:async(ms=500)=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,ms));});}};
@@ -155,6 +156,45 @@ test("title-only filters cannot silently become a broad text search on older API
   expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");
   expect(ui.container.textContent).toContain("Title filtering is not available");
 });
+test("the agent is opt-in and adopts its completed queue search without creating a second search",async()=>{
+  const ui=await setup({agent:true});await ui.click("Ask");
+  expect(ui.container.textContent).toContain("Classic Ask");await ui.click("Try search agent");
+  await ui.fill("Ask about listings","items in Asia");await ui.send();
+  await ui.settle(1900);
+  expect(ui.applied).toHaveLength(1);expect(ui.params().get("task_search")).toBe("50000000-0000-4000-8000-000000000001");
+  expect(ui.container.textContent).toContain("7 matches. 42 candidates checked.");
+  expect(ui.requests.some(item=>item.path.endsWith("/tasks/searches"))).toBe(false);
+  expect(ui.requests.some(item=>item.path.endsWith("/translate"))).toBe(false);
+  expect(ui.requests[0].body).toMatchObject({message:"items in Asia",queue:{country:"Spain",source:"source-one"}});
+});
+test("the classic switch immediately restores the existing translation route",async()=>{
+  const ui=await setup({agent:true});await ui.click("Ask");await ui.click("Try search agent");await ui.click("Use classic Ask");
+  await ui.fill("Ask about listings","top sellers");await ui.send();
+  expect(ui.requests[0].path).toBe("/api/monitoring/listings/translate");expect(ui.applied).toHaveLength(1);
+});
+test("adopting an agent result in another status does not trigger an automatic duplicate search",async()=>{
+  const ui=await setup({agent:true,agentReview:true});await ui.click("Ask");await ui.click("Try search agent");
+  await ui.fill("Ask about listings","items in legal review");await ui.send();await ui.settle(2400);
+  expect(ui.applied).toHaveLength(1);expect(ui.params().get("status")).toBe("review");
+  expect(ui.requests.some(item=>item.path.endsWith("/tasks/searches"))).toBe(false);
+});
+test("queued agent runs resume after remount instead of starting another search",async()=>{
+  const ui=await setup({agent:true});await ui.click("Ask");await ui.click("Try search agent");
+  await ui.fill("Ask about listings","items in Asia");await ui.send();await ui.settle(250);
+  expect(ui.applied).toHaveLength(0);await ui.remount();await ui.click("Ask");
+  expect(ui.container.textContent).toContain("Resume agent search");await ui.click("Resume agent search");await ui.settle(1800);
+  expect(ui.applied).toHaveLength(1);
+  expect(ui.requests.filter(item=>item.path.endsWith("/agent/runs"))).toHaveLength(1);
+  expect(ui.requests.some(item=>item.path.endsWith("/40000000-0000-4000-8000-000000000001"))).toBe(true);
+});
+test("cancelling the agent cancels its server run and keeps the previously applied filters",async()=>{
+  const ui=await setup({agent:true,agentWaiting:true});await ui.click("Ask");await ui.click("Try search agent");
+  await ui.fill("Ask about listings","items in Asia");await ui.send();await ui.settle(250);
+  await ui.click("Cancel assistant request");
+  expect(ui.cancelled).toContain("/api/monitoring/listings/agent/runs/40000000-0000-4000-8000-000000000001");
+  expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");
+});
+
 const conversationTranslation=(body:Record<string,unknown>,turn:number)=>{
   const filters=body.filters as ListingFilters;
   if(turn===2)return Response.json({version:1,jobs_started:0,filters,query:{name:"request_clarification",arguments:{reason:"ambiguous_request",question:"Below 40 and above 60 conflict. Replace the previous price range?",options:["Replace the previous price range","Keep the current search"],conflict_field:"price"}}});
@@ -313,4 +353,50 @@ test("New chat restarts a stopped search even when the fresh filter scope is ide
   expect(ui.requests.filter(item=>item.path==='/api/monitoring/tasks/searches')).toHaveLength(1);expect(ui.params().get('task_search')).toBe('saved-search');
   expect(ui.container.querySelector('table[aria-label="Product category ranking"]')).not.toBeNull();
   expect(ui.requests.some(item=>item.path==='/api/monitoring/tasks/searches/existing-search')).toBe(false);
+});
+
+
+test("category replies can open the lower results table without inline duplication or another search",async()=>{
+ const ui=await setup({conversation:true,categoryRanking:true,categoryTable:true,translation:()=>Response.json({version:1,jobs_started:0,query:{name:"rank_categories",arguments:{metric:"total_price",limit:10}}})});
+ await ui.click("Ask");await ui.fill("Ask about listings","Highest total price across listings");await ui.send();
+ expect(ui.container.querySelector('table[aria-label="Product category ranking"]')).toBeNull();
+ const before=ui.requests.length;await ui.click("Show category breakdown");
+ expect(ui.shownReports).toHaveLength(1);expect(ui.shownReports[0]).toMatchObject({search_id:"existing-search",metric:"total_price"});expect(ui.requests).toHaveLength(before);
+ expect(ui.container.querySelector('[aria-label="Queue search conversation"]')?.hasAttribute("hidden")).toBe(true);
+ await ui.remount();await ui.click("Ask");await ui.click("Show category breakdown");expect(ui.shownReports).toHaveLength(2);expect(ui.requests).toHaveLength(before);
+});
+
+test("category report → named items → seller total value retains context and predicates without another scan for grouping",async()=>{
+ const ui=await setup({conversation:true,queueView:true,categoryRanking:true,actionFeatures:true,cleanScope:true,viewRanked:true,translation:(body,turn)=>{
+   if(turn===1)return Response.json({version:1,jobs_started:0,query:{name:"rank_categories",arguments:{metric:"total_price",limit:10}}});
+   if(turn===2){
+     expect(body.conversation_actions).toBe(true);
+     expect(body.conversation).toMatchObject({mode:"continue",category_context:{metric:"total_price",groups:[{category_key:"action_figures",category_label:"Action Figures"},{category_key:"scale_models",category_label:"Scale Models"}]}});
+     const old=body.filters as ListingFilters;
+     return Response.json({version:1,jobs_started:0,filters:{...old,semantic:{...old.semantic,categories:["action_figures"]}},query:{name:"search_listings",arguments:{show_listings:true,changes:{semantic:{categories:["action_figures"]}}}}});
+   }
+   expect(body.seller_value).toBe(true);
+   return Response.json({version:1,jobs_started:0,query:{name:"set_queue_view",arguments:{group_by:"seller",group_sort:"total_price"}}});
+ }});
+ await ui.click("Ask");await ui.fill("Ask about listings","What categories should I focus on by total listing price?");await ui.send();
+ await ui.fill("Ask about listings","Show me the action figures items");await ui.send();
+ const scope=ui.params().get("queue_filters"),id=ui.params().get("task_search");
+ expect(ui.applied).toHaveLength(1);expect(ui.applied[0].showListings).toBe(true);
+ expect([...ui.container.querySelectorAll(".task-search-message.is-assistant p")].at(-1)?.textContent).toContain("Action Figures");
+ expect(ui.params().has("group_by")).toBe(false);expect(ui.params().has("top_sellers")).toBe(false);
+ expect(ui.container.textContent).not.toContain("Removed the listing-location filter");expect(ui.container.textContent).not.toContain("Updated the price filter");expect(ui.container.textContent).not.toContain("Updated the catalog selection");
+ const creates=ui.requests.filter(item=>item.path==="/api/monitoring/tasks/searches").length;
+ await ui.fill("Ask about listings","group them by sellers and show sellers with most total value");await ui.send();
+ expect(ui.params().get("queue_filters")).toBe(scope);expect(ui.params().get("task_search")).toBe(id);expect(ui.params().get("group_sort")).toBe("total_price");
+ expect(ui.requests.filter(item=>item.path==="/api/monitoring/tasks/searches")).toHaveLength(creates);
+ expect(ui.container.textContent).toContain("Each matching listing is counted once");
+ await ui.click("Undo last change");expect(ui.params().has("group_by")).toBe(false);expect(ui.params().get("task_search")).toBe(id);
+});
+
+test("a fresh seller value request creates one membership with its view and clears the new-chat predicates",async()=>{
+ const ui=await setup({conversation:true,queueView:true,actionFeatures:true,translation:()=>Response.json({version:1,jobs_started:0,query:{name:"set_queue_view",arguments:{group_by:"seller",group_sort:"total_price",top_sellers:10}}})});
+ await ui.click("Ask");await ui.click("New chat");await ui.fill("Ask about listings","Top 10 sellers by highest total known listing price");await ui.send();
+ const creates=ui.requests.filter(item=>item.path==="/api/monitoring/tasks/searches");expect(creates).toHaveLength(1);expect(creates[0].body).not.toHaveProperty("q");expect(creates[0].body).not.toHaveProperty("country");
+ expect(ui.params().get("task_search")).toBe("saved-search");expect(ui.params().get("group_sort")).toBe("total_price");expect(ui.params().get("top_sellers")).toBe("10");expect(ui.applied[0].ranking).toBeNull();
+ expect(ui.container.textContent).toContain("complete search is ready");
 });

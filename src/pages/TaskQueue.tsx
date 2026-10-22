@@ -1,11 +1,13 @@
 import {queueViewFromParams,queueViewParams,queueViewPolicy,type QueueView} from "../lib/queueView";
 import { queueSearchParams } from "../lib/taskSearchAssistant";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState,type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ImageOff } from "lucide-react";
+import { ImageOff,ListFilter } from "lucide-react";
 import MonitoringToolbar from "../components/MonitoringToolbar";
 import TaskSearch from "../components/TaskSearch";
 import TaskSearchStatus from "../components/TaskSearchStatus";
+import {CategoryResultsWorkspace} from "../components/CategoryResultsWorkspace";
+import type {CategoryRanking} from "../lib/categoryRanking";
 import { TaskGroupRows } from "../components/monitoring/board/TaskGroupRows";
 import { SellerGroupedQueue } from "../components/monitoring/board/SellerGroupedQueue";
 import { MonitoringGroupDetails } from "../components/monitoring/board/MonitoringGroupDetails";
@@ -51,6 +53,7 @@ import {
 import "../components/monitoring/board/MonitoringResults.css";
 import "../components/monitoring/MonitoringWorkspace.css";
 import "./TaskQueue.css";
+import "./AiSearchWorkspace.css";
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -84,10 +87,16 @@ export default function TaskQueue({
   ipId,
   conversationOwner,
   onUnavailable,
+  mode="listings",
+  workspaceTabs,
+  historyPanel,
 }: {
   ipId: string;
   conversationOwner?:string;
   onUnavailable?: () => void;
+  mode?:"listings"|"ai";
+  workspaceTabs?:ReactNode;
+  historyPanel?:ReactNode;
 }) {
   const [params, setParams] = useSearchParams(),
     navigate = useNavigate(),
@@ -237,6 +246,11 @@ export default function TaskQueue({
     [searchStack, setSearchStack] = useState<number[]>([]);
   const { members } = useTenantMembers();
   const urlSearchId = params.get("task_search");
+  const categoryScope=JSON.stringify([ipId,query.status,query.catalog_product_id,params.get("queue_filters"),urlSearchId,params.get("top_sellers")]);
+  const [categoryView,setCategoryView]=useState<{scope:string;report:CategoryRanking}|null>(null);
+  const categoryReport=categoryView?.scope===categoryScope&&!searchStarting?categoryView.report:null;
+  const categoryWorkspace=useRef<HTMLDivElement>(null);
+  const categoryReturnFocus=useRef<HTMLElement|null>(null);
   const savedSearchSort=params.get("queue_sort")==="priority"?"priority":"newest";
   const viewGeneration=useRef(0);
   const viewMembership=JSON.stringify([ipId,params.toString()]);
@@ -253,7 +267,7 @@ export default function TaskQueue({
     ? (search?.rows ?? [])
     : (search?.rows ?? page?.rows ?? []);
   const groupBy = parseMonitoringGroupBy(params.get("group_by"));
-  const sellerSort = (["exposure", "articles", "priority", "newest"].includes(params.get("group_sort") ?? "")
+  const sellerSort = (["exposure", "articles", "priority", "newest", "total_price"].includes(params.get("group_sort") ?? "")
     ? params.get("group_sort") : "exposure") as SellerGroupSort;
   const topSellers = /^([1-9]\d?|100)$/.test(params.get("top_sellers") ?? "") ? Number(params.get("top_sellers")) : null;
   const sellerQuery = { ...query, group_sort: sellerSort, ...(topSellers ? { ranking_limit:topSellers } : {}), ...(urlSearchId ? { search_id:urlSearchId } : {}) };
@@ -275,6 +289,7 @@ export default function TaskQueue({
       const result=urlSearchId?await getTaskSearch(urlSearchId,0,signal,view.sort):null;
       if(!current())return false;
       setError("");setSearch(result);setSearchAfter(0);setSearchStack([]);setSelection(new Set());closeGroup();
+      setCategoryView(null);
       setParams(queueViewParams(params,view));return true;
     }catch(error){if(current())setError(errorText(error));return false;}
   }
@@ -587,11 +602,12 @@ export default function TaskQueue({
     <>
       <MonitoringToolbar
         className="task-queue-toolbar"
-        title="Tasks"
-        children={null}
+        title={mode==="ai"?"AI search":"Tasks"}
+        children={workspaceTabs??null}
+        showStatus={mode!=="ai"}
         onRefresh={refresh}
         refreshing={waitingForPage}
-        meta={
+        meta={mode==="ai"?undefined:
           <span role="status">
             {page?.as_of
               ? `Updated ${new Date(page.as_of).toLocaleTimeString()}`
@@ -599,10 +615,13 @@ export default function TaskQueue({
           </span>
         }
       />
+      <div className={mode==="ai"?"task-ai-layout":"task-listings-layout"}>
+      {historyPanel}
       <div
         ref={workspaceRef}
-        className="monitoring-results-workspace monitoring-data-workspace task-queue-workspace"
+        className={`monitoring-results-workspace monitoring-data-workspace task-queue-workspace${mode==="ai"?" is-ai":""}${mode==="ai"&&!search&&!urlSearchId&&!searchStarting?" is-empty":""}`}
       >
+        {mode==="listings"&&<>
         {error && (
           <p role="alert" className="task-queue-notice text-red-700">
             {error} <button onClick={refresh}>Retry</button>
@@ -659,15 +678,24 @@ export default function TaskQueue({
             ))}
           </nav>
         </div>
+        </>}
+        <div className={mode==="ai"?"task-ai-conversation":undefined}>
         <TaskSearch
           key={searchReset}
+          mode={mode}
           conversationOwner={conversationOwner}
           ipId={ipId}
           product={query.catalog_product_id}
           params={params}
           members={members}
           status={query.status}
-          ranking={topSellers ? {limit:topSellers} : null}
+          ranking={topSellers&&sellerSort!=="total_price" ? {limit:topSellers} : null}
+          onShowCategoryReport={report=>{
+            if(report.state!=="completed"||report.search_id!==urlSearchId)return;
+            categoryReturnFocus.current=document.activeElement instanceof HTMLElement?document.activeElement:null;
+            setCategoryView({scope:categoryScope,report});setSelection(new Set());setReview(null);closeGroup();
+            if(mode!=="ai")requestAnimationFrame(()=>{categoryWorkspace.current?.focus();categoryWorkspace.current?.scrollIntoView({block:"start"});});
+          }}
           controls={
             <div className="task-search-scope">
               <button
@@ -695,7 +723,7 @@ export default function TaskQueue({
                 </button>
               )}
               {topSellers && <span className="task-search-chip"><span>Top {topSellers} sellers</span><button type="button" aria-label="Remove top seller limit" onClick={()=>{const next=new URLSearchParams(params);next.delete("top_sellers");setParams(next);}}>×</button></span>}
-              <label>
+              {!categoryReport&&<label>
                 Group by
                 <select
                   aria-label="Group by"
@@ -713,8 +741,8 @@ export default function TaskQueue({
                   <option value="seller">Seller</option>
                   <option value="product">Product</option>
                 </select>
-              </label>
-              {(groupBy === "seller" || (!search && !urlSearchId) || search?.queue_view_policy_version===queueViewPolicy) && (
+              </label>}
+              {!categoryReport&&(groupBy === "seller" || (!search && !urlSearchId) || search?.queue_view_policy_version===queueViewPolicy) && (
                 <label>
                   Sort{" "}
                   <select
@@ -731,7 +759,7 @@ export default function TaskQueue({
                       setParams(next);
                     }}
                   >
-                    {groupBy === "seller" && <><option value="exposure">Seller exposure: highest first</option><option value="articles">Seller articles: most first</option></>}
+                    {groupBy === "seller" && <><option value="exposure">Seller exposure: highest first</option><option value="articles">Seller articles: most first</option>{sellerSort==="total_price"&&<option value="total_price">Seller total listing price: highest first</option>}</>}
                     <option value="priority">Highest priority</option>
                     <option value="newest">Newest first detected</option>
                   </select>
@@ -758,6 +786,10 @@ export default function TaskQueue({
             }
           }}
         />
+        </div>
+        <div className={mode==="ai"?"task-ai-results":undefined} hidden={mode==="ai"&&!search&&!urlSearchId&&!searchStarting}>
+        {mode==="ai"&&<header className="task-ai-results-header"><h2>Results</h2>{(search||urlSearchId)&&<span className="task-ai-result-count">{categoryReport?`${categoryReport.total_categories} categories`:search?.state==="completed"?`${search.matched.toLocaleString()} matches`:"Search in progress"}</span>}</header>}
+        {mode==="ai"&&error&&<p className="task-queue-notice" role="alert">{error} <button type="button" onClick={refresh}>Retry</button></p>}
         {productOpen && (
           <div className="task-queue-product-picker">
             <input
@@ -795,7 +827,7 @@ export default function TaskQueue({
             <button onClick={returnToQueue}>Return to queue</button>
           </div>
         )}
-        {!review && (search || searchStarting) && (
+        {!review && !categoryReport && (search || searchStarting) && (
           <TaskSearchStatus
             search={search}
             starting={searchStarting}
@@ -805,7 +837,8 @@ export default function TaskQueue({
             queueLabel={query.status === "all" ? "All open" : taskStateLabels[query.status]}
             stopping={searchStopping}
             onStop={() => void stopSearch()}
-            onReturn={returnToQueue}
+            returnLabel={mode==="ai"?"Open in Listings":undefined}
+            onReturn={mode==="ai"?()=>{const next=new URLSearchParams(params);next.delete("workspace");next.delete("chat");navigate({pathname:"/monitoring/tasks",search:"?"+next});}:returnToQueue}
           />
         )}
         {review ? (
@@ -846,6 +879,15 @@ export default function TaskQueue({
               onActiveFindingChange={open}
             />
           </>
+        ) : mode==="ai"&&!search&&!urlSearchId&&!categoryReport ? (
+          <div className="task-ai-results-empty"><div><ListFilter size={22} aria-hidden="true"/></div><h3>A place for your findings</h3><p>Listings, seller comparisons, and category breakdowns appear here as you explore.</p><span>Your listing filters stay in the Listings tab.</span></div>
+        ) : categoryReport ? (
+          <div ref={categoryWorkspace} tabIndex={-1} className="task-category-workspace-anchor">
+            <CategoryResultsWorkspace key={`${categoryScope}:${categoryReport.as_of}`} initialReport={categoryReport} revision={revision} onClose={()=>{setCategoryView(null);requestAnimationFrame(()=>{
+              const trigger=categoryReturnFocus.current;
+              if(trigger?.isConnected){const target=trigger.closest("[hidden]")?trigger.closest(".task-search-chat")?.querySelector<HTMLButtonElement>(".task-search-chat-toggle"):trigger;target?.focus();}
+            });}} onSelectionReset={()=>setSelection(new Set())} renderRow={renderTaskRow}/>
+          </div>
         ) : groupBy === "seller" && !searchStarting && (!search || Boolean(search.id)) ? (
           <>
             <SellerGroupedQueue topLimit={topSellers} requireComplete={Boolean(topSellers)} key={`${JSON.stringify(sellerQuery)}:${queueReset}`}
@@ -1077,7 +1119,7 @@ export default function TaskQueue({
             showIpColumn
           />
         </>}
-        {activeGroup && !review && groupBy !== "seller" && (
+        {activeGroup && !review && !categoryReport && groupBy !== "seller" && (
           <MonitoringGroupDetails
             group={activeGroup}
             scope="page"
@@ -1129,6 +1171,8 @@ export default function TaskQueue({
             )}
           </>
         )}
+      </div>
+      </div>
       </div>
     </>
   );

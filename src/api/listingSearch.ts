@@ -1,4 +1,4 @@
-import { queueViewPolicy,parseQueueViewChange,type QueueView,type QueueViewChange } from "../lib/queueView";
+import { queueViewPolicy,sellerValuePolicy,conversationActionsPolicy,parseQueueViewChange,type QueueView,type QueueViewChange } from "../lib/queueView";
 import {categoryRankingPolicy,parseCategoryRankingRequest,type CategoryRankingRequest} from "../lib/categoryRanking";
 import { request } from "./transport";
 import { isRecord, requireResponse } from "./validation";
@@ -10,11 +10,11 @@ export interface ListingRow { sellerMatchingCount: number | null; id: string; ti
 export interface RankedSeller { sellerKey:string; name:string|null; domain:string; count:number }
 export interface ListingPage { sellers?: RankedSeller[]; rows: ListingRow[]; total: number; nextCursor: string | null; catalog: CatalogMatch | null; fx: { asOf: string; basis: string } | null }
 export type Translation = {name:"rank_categories";ranking:CategoryRankingRequest}|{name:"set_queue_view";view:QueueViewChange}
-  | { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; catalogQuery?: string | null }
+  | { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; showListings?:boolean; catalogQuery?: string | null }
   | { name: "next_listing_page" }
   | { name: "request_clarification"; reason: string; capability?: string; question?:string; options?:string[]; conflictField?:"price"|"seller_listing_count" };
 export const listingConversationPolicy = "listing-conversation-v1";
-export type SearchConversation = {mode:"new"|"continue";messages:Array<{role:"user"|"assistant";content:string}>;resolution?:"price"|"seller_listing_count"};
+export type SearchConversation = {mode:"new"|"continue";messages:Array<{role:"user"|"assistant";content:string}>;resolution?:"price"|"seller_listing_count";category_context?:{metric:"total_price"|"articles";groups:Array<{category_key:string|null;category_label:string}>}};
 const text = (value: unknown): value is string => typeof value === "string" && value.length <= 4000;
 const nullableText = (value: unknown): value is string | null => value === null || text(value);
 const count = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -34,10 +34,10 @@ export async function listingCapability(signal: AbortSignal) {
     && Object.entries(value.country_labels).every(([key, label]) => /^[A-Z]{2}$/.test(key) && text(label)), "search capability");
   requireResponse(value.seller_count_policy_version === undefined || value.seller_count_policy_version === sellerCountPolicy, "seller-count policy");
   requireResponse(value.seller_ranking_policy_version === undefined || value.seller_ranking_policy_version === sellerRankingPolicy, "seller-ranking policy");
-  return { categoryRanking:value.category_ranking_policy_version===categoryRankingPolicy, queueView:value.queue_view_policy_version===queueViewPolicy, conversation:value.conversation_policy_version === listingConversationPolicy, searchAgent:value.search_agent_policy_version === "listing-search-agent-v1", titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
+  return { sellerValue:value.seller_value_policy_version===sellerValuePolicy,conversationActions:value.conversation_actions_policy_version===conversationActionsPolicy, categoryRanking:value.category_ranking_policy_version===categoryRankingPolicy, queueView:value.queue_view_policy_version===queueViewPolicy, conversation:value.conversation_policy_version === listingConversationPolicy, searchAgent:value.search_agent_policy_version === "listing-search-agent-v1", titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
 }
-export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null, conversation?:SearchConversation,queueView?:QueueView,categoryRanking=false): Promise<Translation> {
-  const value = await read("translate", { message, filters, ...(ranking ? {ranking} : {}),...(conversation?{conversation}:{}),...(queueView?{queue_view:queueView}:{}),...(categoryRanking?{category_ranking:true}:{}) }, signal);
+export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null, conversation?:SearchConversation,queueView?:QueueView,categoryRanking=false,features:{sellerValue?:boolean;categorySelection?:boolean}={}): Promise<Translation> {
+  const value = await read("translate", { message, filters,...(features.sellerValue?{seller_value:true}:{}),...(features.categorySelection?{conversation_actions:true}:{}), ...(ranking ? {ranking} : {}),...(conversation?{conversation}:{}),...(queueView?{queue_view:queueView}:{}),...(categoryRanking?{category_ranking:true}:{}) }, signal);
   requireResponse(isRecord(value) && value.version === 1 && value.jobs_started === 0 && isRecord(value.query) && isRecord(value.query.arguments), "search translation");
   const query = value.query;
   const args = query.arguments;
@@ -55,7 +55,7 @@ export async function translateListingSearch(message: string, filters: ListingFi
   requireResponse((query.name === "search_listings" || query.name === "rank_sellers") && (args.catalog_query === undefined || nullableText(args.catalog_query)), "search translation");
   const next = parseListingFilters(value.filters);
   requireResponse(next.ip_id === filters.ip_id, "search scope");
-  return { name: query.name, ranking: query.name === "rank_sellers" ? parseSellerRanking(args.ranking) : null, filters: next, ...(Object.hasOwn(args, "catalog_query") ? { catalogQuery: args.catalog_query as string | null } : {}) };
+  return { name: query.name, ...(args.show_listings===true?{showListings:true}:{}), ranking: query.name === "rank_sellers" ? parseSellerRanking(args.ranking) : null, filters: next, ...(Object.hasOwn(args, "catalog_query") ? { catalogQuery: args.catalog_query as string | null } : {}) };
 }
 export async function resolveListingCatalog(query: string, ipId: string | null, signal: AbortSignal): Promise<CatalogResolution> {
   const value = await read("resolve-catalog", { query, ip_id: ipId, limit: 20 }, signal);

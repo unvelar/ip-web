@@ -1,6 +1,7 @@
 import { emptyListingFilters, parseListingFilters, type ListingFilters, type SellerRanking } from "./listingSearch";
 import { readSemanticFilters } from "./semanticFilters";
 import type { TaskQueueQuery } from "../api/taskQueue";
+import {queueViewParams,type QueueView} from "./queueView";
 
 export type TaskSearchValues = Record<string, string>;
 export const taskListingSearchPolicy = "task-listing-search-v1";
@@ -9,12 +10,14 @@ export interface AppliedTaskSearch {
   status: TaskQueueQuery["status"];
   product?: string;
   ranking: SellerRanking | null;
+  showListings?:boolean;
+  queueView?:QueueView;
 }
 export const assistantValueFields = ["title_contains", "listing_countries", "listing_price", "seller_listing_count", "catalog_selection"];
 
 /** One draft for manual controls and language refinements. Only the supported
  * editable subset crosses the model boundary; queue-specific predicates stay. */
-export function taskAssistantFilters(values: TaskSearchValues, ipId: string, status: TaskQueueQuery["status"], product?: string): ListingFilters {
+export function taskAssistantFilters(values: TaskSearchValues, ipId: string|null, status: TaskQueueQuery["status"], product?: string): ListingFilters {
   return parseListingFilters({ ...emptyListingFilters(ipId), ...(values.title_contains ? {title_contains:values.title_contains} : {}), status, catalog_product_id: product ?? null,
     query: values.q?.trim() || null,
     semantic: values.semantic ? readSemanticFilters(values.semantic) : null,
@@ -67,7 +70,8 @@ export function queueSearchParams(params: URLSearchParams, applied: AppliedTaskS
   next.set("status",applied.status);
   if (applied.product) next.set("catalog_product_id",applied.product); else next.delete("catalog_product_id");
   if (searchId) next.set("task_search",searchId); else next.delete("task_search");
+  if(applied.showListings){next.delete("group_by");next.delete("group_sort");next.delete("top_sellers");}
   if (applied.ranking) { next.set("group_by","seller"); next.set("group_sort","articles"); next.set("top_sellers",String(applied.ranking.limit)); }
-  else next.delete("top_sellers");
-  return next;
+  else if(applied.showListings||params.get("group_sort")!=="total_price")next.delete("top_sellers");
+  return applied.queueView?queueViewParams(next,applied.queueView):next;
 }

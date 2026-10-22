@@ -4,7 +4,7 @@ import type { TaskSearchResult } from "../api/taskQueue";
 import { useOutsideDismiss } from "../hooks/useOutsideDismiss";
 
 export default function TaskSearchStatus({
-  search, starting, queueTotal, queueLabel, stopping, onStop, onReturn,
+  search, starting, queueTotal, queueLabel, stopping, onStop, onReturn,returnLabel="Return to queue",
 }: {
   search: TaskSearchResult | null;
   starting: boolean;
@@ -13,6 +13,7 @@ export default function TaskSearchStatus({
   stopping: boolean;
   onStop: () => void;
   onReturn: () => void;
+  returnLabel?:string;
 }) {
   const scope = useRef<HTMLDetailsElement>(null);
   useOutsideDismiss(scope, () => { if (scope.current) scope.current.open = false; });
@@ -61,7 +62,7 @@ export default function TaskSearchStatus({
               {stopping ? "Stopping…" : "Stop"}
             </button>
           )}
-          {!starting && <button type="button" onClick={onReturn}>Return to queue</button>}
+          {!starting && <button type="button" onClick={onReturn}>{returnLabel}</button>}
         </div>
       </div>
       {active && <div className="task-search-activity" role="progressbar" aria-label={label} />}

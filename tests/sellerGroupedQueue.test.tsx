@@ -139,3 +139,20 @@ test("top seller rankings wait for the complete search instead of displaying pro
   expect(ui.container.textContent).toContain("ranking will appear when the full search completes");
   expect(ui.requests).toHaveLength(1);
 });
+
+test("total listing price uses the owned membership API, displays the right basis, and expands canonical seller items",async()=>{
+ const window=new Window({url:"http://localhost:5173"});
+ Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,IS_REACT_ACT_ENVIRONMENT:true});
+ const container=document.createElement("div");document.body.replaceChildren(container);const requests:URL[]=[];
+ globalThis.fetch=(async(input)=>{
+   const url=new URL(String(input),"http://localhost:5173");requests.push(url);
+   const base={policy_version:"task-seller-value-v1",search_id:"saved",offset:0,state:"completed",partial:false,next_offset:null};
+   return Response.json(url.pathname.endsWith("/listings")?{...base,seller_key:"shop",sort:"priority",rows:[{task_id:"task",result_id:"result",seller_key:"shop"}]}:{...base,ranking_limit:null,as_of:new Date().toISOString(),updating:false,total_groups:1,groups:[{seller_key:"shop",seller_name:"Shop",article_count:3,priced_article_count:2,total_price_usd:"30.30"}]});
+ }) as typeof fetch;
+ root=createRoot(container);
+ await act(async()=>root!.render(<SellerGroupedQueue query={{ip_id:"ip",status:"pending",sort:"priority",search_id:"saved",group_sort:"total_price"}} revision="0" selection={new Set()} onSelect={()=>{}} renderRow={row=><tr key={row.result_id}><td>{row.result_id}</td></tr>} onUngroup={()=>{}} onOpenGroup={()=>{}}/>));
+ expect(requests[0].pathname).toBe("/api/monitoring/tasks/searches/saved/sellers");expect(container.textContent).toContain("Total listing price (USD)");expect(container.textContent).toContain("$30.30+");expect(container.textContent).not.toContain("Exposure (USD)");
+ expect(container.querySelector('.monitoring-group-exposure')?.getAttribute('title')).toContain("quantities are not multiplied");
+ await act(async()=>container.querySelector<HTMLButtonElement>('[aria-label="Expand Shop"]')!.click());
+ expect(requests[1].pathname).toBe("/api/monitoring/tasks/searches/saved/sellers/listings");expect(requests[1].searchParams.get("seller_key")).toBe("shop");expect(container.textContent).toContain("result");
+});

@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useActiveIp } from "../context/ActiveIpContext";
 import { isApiError } from "../api";
 import { taskCapability, type TaskCapability } from "../api/taskQueue";
-import TaskQueue from "./TaskQueue";
+import {MonitoringTaskWorkspace} from "../components/MonitoringTaskWorkspace";
 
 /**
  * `/monitoring/tasks` — the canonical monitoring task list. A thin page
@@ -62,7 +62,7 @@ export default function MonitoringTasks() {
   if (activeIpId && capability?.key === key && capability.value?.active)
     return (
       <div className="monitoring-task-page">
-        <TaskQueue key={key} ipId={activeIpId} conversationOwner={user?.id} onUnavailable={renegotiate} />
+        <MonitoringTaskWorkspace key={`${key}:${user?.id??"temporary"}`} ipId={activeIpId} owner={user?.id} tenant={actingTenantId} onUnavailable={renegotiate} />
       </div>
     );
   return (
