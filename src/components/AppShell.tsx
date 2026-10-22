@@ -22,6 +22,7 @@ import BrandProductSelector from "./BrandProductSelector";
 import MonitoringPulse from "./MonitoringPulse";
 import { useMonitoringPulse } from "./useMonitoringPulse";
 import { MonitoringToolbarContext } from "./MonitoringToolbarContext";
+import { useOutsideDismiss } from "../hooks/useOutsideDismiss";
 import Avatar from "./Avatar";
 import BrandMark from "./BrandMark";
 import {
@@ -99,8 +100,9 @@ function AppShellContent() {
   }, [user]);
 
   const actingTenant = tenants.find((t) => t.id === actingTenantId) ?? null;
-  const { pathname, hash } = useLocation();
+  const { pathname, hash, search } = useLocation();
   const toolbarPath = pathname.replace(/\/$/, "");
+  const aiWorkspace = (toolbarPath === "/monitoring/tasks" || toolbarPath.startsWith("/monitoring/tasks/")) && new URLSearchParams(search).get("workspace") === "ai";
   const unifiedMonitoringToolbar = toolbarPath === "/monitoring/products" ||
     toolbarPath === "/monitoring/search" ||
     toolbarPath === "/monitoring/sellers" || toolbarPath === "/monitoring/tasks" ||
@@ -111,6 +113,26 @@ function AppShellContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
     loadBoolean(SIDEBAR_COLLAPSED_KEY, false),
   );
+  const [aiNavigationOpen, setAiNavigationOpen] = useState(false);
+  const desktopNavigation = useRef<HTMLDivElement>(null);
+  const navigationCollapsed = aiWorkspace ? !aiNavigationOpen : sidebarCollapsed;
+  const toggleSidebar = () => aiWorkspace
+    ? setAiNavigationOpen(value => !value)
+    : setSidebarCollapsed(value => !value);
+  useOutsideDismiss(desktopNavigation, () => {
+    if (aiWorkspace && aiNavigationOpen) setAiNavigationOpen(false);
+  });
+  useEffect(() => {
+    if (!aiWorkspace || !aiNavigationOpen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || document.querySelector('[aria-modal="true"], dialog[open]')) return;
+      event.preventDefault();
+      setAiNavigationOpen(false);
+      requestAnimationFrame(() => desktopNavigation.current?.querySelector<HTMLButtonElement>('[aria-label="Expand sidebar"]')?.focus());
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [aiWorkspace, aiNavigationOpen]);
 
   useEffect(() => {
     try {
@@ -173,7 +195,8 @@ function AppShellContent() {
   // Close mobile drawer on navigation.
   useEffect(() => {
     setDrawerOpen(false);
-  }, [pathname, hash]);
+    setAiNavigationOpen(false);
+  }, [pathname, hash, aiWorkspace]);
 
   function isActive(to: string) {
     return pathname === to || pathname.startsWith(`${to}/`);
@@ -195,9 +218,10 @@ function AppShellContent() {
         {collapsible && !collapsed && (
           <button
             type="button"
-            onClick={() => setSidebarCollapsed((value) => !value)}
+            onClick={toggleSidebar}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             <PanelLeftClose size={16} />
@@ -210,9 +234,10 @@ function AppShellContent() {
         {collapsible && collapsed && (
           <button
             type="button"
-            onClick={() => setSidebarCollapsed(false)}
+            onClick={toggleSidebar}
             className="mb-3 flex w-full items-center justify-center rounded-lg py-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
             aria-label="Expand sidebar"
+            aria-expanded={false}
             title="Expand sidebar"
           >
             <PanelLeftOpen size={18} />
@@ -309,6 +334,7 @@ function AppShellContent() {
       className="app-shell min-h-dvh bg-cream text-stone-900 font-[Inter,system-ui,sans-serif] [--app-shell-topbar-height:3rem] [--app-shell-banner-sticky-top:3rem] lg:fixed lg:inset-0 lg:overflow-hidden lg:[--app-shell-topbar-height:40px] lg:[--app-shell-banner-sticky-top:0px]"
       style={appShellLayoutStyle(isActingAsOther)}
       data-monitoring-toolbar={unifiedMonitoringToolbar || undefined}
+      data-ai-workspace={aiWorkspace || undefined}
     >
       {/* Mobile topbar */}
       <div className="shell-mobile-topbar lg:hidden sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-stone-200/60 h-12 flex items-center px-3 gap-3">
@@ -333,8 +359,9 @@ function AppShellContent() {
 
       <div className="flex lg:h-full">
         {/* Desktop sidebar */}
-        <div className="shell-sidebar-frame hidden lg:block lg:h-full lg:sticky lg:top-0 lg:shrink-0" data-collapsed={sidebarCollapsed}>
-          {renderSidebar(sidebarCollapsed, true)}
+        <div ref={desktopNavigation} className="shell-sidebar-frame hidden lg:block lg:h-full lg:sticky lg:top-0 lg:shrink-0" data-collapsed={aiWorkspace || sidebarCollapsed} data-ai-workspace={aiWorkspace || undefined} data-overlay-expanded={aiWorkspace && aiNavigationOpen || undefined}
+          onClick={event => { if (aiWorkspace && event.target instanceof Element && event.target.closest("a[href]")) setAiNavigationOpen(false); }}>
+          {renderSidebar(navigationCollapsed, true)}
         </div>
 
         {/* Off-canvas drawer (mobile) */}

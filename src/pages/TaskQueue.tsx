@@ -1,8 +1,8 @@
 import {queueViewFromParams,queueViewParams,queueViewPolicy,type QueueView} from "../lib/queueView";
 import { queueSearchParams } from "../lib/taskSearchAssistant";
-import { useCallback, useEffect, useMemo, useRef, useState,type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState,type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ImageOff,ListFilter } from "lucide-react";
+import { ImageOff,ListFilter,PanelLeftClose,PanelLeftOpen,ArrowUpRight } from "lucide-react";
 import MonitoringToolbar from "../components/MonitoringToolbar";
 import TaskSearch from "../components/TaskSearch";
 import TaskSearchStatus from "../components/TaskSearchStatus";
@@ -102,6 +102,9 @@ export default function TaskQueue({
     navigate = useNavigate(),
     { taskId } = useParams<{ taskId?: string }>();
   const workspaceRef = useRef<HTMLDivElement>(null);
+  const conversationRef=useRef<HTMLDivElement>(null);
+  const conversationId=useId();
+  const [resultsFocused,setResultsFocused]=useState(false);
   const searchPoll = useRef<AbortController | null>(null);
   const statusRef = useRef<HTMLElement>(null);
   const scrollToQueue = () =>
@@ -599,6 +602,20 @@ export default function TaskQueue({
       </tr>
     );
   };
+  const openInListings=()=>{const next=new URLSearchParams(params);next.delete("workspace");next.delete("chat");navigate({pathname:"/monitoring/tasks",search:"?"+next});};
+  const searchStatus=!review&&!categoryReport&&(search||searchStarting)?<TaskSearchStatus
+    search={search}
+    starting={searchStarting}
+    queueTotal={page ? query.status === "all"
+      ? taskStates.filter(state=>state!=="dismissed").reduce((sum,state)=>sum+page.counts[state],0)
+      : page.counts[query.status] : undefined}
+    queueLabel={query.status === "all"?"All open":taskStateLabels[query.status]}
+    stopping={searchStopping}
+    onStop={()=>void stopSearch()}
+    onReturn={returnToQueue}
+    compact={mode==="ai"}
+    showReturn={mode!=="ai"}
+  />:null;
   return (
     <>
       <MonitoringToolbar
@@ -620,7 +637,7 @@ export default function TaskQueue({
       {historyPanel}
       <div
         ref={workspaceRef}
-        className={`monitoring-results-workspace monitoring-data-workspace task-queue-workspace${mode==="ai"?" is-ai":""}${mode==="ai"&&!search&&!urlSearchId&&!searchStarting?" is-empty":""}`}
+        className={`monitoring-results-workspace monitoring-data-workspace task-queue-workspace${mode==="ai"?" is-ai":""}${mode==="ai"&&!search&&!urlSearchId&&!searchStarting?" is-empty":""}${mode==="ai"&&resultsFocused?" is-results-focused":""}`}
       >
         {mode==="listings"&&<>
         {error && (
@@ -680,7 +697,7 @@ export default function TaskQueue({
           </nav>
         </div>
         </>}
-        <div className={mode==="ai"?"task-ai-conversation":undefined}>
+        <div ref={conversationRef} id={conversationId} className={mode==="ai"?"task-ai-conversation":undefined} role={mode==="ai"?"region":undefined} aria-label={mode==="ai"?"Search conversation":undefined} hidden={mode==="ai"&&resultsFocused}>
         <TaskSearch
           key={searchReset}
           mode={mode}
@@ -788,8 +805,11 @@ export default function TaskQueue({
           }}
         />
         </div>
-        <div className={mode==="ai"?"task-ai-results":undefined} hidden={mode==="ai"&&!search&&!urlSearchId&&!searchStarting}>
-        {mode==="ai"&&<header className="task-ai-results-header"><h2>Results</h2>{(search||urlSearchId)&&<span className="task-ai-result-count">{categoryReport?`${categoryReport.total_categories} categories`:search?.state==="completed"?`${search.matched.toLocaleString()} matches`:"Search in progress"}</span>}</header>}
+        <div className={mode==="ai"?"task-ai-results":undefined} role={mode==="ai"?"region":undefined} aria-label={mode==="ai"?"Search results":undefined} hidden={mode==="ai"&&!search&&!urlSearchId&&!searchStarting}>
+        {mode==="ai"&&<header className="task-ai-results-header">
+          <div className="task-ai-results-heading"><h2>{categoryReport?"Categories":groupBy==="seller"?"Sellers":"Listings"}</h2>{categoryReport?<span className="task-ai-result-count">{categoryReport.total_categories} categories</span>:searchStatus}</div>
+          <div className="task-ai-results-actions"><button type="button" className="task-ai-focus" aria-label={resultsFocused?"Show chat":"Focus results"} title={resultsFocused?"Show chat":"Focus results"} aria-expanded={!resultsFocused} aria-controls={conversationId} onClick={()=>{setResultsFocused(value=>!value);if(resultsFocused)requestAnimationFrame(()=>conversationRef.current?.querySelector("textarea")?.focus());}}>{resultsFocused?<><PanelLeftOpen size={15} aria-hidden="true"/>Chat</>:<PanelLeftClose size={15} aria-hidden="true"/>}</button><button type="button" disabled={searchStarting||!search?.id} onClick={openInListings}><ArrowUpRight size={14} aria-hidden="true"/>Open in Listings</button></div>
+        </header>}
         {mode==="ai"&&error&&<p className="task-queue-notice" role="alert">{error} <button type="button" onClick={refresh}>Retry</button></p>}
         {productOpen && (
           <div className="task-queue-product-picker">
@@ -828,20 +848,7 @@ export default function TaskQueue({
             <button onClick={returnToQueue}>Return to queue</button>
           </div>
         )}
-        {!review && !categoryReport && (search || searchStarting) && (
-          <TaskSearchStatus
-            search={search}
-            starting={searchStarting}
-            queueTotal={page ? query.status === "all"
-              ? taskStates.filter((state) => state !== "dismissed").reduce((sum, state) => sum + page.counts[state], 0)
-              : page.counts[query.status] : undefined}
-            queueLabel={query.status === "all" ? "All open" : taskStateLabels[query.status]}
-            stopping={searchStopping}
-            onStop={() => void stopSearch()}
-            returnLabel={mode==="ai"?"Open in Listings":undefined}
-            onReturn={mode==="ai"?()=>{const next=new URLSearchParams(params);next.delete("workspace");next.delete("chat");navigate({pathname:"/monitoring/tasks",search:"?"+next});}:returnToQueue}
-          />
-        )}
+        {mode!=="ai"&&searchStatus}
         {review ? (
           <>
             <div className="task-queue-controls">

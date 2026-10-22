@@ -4,7 +4,7 @@ import type { TaskSearchResult } from "../api/taskQueue";
 import { useOutsideDismiss } from "../hooks/useOutsideDismiss";
 
 export default function TaskSearchStatus({
-  search, starting, queueTotal, queueLabel, stopping, onStop, onReturn,returnLabel="Return to queue",
+  search, starting, queueTotal, queueLabel, stopping, onStop, onReturn,returnLabel="Return to queue",compact=false,showReturn=true,
 }: {
   search: TaskSearchResult | null;
   starting: boolean;
@@ -14,6 +14,8 @@ export default function TaskSearchStatus({
   onStop: () => void;
   onReturn: () => void;
   returnLabel?:string;
+  compact?:boolean;
+  showReturn?:boolean;
 }) {
   const scope = useRef<HTMLDetailsElement>(null);
   useOutsideDismiss(scope, () => { if (scope.current) scope.current.open = false; });
@@ -29,7 +31,7 @@ export default function TaskSearchStatus({
   const failedBeforeScan = search?.state === "failed" && Number(search.scanned) === 0;
   return (
     <>
-      <div className="task-search-status" role="status" aria-live="polite">
+      <div className={`task-search-status${compact?" is-compact":""}`} role="status" aria-live="polite">
         <span className="task-search-matches">
           {search?.requires_complete && !complete ? search.completion_reason==="priority_order"?(partial?"Priority order unavailable":"Ordering matching items…"):partial ? "Seller counts unavailable" : "Counting seller matches…" : starting || failedBeforeScan ? "Results" : `${search?.matched.toLocaleString() ?? 0} ${search?.matched === 1 ? "match" : "matches"}`}
           {!starting && !complete && !failedBeforeScan && !search?.requires_complete && <> <span>{partial ? "partial" : "so far"}</span></>}
@@ -62,7 +64,7 @@ export default function TaskSearchStatus({
               {stopping ? "Stopping…" : "Stop"}
             </button>
           )}
-          {!starting && <button type="button" onClick={onReturn}>{returnLabel}</button>}
+          {!starting && showReturn && <button type="button" onClick={onReturn}>{returnLabel}</button>}
         </div>
       </div>
       {active && <div className="task-search-activity" role="progressbar" aria-label={label} />}

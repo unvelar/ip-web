@@ -85,6 +85,8 @@
 .shell-account-popover select { padding: 8px; }
 .shell-sidebar[data-collapsed=true] .shell-brand-row { justify-content: center; padding: 0; }
 .shell-sidebar[data-collapsed=true] .shell-sidebar-scroll { padding: 0 8px 12px; }
+.shell-sidebar-frame[data-ai-workspace=true] { z-index:35; }
+.shell-sidebar-frame[data-overlay-expanded=true] > .shell-sidebar { position:absolute; inset:0 auto 0 0; width:224px; z-index:1; box-shadow:12px 0 30px #29252414; }
 .shell-sidebar[data-collapsed=true] .shell-sidebar-footer { padding: 8px; }
 .shell-sidebar[data-collapsed=true] .shell-nav-item { justify-content: center; padding: 8px; }
 .shell-sidebar[data-collapsed=true] .shell-account > button { padding: 6px 0; }
@@ -130,6 +132,7 @@
 @media (min-width: 1024px) {
   .app-shell { --app-shell-topbar-height: 40px; --app-shell-banner-sticky-top: 0px; }
   .app-shell[data-monitoring-toolbar=true] { --app-shell-topbar-height:49px; }
+  .app-shell[data-ai-workspace=true] { --app-shell-topbar-height:55px; }
   .shell-sidebar-frame { width: 224px; transition: width 180ms ease; }
   .shell-sidebar-frame[data-collapsed=true] { width: 60px; }
 }

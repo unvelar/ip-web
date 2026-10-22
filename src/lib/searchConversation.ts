@@ -8,7 +8,7 @@ export type ConversationState = {messages:SearchMessage[];intent:"new"|"continue
 export function newSearchValues(values:TaskSearchValues):TaskSearchValues {
   return {q:"",from:values.from,to:values.to};
 }
-export function searchChangeSummary(before:AppliedTaskSearch,after:AppliedTaskSearch,labels:Record<string,string>):string {
+export function searchChangeSummary(before:AppliedTaskSearch,after:AppliedTaskSearch,labels:Record<string,string>,options:{includeRanking?:boolean;includeRetention?:boolean}={}):string {
   // Compare canonical predicates, not omitted fields versus empty UI strings
   // or legacy price controls versus the structured price representation.
   const previous=taskAssistantFilters(before.values,null,before.status,before.product);
@@ -29,8 +29,15 @@ export function searchChangeSummary(before:AppliedTaskSearch,after:AppliedTaskSe
   if(changed("seller_listing_count"))changes.push("Updated matching listings per seller.");
   if(changed("catalog_product_id")||changed("catalog_selection"))changes.push("Updated the catalog selection.");
   if(before.status!==after.status)changes.push("Updated the queue status.");
-  if(JSON.stringify(before.ranking)!==JSON.stringify(after.ranking))changes.push(after.ranking?`Showing the top ${after.ranking.limit} sellers.`:"Showing listings.");
-  return `${changes.join(" ")||"Search conditions applied."} Other active filters were kept.`;
+  if(options.includeRanking!==false&&JSON.stringify(before.ranking)!==JSON.stringify(after.ranking))changes.push(after.ranking?`Showing the top ${after.ranking.limit} sellers.`:"Showing listings.");
+  const summary=changes.join(" ");
+  return options.includeRetention===false?summary:`${summary||"Search conditions applied."} Other active filters were kept.`;
+}
+
+export function conversationSearchSummary(before:AppliedTaskSearch,after:AppliedTaskSearch,labels:Record<string,string>,fresh:boolean):string {
+  const details=searchChangeSummary(before,after,labels,{includeRanking:false,includeRetention:false});
+  const opening=after.ranking?`I’m finding the ${after.ranking.limit} sellers with the most listings matching your search.`:fresh?"I’ve started a fresh search.":"I’ve updated your search.";
+  return [opening,details,after.ranking?"The ranking will appear when the search finishes.":""].filter(Boolean).join(" ");
 }
 
 /** Conversation text is tab-local, account/tenant/brand scoped, and only

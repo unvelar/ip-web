@@ -9,11 +9,12 @@ export interface CatalogResolution { status: "resolved" | "ambiguous" | "not_fou
 export interface ListingRow { sellerMatchingCount: number | null; id: string; title: string | null; seller: string | null; country: string | null; priceUsd: string | null; image: string | null }
 export interface RankedSeller { sellerKey:string; name:string|null; domain:string; count:number }
 export interface ListingPage { sellers?: RankedSeller[]; rows: ListingRow[]; total: number; nextCursor: string | null; catalog: CatalogMatch | null; fx: { asOf: string; basis: string } | null }
-export type Translation = {name:"rank_categories";ranking:CategoryRankingRequest}|{name:"set_queue_view";view:QueueViewChange}
+export type Translation = {name:"answer_question";answer:string}|{name:"rank_categories";ranking:CategoryRankingRequest}|{name:"set_queue_view";view:QueueViewChange}
   | { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; categoryLabels?:Record<string,string>; showListings?:boolean; catalogQuery?: string | null }
   | { name: "next_listing_page" }
   | { name: "request_clarification"; reason: string; capability?: string; question?:string; options?:string[]; conflictField?:"price"|"seller_listing_count" };
 export const listingConversationPolicy = "listing-conversation-v1";
+export const conversationAnswersPolicy = "listing-conversation-answers-v1";
 export type SearchConversation = {mode:"new"|"continue";messages:Array<{role:"user"|"assistant";content:string}>;resolution?:"price"|"seller_listing_count";category_context?:{metric:"total_price"|"articles";groups:Array<{category_key:string|null;category_label:string}>}};
 const text = (value: unknown): value is string => typeof value === "string" && value.length <= 4000;
 const nullableText = (value: unknown): value is string | null => value === null || text(value);
@@ -34,14 +35,19 @@ export async function listingCapability(signal: AbortSignal) {
     && Object.entries(value.country_labels).every(([key, label]) => /^[A-Z]{2}$/.test(key) && text(label)), "search capability");
   requireResponse(value.seller_count_policy_version === undefined || value.seller_count_policy_version === sellerCountPolicy, "seller-count policy");
   requireResponse(value.seller_ranking_policy_version === undefined || value.seller_ranking_policy_version === sellerRankingPolicy, "seller-ranking policy");
-  return { sellerValue:value.seller_value_policy_version===sellerValuePolicy,conversationActions:value.conversation_actions_policy_version===conversationActionsPolicy, categoryRanking:value.category_ranking_policy_version===categoryRankingPolicy, queueView:value.queue_view_policy_version===queueViewPolicy, conversation:value.conversation_policy_version === listingConversationPolicy, searchAgent:value.search_agent_policy_version === "listing-search-agent-v1", titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
+  return { conversationAnswers:value.conversation_answers_policy_version===conversationAnswersPolicy, sellerValue:value.seller_value_policy_version===sellerValuePolicy,conversationActions:value.conversation_actions_policy_version===conversationActionsPolicy, categoryRanking:value.category_ranking_policy_version===categoryRankingPolicy, queueView:value.queue_view_policy_version===queueViewPolicy, conversation:value.conversation_policy_version === listingConversationPolicy, searchAgent:value.search_agent_policy_version === "listing-search-agent-v1", titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
 }
-export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null, conversation?:SearchConversation,queueView?:QueueView,categoryRanking=false,features:{sellerValue?:boolean;categorySelection?:boolean}={}): Promise<Translation> {
-  const value = await read("translate", { message, filters,...(features.sellerValue?{seller_value:true}:{}),...(features.categorySelection?{conversation_actions:true}:{}), ...(ranking ? {ranking} : {}),...(conversation?{conversation}:{}),...(queueView?{queue_view:queueView}:{}),...(categoryRanking?{category_ranking:true}:{}) }, signal);
+export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null, conversation?:SearchConversation,queueView?:QueueView,categoryRanking=false,features:{sellerValue?:boolean;categorySelection?:boolean;answers?:boolean}={}): Promise<Translation> {
+  const value = await read("translate", { message, filters,...(features.answers&&conversation?{conversation_answers:true}:{}),...(features.sellerValue?{seller_value:true}:{}),...(features.categorySelection?{conversation_actions:true}:{}), ...(ranking ? {ranking} : {}),...(conversation?{conversation}:{}),...(queueView?{queue_view:queueView}:{}),...(categoryRanking?{category_ranking:true}:{}) }, signal);
   requireResponse(isRecord(value) && value.version === 1 && value.jobs_started === 0 && isRecord(value.query) && isRecord(value.query.arguments), "search translation");
   const query = value.query;
   const args = query.arguments;
   requireResponse(isRecord(args), "search translation");
+  if(query.name==="answer_question"){
+    requireResponse(features.answers&&conversation&&Object.keys(args).length===1&&typeof args.answer==="string"&&args.answer.trim().length>0&&args.answer.length<=2000,"conversation answer");
+    requireResponse(listingFilterKey(parseListingFilters(value.filters))===listingFilterKey(filters),"read-only answer filters");
+    return {name:query.name,answer:args.answer.trim()};
+  }
   if(query.name==="rank_categories")return {name:query.name,ranking:parseCategoryRankingRequest(args)};
   if(query.name==="set_queue_view")return {name:query.name,view:parseQueueViewChange(args)};
   if (query.name === "request_clarification") {

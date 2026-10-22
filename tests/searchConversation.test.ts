@@ -23,3 +23,12 @@ test("change summaries compare canonical filters and do not report empty fields 
  const summary=searchChangeSummary(before,after,{action_figures:"Action Figures"});
  expect(summary).toContain("Action Figures");for(const text of ["Updated the price","Removed the listing-location","Updated matching listings","Updated the catalog"])expect(summary).not.toContain(text);
 });
+
+test('chat confirmations name the ranking basis without repetitive reset or retention receipts',async()=>{
+ const {conversationSearchSummary}=await import('../src/lib/searchConversation');
+ const before={status:'pending' as const,ranking:null,values:{q:'',from:'2026-09-23',to:'2026-10-23'}};
+ const after={...before,ranking:{limit:10},values:{...before.values,semantic:JSON.stringify({categories:['action_figures']})}};
+ const summary=conversationSearchSummary(before,after,{action_figures:'Action Figures'},true);
+ expect(summary).toContain('10 sellers with the most listings matching your search');expect(summary).toContain('Action Figures');expect(summary).toContain('when the search finishes');
+ for(const repeated of ['Other active filters','Previous search conditions','Showing the top','rankings wait'])expect(summary).not.toContain(repeated);
+});
