@@ -573,3 +573,10 @@
   .task-search-composer { margin: 6px 10px 0; }
   .task-search-message.is-user { max-width: 90%; }
 }
+
+.task-category-ranking { overflow-x:auto; margin-top:10px; }
+.task-category-ranking table { width:100%; border-collapse:collapse; font-size:13px; }
+.task-category-ranking caption { text-align:left; font-weight:600; padding:0 0 8px; }
+.task-category-ranking th,.task-category-ranking td { padding:8px 10px; border-bottom:1px solid var(--border-color,#e5e2dd); text-align:right; white-space:nowrap; }
+.task-category-ranking th:first-child { text-align:left; white-space:normal; min-width:140px; }
+.task-category-ranking small { display:block; margin-top:10px; line-height:1.5; color:var(--text-muted,#777); }

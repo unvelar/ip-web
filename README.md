@@ -133,3 +133,20 @@ captured immediately before the production build. Vite emits the same metadata
 in `build.json`; open tabs can detect a newer deployment and offer a reload.
 PR previews set `VITE_BASE_PATH` to their preview directory so assets and routes
 stay within the preview.
+
+With `task-category-ranking-v1`, Ask can rank product categories by **total
+listing price (USD)** or matching listing count. The chat displays a table over
+all matching saved members, with known/missing price counts. Total price sums
+one stored USD listing price per canonical listing/category; bundles can count
+in several categories, so category totals overlap. It does not multiply by stock
+quantity. Current trusted component evidence and reviewer corrections determine
+categories; unavailable classifications appear as Uncategorized. Unknown prices
+stay unknown, while a known zero price remains priced.
+
+An answered metric question executes the requested ranking without demanding a
+price range. Continue reuses the confirmed saved search. New chat applies its
+fresh filter scope and waits for the bounded search to complete before publishing
+exact totals; stopped, failed and limited scans cannot produce a final ranking.
+Category tables survive reload within the existing scoped conversation storage.
+Category ranking is separate from grouping every listing by category or ranking
+sellers within each category. Older APIs must not be offered unsupported rankings.

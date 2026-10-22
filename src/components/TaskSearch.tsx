@@ -1,3 +1,5 @@
+import {followTaskCategoryRanking} from "../api/categoryRanking";
+import {emptyCategoryRanking,type CategoryRanking,type CategoryRankingRequest} from "../lib/categoryRanking";
 import {queueViewFromParams,type QueueView} from "../lib/queueView";
 import { QueueConstraintEditor } from "./QueueConstraintEditor";
 import { QueueSearchBar } from "./QueueSearchBar";
@@ -257,7 +259,7 @@ export default function TaskSearch({
     callbacks.current.onSearching?.(true);
     setValues(next);
   };
-  const runSearch = useCallback((applied?: AppliedTaskSearch, signal?: AbortSignal): Promise<boolean> => {
+  const runSearch = useCallback((applied?: AppliedTaskSearch, signal?: AbortSignal, afterCreate?:(result:TaskSearchResult)=>Promise<TaskSearchResult>): Promise<boolean> => {
     const next = applied ?? { values, status, product, ranking:rankingRef.current };
     const candidate = next.values;
     clearTimeout(debounce.current);
@@ -284,8 +286,13 @@ export default function TaskSearch({
         if (activeSearch.current === previous) activeSearch.current = null;
       }
       if (!current()) return;
-      const result = await startTaskSearch(request);
+      const started = await startTaskSearch(request);
+      let result=started;
       activeSearch.current = result.id;
+      if(afterCreate){
+        try{result=await afterCreate(started);}
+        catch(error){if(started.id&&["pending","running"].includes(started.state)){await cancelTaskSearch(started.id);if(activeSearch.current===started.id)activeSearch.current=null;}throw error;}
+      }
       if (!current()) {
         if (result.id && ["pending", "running"].includes(result.state)) {
           await cancelTaskSearch(result.id);
@@ -311,6 +318,25 @@ export default function TaskSearch({
       .then(result => result === true)
       .finally(() => { if (relevant()) callbacks.current.onSearching?.(false); });
   }, [ipId, product, status, scope, values]);
+  async function rankCategories(input:CategoryRankingRequest,target:AppliedTaskSearch,signal:AbortSignal){
+    const same=JSON.stringify([values,status,product,stableRanking])===JSON.stringify([target.values,target.status,target.product,target.ranking]);
+    const id=activeSearch.current;
+    if(same&&id){
+      const token=generation.current;
+      const {report}=await followTaskCategoryRanking(id,input,signal);
+      if(signal.aborted||token!==generation.current||latestScope.current!==scope)return null;
+      return {report,applied:target,searchChanged:false};
+    }
+    let report:CategoryRanking|null=null;
+    const applied=await runSearch(target,signal,async initial=>{
+      if(!initial.id){
+        if(initial.state==="completed"&&initial.matched===0){report=emptyCategoryRanking(input);return initial;}
+        throw Error("No saved search is available to rank.");
+      }
+      const result=await followTaskCategoryRanking(initial.id,input,signal,initial);report=result.report;return result.search;
+    });
+    return applied&&report?{report:report as CategoryRanking,applied:target,searchChanged:true}:null;
+  }
   useEffect(() => {
     if (!autoSearch.current) return;
     const automaticKey = JSON.stringify([scope,values]);
@@ -442,7 +468,7 @@ export default function TaskSearch({
         runSearch();
       }}
     >
-      <QueueSearchBar key={`${conversationOwner??"temporary"}:${ipId}`} conversationOwner={conversationOwner} view={queueViewFromParams(params)} onViewChange={onViewChange} onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
+      <QueueSearchBar key={`${conversationOwner??"temporary"}:${ipId}`} conversationOwner={conversationOwner} onRankCategories={rankCategories} view={queueViewFromParams(params)} onViewChange={onViewChange} onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
         onChange={q => updateValues({ ...values, q })} onApply={runSearch} />
       <div
         className="task-search-filter-row"

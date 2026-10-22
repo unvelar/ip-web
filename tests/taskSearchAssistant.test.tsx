@@ -1,3 +1,4 @@
+import {categoryRankingPolicy} from "../src/lib/categoryRanking";
 import {queueViewParams,type QueueView} from "../src/lib/queueView";
 import { afterEach, expect, test } from "bun:test";
 import { Window } from "happy-dom";
@@ -11,7 +12,7 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
+async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;emptySearch?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
@@ -28,7 +29,7 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
   const translated=()=>Response.json({version:1,jobs_started:0,filters,query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
   globalThis.fetch=(async(input,init)=>{
     const url=new URL(String(input),"http://localhost:5174");
-    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{})});
+    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
     if(url.pathname.endsWith("/tasks/capability"))return Response.json({active:true,ready:true,...(options.titleSupported===false?{}:{title_search_policy_version:"literal-title-substring-v1"}),...(options.extended===false?{}:{listing_search_policy_version:"task-listing-search-v1"})});
     if(url.pathname.endsWith("/semantic-taxonomy"))return options.taxonomyUnavailable?Response.json({error:"Unavailable"},{status:503}):Response.json({categories:[{key:"miniature",label:"Miniature"},{key:"ae_2_2_8",label:"Scale Models"}]});
     if(url.pathname.includes("/agent/runs")){
@@ -40,13 +41,18 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
         progress:"Searching the queue…",message:state==="completed"?"7 matches. 42 candidates checked.":"",filters,ranking:null,
         search:state==="working"?null:{id:searchId,state:state==="completed"?"completed":"running",scanned:42,matched:state==="completed"?7:0,rows:[]}});
     }
+    if(options.categoryRanking&&(!init?.method||init.method==="GET")&&url.pathname.includes("/tasks/searches/")){
+      requests.push({path:url.pathname,body:{}});
+      if(url.pathname.endsWith("/categories"))return Response.json({policy_version:categoryRankingPolicy,search_id:url.pathname.split("/").at(-2),state:"completed",metric:url.searchParams.get("metric"),currency:"USD",price_basis:"stored_listing_price",consistency:"saved_membership_current_categories",as_of:"2026-10-22T09:00:00.000Z",groups:[{category_key:"action_figures",category_label:"Action Figures",article_count:2,priced_article_count:2,missing_price_count:0,total_price_usd:"100.30"},{category_key:"scale_models",category_label:"Scale Models",article_count:1,priced_article_count:0,missing_price_count:1,total_price_usd:null}],total_categories:2,matching_listings:3,priced_listings:2,missing_price_listings:1});
+      return Response.json({id:url.pathname.split("/").at(-1),state:options.categoryIncomplete?"limited":"completed",scanned:60,matched:3,rows:[]});
+    }
     if(init?.method==="DELETE"){cancelled.push(url.pathname);return new Response(null,{status:204});}
     const body=JSON.parse(String(init?.body));requests.push({path:url.pathname,body});
     if(url.pathname.endsWith("/translate")){translationTurn++;return options.hold?await new Promise<Response>(resolve=>{release=resolve;}):options.translation?options.translation(body,translationTurn):translated();}
-    if(url.pathname.endsWith("/searches"))return options.holdCreation?await new Promise<Response>(resolve=>{release=resolve;}):options.fail?Response.json({error:"Search temporarily unavailable"},{status:503}):Response.json({id:"saved-search",state:"pending",scanned:0,matched:0});
+    if(url.pathname.endsWith("/searches"))return options.emptySearch?Response.json({id:null,state:"completed",scanned:0,matched:0}):options.holdCreation?await new Promise<Response>(resolve=>{release=resolve;}):options.fail?Response.json({error:"Search temporarily unavailable"},{status:503}):Response.json({id:"saved-search",state:"pending",scanned:0,matched:0});
     return Response.json({options:[]});
   }) as typeof fetch;
-  let params=new URLSearchParams("country=Spain&source=source-one&q=old&history=on"+(options.queueView?"&task_search=existing-search&queue_sort=newest":""));
+  let params=new URLSearchParams("country=Spain&source=source-one&q=old&history=on"+(options.queueView||options.categoryRanking?"&task_search=existing-search&queue_sort=newest":""));
   if(options.viewRanked){params.set("group_by","seller");params.set("group_sort","articles");params.set("top_sellers","10");}
   root=createRoot(container);
   const render=()=>root!.render(<TaskSearch ranking={options.viewRanked&&params.has("top_sellers")?{limit:Number(params.get("top_sellers"))}:null} onViewChange={options.queueView?async view=>{viewChanges.push(view);params=queueViewParams(params,view);render();return true;}:undefined} conversationOwner={options.conversation?"test-account":undefined} ipId={ip} status={(params.get("status")??"pending") as TaskQueueQuery["status"]} params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
@@ -253,4 +259,49 @@ test("showing individual items can undo back to the previous top-seller view wit
   await ui.click("Undo last change");
   expect(ui.params().get("top_sellers")).toBe("10");expect(ui.params().get("group_by")).toBe("seller");expect(ui.params().get("group_sort")).toBe("articles");
   expect(ui.requests.map(item=>item.path)).toEqual(["/api/monitoring/listings/translate"]);
+});
+
+test("category total-price answer uses the full saved search, retains predicates, displays honest price coverage and survives reload",async()=>{
+  const ui=await setup({conversation:true,categoryRanking:true,translation:body=>{
+    expect(body.category_ranking).toBe(true);
+    return Response.json({version:1,jobs_started:0,query:{name:'rank_categories',arguments:{metric:'total_price',limit:10}}});
+  }});
+  await ui.click('Ask');await ui.fill('Ask about listings','Highest total price across listings');await ui.send();
+  expect(ui.requests.map(item=>item.path)).toEqual(['/api/monitoring/listings/translate','/api/monitoring/tasks/searches/existing-search','/api/monitoring/tasks/searches/existing-search/categories']);
+  expect(ui.params().get('q')).toBe('old');expect(ui.params().get('country')).toBe('Spain');expect(ui.params().get('task_search')).toBe('existing-search');
+  expect(ui.applied).toHaveLength(0);expect(ui.container.querySelector('table[aria-label="Product category ranking"]')?.textContent).toContain('Action Figures');
+  expect(ui.container.textContent).toContain('$100.30');expect(ui.container.textContent).toContain('Unavailable');expect(ui.container.textContent).toContain('1 missing prices');
+  const count=ui.requests.length;await ui.remount();await ui.click('Ask');
+  expect(ui.container.querySelector('table[aria-label="Product category ranking"]')).not.toBeNull();expect(ui.requests).toHaveLength(count);
+});
+
+test("new-chat category metric clarification starts one fresh query and waits before committing the ranking",async()=>{
+  const ui=await setup({conversation:true,categoryRanking:true,translation:(_body,turn)=>Response.json({version:1,jobs_started:0,query:turn===1?{name:'request_clarification',arguments:{reason:'ambiguous_request',question:'Total listing price or listing count?',options:['Highest total price across listings','Most listings']}}:{name:'rank_categories',arguments:{metric:'total_price',limit:10}}})});
+  await ui.click('Ask');await ui.click('New chat');await ui.fill('Ask about listings','most important product category by amount (price)');await ui.send();
+  expect(ui.requests).toHaveLength(1);expect(ui.params().get('q')).toBe('old');
+  await ui.click('Highest total price across listings');
+  expect(ui.params().get('q')).toBe('old');expect(ui.container.textContent).toContain('Calculating category totals');
+  await ui.settle(1600);
+  expect(ui.requests.filter(item=>item.path==='/api/monitoring/tasks/searches')).toHaveLength(1);
+  expect(ui.applied).toHaveLength(1);expect(ui.params().get('task_search')).toBe('saved-search');
+  const create=ui.requests.find(item=>item.path==='/api/monitoring/tasks/searches')!;
+  expect(create.body).not.toHaveProperty('listing_constraints');expect(create.body).not.toHaveProperty('q');expect(create.body).not.toHaveProperty('country');
+  expect(ui.container.querySelector('table[aria-label="Product category ranking"]')).not.toBeNull();
+  expect(ui.container.textContent).not.toContain('could not finish');expect(ui.container.textContent).not.toContain('price range');
+});
+
+test("incomplete searches cannot produce a category ranking or replace the confirmed filters",async()=>{
+  const ui=await setup({conversation:true,categoryRanking:true,categoryIncomplete:true,translation:()=>Response.json({version:1,jobs_started:0,query:{name:'rank_categories',arguments:{metric:'total_price',limit:10}}})});
+  await ui.click('Ask');await ui.fill('Ask about listings','Highest total price across listings');await ui.send();
+  expect(ui.container.textContent).toContain('cannot be ranked accurately');expect(ui.container.querySelector('table')).toBeNull();
+  expect(ui.params().get('q')).toBe('old');expect(ui.params().get('task_search')).toBe('existing-search');expect(ui.applied).toHaveLength(0);
+  expect(ui.requests.some(item=>item.path.endsWith('/categories'))).toBe(false);
+});
+test("a verified empty new search shows no categories and commits its empty query without looping",async()=>{
+  const ui=await setup({conversation:true,categoryRanking:true,emptySearch:true,translation:()=>Response.json({version:1,jobs_started:0,query:{name:'rank_categories',arguments:{metric:'total_price',limit:10}}})});
+  await ui.click('Ask');await ui.click('New chat');await ui.fill('Ask about listings','Rank categories by total listing price');await ui.send();
+  expect(ui.applied).toHaveLength(1);expect(ui.params().has('task_search')).toBe(false);expect(ui.params().get('queue_filters')).not.toContain('"q":"old"');
+  expect(ui.container.textContent).toContain('No categories in this matching set');expect(ui.container.textContent).toContain('0 matching listings');
+  expect(ui.requests.map(item=>item.path)).toEqual(['/api/monitoring/listings/translate','/api/monitoring/tasks/searches']);
+  await ui.settle();expect(ui.requests).toHaveLength(2);
 });

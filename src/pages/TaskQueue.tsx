@@ -242,7 +242,7 @@ export default function TaskQueue({
   const viewMembership=JSON.stringify([ipId,params.toString()]);
   const latestViewMembership=useRef(viewMembership);latestViewMembership.current=viewMembership;
   const search =
-    searchState && (!searchState.id || searchState.id === urlSearchId) && (searchState.sort??"newest")===savedSearchSort
+    searchState && (!searchState.id || searchState.id === urlSearchId) && (!searchState.id||(searchState.sort??"newest")===savedSearchSort)
       ? searchState
       : null;
   const page = data?.key === key ? data.page : null;

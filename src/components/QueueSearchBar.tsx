@@ -1,3 +1,5 @@
+import {CategoryRankingResult} from "./CategoryRankingResult";
+import type {CategoryRanking,CategoryRankingRequest} from "../lib/categoryRanking";
 import { mergeQueueView,queueViewSummary,type QueueView } from "../lib/queueView";
 import { useEffect, useId, useRef, useState } from "react";
 import { Search, Sparkles, ArrowUp, X, SquarePen, ChevronDown, ChevronUp } from "lucide-react";
@@ -10,7 +12,8 @@ import { newSearchValues, readSearchConversation, searchChangeSummary, type Sear
 import { useProductSemanticTaxonomy } from "../hooks/useProductSemanticTaxonomy";
 import { readSemanticFilters } from "../lib/semanticFilters";
 
-export function QueueSearchBar({ipId,product,status,values,ranking,conversationOwner,view,onViewChange,initialAsk=false,onExtended,onTitleSearch,onChange,onApply}: {
+export function QueueSearchBar({ipId,product,status,values,ranking,conversationOwner,view,onViewChange,onRankCategories,initialAsk=false,onExtended,onTitleSearch,onChange,onApply}: {
+  onRankCategories?:(input:CategoryRankingRequest,target:AppliedTaskSearch,signal:AbortSignal)=>Promise<{report:CategoryRanking;applied:AppliedTaskSearch;searchChanged:boolean}|null>;
   view?:QueueView;
   onViewChange?:(view:QueueView,signal:AbortSignal)=>Promise<boolean>;
   conversationOwner?:string;
@@ -29,6 +32,8 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
   const [question,setQuestion] = useState<SearchQuestion|null>(savedConversation.question);
   const [undo,setUndo] = useState<({kind:"search";search:AppliedTaskSearch;scope:string}|{kind:"view";previous:QueueView;target:string;scope:string})|null>(null);
   const [viewAvailable,setViewAvailable]=useState(false);
+  const [categoriesAvailable,setCategoriesAvailable]=useState(false);
+  const [activity,setActivity]=useState("");
   const viewKey=JSON.stringify(view);
   const previousView=useRef(viewKey);
   const {labels:categoryLabels}=useProductSemanticTaxonomy(ipId,readSemanticFilters(values.semantic)?.categories);
@@ -55,7 +60,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if (controller.signal.aborted) return;
       setAvailable(listing.enabled);
       setConversationAvailable(listing.conversation);
-      setViewAvailable(listing.queueView);
+      setViewAvailable(listing.queueView);setCategoriesAvailable(listing.categoryRanking);
       const supported=task.listing_search_policy_version === taskListingSearchPolicy;
       setExtended(supported); onExtended(supported);
       const titleSupported=task.title_search_policy_version === titleSearchPolicy;
@@ -104,7 +109,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     if(question&&!conversationAvailable){setQuestion(null);say("Contextual replies are unavailable on this API. Start a new AI search and describe the full request; your current results were kept.");return;}
     request.current?.abort(); const controller=new AbortController(); request.current=controller;
     const snapshot=scope, current=()=>!controller.signal.aborted && latest.current===snapshot;
-    setBusy(true);setOpen(true);setChoices([]);setDraft("");
+    setBusy(true);setActivity("");setOpen(true);setChoices([]);setDraft("");
     const priorQuestion=question;setQuestion(null);
     setMessages(previous=>[...previous,{role:"user",text:message}]);
     const needsTextChoice=Boolean(conversationAvailable&&intent==="continue"&&values.q&&!messages.length&&!literalChoice);
@@ -112,7 +117,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       say(`This search also requires the literal text “${values.q}”. Keep that text filter, or remove it before applying your request?`);
       setQuestion({options:["Keep text filter","Remove text filter"],literalMessage:message});
     };
-    if(needsTextChoice&&!viewAvailable){clarifyText();setBusy(false);return;}
+    if(needsTextChoice&&!viewAvailable&&!categoriesAvailable){clarifyText();setBusy(false);return;}
     const baseValues=intent==="new"?newSearchValues(values):literalChoice==="remove"?{...values,q:""}:values;
     const baseProduct=intent==="new"?undefined:product;
     const baseRanking=intent==="new"?null:ranking;
@@ -139,8 +144,18 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       const translationMessage=resolution?priorQuestion?.requestMessage??message:message;
       const translation=await translateListingSearch(translationMessage,filters,controller.signal,baseRanking,conversationAvailable?{
         mode:intent,messages:resolution?[]:messages.slice(-12).map(item=>({role:item.role,content:item.text.slice(0,2000)})),...(resolution?{resolution}:{}),
-      }:undefined,viewAvailable&&onViewChange?view:undefined);
+      }:undefined,viewAvailable&&onViewChange?view:undefined,Boolean(categoriesAvailable&&onRankCategories));
       if(!current()) return;
+      if(translation.name==="rank_categories"){
+        if(!categoriesAvailable||!onRankCategories){say("Category ranking is unavailable in this client. Your filters were kept.");return;}
+        setActivity("Calculating category totals across the full search…");
+        const ranked=await onRankCategories(translation.ranking,{values:baseValues,status,product:baseProduct,ranking:baseRanking},controller.signal);
+        if(!ranked){if(current())say("Category ranking could not finish. Your previous filters and results were kept.");return;}
+        if(ranked.searchChanged)setUndo({kind:"search",search:before,scope:JSON.stringify([ipId,ranked.applied.product,ranked.applied.status,ranked.applied.values,ranked.applied.ranking])});
+        const first=ranked.report.groups[0];
+        const summary=`Ranked categories by ${ranked.report.metric==="total_price"?"total known listing price (USD)":"matching listing count"} across the complete search.${first?` First: ${first.category_label}.`:""}`;
+        setMessages(previous=>[...previous,{role:"assistant",text:summary,categoryReport:ranked.report}]);setIntent("continue");return;
+      }
       if(translation.name==="set_queue_view"){
         if(!view||!onViewChange||!viewAvailable){say("Queue display controls are unavailable in this client. Your filters were kept.");return;}
         const next=mergeQueueView(view,translation.view);
@@ -206,7 +221,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     <div ref={transcript} id={transcriptId} className="task-search-transcript" role="log" aria-label="Queue search conversation" aria-live="polite" hidden={!open}
       onScroll={event=>{const log=event.currentTarget;followLatest.current=log.scrollHeight-log.scrollTop-log.clientHeight<48;}}>
       {messages.length===0&&<div className="task-search-chat-empty"><Sparkles size={24} aria-hidden="true"/><strong>{intent==="new"?"What would you like to find?":"What would you like to change?"}</strong><p>{intent==="new"?"Start a fresh search within this brand and date range.":"Ask about the current search, or start a new chat."}</p></div>}
-      {messages.map((message,index)=><div className={`task-search-message is-${message.role}`} key={index}><strong>{message.role==="user"?"You":"Search assistant"}</strong><p>{message.text}</p></div>)}
+      {messages.map((message,index)=><div className={`task-search-message is-${message.role}`} key={index}><strong>{message.role==="user"?"You":"Search assistant"}</strong><p>{message.text}</p>{message.categoryReport&&<CategoryRankingResult report={message.categoryReport}/>}</div>)}
       {choices.length>0&&<div className="task-search-clarification">{choices.map(choice=><button type="button" key={choice.label} disabled={busy} onClick={()=>void choice.apply()}>{choice.label}</button>)}</div>}
       {question&&<div className="task-search-clarification" role="group" aria-label="Clarification answers">
         {question.options.map((option,index)=><button key={option} type="button" disabled={busy} onClick={()=>{
@@ -217,7 +232,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
           void ask(question.literalMessage??option,question.literalMessage?(index===0?"keep":"remove"):undefined,resolution);
         }}>{option}</button>)}
       </div>}
-      {busy&&<div className="task-search-thinking" role="status"><span aria-hidden="true"/>Thinking…</div>}
+      {busy&&<div className="task-search-thinking" role="status"><span aria-hidden="true"/>{activity||"Thinking…"}</div>}
     </div>
     <div className="task-search-composer">
       <textarea ref={composer} aria-label="Ask about listings" placeholder={question?"Reply to the assistant…":replying?"Reply to refine this search…":"Describe what you want to find…"} value={draft} maxLength={2000} rows={2}

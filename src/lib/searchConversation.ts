@@ -1,7 +1,8 @@
+import {parseCategoryRanking,type CategoryRanking} from "./categoryRanking";
 import type { AppliedTaskSearch, TaskSearchValues } from "./taskSearchAssistant";
 import { semanticFilterLabel } from "./semanticFilters";
 
-export type SearchMessage = {role:"user"|"assistant";text:string};
+export type SearchMessage = {role:"user"|"assistant";text:string;categoryReport?:CategoryRanking};
 export type SearchQuestion = {options:string[];literalMessage?:string;requestMessage?:string;conflictField?:"price"|"seller_listing_count"};
 export type ConversationState = {messages:SearchMessage[];intent:"new"|"continue";question:SearchQuestion|null};
 export function newSearchValues(values:TaskSearchValues):TaskSearchValues {
@@ -35,6 +36,7 @@ export function readSearchConversation(key:string|null,scope:string):Conversatio
   try {const value=JSON.parse(sessionStorage.getItem(key)??"null");
     if(!value||value.scope!==scope||!Array.isArray(value.messages)||value.messages.length>40||!["new","continue"].includes(value.intent))return empty;
     if(value.messages.some((m:SearchMessage)=>!m||!["user","assistant"].includes(m.role)||typeof m.text!=="string"||m.text.length>2000))return empty;
+    for(const message of value.messages){if(message.categoryReport!==undefined){message.categoryReport=parseCategoryRanking(message.categoryReport);if(message.role!=="assistant"||message.categoryReport.state!=="completed")return empty;}}
     const q=value.question;
     if(q&&(!Array.isArray(q.options)||q.options.length>3||q.options.some((option:unknown)=>typeof option!=="string"||option.length>160)
       ||q.literalMessage!==undefined&&(typeof q.literalMessage!=="string"||q.literalMessage.length>2000)

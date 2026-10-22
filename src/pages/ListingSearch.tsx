@@ -164,6 +164,7 @@ function SearchWorkspace({ ipId, ipName }: { ipId: string; ipName: string }) {
     try {
       const translation = await translateListingSearch(message, filters, operation.signal, ranking);
       if (!operation.current()) return;
+      if(translation.name==="rank_categories"){setError("Category rankings are available in the review queue. Your filters were kept.");return;}
       if(translation.name==="set_queue_view"){setError("Queue display controls are available in the review queue. Your filters were kept.");return;}
       if (translation.name === "request_clarification") {
         say(translation.reason === "unsupported_capability"
