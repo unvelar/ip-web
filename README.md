@@ -43,13 +43,15 @@ alongside `package.json`.
 Use **Monitoring → Review queue** (`/monitoring/tasks`). Its search bar has
 **Search** for literal keywords and **Ask** for explicitly submitted language
 requests. Both use the queue's manual filters, current dates and review results.
-Conversation history is collapsible. Requests such as “L261 codes” use a literal, case-insensitive **Title contains** predicate; L261 also matches longer codes such as L261012. Seller names, descriptions and URLs do not qualify. The condition has an editable/removable chip and remains active during follow-ups. This requires the API policy `literal-title-substring-v1`. Model configuration and credentials stay
+In Ask mode, messages appear above a bottom multiline composer. Enter sends and
+Shift+Enter adds a line. Conversation history is collapsible. Requests such as “L261 codes” use a literal, case-insensitive **Title contains** predicate; L261 also matches longer codes such as L261012. Seller names, descriptions and URLs do not qualify. The condition has an editable/removable chip and remains active during follow-ups. This requires the API policy `literal-title-substring-v1`. Model configuration and credentials stay
 on the API; the MCP stdio package is not bundled in the frontend.
 
-**New AI search** prepares a fresh query, retaining only the visible brand,
+**New chat** prepares a fresh query, retaining only the visible brand,
 queue status and dates. It clears previous text, catalog, location, price,
 seller and other search predicates only when the new query is successfully
-applied. **Continue current search** refines the confirmed filters. Every text
+applied. **Reply** refines the confirmed filters; a successful first message switches
+the composer to Reply automatically. Every text
 condition is visible as a removable chip, including in Ask mode.
 
 With API capability `listing-conversation-v1`, turns include bounded structured

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Search, Sparkles, ArrowUp, X } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Search, Sparkles, ArrowUp, X, SquarePen, ChevronDown, ChevronUp } from "lucide-react";
 import { listingCapability, resolveListingCatalog, translateListingSearch } from "../api/listingSearch";
 import { taskCapability, type TaskQueueQuery } from "../api/taskQueue";
 import { taskAssistantFilters, applyTaskAssistantFilters, taskListingSearchPolicy, type AppliedTaskSearch, type TaskSearchValues } from "../lib/taskSearchAssistant";
@@ -25,7 +25,11 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
   const [question,setQuestion] = useState<SearchQuestion|null>(savedConversation.question);
   const [undo,setUndo] = useState<{search:AppliedTaskSearch;scope:string}|null>(null);
   const {labels:categoryLabels}=useProductSemanticTaxonomy(ipId,readSemanticFilters(values.semantic)?.categories);
-  const [open,setOpen] = useState(false);
+  const [open,setOpen] = useState(initialAsk);
+  const transcriptId=useId();
+  const transcript=useRef<HTMLDivElement|null>(null);
+  const composer=useRef<HTMLTextAreaElement|null>(null);
+  const followLatest=useRef(true);
   const [busy,setBusy] = useState(false);
   const [available,setAvailable] = useState(false);
   const [titleSearch,setTitleSearch] = useState(false);
@@ -58,7 +62,20 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     if(previousScope.current!==scope)setQuestion(null);
     previousScope.current=scope;
   },[scope]);
+  useEffect(()=>{
+    if(mode!=="ask"||!open)return;
+    const log=transcript.current;
+    if(log&&followLatest.current)log.scrollTop=log.scrollHeight;
+  },[messages,question,choices,busy,mode,open]);
+  useEffect(()=>{
+    const input=composer.current;
+    if(!input)return;
+    input.style.height="auto";
+    input.style.height=`${Math.max(48,Math.min(input.scrollHeight,144))}px`;
+  },[draft,mode]);
+  useEffect(()=>{if(mode==="ask")composer.current?.focus();},[mode]);
   function chooseIntent(next:"new"|"continue") {
+    followLatest.current=true;composer.current?.focus();
     request.current?.abort();setBusy(false);setChoices([]);setQuestion(null);setMode("ask");setOpen(true);setIntent(next);
     if(next==="new"){setMessages([]);setDraft("");}
   }
@@ -140,46 +157,57 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if(current()){setDraft(message);say(error instanceof Error ? `${error.message} The latest request was not applied.` : "Search failed. Your filters were kept.");}
     } finally {if(request.current===controller)setBusy(false);}
   }
-  return <>
-    <div className="task-search-bar">
-      {mode==="ask" ? <Sparkles size={18} aria-hidden="true"/> : <Search size={18} aria-hidden="true"/>}
-      <input type={mode==="ask"?"text":"search"} aria-label={mode==="ask"?"Ask about listings":"Search listings or sellers"}
-        placeholder={mode==="ask"?"Describe what you want to find…":"Search listings or sellers…"}
-        value={mode==="ask"?draft:values.q??""} maxLength={mode==="ask"?2000:100}
-        onChange={event=>mode==="ask"?setDraft(event.target.value):onChange(event.target.value)}
-        onKeyDown={event=>{if(mode==="ask" && event.key==="Enter"){event.preventDefault();void ask();}}}/>
-      <div className="task-search-modes" role="group" aria-label="Search mode">
-        <button type="button" aria-pressed={mode==="search"} onClick={()=>setMode("search")}>Search</button>
-        <button type="button" aria-pressed={mode==="ask"} disabled={!available} title={!available?"Search assistant unavailable":"Describe your filters in plain language"} onClick={()=>{if(mode!=="ask" && !draft.trim()) setDraft(values.q??"");setMode("ask");}}>Ask</button>
+  const replying=intent==="continue"||messages.length>0;
+  const searchModes=<div className="task-search-modes" role="group" aria-label="Search mode">
+    <button type="button" aria-pressed={mode==="search"} onClick={()=>setMode("search")}>Search</button>
+    <button type="button" aria-pressed={mode==="ask"} disabled={!available} title={!available?"Search assistant unavailable":"Describe your filters in plain language"} onClick={()=>{
+      if(mode!=="ask"&&!draft.trim())setDraft(values.q??"");
+      setMode("ask");setOpen(true);followLatest.current=true;
+    }}>Ask</button>
+  </div>;
+  return mode==="search"?<div className="task-search-bar">
+    <Search size={18} aria-hidden="true"/>
+    <input type="search" aria-label="Search listings or sellers" placeholder="Search listings or sellers…" value={values.q??""} maxLength={100} onChange={event=>onChange(event.target.value)}/>
+    {searchModes}
+  </div>:<section className="task-search-chat" aria-label="AI search chat">
+    <header className="task-search-chat-header">
+      <div className="task-search-chat-title"><Sparkles size={17} aria-hidden="true"/><strong>{intent==="new"?"New chat":"Search chat"}</strong></div>
+      <div className="task-search-chat-actions">
+        <button type="button" className="task-search-new-chat" onClick={()=>chooseIntent("new")}><SquarePen size={15} aria-hidden="true"/>New chat</button>
+        {undo?.scope===scope&&<button type="button" disabled={busy} onClick={()=>void undoChange()}>Undo last change</button>}
       </div>
-      {mode==="ask" && (busy ? <button className="task-ask-send" type="button" aria-label="Cancel assistant request" onClick={()=>{
-        request.current?.abort();setBusy(false);
-        say("Request cancelled. Your filters were kept.");
-      }}><X size={16}/></button>
-        : <button className="task-ask-send" type="button" aria-label="Apply assistant search" disabled={!draft.trim()||!available} onClick={()=>void ask()}><ArrowUp size={16}/></button>)}
+      {searchModes}
+      <button type="button" className="task-search-chat-toggle" aria-label={open?"Collapse chat":"Expand chat"} aria-expanded={open} aria-controls={transcriptId} onClick={()=>{setOpen(!open);followLatest.current=true;}}>{open?<ChevronUp size={16}/>:<ChevronDown size={16}/>}</button>
+    </header>
+    <div ref={transcript} id={transcriptId} className="task-search-transcript" role="log" aria-label="Queue search conversation" aria-live="polite" hidden={!open}
+      onScroll={event=>{const log=event.currentTarget;followLatest.current=log.scrollHeight-log.scrollTop-log.clientHeight<48;}}>
+      {messages.length===0&&<div className="task-search-chat-empty"><Sparkles size={24} aria-hidden="true"/><strong>{intent==="new"?"What would you like to find?":"What would you like to change?"}</strong><p>{intent==="new"?"Start a fresh search within this brand and date range.":"Ask about the current search, or start a new chat."}</p></div>}
+      {messages.map((message,index)=><div className={`task-search-message is-${message.role}`} key={index}><strong>{message.role==="user"?"You":"Search assistant"}</strong><p>{message.text}</p></div>)}
+      {choices.length>0&&<div className="task-search-clarification">{choices.map(choice=><button type="button" key={choice.label} disabled={busy} onClick={()=>void choice.apply()}>{choice.label}</button>)}</div>}
+      {question&&<div className="task-search-clarification" role="group" aria-label="Clarification answers">
+        {question.options.map((option,index)=><button key={option} type="button" disabled={busy} onClick={()=>{
+          followLatest.current=true;
+          if(option==="Keep the current search"){setQuestion(null);setDraft("");setIntent("continue");setMessages(previous=>[...previous,{role:"user",text:option},{role:"assistant",text:"Kept the current search."}]);composer.current?.focus();return;}
+          const field=question.conflictField;
+          const resolution=field&&option===`Replace the previous ${field==="price"?"price":"seller count"} range`?field:undefined;
+          void ask(question.literalMessage??option,question.literalMessage?(index===0?"keep":"remove"):undefined,resolution);
+        }}>{option}</button>)}
+      </div>}
+      {busy&&<div className="task-search-thinking" role="status"><span aria-hidden="true"/>Thinking…</div>}
     </div>
-    {mode==="ask"&&<div className="task-search-conversation-actions" role="group" aria-label="AI search intent">
-      <button type="button" aria-pressed={intent==="new"} onClick={()=>chooseIntent("new")}>New AI search</button>
-      <button type="button" aria-pressed={intent==="continue"} onClick={()=>chooseIntent("continue")}>Continue current search</button>
-      {undo?.scope===scope&&<button type="button" disabled={busy} onClick={()=>void undoChange()}>Undo last change</button>}
-      <small>{intent==="new"?"Starts fresh within this brand, queue status and date range. Current results stay until your search is applied.":"Refines the active filters shown below."}</small>
-    </div>}
-    {(mode==="ask" || messages.length>0) && <details className="task-search-conversation" open={open} onToggle={event=>setOpen(event.currentTarget.open)}>
-      <summary>{busy?"Interpreting request…":messages.length?"Search conversation":"Ask about this queue"}</summary>
-      <div role="log" aria-label="Queue search conversation" aria-live="polite">
-        {messages.length===0 && <p>{intent==="new"?"Describe a fresh search. Previous search conditions will be replaced when it is applied.":"Describe what to change. Unmentioned filters stay active."}</p>}
-        {messages.map((message,index)=><div className={`task-search-message is-${message.role}`} key={index}><strong>{message.role==="user"?"You":"Search assistant"}</strong><p>{message.text}</p></div>)}
-        {choices.map(choice=><button type="button" key={choice.label} onClick={()=>void choice.apply()}>{choice.label}</button>)}
-        {question&&<div className="task-search-clarification" role="group" aria-label="Clarification answers">
-          {question.options.map((option,index)=><button key={option} type="button" disabled={busy} onClick={()=>{
-            if(option==="Keep the current search"){setQuestion(null);setDraft("");setIntent("continue");setMessages(previous=>[...previous,{role:"user",text:option},{role:"assistant",text:"Kept the current search."}]);return;}
-            const field=question.conflictField;
-            const resolution=field&&option===`Replace the previous ${field==="price"?"price":"seller count"} range`?field:undefined;
-            void ask(question.literalMessage??option,question.literalMessage?(index===0?"keep":"remove"):undefined,resolution);
-          }}>{option}</button>)}
-        </div>}
+    <div className="task-search-composer">
+      <textarea ref={composer} aria-label="Ask about listings" placeholder={question?"Reply to the assistant…":replying?"Reply to refine this search…":"Describe what you want to find…"} value={draft} maxLength={2000} rows={2}
+        onChange={event=>setDraft(event.target.value)} onKeyDown={event=>{
+          if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();followLatest.current=true;void ask();}
+        }}/>
+      <div className="task-search-composer-footer">
+        <span>{intent==="new"?(replying?"Reply · continues this chat":"Fresh search · keeps brand and dates"):"Reply · keeps current filters"}</span>
+        {busy?<button className="task-ask-send" type="button" aria-label="Cancel assistant request" onClick={()=>{
+          request.current?.abort();setBusy(false);
+          say("Request cancelled. Your filters were kept.");
+        }}><X size={15} aria-hidden="true"/>Stop</button>:<button className="task-ask-send" type="button" aria-label={replying?"Reply":"Send message"} disabled={!draft.trim()||!available} onClick={()=>{followLatest.current=true;void ask();}}><ArrowUp size={15} aria-hidden="true"/>{replying?"Reply":"Send"}</button>}
       </div>
-      {<small>Counts describe suspected listings; they do not establish confirmed infringement.</small>}
-    </details>}
-  </>;
+    </div>
+    <small className="task-search-chat-note">Counts describe suspected listings; they do not establish confirmed infringement.</small>
+  </section>;
 }
