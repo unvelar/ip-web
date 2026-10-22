@@ -15,7 +15,7 @@ afterEach(async () => {
   globalThis.fetch = originalFetch;
 });
 
-async function setup(fail = false) {
+async function setup(fail = false, grouped = true) {
   const window = new Window({ url:"http://localhost:5173" });
   Object.assign(globalThis, {
     window, document:window.document, navigator:window.navigator,
@@ -55,7 +55,8 @@ async function setup(fail = false) {
       else if (url.pathname.endsWith('/dismiss')) resolved.add(url.pathname.split('/').at(-2)!);
       return Response.json({ok:true,queued_case_ids:caseIds??[],requests:[],email_count:caseIds?.length??0,failed:[],skipped:[]});
     }
-    if (url.pathname.endsWith('/queue')) return Response.json({rows:[],next_cursor:null,counts:{pending:completed?1:2,review:0,takedown_pending:0,takedown_sent:0,enforced:0,dismissed:0,preparing:0},as_of:null,updating:false});
+    if (url.pathname.endsWith('/queue')) return Response.json({rows:grouped?[]:[finding("first"),finding("second")],next_cursor:null,counts:{pending:completed?1:2,review:0,takedown_pending:0,takedown_sent:0,enforced:0,dismissed:0,preparing:0},as_of:null,updating:false});
+    if (url.pathname.endsWith('/sellers/shop')) return Response.json({seller:{key:"shop",name:"Shop",domain:"shop.test",contacts:[]},summary:{prior_enforcement_count:3,returned_listing_count:1}});
     if (url.pathname.endsWith('/seller-groups')) {
       const response = () => Response.json({groups:[{seller_key:"shop",seller_name:"Shop",article_count:2-resolved.size,priced_article_count:2-resolved.size,exposure_usd:(2-resolved.size)*10}],total_groups:99,next_offset:50,partial:false,updating:false});
       if (completed) return new Promise<Response>(resolve => { finishRefresh = () => resolve(response()); });
@@ -68,17 +69,40 @@ async function setup(fail = false) {
     return Response.json({comments:[],subscribed:false,members:[]});
   }) as typeof fetch;
   root = createRoot(container);
-  await act(async () => root!.render(<MemoryRouter initialEntries={["/monitoring/tasks?group_by=seller"]}>
+  await act(async () => root!.render(<MemoryRouter initialEntries={[grouped?"/monitoring/tasks?group_by=seller":"/monitoring/tasks"]}>
     <AuthProvider><ActiveIpProvider><Routes><Route path="/monitoring/tasks/:taskId?" element={<TaskQueue ipId="ip" />} /></Routes></ActiveIpProvider></AuthProvider>
   </MemoryRouter>));
   const click = async (selector:string) => { await act(async () => container.querySelector<HTMLElement>(selector)!.click()); };
-  await click('.monitoring-results-pagination button:last-child');
-  await click('[aria-label="Expand Shop"]');
+  if (grouped) {
+    await click('.monitoring-results-pagination button:last-child');
+    await click('[aria-label="Expand Shop"]');
+  }
   await click('[aria-label="Select second"]');
   await click('[data-task-id="first"]');
   return {container,requests,window,click,scrolls:()=>scrolls,
     detailsWith:(handler:typeof detailsHandler)=>{detailsHandler=handler;},
     finish:async()=>{await act(async()=>finishRefresh!());}};
+}
+
+for (const grouped of [false, true]) {
+  test(`seller links open side details without opening a task or resetting ${grouped ? "grouped" : "ungrouped"} queue selection`, async () => {
+    const ui = await setup(false, grouped);
+    await ui.click('[aria-label="Close finding details"]');
+    const before = ui.requests.length;
+    const seller = ui.container.querySelector<HTMLButtonElement>('[data-task-id="first"] .task-queue-seller-link')!;
+    await act(async () => { seller.focus(); seller.click(); });
+    const panel = ui.container.querySelector('[aria-label="Seller details"]');
+    expect(panel?.textContent).toContain("Shop");
+    expect(panel?.textContent).toContain("Seller overview");
+    expect(panel?.querySelector('a[href="/monitoring/sellers/shop?ip_id=ip"]')).not.toBeNull();
+    expect(ui.container.querySelector('[aria-label="Finding details"]')).toBeNull();
+    expect(ui.container.querySelector<HTMLInputElement>('[aria-label="Select second"]')?.checked).toBe(true);
+    expect(ui.requests.slice(before).filter(request => request.url.pathname.endsWith('/sellers/shop'))).toHaveLength(1);
+    expect(ui.requests.slice(before).every(request => request.method === "GET")).toBe(true);
+    await ui.click('[aria-label="Close group details"]');
+    expect(ui.container.querySelector('[aria-label="Seller details"]')).toBeNull();
+    expect(document.activeElement).toBe(seller);
+  });
 }
 
 for (const action of ["dismiss","takedown"] as const) {

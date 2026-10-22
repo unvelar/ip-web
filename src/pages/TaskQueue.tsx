@@ -17,6 +17,7 @@ import {
   groupMonitoringFindings,
   hasProductGrouping,
   parseMonitoringGroupBy,
+  type MonitoringListingGroup,
 } from "../lib/monitoringGrouping";
 import { useTaskProductIdentities } from "../hooks/useTaskProductIdentities";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
@@ -284,10 +285,11 @@ export default function TaskQueue({
   );
   const groups = groupMonitoringFindings(productGroups.rows, groupBy);
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
+  const [rowGroup, setRowGroup] = useState<{ scope: string; group: MonitoringListingGroup<TaskSummary> } | null>(null);
   const activeGroup = !waitingForPage
-    ? groups.find((group) => group.key === activeGroupKey)
+    ? rowGroup?.scope === params.toString() ? rowGroup.group : groups.find((group) => group.key === activeGroupKey)
     : undefined;
-  const closeGroup = useCallback(() => setActiveGroupKey(null), []);
+  const closeGroup = useCallback(() => { setActiveGroupKey(null); setRowGroup(null); }, []);
   async function applyQueueView(view:QueueView,signal:AbortSignal):Promise<boolean> {
     const snapshot=viewMembership,generation=++viewGeneration.current;
     const current=()=>!signal.aborted&&generation===viewGeneration.current&&snapshot===latestViewMembership.current;
@@ -523,7 +525,7 @@ export default function TaskQueue({
     oldFilters.sort !== "score_desc" &&
     oldFilters.sort !== "found_desc" &&
     !params.has("queue_sort");
-  const renderTaskRow = (row: TaskSummary) => {
+  const renderTaskRow = (row: TaskSummary, onOpenSeller?: () => void) => {
     const recommendation = monitoringRecommendation(row);
     return (
       <tr
@@ -569,9 +571,20 @@ export default function TaskQueue({
           <div className="monitoring-listing-main">
             <TaskImage key={row.image_url} url={row.image_url} />
             <div className="monitoring-listing-copy">
-              <span className="task-queue-seller">
-                {row.seller_name ?? "Unknown seller"}
-              </span>
+              {row.seller_key ? <button
+                type="button"
+                className="task-queue-seller task-queue-seller-link"
+                aria-label={`Open seller details: ${row.seller_name ?? "Unnamed seller"}`}
+                disabled={waitingForPage}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (onOpenSeller) { onOpenSeller(); return; }
+                  if (taskId) open(null);
+                  setActiveGroupKey(null);
+                  const group = groupMonitoringFindings([...rows.filter(item => item.result_id !== row.result_id), row], "seller").find(group => group.sellerKey === row.seller_key)!;
+                  setRowGroup({ scope: params.toString(), group });
+                }}
+              >{row.seller_name ?? "Unnamed seller"}</button> : <span className="task-queue-seller">{row.seller_name ?? "Unknown seller"}</span>}
               <span className="task-queue-listing-title" title={row.listing_title ?? row.page_url}>
                 {row.listing_title ?? row.page_url}
               </span>
@@ -1036,12 +1049,13 @@ export default function TaskQueue({
                     }
                     onOpen={(group) => {
                       if (taskId) open(null);
+                      setRowGroup(null);
                       setActiveGroupKey(group.key);
                     }}
                     renderRow={renderTaskRow}
                   />
                 ) : (
-                  <tbody>{rows.map(renderTaskRow)}</tbody>
+                  <tbody>{rows.map(row => renderTaskRow(row))}</tbody>
                 )}
               </table>
               {!waitingForPage && !error && !rows.length && (

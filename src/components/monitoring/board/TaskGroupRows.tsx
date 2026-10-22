@@ -122,7 +122,7 @@ export function TaskGroupRows({
         </tbody>
         <tbody id={bodyId} hidden={!expanded}>
           {group.findings.length > 0 && groupColumns}
-          {group.findings.map(renderRow)}
+          {group.findings.map(row => renderRow(row))}
           {renderFooter?.(group)}
         </tbody>
       </Fragment>
