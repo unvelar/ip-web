@@ -37,3 +37,21 @@ test("seller value order and explicit limits are view state, survive reload, and
  const unlimited=mergeQueueView(queueViewFromParams(next),{group_by:"seller",top_sellers:null});expect(unlimited.top_sellers).toBeUndefined();
  for(const change of [{group_sort:"total_price"},{group_by:"seller",top_sellers:101},{group_by:"none",group_sort:"total_price"}])expect(()=>parseQueueViewChange(change)).toThrow();
 });
+
+test("seller item previews survive reload without becoming seller eligibility or affecting the ranking metric",()=>{
+ const filters=JSON.stringify({seller_listing_count:'{"gt":10}',listing_countries:'["IT"]'});
+ const before=new URLSearchParams({task_search:'complete',queue_filters:filters,group_by:'seller',group_sort:'exposure',top_sellers:'25'});
+ const capped=queueViewParams(before,mergeQueueView(queueViewFromParams(before),parseQueueViewChange({group_by:'seller',items_per_seller:3})));
+ expect(capped.get('queue_filters')).toBe(filters);expect(capped.get('task_search')).toBe('complete');expect(queueViewFromParams(capped)).toMatchObject({group_sort:'exposure',top_sellers:25,items_per_seller:3});
+ const uncapped=mergeQueueView(queueViewFromParams(capped),{group_by:'seller',items_per_seller:null});expect(uncapped.items_per_seller).toBeUndefined();expect(uncapped.group_sort).toBe('exposure');
+ expect(mergeQueueView(queueViewFromParams(capped),{group_by:'none'}).items_per_seller).toBeUndefined();
+ for(const limit of [0,51,1.5,'3'])expect(()=>parseQueueViewChange({group_by:'seller',items_per_seller:limit})).toThrow();
+});
+
+
+test("rollback to an older API strips the unsupported preview field from conversation context",async()=>{
+ const {translateListingSearch}=await import("../src/api/listingSearch");const {emptyListingFilters}=await import("../src/lib/listingSearch");let body:Record<string,unknown>={};
+ globalThis.fetch=(async(_input,init)=>{body=JSON.parse(String(init?.body));return Response.json({version:1,jobs_started:0,query:{name:"set_queue_view",arguments:{group_by:"seller",group_sort:"exposure"}}});}) as typeof fetch;
+ await translateListingSearch("Order by exposure",emptyListingFilters(null),new AbortController().signal,null,{mode:"continue",messages:[]},{sort:"priority",group_by:"seller",group_sort:"articles",items_per_seller:3},false,{});
+ expect(body).not.toHaveProperty("query_view");expect(body.queue_view).not.toHaveProperty("items_per_seller");
+});
