@@ -213,7 +213,6 @@ test("linked filters remain in the request and clear keeps search scope and date
   await ui.click("Clear filters");
   await ui.submit();
   expect(ui.requests[1]).toMatchObject({
-    q: "helmet",
     ip_id: "ip-one",
     catalog_product_id: "product-one",
     status: "dismissed",
@@ -221,6 +220,7 @@ test("linked filters remain in the request and clear keeps search scope and date
     to: ui.requests[0].to,
   });
   expect(ui.requests[1]).not.toHaveProperty("seller_name");
+  expect(ui.requests[1]).not.toHaveProperty("q");
   expect(ui.requests[1]).not.toHaveProperty("evidence");
 });
 

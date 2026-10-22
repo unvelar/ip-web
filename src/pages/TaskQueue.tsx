@@ -81,9 +81,11 @@ function TaskImage({ url }: { url: string | null }) {
 
 export default function TaskQueue({
   ipId,
+  conversationOwner,
   onUnavailable,
 }: {
   ipId: string;
+  conversationOwner?:string;
   onUnavailable?: () => void;
 }) {
   const [params, setParams] = useSearchParams(),
@@ -644,6 +646,7 @@ export default function TaskQueue({
         </div>
         <TaskSearch
           key={searchReset}
+          conversationOwner={conversationOwner}
           ipId={ipId}
           product={query.catalog_product_id}
           params={params}

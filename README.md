@@ -46,6 +46,25 @@ requests. Both use the queue's manual filters, current dates and review results.
 Conversation history is collapsible. Requests such as “L261 codes” use a literal, case-insensitive **Title contains** predicate; L261 also matches longer codes such as L261012. Seller names, descriptions and URLs do not qualify. The condition has an editable/removable chip and remains active during follow-ups. This requires the API policy `literal-title-substring-v1`. Model configuration and credentials stay
 on the API; the MCP stdio package is not bundled in the frontend.
 
+**New AI search** prepares a fresh query, retaining only the visible brand,
+queue status and dates. It clears previous text, catalog, location, price,
+seller and other search predicates only when the new query is successfully
+applied. **Continue current search** refines the confirmed filters. Every text
+condition is visible as a removable chip, including in Ask mode.
+
+With API capability `listing-conversation-v1`, turns include bounded structured
+conversation history. A conflict question keeps the confirmed query and results
+until the user answers. Confirmed range replacements translate the pending request
+against verified filters without replaying superseded range instructions. Answers
+may be typed or chosen using buttons. Questions
+and conversation intent survive reload within the same tab, account, tenant,
+brand and exact confirmed query. **Undo last change** reapplies the previous
+filter snapshot (and reruns its query); it does not restore historical counts.
+Manual edits invalidate pending answer buttons and Undo for superseded queries.
+On older APIs, New/Continue still control filter retention, but contextual chat
+requires the capability. Disable `FILTERING_CONVERSATION_ENABLED` on the API
+and refresh clients to roll back contextual translation without a migration.
+
 Successful search creation commits the confirmed filter draft in `queue_filters`
 and its saved membership in `task_search`. Catalog ambiguity requires a choice.
 Newer manual edits, scope changes and cancellation invalidate older translations.
