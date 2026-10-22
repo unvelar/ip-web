@@ -115,13 +115,13 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
     {page?.updating && <p className="task-queue-notice" role="status">Tasks are updating. Seller totals may lag recent changes.</p>}
     {completePage && <>
       <table className="monitoring-result-list" aria-label="Monitoring tasks grouped by seller">
-        <colgroup><col className="monitoring-checkbox-column" /><col /><col className="monitoring-price-column" /><col className="monitoring-assessment-column" /></colgroup>
-        <thead><tr><th colSpan={4} scope="colgroup"><div className="monitoring-seller-columns"><span>Seller / articles</span><span>{valueRanking?"Total listing price (USD)":"Exposure (USD)"}</span></div></th></tr></thead>
+        <colgroup><col className="monitoring-checkbox-column" /><col /><col className="task-queue-store-column" /><col className="monitoring-price-column" /><col className="monitoring-assessment-column" /></colgroup>
+        <thead><tr><th colSpan={5} scope="colgroup"><div className="monitoring-seller-columns"><span>Seller / articles</span><span>{valueRanking?"Total listing price (USD)":"Exposure (USD)"}</span></div></th></tr></thead>
         <TaskGroupRows key={`${key}:${offset}:${itemLimit}`} groups={groups} selection={selection} disabled={false} onSelect={onSelect}
           onOpen={group => { onOpenGroup(); setActiveKey(group.key); }} renderRow={renderRow}
-          groupColumns={<tr className="monitoring-group-listing-columns"><th scope="col" /><th scope="col" className="monitoring-listing-heading">Listing / seller / first detected</th><th scope="col" className="monitoring-price-heading">Price (USD)</th><th scope="col" className="monitoring-assessment-heading">Suggested action</th></tr>}
+          groupColumns={<tr className="monitoring-group-listing-columns"><th scope="col" /><th scope="col" className="monitoring-listing-heading">Seller / listing / first detected</th><th scope="col" className="task-queue-store-heading">Store</th><th scope="col" className="monitoring-price-heading">Price (USD)</th><th scope="col" className="monitoring-assessment-heading">Suggested action</th></tr>}
           onToggle={(group, expanded) => { if (expanded) void load(group); }}
-          renderFooter={group => <tr><td colSpan={4} className="monitoring-group-footer">
+          renderFooter={group => <tr><td colSpan={5} className="monitoring-group-footer">
             {loadingMembers.has(group.key) ? <span role="status">Loading articles…</span> : memberErrors[group.key] ? <span role="alert">{memberErrors[group.key]} <button onClick={() => void load(group)}>Retry articles</button></span>
               : itemLimit && members[group.key] ? <span>Showing {group.findings.length} of {group.totals?.articles} matching items. Totals include all matches.</span>
               : members[group.key]?.next_offset != null ? <button onClick={() => void load(group,true)}>Load more articles ({group.findings.length} of {group.totals?.articles})</button>

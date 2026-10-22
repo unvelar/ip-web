@@ -3,6 +3,8 @@ import { queueSearchParams } from "../lib/taskSearchAssistant";
 import { useCallback, useEffect, useId, useMemo, useRef, useState,type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ImageOff,ListFilter,PanelLeftClose,PanelLeftOpen,ArrowUpRight } from "lucide-react";
+import { MarketplaceMark } from "../components/MarketplaceMark";
+import { monitoringPlatformLabel } from "../lib/platforms";
 import MonitoringToolbar from "../components/MonitoringToolbar";
 import TaskSearch from "../components/TaskSearch";
 import TaskSearchStatus from "../components/TaskSearchStatus";
@@ -567,11 +569,13 @@ export default function TaskQueue({
           <div className="monitoring-listing-main">
             <TaskImage key={row.image_url} url={row.image_url} />
             <div className="monitoring-listing-copy">
-              <span className="monitoring-listing-title">
+              <span className="task-queue-seller">
+                {row.seller_name ?? "Unknown seller"}
+              </span>
+              <span className="task-queue-listing-title" title={row.listing_title ?? row.page_url}>
                 {row.listing_title ?? row.page_url}
               </span>
               <div className="monitoring-listing-meta">
-                {row.seller_name ?? "Unknown seller"} · {row.domain} ·{" "}
                 <time dateTime={row.found_at}>{date(row.found_at)}</time>
                 {query.status === "all" && ` · ${taskStateLabels[row.state]}`}
               </div>
@@ -585,6 +589,11 @@ export default function TaskQueue({
               )}
             </div>
           </div>
+        </td>
+        <td className="task-queue-store-cell">
+          <span className="task-queue-store-mark" role="img" aria-label={monitoringPlatformLabel(row.domain)} title={row.domain}>
+            <MarketplaceMark source={{ domain: row.domain, name: monitoringPlatformLabel(row.domain) }} />
+          </span>
         </td>
         <td className="monitoring-listing-price">
           {row.price_value_usd == null
@@ -964,6 +973,7 @@ export default function TaskQueue({
                 <colgroup>
                   <col className="monitoring-checkbox-column" />
                   <col />
+                  <col className="task-queue-store-column" />
                   <col className="monitoring-price-column" />
                   <col className="monitoring-assessment-column" />
                 </colgroup>
@@ -998,8 +1008,9 @@ export default function TaskQueue({
                       />
                     </th>
                     <th scope="col" className="monitoring-listing-heading">
-                      Listing / seller / first detected
+                      Seller / listing / first detected
                     </th>
+                    <th scope="col" className="task-queue-store-heading">Store</th>
                     <th scope="col" className="monitoring-price-heading">
                       Price (USD)
                     </th>
