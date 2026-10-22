@@ -273,6 +273,7 @@ export default function TaskQueue({
   const sellerSort = (["exposure", "articles", "priority", "newest", "total_price"].includes(params.get("group_sort") ?? "")
     ? params.get("group_sort") : "exposure") as SellerGroupSort;
   const topSellers = /^([1-9]\d?|100)$/.test(params.get("top_sellers") ?? "") ? Number(params.get("top_sellers")) : null;
+  const sellerItems=queueViewFromParams(params).items_per_seller??null;
   const sellerQuery = { ...query, group_sort: sellerSort, ...(topSellers ? { ranking_limit:topSellers } : {}), ...(urlSearchId ? { search_id:urlSearchId } : {}) };
   const productGroups = useTaskProductIdentities(
     groupBy === "product",
@@ -707,7 +708,7 @@ export default function TaskQueue({
           params={params}
           members={members}
           status={query.status}
-          ranking={topSellers&&sellerSort!=="total_price" ? {limit:topSellers} : null}
+          ranking={topSellers&&sellerSort==="articles" ? {limit:topSellers} : null}
           onShowCategoryReport={report=>{
             if(report.state!=="completed"||report.search_id!==urlSearchId)return;
             categoryReturnFocus.current=document.activeElement instanceof HTMLElement?document.activeElement:null;
@@ -740,6 +741,7 @@ export default function TaskQueue({
                   Clear product
                 </button>
               )}
+              {sellerItems && <span className="task-search-chip"><span>Up to {sellerItems} items per seller</span><button type="button" aria-label="Remove per-seller item limit" onClick={()=>{const next=new URLSearchParams(params);next.delete("items_per_seller");setParams(next);}}>×</button></span>}
               {topSellers && <span className="task-search-chip"><span>Top {topSellers} sellers</span><button type="button" aria-label="Remove top seller limit" onClick={()=>{const next=new URLSearchParams(params);next.delete("top_sellers");setParams(next);}}>×</button></span>}
               {!categoryReport&&<label>
                 Group by
@@ -898,9 +900,9 @@ export default function TaskQueue({
           </div>
         ) : groupBy === "seller" && !searchStarting && (!search || Boolean(search.id)) ? (
           <>
-            <SellerGroupedQueue topLimit={topSellers} requireComplete={Boolean(topSellers)} key={`${JSON.stringify(sellerQuery)}:${queueReset}`}
+            <SellerGroupedQueue itemLimit={sellerItems} topLimit={topSellers} requireComplete={Boolean(topSellers)} key={`${JSON.stringify(sellerQuery)}:${queueReset}`}
               query={sellerQuery} revision={`${revision}:${search?.matched}:${search?.state}`} selection={selection} renderRow={renderTaskRow} activeFindingId={taskId}
-              onUngroup={() => { const next = new URLSearchParams(params); next.delete("group_by"); next.delete("top_sellers"); setParams(next); }}
+              onUngroup={() => { const next = new URLSearchParams(params); next.delete("group_by"); next.delete("top_sellers"); next.delete("items_per_seller"); setParams(next); }}
               onOpenGroup={() => { closeGroup(); if (taskId) open(null); }}
               onSelect={(ids, selected) => setSelection(previous => { const next = new Set(previous); for (const id of ids) { if (selected) next.add(id); else next.delete(id); } return next; })} />
           </>

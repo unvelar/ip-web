@@ -36,8 +36,10 @@ export function searchChangeSummary(before:AppliedTaskSearch,after:AppliedTaskSe
 
 export function conversationSearchSummary(before:AppliedTaskSearch,after:AppliedTaskSearch,labels:Record<string,string>,fresh:boolean):string {
   const details=searchChangeSummary(before,after,labels,{includeRanking:false,includeRetention:false});
-  const opening=after.ranking?`I’m finding the ${after.ranking.limit} sellers with the most listings matching your search.`:fresh?"I’ve started a fresh search.":"I’ve updated your search.";
-  return [opening,details,after.ranking?"The ranking will appear when the search finishes.":""].filter(Boolean).join(" ");
+  const sellerView=after.queueView?.group_by==="seller"?after.queueView:undefined;
+  const metric=sellerView?.group_sort==="exposure"?"estimated stock exposure":sellerView?.group_sort==="total_price"?"total known listing price (USD)":sellerView?.group_sort==="priority"?"recommendation priority":sellerView?.group_sort==="newest"?"newest matching listing":"matching listing count";
+  const opening=sellerView?`I’m finding ${sellerView.top_sellers?`up to ${sellerView.top_sellers}`:"the matching"} sellers, ordered by ${metric}, highest first.`:after.ranking?`I’m finding the ${after.ranking.limit} sellers with the most listings matching your search.`:fresh?"I’ve started a fresh search.":"I’ve updated your search.";
+  return [opening,details,sellerView?.items_per_seller?`I’ll show up to ${sellerView.items_per_seller} items per seller; ranking totals include all matches.`:"",after.ranking||sellerView?"The ranking will appear when the search finishes.":""].filter(Boolean).join(" ");
 }
 
 /** Conversation text is tab-local, account/tenant/brand scoped, and only

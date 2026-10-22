@@ -9,7 +9,7 @@ let root: Root | undefined;
 const originalFetch=globalThis.fetch;
 afterEach(async()=>{ if(root) await act(async()=>root?.unmount()); root=undefined; globalThis.fetch=originalFetch; });
 
-async function setup(fail=false, partial=false) {
+async function setup(fail=false, partial=false, itemLimit:number|null=null) {
   const window=new Window({url:"http://localhost:5173"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div"); document.body.replaceChildren(container);
@@ -28,13 +28,14 @@ async function setup(fail=false, partial=false) {
   let query:TaskSellerGroupsQuery={ip_id:"ip",status:"pending",sort:"priority",group_sort:"exposure",search_id:"saved-search"};
   let selected=new Set<string>(); let ungrouped=false; let revision=0;
   root=createRoot(container);
-  const render=()=>root!.render(<SellerGroupedQueue key={JSON.stringify(query)} query={query} requireComplete={partial} topLimit={partial?10:null} revision={String(revision)} selection={selected}
+  const render=()=>root!.render(<SellerGroupedQueue key={JSON.stringify(query)} query={query} itemLimit={itemLimit} requireComplete={partial} topLimit={partial?10:null} revision={String(revision)} selection={selected}
     onSelect={(ids,checked)=>{ selected=new Set(selected); for(const id of ids){if(checked) selected.add(id);else selected.delete(id);} render(); }}
     renderRow={row=><tr key={row.result_id}><td>{row.result_id}</td></tr>}
     onUngroup={()=>{ungrouped=true;}} onOpenGroup={()=>{}} />);
   await act(async()=>render());
   return {container,requests,selected:()=>selected,ungrouped:()=>ungrouped,
     respondWith:(handler:typeof respond)=>{respond=handler;},
+    setItemLimit:async(value:number|null)=>{await act(async()=>{itemLimit=value;render();});},
     refresh:async()=>{await act(async()=>{revision++;render();});},
     change:async()=>{await act(async()=>{query={...query,group_sort:"articles",status:"review"};render();});},
     click:async(selector:string)=>{await act(async()=>container.querySelector<HTMLButtonElement>(selector)!.click());}};
@@ -155,4 +156,15 @@ test("total listing price uses the owned membership API, displays the right basi
  expect(container.querySelector('.monitoring-group-exposure')?.getAttribute('title')).toContain("quantities are not multiplied");
  await act(async()=>container.querySelector<HTMLButtonElement>('[aria-label="Expand Shop"]')!.click());
  expect(requests[1].pathname).toBe("/api/monitoring/tasks/searches/saved/sellers/listings");expect(requests[1].searchParams.get("seller_key")).toBe("shop");expect(container.textContent).toContain("result");
+});
+
+test("three-item seller previews cap loaded rows and selections while preserving complete seller totals",async()=>{
+ const ui=await setup(false,false,3);
+ ui.respondWith(url=>url.pathname.endsWith('/listings')?Response.json({rows:['one','two','three','four'].map(id=>({result_id:id,task_id:id})),next_offset:50}):Response.json({groups:[{seller_key:'shop',seller_name:'Shop',article_count:72,priced_article_count:70,exposure_usd:5432.10}],total_groups:99,next_offset:50,partial:false,updating:false}));
+ expect(ui.requests[0].searchParams.has('items_per_seller')).toBe(false);expect(ui.requests[0].searchParams.has('limit')).toBe(false);
+ await ui.click('[aria-label="Expand Shop"]');
+ expect(ui.requests.at(-1)?.searchParams.get('limit')).toBe('3');expect(ui.container.textContent).toContain('72 articles');expect(ui.container.textContent).toContain('Showing 3 of 72 matching items');expect(ui.container.textContent).not.toContain('four');expect(ui.container.textContent).not.toContain('Load more articles');
+ await ui.click('[aria-label="Select loaded articles in Shop"]');expect(ui.selected()).toEqual(new Set(['one','two','three']));
+ await ui.refresh();expect(ui.container.textContent).not.toContain('four');expect(ui.container.textContent).toContain('Showing 3 of 72');
+ await ui.setItemLimit(null);await ui.click('[aria-label="Expand Shop"]');expect(ui.container.textContent).toContain('four');expect(ui.container.textContent).toContain('Load more articles');
 });

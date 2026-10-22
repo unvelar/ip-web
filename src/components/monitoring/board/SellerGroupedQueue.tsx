@@ -12,8 +12,9 @@ const message = (error: unknown) => isApiError(error, 404)
   ? "Seller totals are unavailable. Try again or view ungrouped tasks."
   : error instanceof Error ? error.message : "Could not load seller totals.";
 
-export function SellerGroupedQueue({ query, revision, selection, onSelect, renderRow, onUngroup, onOpenGroup, activeFindingId, topLimit = null, requireComplete = false }: {
+export function SellerGroupedQueue({ query, revision, selection, onSelect, renderRow, onUngroup, onOpenGroup, activeFindingId, itemLimit = null, topLimit = null, requireComplete = false }: {
   query: TaskSellerGroupsQuery;
+  itemLimit?: number | null;
   topLimit?: number | null;
   requireComplete?: boolean;
   revision: string;
@@ -34,7 +35,8 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const key = JSON.stringify(query);
   const close = useCallback(() => setActiveKey(null), []);
-  const scope = `${key}:${offset}`;
+  const scope = `${key}:${offset}:${itemLimit}`;
+  const limitMembers=useCallback((page:TaskSellerGroupListingsPage):TaskSellerGroupListingsPage=>itemLimit?{...page,rows:page.rows.slice(0,itemLimit),next_offset:null}:page,[itemLimit]);
   const previousScope = useRef("");
   const loadedMembers = useRef(members);
   const memberController = useRef<AbortController | null>(null);
@@ -66,9 +68,9 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
             let refreshed: TaskSellerGroupListingsPage = { ...loaded, rows:[] };
             let next = 0;
             do {
-              const batch = await taskSellerGroupListings({ ...JSON.parse(key), seller_key:group.seller_key ?? "", offset:next }, controller.signal);
+              const batch = await taskSellerGroupListings({ ...JSON.parse(key), seller_key:group.seller_key ?? "", offset:next, ...(itemLimit?{limit:itemLimit}:{}) }, controller.signal);
               if (controller.signal.aborted) return;
-              refreshed = { ...batch, rows:[...refreshed.rows, ...batch.rows] };
+              refreshed = limitMembers({ ...batch, rows:[...refreshed.rows, ...batch.rows] });
               next = batch.next_offset ?? through;
             } while (refreshed.next_offset !== null && next < through);
             setMembers(previous => ({ ...previous, [groupKey]:refreshed }));
@@ -81,7 +83,7 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
       })
       .catch(reason => { if (!controller.signal.aborted) setError(message(reason)); });
     return () => controller.abort();
-  }, [key, scope, offset, revision, retry]);
+  }, [key, scope, offset, revision, retry, itemLimit, limitMembers]);
   const valueRanking=query.group_sort==="total_price";
   const completePage = (requireComplete||valueRanking) && page?.partial ? null : page;
   const groups: MonitoringListingGroup<TaskSummary>[] = (completePage?.groups ?? []).map(group => {
@@ -98,8 +100,8 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
     setLoadingMembers(previous => new Set(previous).add(group.key));
     setMemberErrors(previous => ({ ...previous, [group.key]:"" }));
     try {
-      const result = await taskSellerGroupListings({ ...query, seller_key:group.sellerKey ?? "", offset:more ? members[group.key]?.next_offset ?? 0 : 0 }, controller.signal);
-      if (!controller.signal.aborted) setMembers(previous => ({ ...previous, [group.key]:{...result, rows:more ? [...(previous[group.key]?.rows ?? []),...result.rows] : result.rows} }));
+      const result = await taskSellerGroupListings({ ...query, seller_key:group.sellerKey ?? "", offset:more ? members[group.key]?.next_offset ?? 0 : 0, ...(itemLimit?{limit:itemLimit}:{}) }, controller.signal);
+      if (!controller.signal.aborted) setMembers(previous => ({ ...previous, [group.key]:limitMembers({...result, rows:more ? [...(previous[group.key]?.rows ?? []),...result.rows] : result.rows}) }));
     } catch (reason) {
       if (!controller.signal.aborted) setMemberErrors(previous => ({...previous, [group.key]:message(reason)}));
     } finally {
@@ -107,7 +109,7 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
     }
   }
   return <div className="monitoring-results-queue" aria-busy={!page && !error}>
-    <div className="monitoring-results-summary"><span>{page ? `${topLimit ? `Top ${Math.min(topLimit,page.total_groups)} of ` : ""}${page.total_groups.toLocaleString()} seller groups · ${page.partial ? "Search incomplete" : "Totals cover all matching tasks across pages"}` : error ? "Seller totals unavailable" : "Loading seller totals…"}</span></div>
+    <div className="monitoring-results-summary"><span>{page ? `${topLimit ? `Top ${Math.min(topLimit,page.total_groups)} of ` : ""}${page.total_groups.toLocaleString()} seller groups · ${page.partial ? "Search incomplete" : "Totals cover all matching tasks across pages"}${itemLimit?` · Up to ${itemLimit} items shown per seller`:""}` : error ? "Seller totals unavailable" : "Loading seller totals…"}</span></div>
     {error && <p className="task-queue-notice" role="alert">{error} <button onClick={() => setRetry(value => value + 1)}>Retry</button> · <button onClick={onUngroup}>Ungroup tasks</button></p>}
     {page?.partial && <p className="task-queue-notice" role="status">{requireComplete||valueRanking ? "The ranking will appear when the full search completes. Narrow the dates or filters if the search reaches its limit." : "Search results are incomplete. Seller totals and ranking cover matches found so far."}</p>}
     {page?.updating && <p className="task-queue-notice" role="status">Tasks are updating. Seller totals may lag recent changes.</p>}
@@ -115,12 +117,13 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
       <table className="monitoring-result-list" aria-label="Monitoring tasks grouped by seller">
         <colgroup><col className="monitoring-checkbox-column" /><col /><col className="monitoring-price-column" /><col className="monitoring-assessment-column" /></colgroup>
         <thead><tr><th colSpan={4} scope="colgroup"><div className="monitoring-seller-columns"><span>Seller / articles</span><span>{valueRanking?"Total listing price (USD)":"Exposure (USD)"}</span></div></th></tr></thead>
-        <TaskGroupRows key={`${key}:${offset}`} groups={groups} selection={selection} disabled={false} onSelect={onSelect}
+        <TaskGroupRows key={`${key}:${offset}:${itemLimit}`} groups={groups} selection={selection} disabled={false} onSelect={onSelect}
           onOpen={group => { onOpenGroup(); setActiveKey(group.key); }} renderRow={renderRow}
           groupColumns={<tr className="monitoring-group-listing-columns"><th scope="col" /><th scope="col" className="monitoring-listing-heading">Listing / seller / first detected</th><th scope="col" className="monitoring-price-heading">Price (USD)</th><th scope="col" className="monitoring-assessment-heading">Suggested action</th></tr>}
           onToggle={(group, expanded) => { if (expanded) void load(group); }}
           renderFooter={group => <tr><td colSpan={4} className="monitoring-group-footer">
             {loadingMembers.has(group.key) ? <span role="status">Loading articles…</span> : memberErrors[group.key] ? <span role="alert">{memberErrors[group.key]} <button onClick={() => void load(group)}>Retry articles</button></span>
+              : itemLimit && members[group.key] ? <span>Showing {group.findings.length} of {group.totals?.articles} matching items. Totals include all matches.</span>
               : members[group.key]?.next_offset != null ? <button onClick={() => void load(group,true)}>Load more articles ({group.findings.length} of {group.totals?.articles})</button>
               : members[group.key]?.rows.length === 0 ? <span>No matching articles remain. Refresh seller totals.</span> : null}
           </td></tr>} />
