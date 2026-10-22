@@ -47,7 +47,8 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
   const [activity,setActivity]=useState("");
   const viewKey=JSON.stringify(view);
   const previousView=useRef(viewKey);
-  const {labels:categoryLabels}=useProductSemanticTaxonomy(ipId,readSemanticFilters(values.semantic)?.categories);
+  const {labels:categoryLabels}=useProductSemanticTaxonomy(ipId,readSemanticFilters(values.semantic)?.categories,mode==="ask");
+  const currentCategoryLabels=useRef(categoryLabels);currentCategoryLabels.current=categoryLabels;
   const [open,setOpen] = useState(initialAsk);
   const transcriptId=useId();
   const transcript=useRef<HTMLDivElement|null>(null);
@@ -158,7 +159,6 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     const baseProduct=intent==="new"?undefined:product;
     const baseRanking=intent==="new"||view?.group_sort==="total_price"?null:ranking;
     const before:AppliedTaskSearch={values,status,product,ranking,...(view?{queueView:view}:{})};
-    const summaryLabels={...Object.fromEntries(messages.flatMap(item=>item.categoryReport?.groups.flatMap(group=>group.category_key?[[group.category_key,group.category_label]]:[])??[])),...categoryLabels};
     const prepare=(filters:ReturnType<typeof taskAssistantFilters>,nextRanking:SellerRanking|null)=>{
       const nextValues=applyTaskAssistantFilters(baseValues,filters);
       if(nextValues.title_contains&&!titleSearch)throw new Error("Title filtering is not available in this queue yet. Your filters were kept.");
@@ -173,6 +173,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
         // final receipt. A stale acknowledgement returns false in TaskSearch.
         const applied=target;
         setUndo({kind:"search",search:before,scope:JSON.stringify([ipId,applied.product,applied.status,applied.values,applied.ranking])});
+        const summaryLabels={...Object.fromEntries(messages.flatMap(item=>item.categoryReport?.groups.flatMap(group=>group.category_key?[[group.category_key,group.category_label]]:[])??[])),...currentCategoryLabels.current};
         const summary=intent==="new"?"Started a new AI search. Previous search conditions were cleared; brand and dates were kept. "+searchChangeSummary({values:baseValues,status,product:baseProduct,ranking:baseRanking},applied,summaryLabels):searchChangeSummary(before,applied,summaryLabels);
         setIntent("continue");say(summary+(nextRanking?` Searching for the top ${nextRanking.limit} sellers; rankings wait for completion.`:""));
       } else if(current()){setDraft(message);say("Search failed. The latest request was not applied; your filters and results were kept.");}

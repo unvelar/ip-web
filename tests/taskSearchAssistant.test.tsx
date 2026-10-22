@@ -89,6 +89,7 @@ test("an older server keeps advanced translated filters out of the queue",async(
 });
 test("category labels replace internal keys without changing filters or starting another search",async()=>{
   const ui=await setup({categoryKey:"ae_2_2_8"});await ui.click("Ask");await ui.fill("Ask about listings","miniatures");await ui.send();
+  expect(ui.container.querySelector('[aria-label="Queue search conversation"]')?.textContent).toContain("Product details: Scale Models.");
   expect(ui.container.textContent).toContain("Scale Models");expect(ui.container.textContent).not.toContain("ae 2 2 8");
   expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
   await ui.settle();expect(ui.requests).toHaveLength(2);
