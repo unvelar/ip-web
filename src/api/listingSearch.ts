@@ -1,3 +1,5 @@
+import { queueViewPolicy,parseQueueViewChange,type QueueView,type QueueViewChange } from "../lib/queueView";
+import {categoryRankingPolicy,parseCategoryRankingRequest,type CategoryRankingRequest} from "../lib/categoryRanking";
 import { request } from "./transport";
 import { isRecord, requireResponse } from "./validation";
 import { titleSearchPolicy, listingFilterKey, sellerCountPolicy, sellerRankingPolicy, parseSellerRanking, type SellerRanking, parseCatalogReference, parseListingFilters, type CatalogReference, type ListingFilters } from "../lib/listingSearch";
@@ -7,7 +9,8 @@ export interface CatalogResolution { status: "resolved" | "ambiguous" | "not_fou
 export interface ListingRow { sellerMatchingCount: number | null; id: string; title: string | null; seller: string | null; country: string | null; priceUsd: string | null; image: string | null }
 export interface RankedSeller { sellerKey:string; name:string|null; domain:string; count:number }
 export interface ListingPage { sellers?: RankedSeller[]; rows: ListingRow[]; total: number; nextCursor: string | null; catalog: CatalogMatch | null; fx: { asOf: string; basis: string } | null }
-export type Translation = { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; catalogQuery?: string | null }
+export type Translation = {name:"rank_categories";ranking:CategoryRankingRequest}|{name:"set_queue_view";view:QueueViewChange}
+  | { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; catalogQuery?: string | null }
   | { name: "next_listing_page" }
   | { name: "request_clarification"; reason: string; capability?: string; question?:string; options?:string[]; conflictField?:"price"|"seller_listing_count" };
 export const listingConversationPolicy = "listing-conversation-v1";
@@ -31,14 +34,16 @@ export async function listingCapability(signal: AbortSignal) {
     && Object.entries(value.country_labels).every(([key, label]) => /^[A-Z]{2}$/.test(key) && text(label)), "search capability");
   requireResponse(value.seller_count_policy_version === undefined || value.seller_count_policy_version === sellerCountPolicy, "seller-count policy");
   requireResponse(value.seller_ranking_policy_version === undefined || value.seller_ranking_policy_version === sellerRankingPolicy, "seller-ranking policy");
-  return { conversation:value.conversation_policy_version === listingConversationPolicy, searchAgent:value.search_agent_policy_version === "listing-search-agent-v1", titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
+  return { categoryRanking:value.category_ranking_policy_version===categoryRankingPolicy, queueView:value.queue_view_policy_version===queueViewPolicy, conversation:value.conversation_policy_version === listingConversationPolicy, searchAgent:value.search_agent_policy_version === "listing-search-agent-v1", titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
 }
-export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null, conversation?:SearchConversation): Promise<Translation> {
-  const value = await read("translate", { message, filters, ...(ranking ? {ranking} : {}),...(conversation?{conversation}:{}) }, signal);
+export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null, conversation?:SearchConversation,queueView?:QueueView,categoryRanking=false): Promise<Translation> {
+  const value = await read("translate", { message, filters, ...(ranking ? {ranking} : {}),...(conversation?{conversation}:{}),...(queueView?{queue_view:queueView}:{}),...(categoryRanking?{category_ranking:true}:{}) }, signal);
   requireResponse(isRecord(value) && value.version === 1 && value.jobs_started === 0 && isRecord(value.query) && isRecord(value.query.arguments), "search translation");
   const query = value.query;
   const args = query.arguments;
   requireResponse(isRecord(args), "search translation");
+  if(query.name==="rank_categories")return {name:query.name,ranking:parseCategoryRankingRequest(args)};
+  if(query.name==="set_queue_view")return {name:query.name,view:parseQueueViewChange(args)};
   if (query.name === "request_clarification") {
     requireResponse(args.question===undefined||typeof args.question==="string"&&args.question.trim().length>0&&args.question.length<=1000,"clarification question");
     requireResponse(args.options===undefined||Array.isArray(args.options)&&args.options.length>=2&&args.options.length<=3&&args.options.every(option=>typeof option==="string"&&option.trim().length>0&&option.length<=160),"clarification options");

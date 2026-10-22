@@ -43,13 +43,15 @@ alongside `package.json`.
 Use **Monitoring → Review queue** (`/monitoring/tasks`). Its search bar has
 **Search** for literal keywords and **Ask** for explicitly submitted language
 requests. Both use the queue's manual filters, current dates and review results.
-Conversation history is collapsible. Requests such as “L261 codes” use a literal, case-insensitive **Title contains** predicate; L261 also matches longer codes such as L261012. Seller names, descriptions and URLs do not qualify. The condition has an editable/removable chip and remains active during follow-ups. This requires the API policy `literal-title-substring-v1`. Model configuration and credentials stay
+In Ask mode, messages appear above a bottom multiline composer. Enter sends and
+Shift+Enter adds a line. Conversation history is collapsible. Requests such as “L261 codes” use a literal, case-insensitive **Title contains** predicate; L261 also matches longer codes such as L261012. Seller names, descriptions and URLs do not qualify. The condition has an editable/removable chip and remains active during follow-ups. This requires the API policy `literal-title-substring-v1`. Model configuration and credentials stay
 on the API; the MCP stdio package is not bundled in the frontend.
 
-**New AI search** prepares a fresh query, retaining only the visible brand,
+**New chat** prepares a fresh query, retaining only the visible brand,
 queue status and dates. It clears previous text, catalog, location, price,
 seller and other search predicates only when the new query is successfully
-applied. **Continue current search** refines the confirmed filters. Every text
+applied. **Reply** refines the confirmed filters; a successful first message switches
+the composer to Reply automatically. Every text
 condition is visible as a removable chip, including in Ask mode.
 
 With API capability `listing-conversation-v1`, turns include bounded structured
@@ -61,6 +63,14 @@ and conversation intent survive reload within the same tab, account, tenant,
 brand and exact confirmed query. **Undo last change** reapplies the previous
 filter snapshot (and reruns its query); it does not restore historical counts.
 Manual edits invalidate pending answer buttons and Undo for superseded queries.
+With `task-queue-view-v1`, ordering and grouping are separate from listing filters.
+“Takedown recommended first” preserves the saved search membership and all filters;
+it uses the queue's priority rank over the complete matching set before pagination.
+While a scan runs, the UI says “Ordering matching items…” rather than showing a
+provisional zero count. Undo restores the previous view without starting a scan.
+Category grouping and top sellers within each category are currently unavailable;
+the assistant explains this directly. **Group by Product** refers to canonical
+product identities and is not a substitute for product categories.
 On older APIs, New/Continue still control filter retention, but contextual chat
 requires the capability. Disable `FILTERING_CONVERSATION_ENABLED` on the API
 and refresh clients to roll back contextual translation without a migration.
@@ -123,3 +133,20 @@ captured immediately before the production build. Vite emits the same metadata
 in `build.json`; open tabs can detect a newer deployment and offer a reload.
 PR previews set `VITE_BASE_PATH` to their preview directory so assets and routes
 stay within the preview.
+
+With `task-category-ranking-v1`, Ask can rank product categories by **total
+listing price (USD)** or matching listing count. The chat displays a table over
+all matching saved members, with known/missing price counts. Total price sums
+one stored USD listing price per canonical listing/category; bundles can count
+in several categories, so category totals overlap. It does not multiply by stock
+quantity. Current trusted component evidence and reviewer corrections determine
+categories; unavailable classifications appear as Uncategorized. Unknown prices
+stay unknown, while a known zero price remains priced.
+
+An answered metric question executes the requested ranking without demanding a
+price range. Continue reuses the confirmed saved search. New chat applies its
+fresh filter scope and waits for the bounded search to complete before publishing
+exact totals; stopped, failed and limited scans cannot produce a final ranking.
+Category tables survive reload within the existing scoped conversation storage.
+Category ranking is separate from grouping every listing by category or ranking
+sellers within each category. Older APIs must not be offered unsupported rankings.
