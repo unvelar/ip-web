@@ -163,19 +163,20 @@ test("new AI search clears previous search predicates only on submit and Undo re
   expect(ui.requests.at(-1)?.body).not.toHaveProperty("listing_constraints");
   expect(ui.container.textContent).toContain("Restored the previous search conditions");
 });
-test("clarification keeps confirmed results and filters; an explicit reply carries history and executes once",async()=>{
+test("clarification keeps confirmed results and filters; an explicit range answer replays only the pending request and executes once",async()=>{
   const ui=await setup({conversation:true,translation:conversationTranslation});await ui.click("Ask");await ui.click("New AI search");
   await ui.fill("Ask about listings","Below 40 dollars");await ui.click("Apply assistant search");
   const confirmed=ui.params().toString();
   await ui.fill("Ask about listings","Also above 60");await ui.click("Apply assistant search");
   expect(ui.applied).toHaveLength(1);expect(ui.params().toString()).toBe(confirmed);expect(ui.requests.filter(r=>r.path.endsWith("/searches"))).toHaveLength(1);
   expect(ui.container.textContent).toContain("Below 40 and above 60 conflict");
+  await ui.remount();await ui.click("Ask");
   await ui.click("Replace the previous price range");
   expect(ui.applied).toHaveLength(2);expect(ui.requests.filter(r=>r.path.endsWith("/searches"))).toHaveLength(2);
   const request=ui.requests.filter(r=>r.path.endsWith("/translate")).at(-1)!;
-  expect(request.body.message).toBe("Replace the previous price range");
+  expect(request.body.message).toBe("Also above 60");
   expect(request.body.conversation).toMatchObject({mode:"continue",resolution:"price"});
-  expect(JSON.stringify(request.body.conversation)).toContain("Also above 60");expect(JSON.stringify(request.body.conversation)).toContain("Below 40 and above 60 conflict");
+  expect(request.body.conversation).toMatchObject({messages:[]});
   expect(ui.requests.at(-1)?.body.listing_constraints).toMatchObject({price:{currency:"USD",gt:"60"}});
 });
 test("a pending clarification survives reload and keeping the search starts no additional request",async()=>{

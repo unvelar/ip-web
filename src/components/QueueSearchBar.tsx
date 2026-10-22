@@ -105,12 +105,13 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     };
     try {
       const filters=taskAssistantFilters(baseValues,ipId,status,baseProduct);
-      const translation=await translateListingSearch(message,filters,controller.signal,baseRanking,conversationAvailable?{
-        mode:intent,messages:messages.slice(-12).map(item=>({role:item.role,content:item.text.slice(0,2000)})),...(resolution?{resolution}:{}),
+      const translationMessage=resolution?priorQuestion?.requestMessage??message:message;
+      const translation=await translateListingSearch(translationMessage,filters,controller.signal,baseRanking,conversationAvailable?{
+        mode:intent,messages:resolution?[]:messages.slice(-12).map(item=>({role:item.role,content:item.text.slice(0,2000)})),...(resolution?{resolution}:{}),
       }:undefined);
       if(!current()) return;
       if(translation.name==="request_clarification") {
-        if(translation.question){say(translation.question);setQuestion({options:translation.options??[],conflictField:translation.conflictField});return;}
+        if(translation.question){say(translation.question);setQuestion({options:translation.options??[],conflictField:translation.conflictField,requestMessage:translationMessage});return;}
         const reasons:Record<string,string>={similarity:"Image similarity is not available in queue search yet.",shipping:"Shipping destinations are not available. You can filter listing locations.",live_fx:"Prices use a historical exchange-rate snapshot.",investigation:"Ask filters the queue. Use the review actions for investigations.",seller_metrics:"Seller ranking counts matching suspected listings. Other seller metrics are not available."};
         if(!conversationAvailable)setDraft(message);
         say((translation.reason==="unsupported_capability" ? reasons[translation.capability??""]??"That filter is not available yet." : "Please specify the product details or filters you want to change.")+" Your filters were kept."+(!conversationAvailable?" Revise the full request in the box, including the conditions you want to retain.":""));

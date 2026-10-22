@@ -54,7 +54,9 @@ condition is visible as a removable chip, including in Ask mode.
 
 With API capability `listing-conversation-v1`, turns include bounded structured
 conversation history. A conflict question keeps the confirmed query and results
-until the user answers. Answers may be typed or chosen using buttons. Questions
+until the user answers. Confirmed range replacements translate the pending request
+against verified filters without replaying superseded range instructions. Answers
+may be typed or chosen using buttons. Questions
 and conversation intent survive reload within the same tab, account, tenant,
 brand and exact confirmed query. **Undo last change** reapplies the previous
 filter snapshot (and reruns its query); it does not restore historical counts.

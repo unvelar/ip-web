@@ -2,7 +2,7 @@ import type { AppliedTaskSearch, TaskSearchValues } from "./taskSearchAssistant"
 import { semanticFilterLabel } from "./semanticFilters";
 
 export type SearchMessage = {role:"user"|"assistant";text:string};
-export type SearchQuestion = {options:string[];literalMessage?:string;conflictField?:"price"|"seller_listing_count"};
+export type SearchQuestion = {options:string[];literalMessage?:string;requestMessage?:string;conflictField?:"price"|"seller_listing_count"};
 export type ConversationState = {messages:SearchMessage[];intent:"new"|"continue";question:SearchQuestion|null};
 export function newSearchValues(values:TaskSearchValues):TaskSearchValues {
   return {q:"",from:values.from,to:values.to};
@@ -38,6 +38,7 @@ export function readSearchConversation(key:string|null,scope:string):Conversatio
     const q=value.question;
     if(q&&(!Array.isArray(q.options)||q.options.length>3||q.options.some((option:unknown)=>typeof option!=="string"||option.length>160)
       ||q.literalMessage!==undefined&&(typeof q.literalMessage!=="string"||q.literalMessage.length>2000)
+      ||q.requestMessage!==undefined&&(typeof q.requestMessage!=="string"||!q.requestMessage.trim()||q.requestMessage.length>2000)
       ||q.conflictField!==undefined&&!["price","seller_listing_count"].includes(q.conflictField)))return empty;
     return {messages:value.messages,intent:value.intent,question:q??null};
   }catch{return empty;}
