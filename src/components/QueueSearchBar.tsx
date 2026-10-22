@@ -1,3 +1,4 @@
+import { mergeQueueView,queueViewSummary,type QueueView } from "../lib/queueView";
 import { useEffect, useId, useRef, useState } from "react";
 import { Search, Sparkles, ArrowUp, X, SquarePen, ChevronDown, ChevronUp } from "lucide-react";
 import { listingCapability, resolveListingCatalog, translateListingSearch } from "../api/listingSearch";
@@ -9,7 +10,9 @@ import { newSearchValues, readSearchConversation, searchChangeSummary, type Sear
 import { useProductSemanticTaxonomy } from "../hooks/useProductSemanticTaxonomy";
 import { readSemanticFilters } from "../lib/semanticFilters";
 
-export function QueueSearchBar({ipId,product,status,values,ranking,conversationOwner,initialAsk=false,onExtended,onTitleSearch,onChange,onApply}: {
+export function QueueSearchBar({ipId,product,status,values,ranking,conversationOwner,view,onViewChange,initialAsk=false,onExtended,onTitleSearch,onChange,onApply}: {
+  view?:QueueView;
+  onViewChange?:(view:QueueView,signal:AbortSignal)=>Promise<boolean>;
   conversationOwner?:string;
   initialAsk?:boolean; ipId:string; product?:string; status:TaskQueueQuery["status"]; values:TaskSearchValues; ranking:SellerRanking|null;
   onTitleSearch:(supported:boolean)=>void; onExtended:(extended:boolean)=>void; onChange:(value:string)=>void; onApply:(next:AppliedTaskSearch,signal:AbortSignal)=>Promise<boolean>;
@@ -17,13 +20,17 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
   const [mode,setMode] = useState<"search"|"ask">(initialAsk?"ask":"search");
   const [draft,setDraft] = useState(initialAsk?values.q??"":"");
   const scope = JSON.stringify([ipId,product,status,values,ranking]);
+  const filterScope=JSON.stringify([ipId,product,status,values]);
   const conversationKey=conversationOwner?`queue-conversation-v1:${conversationOwner}:${getActingTenant()??"own"}:${ipId}`:null;
   const [savedConversation] = useState(()=>readSearchConversation(conversationKey,scope));
   const [messages,setMessages] = useState<SearchMessage[]>(savedConversation.messages);
   const [intent,setIntent] = useState<"new"|"continue">(savedConversation.intent);
   const [conversationAvailable,setConversationAvailable] = useState(false);
   const [question,setQuestion] = useState<SearchQuestion|null>(savedConversation.question);
-  const [undo,setUndo] = useState<{search:AppliedTaskSearch;scope:string}|null>(null);
+  const [undo,setUndo] = useState<({kind:"search";search:AppliedTaskSearch;scope:string}|{kind:"view";previous:QueueView;target:string;scope:string})|null>(null);
+  const [viewAvailable,setViewAvailable]=useState(false);
+  const viewKey=JSON.stringify(view);
+  const previousView=useRef(viewKey);
   const {labels:categoryLabels}=useProductSemanticTaxonomy(ipId,readSemanticFilters(values.semantic)?.categories);
   const [open,setOpen] = useState(initialAsk);
   const transcriptId=useId();
@@ -48,6 +55,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if (controller.signal.aborted) return;
       setAvailable(listing.enabled);
       setConversationAvailable(listing.conversation);
+      setViewAvailable(listing.queueView);
       const supported=task.listing_search_policy_version === taskListingSearchPolicy;
       setExtended(supported); onExtended(supported);
       const titleSupported=task.title_search_policy_version === titleSearchPolicy;
@@ -74,15 +82,19 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     input.style.height=`${Math.max(48,Math.min(input.scrollHeight,144))}px`;
   },[draft,mode]);
   useEffect(()=>{if(mode==="ask")composer.current?.focus();},[mode]);
+  useEffect(()=>{
+    if(previousView.current!==viewKey){request.current?.abort();setBusy(false);setQuestion(null);setChoices([]);}
+    previousView.current=viewKey;
+  },[viewKey]);
   function chooseIntent(next:"new"|"continue") {
     followLatest.current=true;composer.current?.focus();
     request.current?.abort();setBusy(false);setChoices([]);setQuestion(null);setMode("ask");setOpen(true);setIntent(next);
     if(next==="new"){setMessages([]);setDraft("");}
   }
   async function undoChange() {
-    if(!undo||undo.scope!==scope||busy)return;
+    if(!undo||undo.scope!==(undo.kind==="view"?filterScope:scope)||busy)return;
     const controller=new AbortController();request.current?.abort();request.current=controller;setBusy(true);setQuestion(null);setChoices([]);
-    try{if(await onApply(undo.search,controller.signal)){setUndo(null);say("Restored the previous search conditions.");}}
+    try{const restored=undo.kind==="view"?onViewChange&&undo.target===viewKey&&await onViewChange(undo.previous,controller.signal):await onApply(undo.search,controller.signal);if(restored){setUndo(null);say(undo.kind==="view"?"Restored the previous queue view.":"Restored the previous search conditions.");}}
     catch(error){if(!controller.signal.aborted)say(error instanceof Error?error.message:"Could not restore the previous search.");}
     finally{if(request.current===controller)setBusy(false);}
   }
@@ -95,10 +107,12 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     setBusy(true);setOpen(true);setChoices([]);setDraft("");
     const priorQuestion=question;setQuestion(null);
     setMessages(previous=>[...previous,{role:"user",text:message}]);
-    if(conversationAvailable&&intent==="continue"&&values.q&&!messages.length&&!literalChoice){
+    const needsTextChoice=Boolean(conversationAvailable&&intent==="continue"&&values.q&&!messages.length&&!literalChoice);
+    const clarifyText=()=>{
       say(`This search also requires the literal text “${values.q}”. Keep that text filter, or remove it before applying your request?`);
-      setQuestion({options:["Keep text filter","Remove text filter"],literalMessage:message});setBusy(false);return;
-    }
+      setQuestion({options:["Keep text filter","Remove text filter"],literalMessage:message});
+    };
+    if(needsTextChoice&&!viewAvailable){clarifyText();setBusy(false);return;}
     const baseValues=intent==="new"?newSearchValues(values):literalChoice==="remove"?{...values,q:""}:values;
     const baseProduct=intent==="new"?undefined:product;
     const baseRanking=intent==="new"?null:ranking;
@@ -115,7 +129,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
         // onApply commits the new scope, so a successful acknowledgement is the
         // final receipt. A stale acknowledgement returns false in TaskSearch.
         const applied=prepare(filters,nextRanking);
-        setUndo({search:before,scope:JSON.stringify([ipId,applied.product,applied.status,applied.values,applied.ranking])});
+        setUndo({kind:"search",search:before,scope:JSON.stringify([ipId,applied.product,applied.status,applied.values,applied.ranking])});
         const summary=intent==="new"?"Started a new AI search. Previous search conditions were cleared; brand and dates were kept. "+searchChangeSummary({values:baseValues,status,product:baseProduct,ranking:baseRanking},applied,categoryLabels):searchChangeSummary(before,applied,categoryLabels);
         setIntent("continue");say(summary+(nextRanking?` Searching for the top ${nextRanking.limit} sellers; rankings wait for completion.`:""));
       } else if(current()){setDraft(message);say("Search failed. The latest request was not applied; your filters and results were kept.");}
@@ -125,8 +139,17 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       const translationMessage=resolution?priorQuestion?.requestMessage??message:message;
       const translation=await translateListingSearch(translationMessage,filters,controller.signal,baseRanking,conversationAvailable?{
         mode:intent,messages:resolution?[]:messages.slice(-12).map(item=>({role:item.role,content:item.text.slice(0,2000)})),...(resolution?{resolution}:{}),
-      }:undefined);
+      }:undefined,viewAvailable&&onViewChange?view:undefined);
       if(!current()) return;
+      if(translation.name==="set_queue_view"){
+        if(!view||!onViewChange||!viewAvailable){say("Queue display controls are unavailable in this client. Your filters were kept.");return;}
+        const next=mergeQueueView(view,translation.view);
+        if(JSON.stringify(next)!==viewKey){
+          if(!await onViewChange(next,controller.signal)){if(current())say("The queue view could not be changed. Your search was kept.");return;}
+          setUndo({kind:"view",previous:view,target:JSON.stringify(next),scope:filterScope});
+        }
+        setIntent("continue");say(queueViewSummary(translation.view));return;
+      }
       if(translation.name==="request_clarification") {
         if(translation.question){say(translation.question);setQuestion({options:translation.options??[],conflictField:translation.conflictField,requestMessage:translationMessage});return;}
         const reasons:Record<string,string>={similarity:"Image similarity is not available in queue search yet.",shipping:"Shipping destinations are not available. You can filter listing locations.",live_fx:"Prices use a historical exchange-rate snapshot.",investigation:"Ask filters the queue. Use the review actions for investigations.",seller_metrics:"Seller ranking counts matching suspected listings. Other seller metrics are not available."};
@@ -136,6 +159,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       }
       if(translation.name==="next_listing_page") {say("Use the queue’s Next page control to see more matching results.");return;}
       if(priorQuestion&&message==="Keep the current search"){say("Kept the current search.");return;}
+      if(needsTextChoice){clarifyText();return;}
       if(translation.catalogQuery) {
         const resolved=await resolveListingCatalog(translation.catalogQuery,ipId,controller.signal);
         if(!current()) return;
@@ -174,7 +198,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       <div className="task-search-chat-title"><Sparkles size={17} aria-hidden="true"/><strong>{intent==="new"?"New chat":"Search chat"}</strong></div>
       <div className="task-search-chat-actions">
         <button type="button" className="task-search-new-chat" onClick={()=>chooseIntent("new")}><SquarePen size={15} aria-hidden="true"/>New chat</button>
-        {undo?.scope===scope&&<button type="button" disabled={busy} onClick={()=>void undoChange()}>Undo last change</button>}
+        {undo&&undo.scope===(undo.kind==="view"?filterScope:scope)&&(undo.kind==="search"||undo.target===viewKey)&&<button type="button" disabled={busy} onClick={()=>void undoChange()}>Undo last change</button>}
       </div>
       {searchModes}
       <button type="button" className="task-search-chat-toggle" aria-label={open?"Collapse chat":"Expand chat"} aria-expanded={open} aria-controls={transcriptId} onClick={()=>{setOpen(!open);followLatest.current=true;}}>{open?<ChevronUp size={16}/>:<ChevronDown size={16}/>}</button>

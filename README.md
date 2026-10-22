@@ -63,6 +63,14 @@ and conversation intent survive reload within the same tab, account, tenant,
 brand and exact confirmed query. **Undo last change** reapplies the previous
 filter snapshot (and reruns its query); it does not restore historical counts.
 Manual edits invalidate pending answer buttons and Undo for superseded queries.
+With `task-queue-view-v1`, ordering and grouping are separate from listing filters.
+“Takedown recommended first” preserves the saved search membership and all filters;
+it uses the queue's priority rank over the complete matching set before pagination.
+While a scan runs, the UI says “Ordering matching items…” rather than showing a
+provisional zero count. Undo restores the previous view without starting a scan.
+Category grouping and top sellers within each category are currently unavailable;
+the assistant explains this directly. **Group by Product** refers to canonical
+product identities and is not a substitute for product categories.
 On older APIs, New/Continue still control filter retention, but contextual chat
 requires the capability. Disable `FILTERING_CONVERSATION_ENABLED` on the API
 and refresh clients to roll back contextual translation without a migration.

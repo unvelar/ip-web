@@ -1,3 +1,4 @@
+import {queueViewFromParams,type QueueView} from "../lib/queueView";
 import { QueueConstraintEditor } from "./QueueConstraintEditor";
 import { QueueSearchBar } from "./QueueSearchBar";
 import { savedTaskSearchValues, taskSearchRequest, type AppliedTaskSearch } from "../lib/taskSearchAssistant";
@@ -153,6 +154,7 @@ export default function TaskSearch({
   onStart,
   onError,
   onSearching,
+  onViewChange,
 }: {
   ipId: string;
   conversationOwner?:string;
@@ -165,6 +167,7 @@ export default function TaskSearch({
   onStart: (result: TaskSearchResult, applied: AppliedTaskSearch) => void;
   onError: (error: string) => void;
   onSearching?: (searching: boolean) => void;
+  onViewChange?:(view:QueueView,signal:AbortSignal)=>Promise<boolean>;
 }) {
   const [values, setValues] = useState<Values>(() => {
     const saved = savedTaskSearchValues(params);
@@ -439,7 +442,7 @@ export default function TaskSearch({
         runSearch();
       }}
     >
-      <QueueSearchBar key={`${conversationOwner??"temporary"}:${ipId}`} conversationOwner={conversationOwner} onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
+      <QueueSearchBar key={`${conversationOwner??"temporary"}:${ipId}`} conversationOwner={conversationOwner} view={queueViewFromParams(params)} onViewChange={onViewChange} onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
         onChange={q => updateValues({ ...values, q })} onApply={runSearch} />
       <div
         className="task-search-filter-row"

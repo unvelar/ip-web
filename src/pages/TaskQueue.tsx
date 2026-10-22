@@ -1,3 +1,4 @@
+import {queueViewFromParams,queueViewParams,queueViewPolicy,type QueueView} from "../lib/queueView";
 import { queueSearchParams } from "../lib/taskSearchAssistant";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -236,8 +237,12 @@ export default function TaskQueue({
     [searchStack, setSearchStack] = useState<number[]>([]);
   const { members } = useTenantMembers();
   const urlSearchId = params.get("task_search");
+  const savedSearchSort=params.get("queue_sort")==="priority"?"priority":"newest";
+  const viewGeneration=useRef(0);
+  const viewMembership=JSON.stringify([ipId,params.toString()]);
+  const latestViewMembership=useRef(viewMembership);latestViewMembership.current=viewMembership;
   const search =
-    searchState && (!searchState.id || searchState.id === urlSearchId)
+    searchState && (!searchState.id || searchState.id === urlSearchId) && (searchState.sort??"newest")===savedSearchSort
       ? searchState
       : null;
   const page = data?.key === key ? data.page : null;
@@ -263,6 +268,16 @@ export default function TaskQueue({
     ? groups.find((group) => group.key === activeGroupKey)
     : undefined;
   const closeGroup = useCallback(() => setActiveGroupKey(null), []);
+  async function applyQueueView(view:QueueView,signal:AbortSignal):Promise<boolean> {
+    const snapshot=viewMembership,generation=++viewGeneration.current;
+    const current=()=>!signal.aborted&&generation===viewGeneration.current&&snapshot===latestViewMembership.current;
+    try{
+      const result=urlSearchId?await getTaskSearch(urlSearchId,0,signal,view.sort):null;
+      if(!current())return false;
+      setError("");setSearch(result);setSearchAfter(0);setSearchStack([]);setSelection(new Set());closeGroup();
+      setParams(queueViewParams(params,view));return true;
+    }catch(error){if(current())setError(errorText(error));return false;}
+  }
   function change(values: Record<string, string | null>) {
     const next = new URLSearchParams(params);
     next.delete("task_search");
@@ -311,7 +326,7 @@ export default function TaskQueue({
     setSearchStopping(true);
     try {
       await cancelTaskSearch(id);
-      const result = await getTaskSearch(id, searchAfter);
+      const result = await getTaskSearch(id, searchAfter,undefined,savedSearchSort);
       setSearch((current) => current?.id === id ? result : current);
     } catch (error) {
       setError(errorText(error));
@@ -349,10 +364,10 @@ export default function TaskQueue({
     return () => controller.abort();
   }, [key, cursor, revision, onUnavailable]);
   useEffect(() => {
-    if (!urlSearchId || searchState?.id === urlSearchId) return;
+    if (!urlSearchId || searchState?.id === urlSearchId&&(searchState.sort??"newest")===savedSearchSort) return;
     const controller = new AbortController();
     setError("");
-    void getTaskSearch(urlSearchId, 0, controller.signal)
+    void getTaskSearch(urlSearchId, 0, controller.signal,savedSearchSort)
       .then((result) => {
         if (!controller.signal.aborted) {
           setSearch(result);
@@ -365,7 +380,7 @@ export default function TaskQueue({
         if (!controller.signal.aborted) setError(errorText(error));
       });
     return () => controller.abort();
-  }, [urlSearchId, searchState?.id, revision]);
+  }, [urlSearchId, searchState?.id,searchState?.sort,savedSearchSort, revision]);
   useEffect(() => {
     if (!taskId) return;
     let cancelled = false;
@@ -409,7 +424,7 @@ export default function TaskQueue({
     let timer: number | undefined;
     async function poll() {
       try {
-        const result = await getTaskSearch(id!, searchAfter, controller.signal);
+        const result = await getTaskSearch(id!, searchAfter, controller.signal,savedSearchSort);
         if (controller.signal.aborted) return;
         setSearch(result);
         if (result.state === "pending" || result.state === "running")
@@ -423,7 +438,7 @@ export default function TaskQueue({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [search?.id, searchAfter, revision]);
+  }, [search?.id, searchAfter,savedSearchSort, revision]);
   function reviewSelected() {
     if (!selectedData || selectionLoading || selectionError) return;
     setReview(selectedData.findings);
@@ -699,15 +714,15 @@ export default function TaskQueue({
                   <option value="product">Product</option>
                 </select>
               </label>
-              {(groupBy === "seller" || (!search && !urlSearchId)) && (
+              {(groupBy === "seller" || (!search && !urlSearchId) || search?.queue_view_policy_version===queueViewPolicy) && (
                 <label>
                   Sort{" "}
                   <select
                     aria-label="Sort tasks"
                     title={groupBy === "seller" ? "Rank sellers across all matching tasks before pagination. Exposure uses USD price × quantity." : "Takedown recommendations first, then seller takedown history and inventory. Newer listings break ties."}
-                    value={groupBy === "seller" ? sellerSort : query.sort}
+                    value={groupBy === "seller" ? sellerSort : urlSearchId?savedSearchSort:query.sort}
                     onChange={(event) => {
-                      if (groupBy !== "seller") { change({ queue_sort:event.target.value }); return; }
+                      if (groupBy !== "seller") { void applyQueueView({...queueViewFromParams(params),sort:event.target.value as QueueView["sort"]},new AbortController().signal); return; }
                       const next = new URLSearchParams(params);
                       next.delete("top_sellers");
                       next.set("group_sort",event.target.value);
@@ -724,7 +739,9 @@ export default function TaskQueue({
               )}
             </div>
           }
+          onViewChange={applyQueueView}
           onStart={(result, applied) => {
+            viewGeneration.current++;
             setSearch(result);
             setSearchStarting(false);
             setParams(queueSearchParams(params, applied, result.id));

@@ -1,3 +1,4 @@
+import {queueViewParams,type QueueView} from "../src/lib/queueView";
 import { afterEach, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
@@ -10,12 +11,13 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
+async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
   const requests:Array<{path:string;body:Record<string,unknown>}> = [];
   const cancelled:string[]=[];
+  const viewChanges:QueueView[]=[];
   const applied:AppliedTaskSearch[]=[];const errors:string[]=[];
   let release:((response:Response)=>void)|undefined;
   const agentId="40000000-0000-4000-8000-000000000001",searchId="50000000-0000-4000-8000-000000000001";
@@ -26,7 +28,7 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
   const translated=()=>Response.json({version:1,jobs_started:0,filters,query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
   globalThis.fetch=(async(input,init)=>{
     const url=new URL(String(input),"http://localhost:5174");
-    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{})});
+    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{})});
     if(url.pathname.endsWith("/tasks/capability"))return Response.json({active:true,ready:true,...(options.titleSupported===false?{}:{title_search_policy_version:"literal-title-substring-v1"}),...(options.extended===false?{}:{listing_search_policy_version:"task-listing-search-v1"})});
     if(url.pathname.endsWith("/semantic-taxonomy"))return options.taxonomyUnavailable?Response.json({error:"Unavailable"},{status:503}):Response.json({categories:[{key:"miniature",label:"Miniature"},{key:"ae_2_2_8",label:"Scale Models"}]});
     if(url.pathname.includes("/agent/runs")){
@@ -44,9 +46,10 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
     if(url.pathname.endsWith("/searches"))return options.holdCreation?await new Promise<Response>(resolve=>{release=resolve;}):options.fail?Response.json({error:"Search temporarily unavailable"},{status:503}):Response.json({id:"saved-search",state:"pending",scanned:0,matched:0});
     return Response.json({options:[]});
   }) as typeof fetch;
-  let params=new URLSearchParams("country=Spain&source=source-one&q=old&history=on");
+  let params=new URLSearchParams("country=Spain&source=source-one&q=old&history=on"+(options.queueView?"&task_search=existing-search&queue_sort=newest":""));
+  if(options.viewRanked){params.set("group_by","seller");params.set("group_sort","articles");params.set("top_sellers","10");}
   root=createRoot(container);
-  const render=()=>root!.render(<TaskSearch conversationOwner={options.conversation?"test-account":undefined} ipId={ip} status={(params.get("status")??"pending") as TaskQueueQuery["status"]} params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
+  const render=()=>root!.render(<TaskSearch ranking={options.viewRanked&&params.has("top_sellers")?{limit:Number(params.get("top_sellers"))}:null} onViewChange={options.queueView?async view=>{viewChanges.push(view);params=queueViewParams(params,view);render();return true;}:undefined} conversationOwner={options.conversation?"test-account":undefined} ipId={ip} status={(params.get("status")??"pending") as TaskQueueQuery["status"]} params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
   await act(async()=>render());
   const button=(name:string)=>[...container.querySelectorAll<HTMLButtonElement>("button")].find(el=>el.getAttribute("aria-label")===name||el.textContent?.trim()===name)!;
   const click=async(name:string)=>{await act(async()=>button(name).click());};
@@ -54,7 +57,7 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
     const input=container.querySelector<HTMLInputElement|HTMLTextAreaElement>(`[aria-label="${label}"]`)!;
     await act(async()=>{Object.getOwnPropertyDescriptor(input.tagName==="TEXTAREA"?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype,"value")!.set!.call(input,value);input.dispatchEvent(new window.Event("input",{bubbles:true}));input.dispatchEvent(new window.Event("change",{bubbles:true}));});
   };
-  return {container,requests,applied,errors,cancelled,params:()=>params,click,fill,
+  return {container,requests,applied,viewChanges,errors,cancelled,params:()=>params,click,fill,
     send:()=>click(button("Send message")?"Send message":"Reply"),
     remount:async()=>{await act(async()=>root!.unmount());root=createRoot(container);await act(async()=>render());},
     release:async()=>{await act(async()=>release?.(options.holdCreation?Response.json({id:"cancelled-search",state:"pending",scanned:0,matched:0}):translated()));},settle:async(ms=500)=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,ms));});}};
@@ -145,7 +148,6 @@ test("title-only filters cannot silently become a broad text search on older API
   expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");
   expect(ui.container.textContent).toContain("Title filtering is not available");
 });
-
 const conversationTranslation=(body:Record<string,unknown>,turn:number)=>{
   const filters=body.filters as ListingFilters;
   if(turn===2)return Response.json({version:1,jobs_started:0,filters,query:{name:"request_clarification",arguments:{reason:"ambiguous_request",question:"Below 40 and above 60 conflict. Replace the previous price range?",options:["Replace the previous price range","Keep the current search"],conflict_field:"price"}}});
@@ -227,3 +229,28 @@ test("a free-text answer after reload retains new-search intent and the original
   expect(ui.container.querySelector('button[aria-label="Reply"]')?.textContent).toBe("Reply");
   expect(ui.container.textContent).not.toContain("Continue current search");
  });
+
+test("takedown-first is a view change: keeps search identity and predicates, creates no scan, and Undo restores order",async()=>{
+ const ui=await setup({conversation:true,queueView:true,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"set_queue_view",arguments:{sort:"priority",group_by:"none"}}})});
+ await ui.click("Ask");await ui.fill("Ask about listings","Just sort by takedown recommendation without infringement filtering");await ui.send();
+ expect(ui.requests).toHaveLength(1);expect(ui.requests[0].path).toEndWith("/translate");
+ expect(ui.requests[0].body.queue_view).toEqual({sort:"newest",group_by:"none"});
+ expect(ui.viewChanges).toEqual([{sort:"priority",group_by:"none"}]);
+ expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.params().get("q")).toBe("old");expect(ui.params().get("country")).toBe("Spain");expect(ui.params().get("source")).toBe("source-one");expect(ui.params().get("queue_sort")).toBe("priority");
+ expect(ui.container.textContent).toContain("other matching items remain included");expect(ui.container.textContent).not.toContain("literal text “old”");
+ await ui.click("Undo last change");expect(ui.params().get("queue_sort")).toBe("newest");expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.requests).toHaveLength(1);
+});
+test("unavailable category grouping is explained without demanding a product type or changing the matching set",async()=>{
+ const ui=await setup({conversation:true,queueView:true,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"set_queue_view",arguments:{unavailable:"seller_ranking_per_category"}}})});
+ await ui.click("Ask");await ui.fill("Ask about listings","Top 10 sellers per product category");await ui.send();
+ expect(ui.container.textContent).toContain("Top sellers within each product category is not available yet");expect(ui.applied).toHaveLength(0);expect(ui.viewChanges).toHaveLength(0);expect(ui.requests).toHaveLength(1);expect(ui.params().get("task_search")).toBe("existing-search");
+});
+
+test("showing individual items can undo back to the previous top-seller view without rerunning its search",async()=>{
+  const ui=await setup({conversation:true,queueView:true,viewRanked:true,translation:()=>Response.json({version:1,jobs_started:0,query:{name:"set_queue_view",arguments:{sort:"priority",group_by:"none"}}})});
+  await ui.click("Ask");await ui.fill("Ask about listings","Just sort by takedown recommendation without infringement filtering");await ui.send();
+  expect(ui.params().has("top_sellers")).toBe(false);expect(ui.params().get("task_search")).toBe("existing-search");
+  await ui.click("Undo last change");
+  expect(ui.params().get("top_sellers")).toBe("10");expect(ui.params().get("group_by")).toBe("seller");expect(ui.params().get("group_sort")).toBe("articles");
+  expect(ui.requests.map(item=>item.path)).toEqual(["/api/monitoring/listings/translate"]);
+});

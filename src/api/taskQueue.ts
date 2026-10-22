@@ -1,3 +1,4 @@
+import {queueViewPolicy} from "../lib/queueView";
 import { request } from "./transport";
 import type { IpReviewFinding } from "./reviews";
 export const taskStates = [
@@ -92,6 +93,9 @@ export interface TaskSearchResult {
   matched: number;
   error?: string | null;
   requires_complete?: boolean;
+  queue_view_policy_version?:string;
+  sort?:"priority"|"newest";
+  completion_reason?:"seller_counts"|"priority_order";
   rows?: TaskSummary[];
   next?: number | null;
 }
@@ -167,14 +171,11 @@ export const startTaskSearch = (filters: object) =>
     method: "POST",
     body: JSON.stringify(filters),
   });
-export const getTaskSearch = (id: string, after = 0, signal?: AbortSignal) =>
-  request<TaskSearchResult>(
-    "/api/monitoring/tasks/searches/" +
-      encodeURIComponent(id) +
-      "?after=" +
-      after,
-    { signal },
-  );
+export const getTaskSearch = async(id:string,after=0,signal?:AbortSignal,sort?:"priority"|"newest")=>{
+  const result=await request<TaskSearchResult>("/api/monitoring/tasks/searches/"+encodeURIComponent(id)+"?"+new URLSearchParams({after:String(after),...(sort?{sort}:{})}),{signal});
+  if(sort==="priority"&&(result.queue_view_policy_version!==queueViewPolicy||result.sort!==sort))throw new Error("This API cannot order saved search results by takedown recommendation yet. Your search was kept.");
+  return result;
+};
 export const cancelTaskSearch = (id: string) =>
   request<void>("/api/monitoring/tasks/searches/" + encodeURIComponent(id), {
     method: "DELETE",
