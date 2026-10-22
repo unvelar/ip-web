@@ -52,7 +52,7 @@ export function TaskGroupRows({
               if ((event.target as Element).closest("button, input")) return;
               toggle();
             }}>
-            <th colSpan={4} scope="rowgroup">
+            <th colSpan={5} scope="rowgroup">
               <div className="monitoring-group-heading-content">
                 <input
                   type="checkbox"
