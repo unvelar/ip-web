@@ -382,6 +382,7 @@ test("category report → named items → seller total value retains context and
  await ui.fill("Ask about listings","Show me the action figures items");await ui.send();
  const scope=ui.params().get("queue_filters"),id=ui.params().get("task_search");
  expect(ui.applied).toHaveLength(1);expect(ui.applied[0].showListings).toBe(true);
+ expect([...ui.container.querySelectorAll(".task-search-message.is-assistant p")].at(-1)?.textContent).toContain("Action Figures");
  expect(ui.params().has("group_by")).toBe(false);expect(ui.params().has("top_sellers")).toBe(false);
  expect(ui.container.textContent).not.toContain("Removed the listing-location filter");expect(ui.container.textContent).not.toContain("Updated the price filter");expect(ui.container.textContent).not.toContain("Updated the catalog selection");
  const creates=ui.requests.filter(item=>item.path==="/api/monitoring/tasks/searches").length;
