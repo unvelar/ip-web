@@ -1,8 +1,9 @@
 import {isRecord,requireResponse} from "../api/validation";
 export const categoryRankingPolicy="task-category-ranking-v1";
+export const categoryListingsPolicy="task-category-listings-v1";
 export type CategoryRankingRequest={metric:"total_price"|"articles";limit:number};
 export type CategoryRankingGroup={category_key:string|null;category_label:string;article_count:number;priced_article_count:number;missing_price_count:number;total_price_usd:string|null};
-export type CategoryRanking={policy_version:typeof categoryRankingPolicy;search_id:string|null;state:"pending"|"running"|"completed"|"limited"|"failed"|"cancelled";metric:CategoryRankingRequest["metric"];currency:"USD";price_basis:"stored_listing_price";consistency:"saved_membership_current_categories"|"empty_matching_set";as_of:string;groups:CategoryRankingGroup[];total_categories:number;matching_listings:number|null;priced_listings:number|null;missing_price_listings:number|null};
+export type CategoryRanking={policy_version:typeof categoryRankingPolicy;listing_policy_version?:typeof categoryListingsPolicy;search_id:string|null;state:"pending"|"running"|"completed"|"limited"|"failed"|"cancelled";metric:CategoryRankingRequest["metric"];currency:"USD";price_basis:"stored_listing_price";consistency:"saved_membership_current_categories"|"empty_matching_set";as_of:string;groups:CategoryRankingGroup[];total_categories:number;matching_listings:number|null;priced_listings:number|null;missing_price_listings:number|null};
 export function emptyCategoryRanking(input:CategoryRankingRequest):CategoryRanking {
   return {policy_version:categoryRankingPolicy,search_id:null,state:"completed",metric:input.metric,currency:"USD",price_basis:"stored_listing_price",consistency:"empty_matching_set",as_of:new Date().toISOString(),groups:[],total_categories:0,matching_listings:0,priced_listings:0,missing_price_listings:0};
 }

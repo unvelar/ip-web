@@ -1,3 +1,4 @@
+import {taskSellerValue,taskSellerValueListings} from "./sellerValue";
 import {queueViewPolicy} from "../lib/queueView";
 import { request } from "./transport";
 import type { IpReviewFinding } from "./reviews";
@@ -99,13 +100,14 @@ export interface TaskSearchResult {
   rows?: TaskSummary[];
   next?: number | null;
 }
-export type SellerGroupSort = "exposure" | "articles" | "priority" | "newest";
+export type SellerGroupSort = "exposure" | "articles" | "priority" | "newest" | "total_price";
 export interface TaskSellerGroup {
   seller_key: string | null;
   seller_name: string;
   article_count: number;
   priced_article_count: number;
   exposure_usd: number | null;
+  total_price_usd?:number|null;
 }
 export interface TaskSellerGroupsPage {
   groups: TaskSellerGroup[];
@@ -133,9 +135,9 @@ const queryString = (query: object) =>
       .map(([key, value]) => [key, String(value)]),
   ).toString();
 export const taskSellerGroups = (query: TaskSellerGroupsQuery, signal?: AbortSignal) =>
-  request<TaskSellerGroupsPage>("/api/monitoring/tasks/seller-groups?" + queryString(query), { signal });
+  query.group_sort==="total_price"?taskSellerValue(query,signal):request<TaskSellerGroupsPage>("/api/monitoring/tasks/seller-groups?" + queryString(query), { signal });
 export const taskSellerGroupListings = (query: TaskSellerGroupsQuery & { seller_key: string }, signal?: AbortSignal) =>
-  request<TaskSellerGroupListingsPage>("/api/monitoring/tasks/seller-groups/listings?" + queryString(query), { signal });
+  query.group_sort==="total_price"?taskSellerValueListings(query,signal):request<TaskSellerGroupListingsPage>("/api/monitoring/tasks/seller-groups/listings?" + queryString(query), { signal });
 export const taskCapability = (ip_id: string, signal?: AbortSignal) =>
   request<TaskCapability>(
     "/api/monitoring/tasks/capability?" + queryString({ ip_id }),

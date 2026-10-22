@@ -27,3 +27,13 @@ test("saved-search sorting cannot label an older API's natural-order page as rec
   globalThis.fetch=(async()=>Response.json({id:"saved",state:"completed",rows:[],sort:"priority",queue_view_policy_version:queueViewPolicy})) as typeof fetch;
   expect((await getTaskSearch("saved",50,undefined,"priority")).sort).toBe("priority");
 });
+
+test("seller value order and explicit limits are view state, survive reload, and cannot change filters",()=>{
+ const params=new URLSearchParams({task_search:"owned",queue_filters:JSON.stringify({semantic:JSON.stringify({categories:["action_figures"]}),listing_price:JSON.stringify({currency:"USD",lt:"40"})})});
+ const change=parseQueueViewChange({group_by:"seller",group_sort:"total_price",top_sellers:10});
+ const next=queueViewParams(params,mergeQueueView(queueViewFromParams(params),change));
+ expect(next.get("task_search")).toBe("owned");expect(next.get("queue_filters")).toBe(params.get("queue_filters"));
+ expect(queueViewFromParams(next)).toEqual({sort:"newest",group_by:"seller",group_sort:"total_price",top_sellers:10});
+ const unlimited=mergeQueueView(queueViewFromParams(next),{group_by:"seller",top_sellers:null});expect(unlimited.top_sellers).toBeUndefined();
+ for(const change of [{group_sort:"total_price"},{group_by:"seller",top_sellers:101},{group_by:"none",group_sort:"total_price"}])expect(()=>parseQueueViewChange(change)).toThrow();
+});

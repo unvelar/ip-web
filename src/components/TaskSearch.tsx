@@ -4,7 +4,8 @@ import {queueViewFromParams,type QueueView} from "../lib/queueView";
 import { QueueConstraintEditor } from "./QueueConstraintEditor";
 import { QueueSearchBar } from "./QueueSearchBar";
 import { savedTaskSearchValues, taskSearchRequest, type AppliedTaskSearch } from "../lib/taskSearchAssistant";
-import type { SellerRanking } from "../lib/listingSearch";
+import {titleSearchPolicy,type SellerRanking} from "../lib/listingSearch";
+import {taskListingSearchPolicy} from "../lib/taskSearchAssistant";
 import { SemanticFilterPanel } from "./monitoring/board/SemanticFilterPanel";
 import { readSemanticFilters, semanticFilterLabel } from "../lib/semanticFilters";
 import { useProductSemanticTaxonomy } from "../hooks/useProductSemanticTaxonomy";
@@ -16,12 +17,15 @@ import {
   ArrowLeft,
   CalendarDays,
   Check,
+  Search,
 } from "lucide-react";
 import type { TenantMember } from "../api";
 import { suggestionFilterLabel } from "../lib/monitoringRecommendation";
 import { useOutsideDismiss } from "../hooks/useOutsideDismiss";
 import {
   taskOptions,
+  taskCapability,
+  taskStateLabels,
   taskCatalogOptions,
   startTaskSearch,
   cancelTaskSearch,
@@ -157,6 +161,8 @@ export default function TaskSearch({
   onError,
   onSearching,
   onViewChange,
+  onShowCategoryReport,
+  mode="combined",
 }: {
   ipId: string;
   conversationOwner?:string;
@@ -170,6 +176,8 @@ export default function TaskSearch({
   onError: (error: string) => void;
   onSearching?: (searching: boolean) => void;
   onViewChange?:(view:QueueView,signal:AbortSignal)=>Promise<boolean>;
+  onShowCategoryReport?:(report:CategoryRanking)=>void;
+  mode?:"listings"|"ai"|"combined";
 }) {
   const [values, setValues] = useState<Values>(() => {
     const saved = savedTaskSearchValues(params);
@@ -208,6 +216,12 @@ export default function TaskSearch({
   const [titleSearch, setTitleSearch] = useState(false);
   const { labels: categoryLabels } = useProductSemanticTaxonomy(ipId, readSemanticFilters(values.semantic)?.categories);
   const [extended, setExtended] = useState(false);
+  useEffect(()=>{
+    if(mode!=="listings")return;
+    const controller=new AbortController();
+    void taskCapability(ipId,controller.signal).then(value=>{if(!controller.signal.aborted){setTitleSearch(value.title_search_policy_version===titleSearchPolicy);setExtended(value.listing_search_policy_version===taskListingSearchPolicy);}}).catch(()=>{});
+    return()=>controller.abort();
+  },[mode,ipId]);
   const [labels, setLabels] = useState<Values>({});
   const [panel, setPanel] = useState<string | null>(null);
   const [draft, setDraft] = useState<Values>({});
@@ -221,7 +235,7 @@ export default function TaskSearch({
   const scope = JSON.stringify([ipId, product, status]);
   const callbacks = useRef({ onStart, onError, onSearching });
   useEffect(() => { callbacks.current = { onStart, onError, onSearching }; });
-  const autoSearch = useRef(Boolean(params.get("queue_filters")) && !params.has("task_search"));
+  const autoSearch = useRef(mode!=="ai"&&Boolean(params.get("queue_filters")) && !params.has("task_search"));
   const generation = useRef(0);
   const invalidateRequests = useCallback(() => { generation.current++; }, []);
   const activeSearch = useRef<string | null>(params.get("task_search"));
@@ -250,9 +264,9 @@ export default function TaskSearch({
   },[savedDraft,invalidateRequests]);
   const previousScope = useRef(scope);
   useEffect(() => {
-    if (previousScope.current !== scope && savedDraft) autoSearch.current = true;
+    if (mode!=="ai"&&previousScope.current !== scope && savedDraft) autoSearch.current = true;
     previousScope.current = scope;
-  },[scope,savedDraft]);
+  },[scope,savedDraft,mode]);
   const updateValues = (next: SetStateAction<Values>) => {
     autoSearch.current = true;
     generation.current++;
@@ -468,10 +482,18 @@ export default function TaskSearch({
         runSearch();
       }}
     >
-      <QueueSearchBar key={`${conversationOwner??"temporary"}:${ipId}`} conversationOwner={conversationOwner} onRankCategories={rankCategories} view={queueViewFromParams(params)} onViewChange={onViewChange} onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
-        onChange={q => updateValues({ ...values, q })} onApply={runSearch} />
+      {mode==="listings"?<div className="task-search-bar"><Search size={18} aria-hidden="true"/><input type="search" aria-label="Search listings or sellers" placeholder="Search listings or sellers…" value={values.q??""} maxLength={100} onChange={event=>updateValues({...values,q:event.target.value})}/></div>:<QueueSearchBar key={`${conversationOwner??"temporary"}:${ipId}`} standalone={mode==="ai"} scopeLabel={(status==="all"?"All open":taskStateLabels[status])+" · "+dateLabel} conversationOwner={conversationOwner} onRankCategories={rankCategories} onShowCategoryReport={onShowCategoryReport} searchId={params.get("task_search")} view={queueViewFromParams(params)} onViewChange={onViewChange} onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={mode==="ai"||params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
+        onAgentSearching={searching=>callbacks.current.onSearching?.(searching)}
+        onAgentResult={(result,applied)=>{
+          clearTimeout(debounce.current);generation.current++;
+          autoSearch.current=false;activeSearch.current=result.id;
+          skipAutomatic.current=JSON.stringify([JSON.stringify([ipId,applied.product,applied.status]),applied.values]);
+          setValues(applied.values);callbacks.current.onSearching?.(false);callbacks.current.onStart(result,applied);
+        }}
+        onChange={q => updateValues({ ...values, q })} onApply={runSearch} />}
       <div
         className="task-search-filter-row"
+        hidden={mode==="ai"}
         onKeyDown={(event) => {
           if (event.key === "Escape" && panel) {
             event.preventDefault();

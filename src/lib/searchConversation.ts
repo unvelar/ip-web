@@ -1,5 +1,5 @@
 import {parseCategoryRanking,type CategoryRanking} from "./categoryRanking";
-import type { AppliedTaskSearch, TaskSearchValues } from "./taskSearchAssistant";
+import {taskAssistantFilters,type AppliedTaskSearch,type TaskSearchValues} from "./taskSearchAssistant";
 import { semanticFilterLabel } from "./semanticFilters";
 
 export type SearchMessage = {role:"user"|"assistant";text:string;categoryReport?:CategoryRanking};
@@ -9,20 +9,25 @@ export function newSearchValues(values:TaskSearchValues):TaskSearchValues {
   return {q:"",from:values.from,to:values.to};
 }
 export function searchChangeSummary(before:AppliedTaskSearch,after:AppliedTaskSearch,labels:Record<string,string>):string {
+  // Compare canonical predicates, not omitted fields versus empty UI strings
+  // or legacy price controls versus the structured price representation.
+  const previous=taskAssistantFilters(before.values,null,before.status,before.product);
+  const next=taskAssistantFilters(after.values,null,after.status,after.product);
+  const changed=(field:keyof typeof previous)=>JSON.stringify(previous[field])!==JSON.stringify(next[field]);
   const changes:string[]=[];
-  if(before.values.q!==after.values.q)changes.push(after.values.q?`Text contains “${after.values.q}”.`:"Removed the literal text filter.");
-  if(before.values.listing_price!==after.values.listing_price||before.values.min_price_usd!==after.values.min_price_usd||before.values.max_price_usd!==after.values.max_price_usd) {
+  if(changed("query"))changes.push(after.values.q?`Text contains “${after.values.q}”.`:"Removed the literal text filter.");
+  if(changed("price")) {
     if(after.values.listing_price){const price=JSON.parse(after.values.listing_price);const operators:Record<string,string>={gt:">",gte:"≥",lt:"<",lte:"≤"};changes.push("Price: "+Object.entries(price).filter(([key])=>key!=="currency").map(([key,value])=>`${operators[key]} ${value} ${price.currency}`).join(" and ")+".");}
     else changes.push("Updated the price filter.");
   }
-  if(before.values.listing_countries!==after.values.listing_countries) {
+  if(changed("countries")) {
     const countries=JSON.parse(after.values.listing_countries||"[]") as string[];
     const names=new Intl.DisplayNames(["en"],{type:"region"});
     changes.push(countries.length?`Listing locations: ${countries.map(code=>names.of(code)??code).join(" or ")}.`:"Removed the listing-location filter.");
   }
-  if(before.values.semantic!==after.values.semantic)changes.push(after.values.semantic?`Product details: ${semanticFilterLabel(after.values.semantic,labels)}.`:"Removed the product-detail filters.");
-  if(before.values.seller_listing_count!==after.values.seller_listing_count)changes.push("Updated matching listings per seller.");
-  if(before.product!==after.product||before.values.catalog_selection!==after.values.catalog_selection)changes.push("Updated the catalog selection.");
+  if(changed("semantic"))changes.push(after.values.semantic?`Product details: ${semanticFilterLabel(after.values.semantic,labels)}.`:"Removed the product-detail filters.");
+  if(changed("seller_listing_count"))changes.push("Updated matching listings per seller.");
+  if(changed("catalog_product_id")||changed("catalog_selection"))changes.push("Updated the catalog selection.");
   if(before.status!==after.status)changes.push("Updated the queue status.");
   if(JSON.stringify(before.ranking)!==JSON.stringify(after.ranking))changes.push(after.ranking?`Showing the top ${after.ranking.limit} sellers.`:"Showing listings.");
   return `${changes.join(" ")||"Search conditions applied."} Other active filters were kept.`;
@@ -33,7 +38,15 @@ export function searchChangeSummary(before:AppliedTaskSearch,after:AppliedTaskSe
 export function readSearchConversation(key:string|null,scope:string):ConversationState {
   const empty:ConversationState={messages:[],intent:"continue",question:null};
   if(!key)return empty;
-  try {const value=JSON.parse(sessionStorage.getItem(key)??"null");
+  try {return parseSearchConversation(JSON.parse(sessionStorage.getItem(key)??"null"),scope);}catch{return empty;}
+}
+export function parseSearchConversation(rawValue:unknown,scope:string):ConversationState {
+  const empty:ConversationState={messages:[],intent:"continue",question:null};
+  try {
+    if(!rawValue||typeof rawValue!=="object")return empty;
+    const input=rawValue as Record<string,unknown>;
+    if(input.scope!==scope)return empty;
+    const value=input as {scope:string;messages:SearchMessage[];intent:"new"|"continue";question?:SearchQuestion};
     if(!value||value.scope!==scope||!Array.isArray(value.messages)||value.messages.length>40||!["new","continue"].includes(value.intent))return empty;
     if(value.messages.some((m:SearchMessage)=>!m||!["user","assistant"].includes(m.role)||typeof m.text!=="string"||m.text.length>2000))return empty;
     for(const message of value.messages){if(message.categoryReport!==undefined){message.categoryReport=parseCategoryRanking(message.categoryReport);if(message.role!=="assistant"||message.categoryReport.state!=="completed")return empty;}}
