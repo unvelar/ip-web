@@ -421,6 +421,7 @@ export default function TaskQueue({
     const id = search.id,
       controller = new AbortController();
     searchPoll.current = controller;
+    const pollStartedAt = performance.now();
     let timer: number | undefined;
     async function poll() {
       try {
@@ -428,7 +429,7 @@ export default function TaskQueue({
         if (controller.signal.aborted) return;
         setSearch(result);
         if (result.state === "pending" || result.state === "running")
-          timer = window.setTimeout(poll, 1500);
+          timer = window.setTimeout(poll, performance.now() - pollStartedAt < 10_000 ? 500 : 1500);
       } catch (error) {
         if (!controller.signal.aborted) setError(errorText(error));
       }
