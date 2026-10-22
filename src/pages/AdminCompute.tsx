@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Clock3, Cpu, GitBranch, Server } from "lucide-react";
 import { AdminPage } from "../components/admin/AdminPage";
+import { computeAutoscalingSettingsPatch } from "../computeRuntimeSettings";
 import {
   getComputeProfiles,
   getComputeRuntimeSettings,
@@ -124,25 +125,24 @@ export default function AdminCompute() {
       setComputeError("Additional pod target must be a whole number between 1 and 1,000,000.");
       return;
     }
-    if ((compute.settings.minimumPods ?? 0) > maxPods) {
-      setComputeError("Maximum pods cannot be lower than the active minimum-pod setting.");
-      return;
-    }
     setSavingAutoscaling(true);
     setComputeError("");
     setComputeNotice("");
     try {
-      const updated = await patchComputeRuntimeSettings(compute.version, {
+      const settings = computeAutoscalingSettingsPatch(compute.settings, {
         maxPods,
         firstPodQueueThreshold,
         jobsPerPodTarget,
       });
+      const updated = await patchComputeRuntimeSettings(compute.version, settings);
       setCompute(updated);
       setMaxPodsDraft(String(updated.settings.maxPods));
       setFirstPodQueueThresholdDraft(String(updated.settings.firstPodQueueThreshold));
       setJobsPerPodTargetDraft(String(updated.settings.jobsPerPodTarget));
       setComputeNotice(
-        `Shared autoscaling saved: maximum ${maxPods} pods, first pod above ${firstPodQueueThreshold}, then one additional pod per ${jobsPerPodTarget} queued jobs.`,
+        maxPods === 0
+          ? "RunPod disabled. Minimum capacity cleared; no new RunPod pods will be provisioned."
+          : `Shared autoscaling saved: maximum ${maxPods} pods, first pod above ${firstPodQueueThreshold}, then one additional pod per ${jobsPerPodTarget} queued jobs.`,
       );
     } catch (e: unknown) {
       setComputeError(e instanceof Error ? e.message : "Could not update RunPod autoscaling");
@@ -262,7 +262,7 @@ export default function AdminCompute() {
                   </span>
                 ) : (
                   <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-500">
-                    Queue-driven
+                    {maximumPods === 0 ? "Disabled" : "Queue-driven"}
                   </span>
                 )}
               </div>
@@ -293,7 +293,7 @@ export default function AdminCompute() {
                 className="h-11 min-w-28 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 disabled:opacity-50"
               >
                 {maximumPods < 1
-                  ? <option value={1}>Unavailable</option>
+                  ? <option value={1}>Disabled</option>
                   : Array.from({ length: maximumPods }, (_, index) => index + 1).map((count) => (
                     <option key={count} value={count}>{count}</option>
                   ))}
@@ -331,7 +331,7 @@ export default function AdminCompute() {
             <div>
               <h3 className="text-sm font-bold text-stone-900">Queue scaling</h3>
               <p className="mt-1 max-w-xl text-xs text-stone-500">
-                Shared by all managed GPU job pools. Cap the fleet, start above the threshold, then add one pod for each target-sized queue band.
+                Shared by all managed GPU job pools. Set maximum pods to 0 to disable RunPod. Otherwise, start above the threshold and add one pod for each target-sized queue band.
               </p>
             </div>
             <div className="admin-scaling-fields">
