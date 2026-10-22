@@ -98,6 +98,7 @@ for (const grouped of [false, true]) {
     expect(ui.container.querySelector('[aria-label="Finding details"]')).toBeNull();
     expect(ui.container.querySelector<HTMLInputElement>('[aria-label="Select second"]')?.checked).toBe(true);
     expect(ui.requests.slice(before).filter(request => request.url.pathname.endsWith('/sellers/shop'))).toHaveLength(1);
+    expect(ui.requests.slice(before).find(request => request.url.pathname.endsWith('/sellers/shop'))?.url.searchParams.get("ip_id")).toBe("ip");
     expect(ui.requests.slice(before).every(request => request.method === "GET")).toBe(true);
     await ui.click('[aria-label="Close group details"]');
     expect(ui.container.querySelector('[aria-label="Seller details"]')).toBeNull();

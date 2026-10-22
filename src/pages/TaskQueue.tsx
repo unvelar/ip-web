@@ -582,7 +582,7 @@ export default function TaskQueue({
                   if (taskId) open(null);
                   setActiveGroupKey(null);
                   const group = groupMonitoringFindings([...rows.filter(item => item.result_id !== row.result_id), row], "seller").find(group => group.sellerKey === row.seller_key)!;
-                  setRowGroup({ scope: params.toString(), group });
+                  setRowGroup({ scope: params.toString(), group: { ...group, ipId } });
                 }}
               >{row.seller_name ?? "Unnamed seller"}</button> : <span className="task-queue-seller">{row.seller_name ?? "Unknown seller"}</span>}
               <span className="task-queue-listing-title" title={row.listing_title ?? row.page_url}>
