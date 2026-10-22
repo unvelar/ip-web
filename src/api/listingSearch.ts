@@ -10,7 +10,7 @@ export interface ListingRow { sellerMatchingCount: number | null; id: string; ti
 export interface RankedSeller { sellerKey:string; name:string|null; domain:string; count:number }
 export interface ListingPage { sellers?: RankedSeller[]; rows: ListingRow[]; total: number; nextCursor: string | null; catalog: CatalogMatch | null; fx: { asOf: string; basis: string } | null }
 export type Translation = {name:"rank_categories";ranking:CategoryRankingRequest}|{name:"set_queue_view";view:QueueViewChange}
-  | { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; showListings?:boolean; catalogQuery?: string | null }
+  | { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; categoryLabels?:Record<string,string>; showListings?:boolean; catalogQuery?: string | null }
   | { name: "next_listing_page" }
   | { name: "request_clarification"; reason: string; capability?: string; question?:string; options?:string[]; conflictField?:"price"|"seller_listing_count" };
 export const listingConversationPolicy = "listing-conversation-v1";
@@ -55,7 +55,8 @@ export async function translateListingSearch(message: string, filters: ListingFi
   requireResponse((query.name === "search_listings" || query.name === "rank_sellers") && (args.catalog_query === undefined || nullableText(args.catalog_query)), "search translation");
   const next = parseListingFilters(value.filters);
   requireResponse(next.ip_id === filters.ip_id, "search scope");
-  return { name: query.name, ...(args.show_listings===true?{showListings:true}:{}), ranking: query.name === "rank_sellers" ? parseSellerRanking(args.ranking) : null, filters: next, ...(Object.hasOwn(args, "catalog_query") ? { catalogQuery: args.catalog_query as string | null } : {}) };
+  requireResponse(value.category_labels===undefined||isRecord(value.category_labels)&&Object.entries(value.category_labels).every(([key,label])=>next.semantic?.categories?.includes(key)&&typeof label==="string"&&label.trim().length>0&&label.length<=120),"translation category labels");
+  return { name: query.name, categoryLabels:value.category_labels as Record<string,string>|undefined, ...(args.show_listings===true?{showListings:true}:{}), ranking: query.name === "rank_sellers" ? parseSellerRanking(args.ranking) : null, filters: next, ...(Object.hasOwn(args, "catalog_query") ? { catalogQuery: args.catalog_query as string | null } : {}) };
 }
 export async function resolveListingCatalog(query: string, ipId: string | null, signal: AbortSignal): Promise<CatalogResolution> {
   const value = await read("resolve-catalog", { query, ip_id: ipId, limit: 20 }, signal);

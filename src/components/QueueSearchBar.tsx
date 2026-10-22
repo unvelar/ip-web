@@ -47,7 +47,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
   const [activity,setActivity]=useState("");
   const viewKey=JSON.stringify(view);
   const previousView=useRef(viewKey);
-  const {labels:categoryLabels}=useProductSemanticTaxonomy(ipId,readSemanticFilters(values.semantic)?.categories,mode==="ask");
+  const {labels:categoryLabels}=useProductSemanticTaxonomy(ipId,readSemanticFilters(values.semantic)?.categories);
   const currentCategoryLabels=useRef(categoryLabels);currentCategoryLabels.current=categoryLabels;
   const [open,setOpen] = useState(initialAsk);
   const transcriptId=useId();
@@ -159,6 +159,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     const baseProduct=intent==="new"?undefined:product;
     const baseRanking=intent==="new"||view?.group_sort==="total_price"?null:ranking;
     const before:AppliedTaskSearch={values,status,product,ranking,...(view?{queueView:view}:{})};
+    let translationLabels:Record<string,string>={};
     const prepare=(filters:ReturnType<typeof taskAssistantFilters>,nextRanking:SellerRanking|null)=>{
       const nextValues=applyTaskAssistantFilters(baseValues,filters);
       if(nextValues.title_contains&&!titleSearch)throw new Error("Title filtering is not available in this queue yet. Your filters were kept.");
@@ -173,7 +174,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
         // final receipt. A stale acknowledgement returns false in TaskSearch.
         const applied=target;
         setUndo({kind:"search",search:before,scope:JSON.stringify([ipId,applied.product,applied.status,applied.values,applied.ranking])});
-        const summaryLabels={...Object.fromEntries(messages.flatMap(item=>item.categoryReport?.groups.flatMap(group=>group.category_key?[[group.category_key,group.category_label]]:[])??[])),...currentCategoryLabels.current};
+        const summaryLabels={...Object.fromEntries(messages.flatMap(item=>item.categoryReport?.groups.flatMap(group=>group.category_key?[[group.category_key,group.category_label]]:[])??[])),...currentCategoryLabels.current,...translationLabels};
         const summary=intent==="new"?"Started a new AI search. Previous search conditions were cleared; brand and dates were kept. "+searchChangeSummary({values:baseValues,status,product:baseProduct,ranking:baseRanking},applied,summaryLabels):searchChangeSummary(before,applied,summaryLabels);
         setIntent("continue");say(summary+(nextRanking?` Searching for the top ${nextRanking.limit} sellers; rankings wait for completion.`:""));
       } else if(current()){setDraft(message);say("Search failed. The latest request was not applied; your filters and results were kept.");}
@@ -216,6 +217,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
         mode:intent,...(reportContext?{category_context:{metric:reportContext.metric,groups:reportContext.groups.map(({category_key,category_label})=>({category_key,category_label}))}}:{}),messages:resolution?[]:messages.slice(-12).map(item=>({role:item.role,content:item.text.slice(0,2000)})),...(resolution?{resolution}:{}),
       }:undefined,viewAvailable&&onViewChange?view:undefined,Boolean(categoriesAvailable&&onRankCategories),actionFeatures);
       if(!current()) return;
+      if(translation.name==="search_listings"||translation.name==="rank_sellers")translationLabels=translation.categoryLabels??{};
       if(translation.name==="rank_categories"){
         if(!categoriesAvailable||!onRankCategories){say("Category ranking is unavailable in this client. Your filters were kept.");return;}
         setActivity("Calculating category totals across the full search…");

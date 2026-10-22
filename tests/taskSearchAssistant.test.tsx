@@ -12,7 +12,7 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
+async function setup(options:{categoryLabels?:Record<string,string>;actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
@@ -26,7 +26,7 @@ async function setup(options:{actionFeatures?:boolean;extended?:boolean;clarify?
   let translationTurn=0;
   const filters:ListingFilters=options.title?{...emptyListingFilters(ip),query:"old",title_contains:"L261"}:{...emptyListingFilters(ip),semantic:{categories:[options.categoryKey??"miniature"]},seller_listing_count:{gt:10},countries:["CN","FR"],price:{currency:"EUR",lt:"40"}};
   if(options.agentReview)filters.status="review";
-  const translated=()=>Response.json({version:1,jobs_started:0,filters,query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
+  const translated=()=>Response.json({version:1,jobs_started:0,filters,...(options.categoryLabels?{category_labels:options.categoryLabels}:{}),query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
   globalThis.fetch=(async(input,init)=>{
     const url=new URL(String(input),"http://localhost:5174");
     if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,...(options.actionFeatures?{seller_value_policy_version:"task-seller-value-v1",conversation_actions_policy_version:"listing-conversation-actions-v1"}:{}),country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
@@ -88,7 +88,7 @@ test("an older server keeps advanced translated filters out of the queue",async(
   expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");expect(ui.container.textContent).toContain("not available in this queue yet");
 });
 test("category labels replace internal keys without changing filters or starting another search",async()=>{
-  const ui=await setup({categoryKey:"ae_2_2_8"});await ui.click("Ask");await ui.fill("Ask about listings","miniatures");await ui.send();
+  const ui=await setup({categoryKey:"ae_2_2_8",categoryLabels:{ae_2_2_8:"Scale Models"}});await ui.click("Ask");await ui.fill("Ask about listings","miniatures");await ui.send();
   expect(ui.container.querySelector('[aria-label="Queue search conversation"]')?.textContent).toContain("Product details: Scale Models.");
   expect(ui.container.textContent).toContain("Scale Models");expect(ui.container.textContent).not.toContain("ae 2 2 8");
   expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
@@ -99,6 +99,12 @@ test("unavailable category labels keep a removable filter without exposing its i
   expect(ui.container.textContent).toContain("Product type");expect(ui.container.textContent).not.toContain("ae 2 2 8");
   expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
   expect(ui.container.querySelector('button[aria-label="Remove product details filter"]')).not.toBeNull();
+});
+test("translation category labels name the selected type even when the separate taxonomy request fails",async()=>{
+  const ui=await setup({categoryKey:"ae_2_2_8",taxonomyUnavailable:true,categoryLabels:{ae_2_2_8:"Scale Models"}});
+  await ui.click("Ask");await ui.fill("Ask about listings","tabletop miniatures");await ui.send();
+  expect(ui.container.querySelector('[aria-label="Queue search conversation"]')?.textContent).toContain("Product details: Scale Models.");
+  expect(ui.requests[1].body.semantic).toEqual({categories:["ae_2_2_8"]});
 });
 test("Ask reveals the active literal text filter and carries it into an empty draft without submitting",async()=>{
   const ui=await setup();await ui.click("Ask");
