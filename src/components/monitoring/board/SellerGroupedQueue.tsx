@@ -20,7 +20,7 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
   revision: string;
   selection: Set<string>;
   onSelect: (ids: string[], selected: boolean) => void;
-  renderRow: (row: TaskSummary) => ReactNode;
+  renderRow: (row: TaskSummary, onOpenSeller?: () => void) => ReactNode;
   onUngroup: () => void;
   onOpenGroup: () => void;
   activeFindingId?: string;
@@ -118,7 +118,8 @@ export function SellerGroupedQueue({ query, revision, selection, onSelect, rende
         <colgroup><col className="monitoring-checkbox-column" /><col /><col className="task-queue-store-column" /><col className="monitoring-price-column" /><col className="monitoring-assessment-column" /></colgroup>
         <thead><tr><th colSpan={5} scope="colgroup"><div className="monitoring-seller-columns"><span>Seller / articles</span><span>{valueRanking?"Total listing price (USD)":"Exposure (USD)"}</span></div></th></tr></thead>
         <TaskGroupRows key={`${key}:${offset}:${itemLimit}`} groups={groups} selection={selection} disabled={false} onSelect={onSelect}
-          onOpen={group => { onOpenGroup(); setActiveKey(group.key); }} renderRow={renderRow}
+          onOpen={group => { onOpenGroup(); setActiveKey(group.key); }}
+          renderRow={row => renderRow(row, () => { onOpenGroup(); setActiveKey(`seller:${row.seller_key}`); })}
           groupColumns={<tr className="monitoring-group-listing-columns"><th scope="col" /><th scope="col" className="monitoring-listing-heading">Seller / listing / first detected</th><th scope="col" className="task-queue-store-heading">Store</th><th scope="col" className="monitoring-price-heading">Price (USD)</th><th scope="col" className="monitoring-assessment-heading">Suggested action</th></tr>}
           onToggle={(group, expanded) => { if (expanded) void load(group); }}
           renderFooter={group => <tr><td colSpan={5} className="monitoring-group-footer">
