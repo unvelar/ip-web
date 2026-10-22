@@ -318,10 +318,10 @@ export default function TaskSearch({
       .then(result => result === true)
       .finally(() => { if (relevant()) callbacks.current.onSearching?.(false); });
   }, [ipId, product, status, scope, values]);
-  async function rankCategories(input:CategoryRankingRequest,target:AppliedTaskSearch,signal:AbortSignal){
+  async function rankCategories(input:CategoryRankingRequest,target:AppliedTaskSearch,signal:AbortSignal,fresh:boolean){
     const same=JSON.stringify([values,status,product,stableRanking])===JSON.stringify([target.values,target.status,target.product,target.ranking]);
     const id=activeSearch.current;
-    if(same&&id){
+    if(!fresh&&same&&id){
       const token=generation.current;
       const {report}=await followTaskCategoryRanking(id,input,signal);
       if(signal.aborted||token!==generation.current||latestScope.current!==scope)return null;

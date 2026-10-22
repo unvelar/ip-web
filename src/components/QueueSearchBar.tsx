@@ -13,7 +13,7 @@ import { useProductSemanticTaxonomy } from "../hooks/useProductSemanticTaxonomy"
 import { readSemanticFilters } from "../lib/semanticFilters";
 
 export function QueueSearchBar({ipId,product,status,values,ranking,conversationOwner,view,onViewChange,onRankCategories,initialAsk=false,onExtended,onTitleSearch,onChange,onApply}: {
-  onRankCategories?:(input:CategoryRankingRequest,target:AppliedTaskSearch,signal:AbortSignal)=>Promise<{report:CategoryRanking;applied:AppliedTaskSearch;searchChanged:boolean}|null>;
+  onRankCategories?:(input:CategoryRankingRequest,target:AppliedTaskSearch,signal:AbortSignal,fresh:boolean)=>Promise<{report:CategoryRanking;applied:AppliedTaskSearch;searchChanged:boolean}|null>;
   view?:QueueView;
   onViewChange?:(view:QueueView,signal:AbortSignal)=>Promise<boolean>;
   conversationOwner?:string;
@@ -149,7 +149,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if(translation.name==="rank_categories"){
         if(!categoriesAvailable||!onRankCategories){say("Category ranking is unavailable in this client. Your filters were kept.");return;}
         setActivity("Calculating category totals across the full search…");
-        const ranked=await onRankCategories(translation.ranking,{values:baseValues,status,product:baseProduct,ranking:baseRanking},controller.signal);
+        const ranked=await onRankCategories(translation.ranking,{values:baseValues,status,product:baseProduct,ranking:baseRanking},controller.signal,intent==="new");
         if(!ranked){if(current())say("Category ranking could not finish. Your previous filters and results were kept.");return;}
         if(ranked.searchChanged)setUndo({kind:"search",search:before,scope:JSON.stringify([ipId,ranked.applied.product,ranked.applied.status,ranked.applied.values,ranked.applied.ranking])});
         const first=ranked.report.groups[0];

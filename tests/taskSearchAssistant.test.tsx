@@ -12,7 +12,7 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;emptySearch?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
+async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
@@ -44,7 +44,7 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
     if(options.categoryRanking&&(!init?.method||init.method==="GET")&&url.pathname.includes("/tasks/searches/")){
       requests.push({path:url.pathname,body:{}});
       if(url.pathname.endsWith("/categories"))return Response.json({policy_version:categoryRankingPolicy,search_id:url.pathname.split("/").at(-2),state:"completed",metric:url.searchParams.get("metric"),currency:"USD",price_basis:"stored_listing_price",consistency:"saved_membership_current_categories",as_of:"2026-10-22T09:00:00.000Z",groups:[{category_key:"action_figures",category_label:"Action Figures",article_count:2,priced_article_count:2,missing_price_count:0,total_price_usd:"100.30"},{category_key:"scale_models",category_label:"Scale Models",article_count:1,priced_article_count:0,missing_price_count:1,total_price_usd:null}],total_categories:2,matching_listings:3,priced_listings:2,missing_price_listings:1});
-      return Response.json({id:url.pathname.split("/").at(-1),state:options.categoryIncomplete?"limited":"completed",scanned:60,matched:3,rows:[]});
+      return Response.json({id:url.pathname.split("/").at(-1),state:options.categoryIncomplete&&url.pathname.endsWith("existing-search")?"limited":"completed",scanned:60,matched:3,rows:[]});
     }
     if(init?.method==="DELETE"){cancelled.push(url.pathname);return new Response(null,{status:204});}
     const body=JSON.parse(String(init?.body));requests.push({path:url.pathname,body});
@@ -53,6 +53,7 @@ async function setup(options:{extended?:boolean;clarify?:boolean;fail?:boolean;h
     return Response.json({options:[]});
   }) as typeof fetch;
   let params=new URLSearchParams("country=Spain&source=source-one&q=old&history=on"+(options.queueView||options.categoryRanking?"&task_search=existing-search&queue_sort=newest":""));
+  if(options.cleanScope){params.delete("country");params.delete("source");params.set("q","");}
   if(options.viewRanked){params.set("group_by","seller");params.set("group_sort","articles");params.set("top_sellers","10");}
   root=createRoot(container);
   const render=()=>root!.render(<TaskSearch ranking={options.viewRanked&&params.has("top_sellers")?{limit:Number(params.get("top_sellers"))}:null} onViewChange={options.queueView?async view=>{viewChanges.push(view);params=queueViewParams(params,view);render();return true;}:undefined} conversationOwner={options.conversation?"test-account":undefined} ipId={ip} status={(params.get("status")??"pending") as TaskQueueQuery["status"]} params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
@@ -304,4 +305,12 @@ test("a verified empty new search shows no categories and commits its empty quer
   expect(ui.container.textContent).toContain('No categories in this matching set');expect(ui.container.textContent).toContain('0 matching listings');
   expect(ui.requests.map(item=>item.path)).toEqual(['/api/monitoring/listings/translate','/api/monitoring/tasks/searches']);
   await ui.settle();expect(ui.requests).toHaveLength(2);
+});
+
+test("New chat restarts a stopped search even when the fresh filter scope is identical",async()=>{
+  const ui=await setup({conversation:true,categoryRanking:true,categoryIncomplete:true,cleanScope:true,translation:()=>Response.json({version:1,jobs_started:0,query:{name:'rank_categories',arguments:{metric:'total_price',limit:10}}})});
+  await ui.click('Ask');await ui.click('New chat');await ui.fill('Ask about listings','Highest total price across listings');await ui.send();await ui.settle(1600);
+  expect(ui.requests.filter(item=>item.path==='/api/monitoring/tasks/searches')).toHaveLength(1);expect(ui.params().get('task_search')).toBe('saved-search');
+  expect(ui.container.querySelector('table[aria-label="Product category ranking"]')).not.toBeNull();
+  expect(ui.requests.some(item=>item.path==='/api/monitoring/tasks/searches/existing-search')).toBe(false);
 });
