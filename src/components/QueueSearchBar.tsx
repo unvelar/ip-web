@@ -7,7 +7,7 @@ import { Search, Sparkles, ArrowUp, X, SquarePen, ChevronDown, ChevronUp, Histor
 import { listingCapability, resolveListingCatalog, translateListingSearch } from "../api/listingSearch";
 import { taskCapability, type TaskQueueQuery } from "../api/taskQueue";
 import { taskAssistantFilters, applyTaskAssistantFilters, taskListingSearchPolicy, type AppliedTaskSearch, type TaskSearchValues } from "../lib/taskSearchAssistant";
-import { titleSearchPolicy, type SellerRanking } from "../lib/listingSearch";
+import { titleSearchPolicy, listingFilterKey, type SellerRanking } from "../lib/listingSearch";
 import { startListingAgent, getListingAgent, followListingAgent, cancelListingAgent } from "../api/listingAgent";
 import type { TaskSearchResult } from "../api/taskQueue";
 import { getActingTenant, isApiError } from "../api/transport";
@@ -226,7 +226,13 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
         else say(result.message||"Search stopped. Your previous results were kept.");
         return;
       }
-      const translation=conversationalTranslation??await translate();
+      let translation=conversationalTranslation??await translate();
+      // A model may wrap a display-only reply in search_listings. Membership is
+      // already established; unchanged canonical predicates need only a view change.
+      if(intent==="continue"&&searchId&&(translation.name==="search_listings"||translation.name==="rank_sellers")&&translation.queueView&&!translation.catalogQuery&&!translation.showListings&&listingFilterKey(translation.filters)===listingFilterKey(filters)){
+        const display:QueueViewChange=translation.name==="rank_sellers"?{group_by:"seller",group_sort:"articles",top_sellers:translation.ranking!.limit,...translation.queueView}:translation.queueView;
+        translation={name:"set_queue_view",view:display};
+      }
       if(!current()) return;
       if(translation.name==="search_listings"||translation.name==="rank_sellers")translationLabels=translation.categoryLabels??{};
       if(translation.name==="answer_question"){

@@ -473,3 +473,11 @@ test("a fresh seller preview creates membership before applying its display sett
  expect(ui.applied).toHaveLength(1);expect(ui.applied[0].ranking).toBeNull();expect(ui.params().get('group_sort')).toBe('exposure');expect(ui.params().get('top_sellers')).toBe('25');expect(ui.params().get('items_per_seller')).toBe('3');
  const create=ui.requests.find(item=>item.path==='/api/monitoring/tasks/searches')!;expect(create.body).not.toHaveProperty('q');expect(create.body).not.toHaveProperty('country');expect(create.body).not.toHaveProperty('listing_constraints');
 });
+
+
+test("query-shaped view refinements reuse saved membership and Undo without creating a replacement search",async()=>{
+ const ui=await setup({conversation:true,queueView:true,queryView:true,viewRanked:true,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"search_listings",arguments:{view:{group_by:"seller",group_sort:"exposure",top_sellers:25,items_per_seller:3}}}})});
+ await ui.click("Ask");await ui.fill("Ask about listings","I want them order by total volume (exposure)");await ui.send();
+ expect(ui.applied).toHaveLength(0);expect(ui.viewChanges).toHaveLength(1);expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.params().get("q")).toBe("old");expect(ui.params().get("country")).toBe("Spain");expect(ui.params().get("group_sort")).toBe("exposure");expect(ui.params().get("items_per_seller")).toBe("3");
+ await ui.click("Undo last change");expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.params().get("group_sort")).toBe("articles");expect(ui.params().get("top_sellers")).toBe("10");expect(ui.params().has("items_per_seller")).toBe(false);expect(ui.requests).toHaveLength(1);
+});
