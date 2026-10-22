@@ -1,1 +1,0 @@
-import{A as e,D as t}from"./jsx-runtime-BXps-J6F.js";var n=(0,e(t(),1).createContext)(null);export{n as t};
