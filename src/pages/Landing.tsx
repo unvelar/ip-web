@@ -351,7 +351,8 @@ export default function Landing() {
           <div className="space-y-10">
             {FAQ_GROUPS.map((group, gi) => (
               <div key={group.title}>
-                <h3 className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-400">
+                <h3 className="mb-3.5 px-1 flex items-center gap-2 text-[14px] font-semibold uppercase tracking-[0.2em] text-stone-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-600" aria-hidden />
                   {group.title}
                 </h3>
                 <div className="space-y-3">
