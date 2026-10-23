@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-BPFg_vpS.js";var t=e(),n=`/logo/logo.svg`;function r({className:e=``}){return(0,t.jsx)(`img`,{className:e,src:n,width:`512`,height:`512`,alt:``,"aria-hidden":`true`,decoding:`async`,draggable:!1})}export{r as t};
