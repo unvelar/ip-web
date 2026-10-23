@@ -39,6 +39,7 @@ const AdminIpDetail = lazy(() => import("./pages/AdminIpDetail"));
 const AdminTenants = lazy(() => import("./pages/AdminTenants"));
 const AdminMonitoring = lazy(() => import("./pages/AdminMonitoring"));
 const AdminBrowserActivity = lazy(() => import("./pages/AdminBrowserActivity"));
+const AdminRuns = lazy(() => import("./pages/AdminRuns"));
 const AdminLlmActivity = lazy(() => import("./pages/AdminLlmActivity"));
 const AdminEvaluations = lazy(() => import("./pages/AdminEvaluations"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -209,6 +210,8 @@ export default function App() {
           <Route path="/admin/marketplaces" element={<AdminMarketplaces />} />
           <Route path="/admin/browser-activity" element={<AdminBrowserActivity />} />
           <Route path="/admin/llm-activity" element={<AdminLlmActivity />} />
+          <Route path="/admin/runs" element={<AdminRuns />} />
+          <Route path="/admin/runs/:source/:id" element={<AdminRuns />} />
           <Route path="/admin/evaluations" element={<AdminEvaluations />} />
           <Route path="/admin/ips" element={<AdminCatalog />} />
           <Route path="/admin/ips/:id" element={<AdminIpDetail />} />

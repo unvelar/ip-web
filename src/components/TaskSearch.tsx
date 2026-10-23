@@ -1,3 +1,4 @@
+import {workflowForSignal} from "../lib/workflowContext";
 import {followTaskCategoryRanking} from "../api/categoryRanking";
 import {emptyCategoryRanking,type CategoryRanking,type CategoryRankingRequest} from "../lib/categoryRanking";
 import {queueViewFromParams,type QueueView} from "../lib/queueView";
@@ -302,7 +303,7 @@ export default function TaskSearch({
         if (activeSearch.current === previous) activeSearch.current = null;
       }
       if (!current()) return;
-      const started = await startTaskSearch(request);
+      const started = await startTaskSearch(request,workflowForSignal(signal));
       let result=started;
       activeSearch.current = result.id;
       if(afterCreate){

@@ -1,5 +1,16 @@
 # Unvelar web
 
+Admin → Runs inspects recorded assistant instructions, translations, job attempts
+and observed scripts. Its workflow definitions describe intended steps; actual
+runs show persisted execution evidence. Admin → Evaluations is a separate,
+clearly labeled synthetic demo for recommendation quality and review routing.
+
+The Runs/Discuss frontend requires backend migrations 193–196 and the matching
+API release. Older APIs leave Discuss/correlation disabled and show an explicit
+inspector availability message. Discuss prepares a host-owned proposal; applying
+it requires Run this search. Script coverage requires the backend observed runner.
+See the backend `api/docs/workflow-runs.md` for instrumentation and retention.
+
 React and TypeScript frontend for IP registration, monitoring, product review,
 and administration. Vite builds the application for GitHub Pages.
 

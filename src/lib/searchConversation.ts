@@ -1,10 +1,11 @@
+import {parseSearchPlan,type SearchPlan} from "../api/listingDiscussion";
 import {parseCategoryRanking,type CategoryRanking} from "./categoryRanking";
 import {taskAssistantFilters,type AppliedTaskSearch,type TaskSearchValues} from "./taskSearchAssistant";
 import { semanticFilterLabel } from "./semanticFilters";
 
-export type SearchMessage = {role:"user"|"assistant";text:string;categoryReport?:CategoryRanking};
+export type SearchMessage = {role:"user"|"assistant";text:string;categoryReport?:CategoryRanking;plan?:SearchPlan};
 export type SearchQuestion = {options:string[];literalMessage?:string;requestMessage?:string;conflictField?:"price"|"seller_listing_count"};
-export type ConversationState = {messages:SearchMessage[];intent:"new"|"continue";question:SearchQuestion|null};
+export type ConversationState = {messages:SearchMessage[];intent:"new"|"continue";question:SearchQuestion|null;assistantMode?:"discuss"|"search"};
 export function newSearchValues(values:TaskSearchValues):TaskSearchValues {
   return {q:"",from:values.from,to:values.to};
 }
@@ -55,15 +56,16 @@ export function parseSearchConversation(rawValue:unknown,scope:string):Conversat
     if(!rawValue||typeof rawValue!=="object")return empty;
     const input=rawValue as Record<string,unknown>;
     if(input.scope!==scope)return empty;
-    const value=input as {scope:string;messages:SearchMessage[];intent:"new"|"continue";question?:SearchQuestion};
+    const value=input as {scope:string;messages:SearchMessage[];intent:"new"|"continue";question?:SearchQuestion;assistantMode?:"discuss"|"search"};
     if(!value||value.scope!==scope||!Array.isArray(value.messages)||value.messages.length>40||!["new","continue"].includes(value.intent))return empty;
     if(value.messages.some((m:SearchMessage)=>!m||!["user","assistant"].includes(m.role)||typeof m.text!=="string"||m.text.length>2000))return empty;
-    for(const message of value.messages){if(message.categoryReport!==undefined){message.categoryReport=parseCategoryRanking(message.categoryReport);if(message.role!=="assistant"||message.categoryReport.state!=="completed")return empty;}}
+    for(const message of value.messages){if(message.plan!==undefined){if(message.role!=="assistant")return empty;message.plan=parseSearchPlan(message.plan);}if(message.categoryReport!==undefined){message.categoryReport=parseCategoryRanking(message.categoryReport);if(message.role!=="assistant"||message.categoryReport.state!=="completed")return empty;}}
     const q=value.question;
     if(q&&(!Array.isArray(q.options)||q.options.length>3||q.options.some((option:unknown)=>typeof option!=="string"||option.length>160)
       ||q.literalMessage!==undefined&&(typeof q.literalMessage!=="string"||q.literalMessage.length>2000)
       ||q.requestMessage!==undefined&&(typeof q.requestMessage!=="string"||!q.requestMessage.trim()||q.requestMessage.length>2000)
       ||q.conflictField!==undefined&&!["price","seller_listing_count"].includes(q.conflictField)))return empty;
-    return {messages:value.messages,intent:value.intent,question:q??null};
+    if(value.assistantMode!==undefined&&!["discuss","search"].includes(value.assistantMode))return empty;
+    return {messages:value.messages,intent:value.intent,question:q??null,...(value.assistantMode?{assistantMode:value.assistantMode}:{})};
   }catch{return empty;}
 }

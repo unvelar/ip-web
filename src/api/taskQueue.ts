@@ -168,9 +168,10 @@ export const taskCatalogOptions = (
     "/api/monitoring/tasks/catalog-options?" + queryString(query),
     { signal },
   );
-export const startTaskSearch = (filters: object) =>
+export const startTaskSearch = (filters: object,workflowRunId?:string) =>
   request<TaskSearchResult>("/api/monitoring/tasks/searches", {
     method: "POST",
+    ...(workflowRunId?{headers:{"X-Workflow-Run":workflowRunId}}:{}),
     body: JSON.stringify(filters),
   });
 export const getTaskSearch = async(id:string,after=0,signal?:AbortSignal,sort?:"priority"|"newest")=>{

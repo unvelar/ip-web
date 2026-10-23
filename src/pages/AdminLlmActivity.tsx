@@ -1,3 +1,4 @@
+import {AssistantTracePanel} from "../features/assistantTrace/AssistantTracePanel";
 import { useState } from "react";
 import { Activity as ActivityIcon, ArrowDown, ArrowRight, Check, CheckCheck, ChevronRight, CircleAlert, Clock3, Code2, Cpu, FileInput, GitBranch, List, Pause, Play, Search, Server, X } from "lucide-react";
 import { AdminPage } from "../components/admin/AdminPage";
@@ -11,6 +12,7 @@ function StateBadge({ state }: { state: ActivityState }) {
 }
 
 export default function AdminLlmActivity() {
+  const [showAssistant,setShowAssistant]=useState(()=>new URLSearchParams(window.location.search).has("assistant_trace"));
   const [paused, setPaused] = useState(false);
   const [view, setView] = useState<"feed" | "fleet">("feed");
   const [provider, setProvider] = useState<string>("all");
@@ -41,6 +43,8 @@ export default function AdminLlmActivity() {
 
   return <AdminPage section="llm-activity" title="LLM activity" description="See what your workers are processing, what they return, and what happens next." wide
     actions={<><span className="la-connection"><i />{paused ? "Paused" : feed.error ? "Reconnecting" : feed.loading ? "Connecting" : "Connected · refreshes every 10s"}</span><button className="admin-button" onClick={() => setPaused(value => !value)}>{paused ? <Play size={14} /> : <Pause size={14} />}{paused ? "Resume feed" : "Pause feed"}</button></>}>
+    <button className="admin-button" aria-expanded={showAssistant} onClick={()=>setShowAssistant(value=>!value)}>{showAssistant?"Hide search assistant traces":"Inspect search assistant traces"}</button>
+    {showAssistant&&<AssistantTracePanel/>}
     {feed.error && <div className="la-error" role="alert"><CircleAlert size={15}/><span>{feed.error}{feed.snapshot ? " Showing the last available snapshot." : ""}</span><button className="admin-button" onClick={feed.refresh}>Retry</button></div>}
     {feed.warning && <div className="la-error" role="status"><CircleAlert size={15}/><span>{feed.warning}</span></div>}
     <div className="la-live-note"><span>Live worker status & saved job results</span><small>Recent monitoring jobs + model work observed in this session · read only</small></div>

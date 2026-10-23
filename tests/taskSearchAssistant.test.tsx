@@ -12,11 +12,12 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{queryView?:boolean;answers?:boolean;categoryLabels?:Record<string,string>;actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
+async function setup(options:{workflows?:boolean;discussion?:boolean;discussionNoPlan?:boolean;queryView?:boolean;answers?:boolean;categoryLabels?:Record<string,string>;actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
   const requests:Array<{path:string;body:Record<string,unknown>}> = [];
+  const searchHeaders:Headers[]=[];
   const cancelled:string[]=[];
   const viewChanges:QueueView[]=[];
   const applied:AppliedTaskSearch[]=[];const errors:string[]=[];
@@ -26,12 +27,22 @@ async function setup(options:{queryView?:boolean;answers?:boolean;categoryLabels
   let translationTurn=0;
   const filters:ListingFilters=options.title?{...emptyListingFilters(ip),query:"old",title_contains:"L261"}:{...emptyListingFilters(ip),semantic:{categories:[options.categoryKey??"miniature"]},seller_listing_count:{gt:10},countries:["CN","FR"],price:{currency:"EUR",lt:"40"}};
   if(options.agentReview)filters.status="review";
-  const translated=()=>Response.json({version:1,jobs_started:0,filters,...(options.categoryLabels?{category_labels:options.categoryLabels}:{}),query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
+  const translated=()=>Response.json({version:1,jobs_started:0,...(options.workflows?{trace_id:"70000000-0000-4000-8000-000000000001"}:{}),filters,...(options.categoryLabels?{category_labels:options.categoryLabels}:{}),query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
   globalThis.fetch=(async(input,init)=>{
     const url=new URL(String(input),"http://localhost:5174");
-    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,...(options.queryView?{query_view_policy_version:"listing-query-view-v1"}:{}),...(options.answers?{conversation_answers_policy_version:"listing-conversation-answers-v1"}:{}),...(options.actionFeatures?{seller_value_policy_version:"task-seller-value-v1",conversation_actions_policy_version:"listing-conversation-actions-v1"}:{}),country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
+    if(url.pathname.endsWith("/searches")&&init?.method==="POST")searchHeaders.push(new Headers(init.headers));
+    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,...(options.workflows?{workflow_runs_policy_version:"workflow-runs-v1"}:{}),...(options.discussion?{discussion_policy_version:"listing-discussion-v1"}:{}),...(options.queryView?{query_view_policy_version:"listing-query-view-v1"}:{}),...(options.answers?{conversation_answers_policy_version:"listing-conversation-answers-v1"}:{}),...(options.actionFeatures?{seller_value_policy_version:"task-seller-value-v1",conversation_actions_policy_version:"listing-conversation-actions-v1"}:{}),country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
     if(url.pathname.endsWith("/tasks/capability"))return Response.json({active:true,ready:true,...(options.titleSupported===false?{}:{title_search_policy_version:"literal-title-substring-v1"}),...(options.extended===false?{}:{listing_search_policy_version:"task-listing-search-v1"})});
     if(url.pathname.endsWith("/semantic-taxonomy"))return options.taxonomyUnavailable?Response.json({error:"Unavailable"},{status:503}):Response.json({categories:[{key:"miniature",label:"Miniature"},{key:"ae_2_2_8",label:"Scale Models"}]});
+    const planId="60000000-0000-4000-8000-000000000001";
+    if(url.pathname.endsWith("/assistant/discuss")){
+      const body=JSON.parse(String(init?.body));requests.push({path:url.pathname,body});
+      return Response.json({version:1,policy:"listing-discussion-v1",id:planId,answer:"Consider a bounded shortlist before deciding whom to address.",plan:options.discussionNoPlan?null:{id:planId,summary:"Miniature listings below 40 EUR in China or France.",context_key:body.context_key,details:{version:1,jobs_started:0,filters,query:{name:"search_listings",arguments:{changes:{}}}}}});
+    }
+    if(url.pathname.includes("/assistant/plans/")){
+      requests.push({path:url.pathname,body:{}});const discussed=requests.find(item=>item.path.endsWith("/assistant/discuss"))!.body;
+      return Response.json({version:1,policy:"listing-discussion-v1",id:planId,context_key:discussed.context_key,intent:(discussed.conversation as {mode:string}).mode,basis:discussed.filters,proposal:{version:1,jobs_started:0,filters,query:{name:"search_listings",arguments:{changes:{}}}},summary:"Miniature listings below 40 EUR in China or France."});
+    }
     if(url.pathname.includes("/agent/runs")){
       const body=init?.body?JSON.parse(String(init.body)):{};requests.push({path:url.pathname,body});
       if(init?.method==="DELETE")cancelled.push(url.pathname);
@@ -65,7 +76,7 @@ async function setup(options:{queryView?:boolean;answers?:boolean;categoryLabels
     const input=container.querySelector<HTMLInputElement|HTMLTextAreaElement>(`[aria-label="${label}"]`)!;
     await act(async()=>{Object.getOwnPropertyDescriptor(input.tagName==="TEXTAREA"?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype,"value")!.set!.call(input,value);input.dispatchEvent(new window.Event("input",{bubbles:true}));input.dispatchEvent(new window.Event("change",{bubbles:true}));});
   };
-  return {container,requests,applied,viewChanges,errors,cancelled,shownReports,params:()=>params,click,fill,
+  return {container,requests,searchHeaders,applied,viewChanges,errors,cancelled,shownReports,params:()=>params,click,fill,
     send:()=>click(button("Send message")?"Send message":"Reply"),
     remount:async()=>{await act(async()=>root!.unmount());root=createRoot(container);await act(async()=>render());},
     release:async()=>{await act(async()=>release?.(options.holdCreation?Response.json({id:"cancelled-search",state:"pending",scanned:0,matched:0}):translated()));},settle:async(ms=500)=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,ms));});}};
@@ -480,4 +491,55 @@ test("query-shaped view refinements reuse saved membership and Undo without crea
  await ui.click("Ask");await ui.fill("Ask about listings","I want them order by total volume (exposure)");await ui.send();
  expect(ui.applied).toHaveLength(0);expect(ui.viewChanges).toHaveLength(1);expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.params().get("q")).toBe("old");expect(ui.params().get("country")).toBe("Spain");expect(ui.params().get("group_sort")).toBe("exposure");expect(ui.params().get("items_per_seller")).toBe("3");
  await ui.click("Undo last change");expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.params().get("group_sort")).toBe("articles");expect(ui.params().get("top_sellers")).toBe("10");expect(ui.params().has("items_per_seller")).toBe(false);expect(ui.requests).toHaveLength(1);
+});
+
+test("Discuss prepares a plan without changing the workspace; Run uses the saved translation once",async()=>{
+  const ui=await setup({discussion:true,conversation:true,answers:true,cleanScope:true});await ui.click("Ask");await ui.click("Discuss");
+  await ui.fill("Ask about listings","Help me decide which miniature listings to review first");await ui.send();
+  expect(ui.requests.map(item=>item.path)).toEqual(["/api/monitoring/listings/assistant/discuss"]);expect(ui.applied).toHaveLength(0);
+  expect(ui.requests[0].body).toMatchObject({search_id:null,conversation:{mode:"continue"},queue:{history:false}});
+  expect(ui.container.textContent).toContain("Proposed search");
+  await ui.click("Run this search");expect(ui.requests.map(item=>item.path)).toEqual(["/api/monitoring/listings/assistant/discuss","/api/monitoring/listings/assistant/plans/60000000-0000-4000-8000-000000000001","/api/monitoring/tasks/searches"]);
+  expect(ui.applied).toHaveLength(1);expect(ui.container.textContent).toContain("Plan submitted");
+});
+test("Discuss mode and its plan survive reload; execution still fetches the host-owned proposal",async()=>{
+  const ui=await setup({discussion:true,conversation:true,cleanScope:true});await ui.click("Ask");await ui.click("Discuss");await ui.fill("Ask about listings","Prepare a shortlist");await ui.send();await ui.remount();await ui.click("Ask");
+  expect(ui.container.querySelector('button[aria-pressed="true"]')?.textContent).toBeDefined();expect(ui.container.textContent).toContain("Explore and plan");
+  await ui.click("Run this search");expect(ui.applied).toHaveLength(1);expect(ui.requests.filter(item=>item.path.endsWith("/translate"))).toHaveLength(0);
+});
+test("advice can end without a proposal or executing a search",async()=>{
+  const ui=await setup({discussion:true,discussionNoPlan:true,conversation:true});await ui.click("Ask");await ui.click("Discuss");await ui.fill("Ask about listings","What should I consider when choosing a priority metric?");await ui.send();
+  expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.container.textContent).not.toContain("Run this search");
+});
+test("changing confirmed context disables a discussion plan instead of applying it to different filters",async()=>{
+  const ui=await setup({discussion:true,conversation:true});await ui.click("Ask");await ui.click("Discuss");await ui.fill("Ask about listings","Prepare a shortlist");await ui.send();
+  await ui.click("Search");await ui.fill("Search listings or sellers","a different literal filter");await ui.click("Ask");
+  const run=[...ui.container.querySelectorAll<HTMLButtonElement>("button")].find(button=>button.textContent==="Run this search")!;
+  expect(run.disabled).toBe(true);expect(ui.container.textContent).toContain("search context changed");expect(ui.applied).toHaveLength(0);
+});
+test("old APIs do not offer a discussion path they cannot execute",async()=>{
+  const ui=await setup();await ui.click("Ask");const button=[...ui.container.querySelectorAll<HTMLButtonElement>("button")].find(item=>item.textContent==="Discuss")!;expect(button.disabled).toBe(true);expect(ui.requests).toHaveLength(0);
+});
+
+test("follow-up discussions identify the same unexecuted draft while leaving current filters authoritative",async()=>{
+  const ui=await setup({discussion:true,conversation:true});await ui.click("Ask");await ui.click("Discuss");await ui.fill("Ask about listings","Prepare a shortlist");await ui.send();
+  await ui.fill("Ask about listings","Make that France instead");await ui.send();
+  expect(ui.requests[1].body.draft_id).toBe("60000000-0000-4000-8000-000000000001");expect(ui.requests[1].body.filters).toEqual(ui.requests[0].body.filters);expect(ui.applied).toHaveLength(0);
+});
+test("a locally edited plan description cannot authorize a different host-owned query",async()=>{
+  const ui=await setup({discussion:true,conversation:true});await ui.click("Ask");await ui.click("Discuss");await ui.fill("Ask about listings","Prepare a shortlist");await ui.send();
+  const key=`queue-conversation-v1:test-account:own:${ip}`;
+  const saved=JSON.parse(sessionStorage.getItem(key)!);saved.messages.find((message:{plan?:unknown})=>message.plan).plan.summary="A different reviewed query";sessionStorage.setItem(key,JSON.stringify(saved));
+  await ui.remount();await ui.click("Ask");await ui.click("Run this search");
+  expect(ui.applied).toHaveLength(0);expect(ui.requests.some(item=>item.path.endsWith("/searches"))).toBe(false);expect(ui.container.textContent).toContain("invalid reviewed search plan");
+});
+
+test("direct search carries its originating run without changing query filters and reports workspace adoption separately",async()=>{
+  const ui=await setup({workflows:true,conversation:true,cleanScope:true});await ui.click("Ask");await ui.fill("Ask about listings","Top miniature sellers");await ui.send();
+  expect(ui.applied).toHaveLength(1);expect(ui.searchHeaders[0].get("X-Workflow-Run")).toBe("70000000-0000-4000-8000-000000000001");
+  expect(ui.requests.find(item=>item.path.endsWith("/outcome"))?.body).toEqual({status:"applied"});expect(ui.requests.filter(item=>item.path.endsWith("/searches"))).toHaveLength(1);
+});
+test("running a proposal correlates execution to the prepared plan instead of translating it again",async()=>{
+  const ui=await setup({workflows:true,discussion:true,conversation:true,cleanScope:true});await ui.click("Ask");await ui.click("Discuss");await ui.fill("Ask about listings","Prepare a shortlist");await ui.send();await ui.click("Run this search");
+  expect(ui.searchHeaders[0].get("X-Workflow-Run")).toBe("60000000-0000-4000-8000-000000000001");expect(ui.requests.filter(item=>item.path.endsWith("/translate"))).toHaveLength(0);expect(ui.requests.find(item=>item.path.endsWith("/outcome"))?.body).toEqual({status:"applied"});
 });
