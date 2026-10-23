@@ -189,6 +189,8 @@ export function dismissalBadge(reason: string | null) {
 // Short, highlighted label for the scrape method that surfaced a finding.
 export function methodChip(method: string): { label: string; cls: string } {
   switch (method) {
+    case "self_report":
+      return { label: "Self reported", cls: "bg-stone-100 text-stone-700" };
     case "nodriver_direct":
       return { label: "direct", cls: "bg-violet-100 text-violet-700" };
     case "serper_google":
@@ -215,6 +217,12 @@ export function matchMethodChip(
   method: string,
 ): { label: string; cls: string; title: string } {
   switch (method) {
+    case "self_report":
+      return {
+        label: "User submitted",
+        cls: "bg-stone-100 text-stone-700",
+        title: "Submitted by a user for scraping and review",
+      };
     case "visual":
       return {
         label: "visual",

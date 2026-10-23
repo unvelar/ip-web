@@ -6,6 +6,7 @@ import { ImageOff,ListFilter,PanelLeftClose,PanelLeftOpen,ArrowUpRight } from "l
 import { MarketplaceMark } from "../components/MarketplaceMark";
 import { monitoringPlatformLabel } from "../lib/platforms";
 import MonitoringToolbar from "../components/MonitoringToolbar";
+import { MonitoringQueueHeader } from "../components/SubmitListingLink";
 import TaskSearch from "../components/TaskSearch";
 import TaskSearchStatus from "../components/TaskSearchStatus";
 import {CategoryResultsWorkspace} from "../components/CategoryResultsWorkspace";
@@ -662,6 +663,7 @@ export default function TaskQueue({
         className={`monitoring-results-workspace monitoring-data-workspace task-queue-workspace${mode==="ai"?" is-ai":""}${mode==="ai"&&!search&&!urlSearchId&&!searchStarting?" is-empty":""}${mode==="ai"&&resultsFocused?" is-results-focused":""}`}
       >
         {mode==="listings"&&<>
+        <MonitoringQueueHeader onSubmitted={refresh} />
         {error && (
           <p role="alert" className="task-queue-notice text-red-700">
             {error} <button onClick={refresh}>Retry</button>

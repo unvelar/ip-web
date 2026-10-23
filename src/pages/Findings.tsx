@@ -15,6 +15,7 @@ import {
 import { parseFilters, writeFilters, type InboxFilters } from "../lib/monitoringFilters";
 import { parseMonitoringGroupBy, type MonitoringGroupBy } from "../lib/monitoringGrouping";
 import MonitoringToolbar from "../components/MonitoringToolbar";
+import { MonitoringQueueHeader } from "../components/SubmitListingLink";
 import MonitoringSearch from "../components/MonitoringSearch";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
 import "../components/monitoring/board/MonitoringResults.css";
@@ -437,6 +438,7 @@ export function MonitoringInboxView() {
         <MonitoringSearch inputRef={toolbarSearchRef} value={filters.query ?? ""} onChange={(query) => onFiltersChange({ query: query || null })} debounceMs={250} label="Search listings or sellers" placeholder="Search listings or sellers…" />
       </MonitoringToolbar>
       <div className="monitoring-results-workspace monitoring-data-workspace">
+        <MonitoringQueueHeader onSubmitted={() => refresh()} />
 
         {activeIpId && onboardingStatus?.customer_action_required && (
           <div className="monitoring-workspace-notice"><TenantMonitoringSetupNotice ipId={activeIpId} status={onboardingStatus} /></div>

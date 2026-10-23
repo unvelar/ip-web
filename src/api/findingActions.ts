@@ -2,6 +2,13 @@ import type { MonitoredDomain } from "./monitoringSettings";
 import type { IpReviewFinding } from "./reviews";
 import { API, authHeaders, request } from "./transport";
 
+export function submitListingLink(ipId: string, url: string) {
+  return request<{ result_id: string; created: boolean }>(
+    `/api/ip/${encodeURIComponent(ipId)}/monitoring/submissions`,
+    { method: "POST", body: JSON.stringify({ url }) },
+  );
+}
+
 // --- IP-scoped monitoring (platforms + findings live under the IP) ---
 
 /** Platforms (monitored domains) wired to a single IP. */
