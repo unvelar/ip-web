@@ -742,6 +742,7 @@ export default function TaskQueue({
         <TaskSearch
           key={searchReset}
           mode={mode}
+          searchState={search?.state}
           conversationOwner={conversationOwner}
           ipId={ipId}
           product={query.catalog_product_id}

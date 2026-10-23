@@ -17,7 +17,8 @@ import { newSearchValues,parseSearchConversation, readSearchConversation, search
 import { useProductSemanticTaxonomy } from "../hooks/useProductSemanticTaxonomy";
 import { readSemanticFilters } from "../lib/semanticFilters";
 
-export function QueueSearchBar({ipId,product,status,values,ranking,conversationOwner,view,onViewChange,onRankCategories,onShowCategoryReport,searchId,scopeLabel,standalone=false,initialAsk=false,onExtended,onTitleSearch,onChange,onApply,onAgentResult,onAgentSearching}: {
+export function QueueSearchBar({ipId,product,status,values,ranking,conversationOwner,view,onViewChange,onRankCategories,onShowCategoryReport,searchId,scopeLabel,searchState,standalone=false,initialAsk=false,onExtended,onTitleSearch,onChange,onApply,onAgentResult,onAgentSearching}: {
+  searchState?:TaskSearchResult["state"];
   scopeLabel?:string;
   standalone?:boolean;
   onShowCategoryReport?:(report:CategoryRanking)=>void;
@@ -44,7 +45,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
   const [question,setQuestion] = useState<SearchQuestion|null>(savedConversation.question);
   const [undo,setUndo] = useState<({kind:"search";search:AppliedTaskSearch;scope:string}|{kind:"view";previous:QueueView;target:string;scope:string})|null>(null);
   const [viewAvailable,setViewAvailable]=useState(false);
-  const [actionFeatures,setActionFeatures]=useState({marketplace:false,grouping:false,sellerValue:false,categorySelection:false,answers:false,queryView:false});
+  const [actionFeatures,setActionFeatures]=useState({analysis:false,marketplace:false,grouping:false,sellerValue:false,categorySelection:false,answers:false,queryView:false});
   const [categoriesAvailable,setCategoriesAvailable]=useState(false);
   const [activity,setActivity]=useState("");
   const viewKey=queueViewKey(view);
@@ -90,7 +91,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if (controller.signal.aborted) return;
       setAvailable(listing.enabled);
       setConversationAvailable(listing.conversation);
-      setActionFeatures({marketplace:listing.marketplace,grouping:listing.grouping,sellerValue:listing.sellerValue,categorySelection:listing.conversationActions,answers:listing.conversationAnswers,queryView:listing.queryView});
+      setActionFeatures({analysis:listing.resultAnalysis,marketplace:listing.marketplace,grouping:listing.grouping,sellerValue:listing.sellerValue,categorySelection:listing.conversationActions,answers:listing.conversationAnswers,queryView:listing.queryView});
       setViewAvailable(listing.queueView);setCategoriesAvailable(listing.categoryRanking);
       const supported=task.listing_search_policy_version === taskListingSearchPolicy;
       setAgentAvailable(listing.searchAgent&&supported&&task.active&&task.ready);
@@ -126,6 +127,23 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     if(previousView.current!==viewKey){request.current?.abort();setBusy(false);setQuestion(null);setChoices([]);}
     previousView.current=viewKey;
   },[viewKey]);
+  const [analysisError,setAnalysisError]=useState<{key:string;message:string}|null>(null);
+  const [analysisLoading,setAnalysisLoading]=useState(false);
+  const [analysisRetry,setAnalysisRetry]=useState(0);
+  const analysisKey=JSON.stringify([searchId,view?.grouping??(view?.group_by==="seller"?[view.group_by,view.group_sort,view.top_sellers]:null)]);
+  const analysisInputs=useRef({messages,values,view,ranking,status,product,ipId});
+  analysisInputs.current={messages,values,view,ranking,status,product,ipId};
+  useEffect(()=>{
+    const inputs=analysisInputs.current;
+    if(intent!=="continue"||!standalone||!actionFeatures.analysis||!actionFeatures.answers||!conversationAvailable||!searchId||searchState!=="completed"||!inputs.view||(!inputs.view.grouping&&inputs.view.group_by!=="seller")||inputs.messages.some(item=>item.analysisKey===analysisKey))return;
+    const controller=new AbortController();setAnalysisLoading(true);setAnalysisError(null);
+    void translateListingSearch("Summarize the completed grouped results: the leading groups, their concentration, price coverage, and one useful next drill-down. Explain the chosen metric without treating it as a risk score.",taskAssistantFilters(inputs.values,inputs.ipId,inputs.status,inputs.product),controller.signal,inputs.ranking,{mode:"continue",messages:[]},inputs.view,false,{...actionFeatures,searchId,analysisOnly:true}).then(result=>{
+      if(controller.signal.aborted)return;
+      if(result.name!=="answer_question")throw new Error("The result summary is unavailable. You can continue exploring these results.");
+      setMessages(previous=>previous.some(item=>item.analysisKey===analysisKey)?previous:[...previous,{role:"assistant",text:result.answer,analysisKey}]);
+    }).catch(error=>{if(!controller.signal.aborted)setAnalysisError({key:analysisKey,message:error instanceof Error?error.message:"Could not analyze these results."});}).finally(()=>{if(!controller.signal.aborted)setAnalysisLoading(false);});
+    return()=>{controller.abort();setAnalysisLoading(false);};
+  },[intent,standalone,actionFeatures,conversationAvailable,searchId,searchState,analysisKey,analysisRetry]);
   function chooseIntent(next:"new"|"continue") {
     followLatest.current=true;composer.current?.focus();
     request.current?.abort();setBusy(false);setChoices([]);setQuestion(null);setMode("ask");setOpen(true);setIntent(next);
@@ -192,7 +210,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       const reportContext=actionFeatures.categorySelection&&intent==="continue"?[...messages].reverse().find(item=>item.categoryReport?.search_id===searchId)?.categoryReport:undefined;
       const translate=()=>translateListingSearch(translationMessage,filters,controller.signal,baseRanking,conversationAvailable?{
         mode:intent,...(reportContext?{category_context:{metric:reportContext.metric,groups:reportContext.groups.map(({category_key,category_label})=>({category_key,category_label}))}}:{}),messages:resolution?[]:messages.slice(-12).map(item=>({role:item.role,content:item.text.slice(0,2000)})),...(resolution?{resolution}:{}),
-      }:undefined,viewAvailable&&onViewChange?view:undefined,Boolean(categoriesAvailable&&onRankCategories),actionFeatures);
+      }:undefined,viewAvailable&&onViewChange?view:undefined,Boolean(categoriesAvailable&&onRankCategories),{...actionFeatures,...(intent==="continue"?{searchId}:{} )});
       // A question can be answered without starting or resuming a search agent.
       // Other agent requests still use discovery and execution as before.
       const conversationalTranslation=actionFeatures.answers&&conversationAvailable&&!resume?await translate():null;
@@ -351,7 +369,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     </div>}
     <div ref={transcript} id={transcriptId} className="task-search-transcript" role="log" aria-label="Queue search conversation" aria-live="polite" hidden={!open}
       onScroll={event=>{const log=event.currentTarget;followLatest.current=log.scrollHeight-log.scrollTop-log.clientHeight<48;}}>
-      {messages.length===0&&<div className="task-search-chat-empty"><div className="ai-search-mark"><Search size={22} aria-hidden="true"/></div><strong>{intent==="new"?"What would you like to find?":"What would you like to change?"}</strong><p>{standalone?"Find listings, compare sellers, or explore product categories.":intent==="new"?"Start a fresh search within this brand and date range.":"Ask about the current search, or start a new chat."}</p>{standalone&&<div className="ai-search-prompts">{["Miniatures under $40 in Asia","Categories by total listing price","Takedown recommendations first"].map(prompt=><button type="button" key={prompt} onClick={()=>{setDraft(prompt);composer.current?.focus();}}>{prompt}<span aria-hidden="true">↗</span></button>)}</div>}</div>}
+      {messages.length===0&&<div className="task-search-chat-empty"><div className="ai-search-mark"><Search size={22} aria-hidden="true"/></div><strong>{intent==="new"?"What would you like to find?":"What would you like to change?"}</strong><p>{standalone?"Filter listings, compare groups, and explore what drives their volume or value.":intent==="new"?"Start a fresh search within this brand and date range.":"Ask about the current search, or start a new chat."}</p>{standalone&&<div className="ai-search-prompts">{["Miniatures under $40 in Asia","Categories by total listing price","Takedown recommendations first"].map(prompt=><button type="button" key={prompt} onClick={()=>{setDraft(prompt);composer.current?.focus();}}>{prompt}<span aria-hidden="true">↗</span></button>)}</div>}</div>}
       {messages.map((message,index)=><div className={`task-search-message is-${message.role}`} key={index}><strong>{message.role==="user"?"You":"Search assistant"}</strong><p>{message.text}</p>{message.categoryReport&&(onShowCategoryReport?<button type="button" className="task-category-show-button" disabled={busy||(message.categoryReport.search_id??null)!==(searchId??null)} onClick={()=>{onShowCategoryReport(message.categoryReport!);if(!standalone)setOpen(false);}}>Show category breakdown</button>:<CategoryRankingResult report={message.categoryReport}/>)}</div>)}
       {choices.length>0&&<div className="task-search-clarification">{choices.map(choice=><button type="button" key={choice.label} disabled={busy} onClick={()=>void choice.apply()}>{choice.label}</button>)}</div>}
       {question&&<div className="task-search-clarification" role="group" aria-label="Clarification answers">
@@ -363,6 +381,8 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
           void ask(false,question.literalMessage??option,question.literalMessage?(index===0?"keep":"remove"):undefined,resolution);
         }}>{option}</button>)}
       </div>}
+      {analysisLoading&&!busy&&<div className="task-search-thinking" role="status"><span aria-hidden="true"/>Analyzing the completed results…</div>}
+      {analysisError?.key===analysisKey&&<p role="status">{analysisError.message} <button type="button" onClick={()=>setAnalysisRetry(value=>value+1)}>Retry analysis</button></p>}
       {busy&&<div className="task-search-thinking" role="status"><span aria-hidden="true"/>{agentAvailable&&agentMode?agentProgress||"Starting search agent…":activity||"Thinking…"}</div>}
     </div>
     <div className="task-search-composer">

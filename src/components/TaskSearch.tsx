@@ -162,8 +162,10 @@ export default function TaskSearch({
   onSearching,
   onViewChange,
   onShowCategoryReport,
+  searchState,
   mode="combined",
 }: {
+  searchState?:TaskSearchResult["state"];
   ipId: string;
   conversationOwner?:string;
   product?: string;
@@ -482,7 +484,7 @@ export default function TaskSearch({
         runSearch();
       }}
     >
-      {mode==="listings"?<div className="task-search-bar"><Search size={18} aria-hidden="true"/><input type="search" aria-label="Search listings or sellers" placeholder="Search listings or sellers…" value={values.q??""} maxLength={100} onChange={event=>updateValues({...values,q:event.target.value})}/></div>:<QueueSearchBar key={`${conversationOwner??"temporary"}:${ipId}`} standalone={mode==="ai"} scopeLabel={(status==="all"?"All open":taskStateLabels[status])+" · "+dateLabel} conversationOwner={conversationOwner} onRankCategories={rankCategories} onShowCategoryReport={onShowCategoryReport} searchId={params.get("task_search")} view={queueViewFromParams(params)} onViewChange={onViewChange} onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={mode==="ai"||params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
+      {mode==="listings"?<div className="task-search-bar"><Search size={18} aria-hidden="true"/><input type="search" aria-label="Search listings or sellers" placeholder="Search listings or sellers…" value={values.q??""} maxLength={100} onChange={event=>updateValues({...values,q:event.target.value})}/></div>:<QueueSearchBar key={`${conversationOwner??"temporary"}:${ipId}`} standalone={mode==="ai"} searchState={searchState} scopeLabel={(status==="all"?"All open":taskStateLabels[status])+" · "+dateLabel} conversationOwner={conversationOwner} onRankCategories={rankCategories} onShowCategoryReport={onShowCategoryReport} searchId={params.get("task_search")} view={queueViewFromParams(params)} onViewChange={onViewChange} onTitleSearch={setTitleSearch} onExtended={setExtended} initialAsk={mode==="ai"||params.get("ask")==="1"} ipId={ipId} product={product} status={status} values={values} ranking={ranking}
         onAgentSearching={searching=>callbacks.current.onSearching?.(searching)}
         onAgentResult={(result,applied)=>{
           clearTimeout(debounce.current);generation.current++;
