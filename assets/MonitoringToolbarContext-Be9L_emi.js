@@ -1,0 +1,1 @@
+import{g as e,p as t}from"./jsx-runtime-BPFg_vpS.js";var n=(0,e(t(),1).createContext)(null);export{n as t};
