@@ -12,7 +12,7 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{queryView?:boolean;answers?:boolean;categoryLabels?:Record<string,string>;actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
+async function setup(options:{marketplace?:boolean;grouping?:boolean;websites?:Array<{value:string;label:string}>;queryView?:boolean;answers?:boolean;categoryLabels?:Record<string,string>;actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
@@ -29,8 +29,9 @@ async function setup(options:{queryView?:boolean;answers?:boolean;categoryLabels
   const translated=()=>Response.json({version:1,jobs_started:0,filters,...(options.categoryLabels?{category_labels:options.categoryLabels}:{}),query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
   globalThis.fetch=(async(input,init)=>{
     const url=new URL(String(input),"http://localhost:5174");
-    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,...(options.queryView?{query_view_policy_version:"listing-query-view-v1"}:{}),...(options.answers?{conversation_answers_policy_version:"listing-conversation-answers-v1"}:{}),...(options.actionFeatures?{seller_value_policy_version:"task-seller-value-v1",conversation_actions_policy_version:"listing-conversation-actions-v1"}:{}),country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
+    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,...(options.marketplace?{marketplace_search_policy_version:"task-marketplace-selection-v1"}:{}),...(options.grouping?{grouping_policy_version:"task-grouping-v1"}:{}),...(options.queryView?{query_view_policy_version:"listing-query-view-v1"}:{}),...(options.answers?{conversation_answers_policy_version:"listing-conversation-answers-v1"}:{}),...(options.actionFeatures?{seller_value_policy_version:"task-seller-value-v1",conversation_actions_policy_version:"listing-conversation-actions-v1"}:{}),country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
     if(url.pathname.endsWith("/tasks/capability"))return Response.json({active:true,ready:true,...(options.titleSupported===false?{}:{title_search_policy_version:"literal-title-substring-v1"}),...(options.extended===false?{}:{listing_search_policy_version:"task-listing-search-v1"})});
+    if(url.pathname.endsWith("/tasks/options")){requests.push({path:url.pathname,body:{q:url.searchParams.get("q")}});return Response.json({options:options.websites??[]});}
     if(url.pathname.endsWith("/semantic-taxonomy"))return options.taxonomyUnavailable?Response.json({error:"Unavailable"},{status:503}):Response.json({categories:[{key:"miniature",label:"Miniature"},{key:"ae_2_2_8",label:"Scale Models"}]});
     if(url.pathname.includes("/agent/runs")){
       const body=init?.body?JSON.parse(String(init.body)):{};requests.push({path:url.pathname,body});
@@ -480,4 +481,40 @@ test("query-shaped view refinements reuse saved membership and Undo without crea
  await ui.click("Ask");await ui.fill("Ask about listings","I want them order by total volume (exposure)");await ui.send();
  expect(ui.applied).toHaveLength(0);expect(ui.viewChanges).toHaveLength(1);expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.params().get("q")).toBe("old");expect(ui.params().get("country")).toBe("Spain");expect(ui.params().get("group_sort")).toBe("exposure");expect(ui.params().get("items_per_seller")).toBe("3");
  await ui.click("Undo last change");expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.params().get("group_sort")).toBe("articles");expect(ui.params().get("top_sellers")).toBe("10");expect(ui.params().has("items_per_seller")).toBe(false);expect(ui.requests).toHaveLength(1);
+});
+
+test("marketplace discovery applies the authenticated website with the complete translated query and survives URL/history",async()=>{
+ const ui=await setup({marketplace:true,queryView:true,conversation:true,queueView:true,cleanScope:true,websites:[{value:'goofish.com',label:'goofish.com'}],translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:'search_listings',arguments:{marketplace_query:'goofish',changes:{}}}})});
+ await ui.click('Ask');await ui.fill('Ask about listings','show me the goofish listings');await ui.send();
+ expect(ui.requests.find(item=>item.path.endsWith('/translate'))?.body.marketplace_search).toBe(true);
+ expect(ui.requests.find(item=>item.path.endsWith('/tasks/options'))?.body.q).toBe('goofish');
+ expect(ui.applied).toHaveLength(1);expect(ui.applied[0].values.website).toBe('goofish.com');
+ expect(ui.requests.find(item=>item.path.endsWith('/searches'))?.body.website).toBe('goofish.com');
+ expect(JSON.parse(ui.params().get('queue_filters')!).website).toBe('goofish.com');expect(ui.container.textContent).toContain('Marketplace: goofish.com');
+});
+test("ambiguous or missing websites never apply a partial country/price query",async()=>{
+ for(const websites of [[],[{value:'shop.fr',label:'Shop France'},{value:'shop.de',label:'Shop Germany'}]]){
+  const ui=await setup({marketplace:true,conversation:true,cleanScope:true,websites,translation:body=>Response.json({version:1,jobs_started:0,filters:{...(body.filters as object),countries:['IT'],price:{currency:'USD',lt:'20'}},query:{name:'search_listings',arguments:{marketplace_query:'shop',changes:{}}}})});
+  await ui.click('Ask');await ui.fill('Ask about listings','Shop listings under 20 dollars in Italy');await ui.send();
+  expect(ui.applied).toHaveLength(0);expect(ui.requests.filter(item=>item.path.endsWith('/searches'))).toHaveLength(0);
+  expect(ui.container.textContent).toContain(websites.length?'Several websites match':'No available website matches');
+  if(websites.length)expect(ui.container.textContent).toContain('shop.fr');
+  await act(async()=>root?.unmount());root=undefined;
+ }
+});
+test("grouping a fresh AI search establishes membership once and commits the full server grouping view",async()=>{
+ const grouping={dimensions:['marketplace'],metric:'articles',group_limit:null,subgroup_limit:null,items_per_group:3};
+ const ui=await setup({grouping:true,queryView:true,conversation:true,queueView:true,cleanScope:true,translation:()=>Response.json({version:1,jobs_started:0,query:{name:'set_queue_view',arguments:{group_by:'none',grouping}}})});
+ await ui.click('Ask');await ui.click('New chat');await ui.fill('Ask about listings','Group by marketplaces');await ui.send();
+ expect(ui.requests.filter(item=>item.path.endsWith('/searches'))).toHaveLength(1);expect(ui.applied[0].queueView?.grouping).toEqual(grouping);
+ expect(JSON.parse(ui.params().get('grouping')!)).toEqual(grouping);
+});
+test('marketplace, country, price and grouping commit atomically in one saved search',async()=>{
+ const grouping={dimensions:['marketplace'],metric:'total_price',group_limit:null,subgroup_limit:null,items_per_group:3};
+ const ui=await setup({marketplace:true,grouping:true,queryView:true,conversation:true,queueView:true,cleanScope:true,websites:[{value:'goofish.com',label:'goofish.com'}],translation:body=>Response.json({version:1,jobs_started:0,filters:{...(body.filters as object),countries:['IT'],price:{currency:'USD',lt:'20'}},query:{name:'search_listings',arguments:{marketplace_query:'goofish',changes:{},view:{group_by:'none',grouping}}}})});
+ await ui.click('Ask');await ui.fill('Ask about listings','Goofish listings under $20 in Italy, group by marketplace total price');await ui.send();
+ const searches=ui.requests.filter(item=>item.path.endsWith('/searches'));expect(searches).toHaveLength(1);
+ expect(searches[0].body).toMatchObject({website:'goofish.com',listing_constraints:{countries:['IT'],price:{currency:'USD',lt:'20'}}});
+ expect(ui.applied[0].queueView?.grouping).toEqual(grouping);expect(JSON.parse(ui.params().get('grouping')!)).toEqual(grouping);
+ expect(ui.container.textContent).toContain('Grouped by marketplace');
 });

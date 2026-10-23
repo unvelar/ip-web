@@ -1,3 +1,5 @@
+import {resolveMarketplace,applyMarketplace,marketplaceLookupQuery} from '../lib/marketplaceSearch';
+import {taskOptions} from '../api/taskQueue';
 import {CategoryRankingResult} from "./CategoryRankingResult";
 import type {CategoryRanking,CategoryRankingRequest} from "../lib/categoryRanking";
 import { mergeQueueView,queueViewSummary,queueViewKey,type QueueView,type QueueViewChange } from "../lib/queueView";
@@ -42,7 +44,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
   const [question,setQuestion] = useState<SearchQuestion|null>(savedConversation.question);
   const [undo,setUndo] = useState<({kind:"search";search:AppliedTaskSearch;scope:string}|{kind:"view";previous:QueueView;target:string;scope:string})|null>(null);
   const [viewAvailable,setViewAvailable]=useState(false);
-  const [actionFeatures,setActionFeatures]=useState({sellerValue:false,categorySelection:false,answers:false,queryView:false});
+  const [actionFeatures,setActionFeatures]=useState({marketplace:false,grouping:false,sellerValue:false,categorySelection:false,answers:false,queryView:false});
   const [categoriesAvailable,setCategoriesAvailable]=useState(false);
   const [activity,setActivity]=useState("");
   const viewKey=queueViewKey(view);
@@ -88,7 +90,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if (controller.signal.aborted) return;
       setAvailable(listing.enabled);
       setConversationAvailable(listing.conversation);
-      setActionFeatures({sellerValue:listing.sellerValue,categorySelection:listing.conversationActions,answers:listing.conversationAnswers,queryView:listing.queryView});
+      setActionFeatures({marketplace:listing.marketplace,grouping:listing.grouping,sellerValue:listing.sellerValue,categorySelection:listing.conversationActions,answers:listing.conversationAnswers,queryView:listing.queryView});
       setViewAvailable(listing.queueView);setCategoriesAvailable(listing.categoryRanking);
       const supported=task.listing_search_policy_version === taskListingSearchPolicy;
       setAgentAvailable(listing.searchAgent&&supported&&task.active&&task.ready);
@@ -160,8 +162,10 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     const baseRanking=intent==="new"||view?.group_sort==="total_price"?null:ranking;
     const before:AppliedTaskSearch={values,status,product,ranking,...(view?{queueView:view}:{})};
     let translationLabels:Record<string,string>={};
+    let websiteChange:{website:string|null}|undefined;
     const prepare=(filters:ReturnType<typeof taskAssistantFilters>,nextRanking:SellerRanking|null)=>{
-      const nextValues=applyTaskAssistantFilters(baseValues,filters);
+      const mappedValues=applyTaskAssistantFilters(baseValues,filters);
+      const nextValues=websiteChange?applyMarketplace(mappedValues,websiteChange.website):mappedValues;
       if(nextValues.title_contains&&!titleSearch)throw new Error("Title filtering is not available in this queue yet. Your filters were kept.");
       if(!extended&&(nextRanking||["listing_countries","listing_price","seller_listing_count","catalog_selection"].some(field=>nextValues[field])))throw new Error("That search is not available in this queue yet. Your filters were kept.");
       return {values:nextValues,status:filters.status,product:filters.catalog_product_id??undefined,ranking:nextRanking};
@@ -179,7 +183,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
         const summaryLabels={...Object.fromEntries(messages.flatMap(item=>item.categoryReport?.groups.flatMap(group=>group.category_key?[[group.category_key,group.category_label]]:[])??[])),...currentCategoryLabels.current,...translationLabels};
         const summaryBefore=intent==="new"?{values:baseValues,status,product:baseProduct,ranking:baseRanking}:before;
         const summary=standalone?conversationSearchSummary(summaryBefore,applied,summaryLabels,intent==="new"):intent==="new"?"Started a new AI search. Previous search conditions were cleared; brand and dates were kept. "+searchChangeSummary(summaryBefore,applied,summaryLabels):searchChangeSummary(before,applied,summaryLabels);
-        setIntent("continue");say(summary+(!standalone&&nextRanking?` Searching for the top ${nextRanking.limit} sellers; rankings wait for completion.`:""));
+        setIntent("continue");say(summary+(!standalone&&queueViewChange?.grouping?" "+queueViewSummary(queueViewChange):"")+(!standalone&&nextRanking?` Searching for the top ${nextRanking.limit} sellers; rankings wait for completion.`:""));
       } else if(current()){setDraft(message);say("Search failed. The latest request was not applied; your filters and results were kept.");}
     };
     try {
@@ -196,7 +200,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if(conversationalTranslation?.name==="answer_question"){
         say(conversationalTranslation.answer);setQuestion(priorQuestion);return;
       }
-      if(agentAvailable&&agentMode&&!(conversationalTranslation&&"queueView" in conversationalTranslation&&conversationalTranslation.queueView)){
+      if(agentAvailable&&agentMode&&!(conversationalTranslation&&"marketplaceQuery" in conversationalTranslation)&&!(conversationalTranslation&&"queueView" in conversationalTranslation&&conversationalTranslation.queueView)){
         onAgentSearching(true);
         const continuing=saved?.scope===scope&&saved.message===message;
         if(!continuing&&saved?.id)await cancelListingAgent(saved.id);
@@ -229,7 +233,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       let translation=conversationalTranslation??await translate();
       // A model may wrap a display-only reply in search_listings. Membership is
       // already established; unchanged canonical predicates need only a view change.
-      if(intent==="continue"&&searchId&&(translation.name==="search_listings"||translation.name==="rank_sellers")&&translation.queueView&&!translation.catalogQuery&&!translation.showListings&&listingFilterKey(translation.filters)===listingFilterKey(filters)){
+      if(intent==="continue"&&searchId&&(translation.name==="search_listings"||translation.name==="rank_sellers")&&translation.queueView&&!Object.hasOwn(translation,"marketplaceQuery")&&!translation.catalogQuery&&!translation.showListings&&listingFilterKey(translation.filters)===listingFilterKey(filters)){
         const display:QueueViewChange=translation.name==="rank_sellers"?{group_by:"seller",group_sort:"articles",top_sellers:translation.ranking!.limit,...translation.queueView}:translation.queueView;
         translation={name:"set_queue_view",view:display};
       }
@@ -254,7 +258,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
         if(!view||!onViewChange||!viewAvailable){say("Queue display controls are unavailable in this client. Your filters were kept.");return;}
         if(translation.view.group_sort==="total_price"&&!actionFeatures.sellerValue){say("Seller totals by listing price are not available on this API yet. Your filters and results were kept.");return;}
         const next=mergeQueueView(intent==="new"?{sort:"priority",group_by:"none"}:view,translation.view);
-        if(next.group_by==="seller"&&(intent==="new"||!searchId)){
+        if((next.group_by==="seller"||next.grouping)&&(intent==="new"||!searchId)){
           // A fresh chat has no saved membership to aggregate. Establish it
           // once and commit the desired view with that query, never an old chat.
           const target={...prepare(filters,next.group_sort==="articles"&&next.top_sellers?{limit:next.top_sellers}:null),queueView:next};
@@ -278,6 +282,21 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if(translation.name==="next_listing_page") {say("Use the queue’s Next page control to see more matching results.");return;}
       if(priorQuestion&&message==="Keep the current search"){say("Kept the current search.");return;}
       if(needsTextChoice){clarifyText();return;}
+      if(Object.hasOwn(translation,"marketplaceQuery")){
+        if(translation.marketplaceQuery===null)websiteChange={website:null};
+        else {
+          const name=translation.marketplaceQuery!;
+          setActivity("Finding the requested marketplace…");
+          const found=resolveMarketplace(name,await taskOptions({ip_id:ipId,catalog_product_id:baseProduct,kind:"website",q:marketplaceLookupQuery(name)},controller.signal));
+          if(!current())return;
+          if(found.kind==="not_found"){say(`No available website matches “${name}” in this scope. Your filters and results were kept.`);return;}
+          if(found.kind==="ambiguous"){
+            say(`Several websites match “${name}”. ${found.options.length<=3?"Which one do you mean?":"Enter the full website domain."}`);
+            setQuestion({options:found.options.length<=3?found.options.map(option=>option.value):[],requestMessage:translationMessage});return;
+          }
+          websiteChange={website:found.website};
+        }
+      }
       if(translation.catalogQuery) {
         const resolved=await resolveListingCatalog(translation.catalogQuery,ipId,controller.signal);
         if(!current()) return;

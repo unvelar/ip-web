@@ -70,8 +70,22 @@ export function queueSearchParams(params: URLSearchParams, applied: AppliedTaskS
   next.set("status",applied.status);
   if (applied.product) next.set("catalog_product_id",applied.product); else next.delete("catalog_product_id");
   if (searchId) next.set("task_search",searchId); else next.delete("task_search");
-  if(applied.showListings){next.delete("group_by");next.delete("group_sort");next.delete("top_sellers");next.delete("items_per_seller");}
+  if(applied.showListings){next.delete("grouping");next.delete("group_by");next.delete("group_sort");next.delete("top_sellers");next.delete("items_per_seller");}
   if (applied.ranking) { next.set("group_by","seller"); next.set("group_sort","articles"); next.set("top_sellers",String(applied.ranking.limit)); }
   else if(applied.showListings||params.get("group_sort")!=="total_price")next.delete("top_sellers");
   return applied.queueView?queueViewParams(next,applied.queueView):next;
+}
+/** Reuse the saved queue draft when a display grouping needs full membership. */
+export function groupingSearchValues(params:URLSearchParams):TaskSearchValues {
+ const saved=savedTaskSearchValues(params);if(saved)return saved;
+ const date=(days:number)=>{const now=new Date();now.setDate(now.getDate()+days);return now.toISOString().slice(0,10);};
+ const values:TaskSearchValues={q:params.get('q')??'',from:params.get('from')??date(-29),to:params.get('to')??date(1)};
+ const aliases:Record<string,string>={website:'platform',seller_name:'seller',evidence:'match_basis'};
+ for(const field of ['semantic','website','source','seller_name','assignee','candidate_outcome','evidence','protected_term_id','country','seller_origin','dismissal_reason','min_price_usd','max_price_usd','product_group_id',...assistantValueFields]){
+  const value=params.get(aliases[field]??field);if(value)values[field]=value;
+ }
+ const selector=params.get('selector'),value=params.get('value');
+ if(selector&&value&&['website','source','seller','assignee','suggestion'].includes(selector))values[selector==='suggestion'?'candidate_outcome':selector]=value;
+ if(params.get('history')==='on')values.history='on';
+ return values;
 }
