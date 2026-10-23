@@ -722,6 +722,7 @@ export default function TaskQueue({
         <div ref={conversationRef} id={conversationId} className={mode==="ai"?"task-ai-conversation":undefined} role={mode==="ai"?"region":undefined} aria-label={mode==="ai"?"Search conversation":undefined} hidden={mode==="ai"&&resultsFocused}>
         <TaskSearch
           key={searchReset}
+          refreshRevision={queueReset}
           mode={mode}
           conversationOwner={conversationOwner}
           ipId={ipId}

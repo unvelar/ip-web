@@ -162,6 +162,7 @@ export default function TaskSearch({
   onSearching,
   onViewChange,
   onShowCategoryReport,
+  refreshRevision=0,
   mode="combined",
 }: {
   ipId: string;
@@ -177,6 +178,7 @@ export default function TaskSearch({
   onSearching?: (searching: boolean) => void;
   onViewChange?:(view:QueueView,signal:AbortSignal)=>Promise<boolean>;
   onShowCategoryReport?:(report:CategoryRanking)=>void;
+  refreshRevision?:number;
   mode?:"listings"|"ai"|"combined";
 }) {
   const [values, setValues] = useState<Values>(() => {
@@ -332,6 +334,12 @@ export default function TaskSearch({
       .then(result => result === true)
       .finally(() => { if (relevant()) callbacks.current.onSearching?.(false); });
   }, [ipId, product, status, scope, values]);
+  const previousRefresh=useRef(refreshRevision);
+  useEffect(()=>{
+    if(previousRefresh.current===refreshRevision)return;
+    previousRefresh.current=refreshRevision;
+    if(params.has('task_search'))void runSearch();
+  },[refreshRevision,params,runSearch]);
   async function rankCategories(input:CategoryRankingRequest,target:AppliedTaskSearch,signal:AbortSignal,fresh:boolean){
     const same=JSON.stringify([values,status,product,stableRanking])===JSON.stringify([target.values,target.status,target.product,target.ranking]);
     const id=activeSearch.current;
