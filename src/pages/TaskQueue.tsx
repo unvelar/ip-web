@@ -11,6 +11,7 @@ import TaskSearchStatus from "../components/TaskSearchStatus";
 import {CategoryResultsWorkspace} from "../components/CategoryResultsWorkspace";
 import type {CategoryRanking} from "../lib/categoryRanking";
 import { TaskGroupRows } from "../components/monitoring/board/TaskGroupRows";
+import { TaskRowActions } from "../components/monitoring/board/TaskRowActions";
 import { SellerGroupedQueue } from "../components/monitoring/board/SellerGroupedQueue";
 import { MonitoringGroupDetails } from "../components/monitoring/board/MonitoringGroupDetails";
 import {
@@ -108,6 +109,7 @@ export default function TaskQueue({
   const conversationRef=useRef<HTMLDivElement>(null);
   const conversationId=useId();
   const [resultsFocused,setResultsFocused]=useState(false);
+  const [quickActionId, setQuickActionId] = useState<string | null>(null);
   const searchPoll = useRef<AbortController | null>(null);
   const statusRef = useRef<HTMLElement>(null);
   const scrollToQueue = () =>
@@ -334,10 +336,10 @@ export default function TaskQueue({
     setQueueReset((value) => value + 1);
     scrollToQueue();
   }
-  function refreshAfterAction(options?: FindingUpdateOptions) {
-    if (options?.completed && taskId) setSelection((previous) => {
+  function refreshAfterAction(options?: FindingUpdateOptions, resultId = taskId) {
+    if (options?.completed && resultId) setSelection((previous) => {
       const next = new Set(previous);
-      next.delete(taskId);
+      next.delete(resultId);
       return next;
     });
     setRevision((value) => value + 1);
@@ -534,6 +536,11 @@ export default function TaskQueue({
         tabIndex={waitingForPage ? -1 : 0}
         className={`monitoring-listing-row${taskId === row.result_id ? " is-active" : ""}${selection.has(row.result_id) ? " is-selected" : ""}${row.state === "dismissed" ? " is-dismissed" : ""}`}
         aria-label={`Open task: ${row.listing_title ?? row.domain}`}
+        onPointerEnter={() => { if (!waitingForPage) setQuickActionId(row.result_id); }}
+        onPointerLeave={event => {
+          if (!event.currentTarget.contains(document.activeElement)) setQuickActionId(current => current === row.result_id ? null : current);
+        }}
+        onFocus={() => { if (!waitingForPage) setQuickActionId(row.result_id); }}
         onClick={() => {
           if (!waitingForPage) open(row.result_id);
         }}
@@ -615,12 +622,13 @@ export default function TaskQueue({
         </td>
         <td
           className="monitoring-listing-assessment"
-          title={recommendation.label ? recommendation.reason : undefined}
           aria-label={
             recommendation.label ? undefined : "No suggested action yet"
           }
         >
-          {recommendation.label}
+          <TaskRowActions key={`${row.result_id}:${revision}`} row={row} ipId={row.ip_id ?? ipId}
+            active={!waitingForPage && quickActionId === row.result_id}
+            onUpdated={options => refreshAfterAction(options, row.result_id)} />
         </td>
       </tr>
     );

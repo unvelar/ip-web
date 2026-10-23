@@ -1,6 +1,6 @@
 import { LegalReviewDialog } from "./LegalReviewDialog";
 import { useState, type ReactNode } from "react";
-import { Sparkles } from "lucide-react";
+import { createPortal } from "react-dom";
 import { ComposeModal, ConfirmSendModal } from "../../TakedownPanel";
 import {
   addIpLicense,
@@ -52,6 +52,7 @@ export function FindingActions({
   onUpdated,
   compact = false,
   grouped = false,
+  inline = false,
 }: {
   f: IpReviewFinding;
   ipId?: string;
@@ -67,6 +68,7 @@ export function FindingActions({
   onUpdated: (opts?: FindingUpdateOptions) => void;
   compact?: boolean;
   grouped?: boolean;
+  inline?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [requestingReview, setRequestingReview] = useState(false);
@@ -192,12 +194,13 @@ export function FindingActions({
   }
 
   function actionTitle(action: RecommendableAction, title?: string) {
+    if (inline) title = title?.replace(/^Shortcut [^:]+:\s*/, "");
     if (recommendedAction !== action) return title;
     return [
       recommendationReason
         ? `Recommended action: ${recommendationReason}`
         : "Recommended action",
-      "Press Enter to use this recommendation",
+      !inline && "Press Enter to use this recommendation",
       title,
     ].filter(Boolean).join(" · ");
   }
@@ -223,7 +226,7 @@ export function FindingActions({
       title={actionTitle(action, title)}
       className={actionClass(action)}
       aria-label={actionAriaLabel(action, label)}
-      aria-keyshortcuts={recommendedAction === action ? `Enter ${shortcut}` : shortcut}
+      aria-keyshortcuts={inline ? undefined : recommendedAction === action ? `Enter ${shortcut}` : shortcut}
       data-recommended-action={recommendedAction === action ? "true" : undefined}
     >
       {isDismissing ? (
@@ -233,8 +236,8 @@ export function FindingActions({
           <ButtonWithShortcut
             label={label}
             shortcut={shortcut}
+            showShortcut={!inline}
             dark={recommendedAction === action}
-            leadingIcon={recommendedAction === action ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
           />
           {grouped && action === "false_positive" && (
             <span className={`text-[10px] font-normal leading-4 ${recommendedAction === action ? "text-white/80" : "text-stone-500"}`}>
@@ -324,7 +327,7 @@ export function FindingActions({
       onClick={() => setRequestingReview(true)}
       className={actionClass("review")}
       aria-label={actionAriaLabel("review", "Legal review")}
-      aria-keyshortcuts={recommendedAction === "review" ? "Enter R" : "R"}
+      aria-keyshortcuts={inline ? undefined : recommendedAction === "review" ? "Enter R" : "R"}
       data-recommended-action={recommendedAction === "review" ? "true" : undefined}
     >
       {busy === "review" ? (
@@ -332,10 +335,10 @@ export function FindingActions({
       ) : (
         <>
           <ButtonWithShortcut
-            label="Legal review"
+            label={inline ? "Review" : "Legal review"}
             shortcut="R"
+            showShortcut={!inline}
             dark={recommendedAction === "review"}
-            leadingIcon={recommendedAction === "review" ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
           />
         </>
       )}
@@ -377,10 +380,9 @@ export function FindingActions({
             : ghostStone
       }
       aria-label={actionAriaLabel("license", "Authorize seller")}
-      aria-keyshortcuts={recommendedAction === "license" ? "Enter" : undefined}
+      aria-keyshortcuts={!inline && recommendedAction === "license" ? "Enter" : undefined}
       data-recommended-action={recommendedAction === "license" ? "true" : undefined}
     >
-      {recommendedAction === "license" && <Sparkles className="recommended-action-icon" aria-hidden="true" />}
       {licensing ? "Marking…" : compact ? "Authorize seller" : "Authorize seller"}
     </button>
   ) : null;
@@ -402,6 +404,32 @@ export function FindingActions({
     );
   }
 
+  const takedownBtn = (
+    <button
+      type="button"
+      disabled={!f.case_id || actionPending}
+      title={actionTitle(
+        "send_takedown",
+        !f.case_id
+          ? "Still preparing this case…"
+          : "Submit automatically when possible; otherwise add to the legal queue",
+      )}
+      onClick={beginTakedown}
+      className={actionClass("send_takedown")}
+      aria-label={actionAriaLabel("send_takedown", "Takedown")}
+      aria-keyshortcuts={inline ? undefined : recommendedAction === "send_takedown" ? "Enter T" : "T"}
+      data-recommended-action={recommendedAction === "send_takedown" ? "true" : undefined}
+    >
+      <ButtonWithShortcut
+        label={directSending ? "Processing…" : "Takedown"}
+        shortcut="T"
+        showShortcut={!inline}
+        dark={recommendedAction === "send_takedown"}
+      />
+    </button>
+  );
+
+  const showDialog = (dialog: ReactNode) => inline ? createPortal(dialog, document.body) : dialog;
   let buttons: ReactNode = null;
   let utilityButtons: ReactNode = null;
   let stateNote: ReactNode = null;
@@ -438,61 +466,22 @@ export function FindingActions({
     // routes enter takedown_pending for legal review and manual submission.
     buttons = (
       <>
+        {inline && takedownBtn}
+        {inline && needsReviewBtn}
         {dismissButtons}
         {!grouped && allowProductBtn}
-        {needsReviewBtn}
-        <button
-          type="button"
-          disabled={!f.case_id || actionPending}
-          title={actionTitle(
-            "send_takedown",
-            !f.case_id
-              ? "Still preparing this case…"
-              : "Submit automatically when possible; otherwise add to the legal queue",
-          )}
-          onClick={beginTakedown}
-          className={actionClass("send_takedown")}
-          aria-label={actionAriaLabel("send_takedown", "Takedown")}
-          aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
-          data-recommended-action={recommendedAction === "send_takedown" ? "true" : undefined}
-        >
-          <ButtonWithShortcut
-            label={directSending ? "Processing…" : "Takedown"}
-            shortcut="T"
-            dark={recommendedAction === "send_takedown"}
-            leadingIcon={recommendedAction === "send_takedown" ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
-          />
-        </button>
+        {!inline && needsReviewBtn}
+        {!inline && takedownBtn}
       </>
     );
     utilityButtons = licenseBtn;
   } else if (state === "review") {
     buttons = (
       <>
+        {inline && takedownBtn}
         {dismissButtons}
         {!grouped && allowProductBtn}
-        <button
-          type="button"
-          disabled={!f.case_id || actionPending}
-          title={actionTitle(
-            "send_takedown",
-            !f.case_id
-              ? "Still preparing this case..."
-              : "Submit automatically when possible; otherwise add to the legal queue",
-          )}
-          onClick={beginTakedown}
-          className={actionClass("send_takedown")}
-          aria-label={actionAriaLabel("send_takedown", "Takedown")}
-          aria-keyshortcuts={recommendedAction === "send_takedown" ? "Enter T" : "T"}
-          data-recommended-action={recommendedAction === "send_takedown" ? "true" : undefined}
-        >
-          <ButtonWithShortcut
-            label={directSending ? "Processing…" : "Takedown"}
-            shortcut="T"
-            dark={recommendedAction === "send_takedown"}
-            leadingIcon={recommendedAction === "send_takedown" ? <Sparkles className="recommended-action-icon" aria-hidden="true" /> : undefined}
-          />
-        </button>
+        {!inline && takedownBtn}
       </>
     );
     utilityButtons = (
@@ -620,7 +609,7 @@ export function FindingActions({
           )}
         </div>
       )}
-      {confirming && f.case_id && (
+      {confirming && f.case_id && showDialog(
         <ConfirmSendModal
           platform={f.domain}
           sending={directSending}
@@ -644,7 +633,7 @@ export function FindingActions({
           await markIpFindingNeedsReview(ipId,f.result_id,question);
           setRequestingReview(false);onNeedsReview();onActionComplete();onUpdated({completed:true});
         }} />}
-      {composing && f.case_id && (
+      {composing && f.case_id && showDialog(
         <ComposeModal
           caseId={f.case_id}
           ipId={f.ip_id}

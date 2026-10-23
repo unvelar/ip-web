@@ -19,15 +19,17 @@ export function ButtonWithShortcut({
   shortcut,
   dark = false,
   leadingIcon,
+  showShortcut = true,
 }: {
   label: string;
   shortcut: string;
   dark?: boolean;
   leadingIcon?: ReactNode;
+  showShortcut?: boolean;
 }) {
   return (
     <span className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
-      {leadingIcon ? <><span className="sr-only">{shortcut}</span>{leadingIcon}</> : <ShortcutKey value={shortcut} dark={dark} />}
+      {showShortcut && (leadingIcon ? <><span className="sr-only">{shortcut}</span>{leadingIcon}</> : <ShortcutKey value={shortcut} dark={dark} />)}
       <span>{label}</span>
     </span>
   );

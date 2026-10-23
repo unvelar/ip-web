@@ -86,12 +86,14 @@ function renderActions({
   isDismissed = false,
   isDismissing = false,
   grouped = false,
+  inline = false,
 }: {
   item?: IpReviewFinding;
   ipId?: string | null;
   isDismissed?: boolean;
   isDismissing?: boolean;
   grouped?: boolean;
+  inline?: boolean;
 } = {}) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -107,6 +109,7 @@ function renderActions({
       isDismissed,
       isDismissing,
       grouped,
+      inline,
       onDismiss: dismiss,
       onActionComplete,
       onNeedsReview: mock(() => undefined),
@@ -315,3 +318,13 @@ describe("FindingActions allow product", () => {
     expect(licensed.container.textContent).not.toContain("Allow product");
   });
 });
+
+for (const [key, label] of [['send_takedown', 'Takedown'], ['needs_review', 'Legal review'], ['allowed_resale', 'Dismiss']] as const) {
+  test(`inline actions highlight ${label} from the recommendation without sparkle icons or inactive shortcuts`, () => {
+    const { container } = renderActions({ grouped: true, inline: true, item: finding({ actionability: { key, reason: 'Current evidence' } }) });
+    expect(container.querySelector('[data-recommended-action="true"]')?.getAttribute('aria-label')).toBe(`Recommended action: ${label}`);
+    expect(container.querySelector('.lucide-sparkles')).toBeNull();
+    expect(container.querySelector('kbd')).toBeNull();
+    expect(container.querySelector('[aria-keyshortcuts]')).toBeNull();
+  });
+}

@@ -274,3 +274,46 @@ test("a stale selected-evidence response cannot replace the latest selection", a
   expect(bar.querySelector<HTMLButtonElement>('.monitoring-selection-primary')?.disabled).toBe(false);
   expect(ui.container.querySelector('[role="alert"]')).toBeNull();
 });
+
+test("row decisions load on focus, keep takedown confirmation outside the hover surface, and never submit on open", async () => {
+  const ui = await setup();
+  await ui.click('[aria-label="Close finding details"]');
+  const before = ui.requests.length;
+  const row = ui.container.querySelector<HTMLElement>('[data-task-id="first"]')!;
+  await act(async () => row.focus());
+  const actions = row.querySelector('.task-row-actions')!;
+  expect(ui.requests.slice(before).filter(request => request.url.pathname.endsWith('/findings/first'))).toHaveLength(1);
+  expect(actions.querySelector('kbd')).toBeNull();
+  expect(actions.querySelector('.lucide-sparkles')).toBeNull();
+  const takedown = [...actions.querySelectorAll('button')].find(button => button.textContent === 'Takedown')!;
+  await act(async () => takedown.click());
+  const dialog = document.querySelector('[role="dialog"][aria-label="Takedown"]');
+  expect(dialog).not.toBeNull();
+  expect(row.contains(dialog)).toBe(false);
+  expect(ui.container.querySelector('[aria-label="Finding details"]')).toBeNull();
+  expect(ui.requests.slice(before).some(request => request.method === 'POST' && !request.url.pathname.endsWith('/details'))).toBe(false);
+  await act(async () => dialog!.querySelector<HTMLTextAreaElement>('textarea')!.focus());
+  expect(document.querySelector('[role="dialog"][aria-label="Takedown"]')).toBe(dialog);
+  expect(ui.requests.slice(before).filter(request => request.url.pathname.endsWith('/findings/first'))).toHaveLength(1);
+});
+
+test("a row dismissal preserves the selected sibling and refreshes the expanded seller page once", async () => {
+  const ui = await setup();
+  await ui.click('[aria-label="Close finding details"]');
+  const row = ui.container.querySelector<HTMLElement>('[data-task-id="first"]')!;
+  await act(async () => row.focus());
+  const actions = row.querySelector('.task-row-actions')!;
+  const before = ui.requests.length;
+  const dismissMenu = [...actions.querySelectorAll('button')].find(button => button.textContent === 'Dismiss')!;
+  await act(async () => dismissMenu.click());
+  expect(ui.requests.slice(before).some(request => request.method === 'POST')).toBe(false);
+  const reason = [...actions.querySelectorAll('button')].find(button => button.textContent?.startsWith('Different product'))!;
+  await act(async () => reason.click());
+  const request = ui.requests.slice(before).find(request => request.url.pathname.endsWith('/dismiss'))!;
+  expect(request.body).toEqual({ reason: 'false_positive', reason_code: 'different_product' });
+  await ui.finish();
+  expect(ui.container.textContent).toContain('Page 2');
+  expect(ui.container.querySelector('[aria-label="Collapse Shop"]')).not.toBeNull();
+  expect(ui.container.querySelector<HTMLInputElement>('[aria-label="Select second"]')?.checked).toBe(true);
+  expect(ui.requests.slice(before).filter(request => request.url.pathname.endsWith('/seller-groups'))).toHaveLength(1);
+});

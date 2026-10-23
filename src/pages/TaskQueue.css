@@ -648,3 +648,41 @@
 .task-category-workspace .task-category-ranking th,.task-category-workspace .task-category-ranking td { padding:14px 12px; }
 .task-category-page-status { padding:12px 32px; margin:0; color:#78716c; font-size:13px; }
 @media (max-width:640px) { .task-category-workspace-header { padding:12px 16px; } .task-category-workspace > .task-category-ranking { padding:12px 16px; } .task-category-page-status { padding:12px 16px; } }
+
+/* Decisions occupy a stable slot; the recommendation returns when the row loses intent. */
+.monitoring-task-page .monitoring-result-list .monitoring-assessment-column { width: 300px; }
+.task-queue-store-mark { width: 22px; height: 22px; border-radius: 4px; filter: grayscale(1); }
+.task-queue-store-mark .marketplace-logo, .task-queue-store-mark .marketplace-monogram,
+.task-queue-store-mark img { width: 14px; height: 14px; }
+.task-row-decision { position: relative; min-height: 32px; display: grid; align-items: center; text-align: right; }
+.task-row-suggestion { justify-self: end; max-width: 140px; color: #44403c; }
+.task-row-actions { position: absolute; inset: 0; display: flex; justify-content: flex-end; align-items: center; visibility: hidden; opacity: 0; }
+.monitoring-listing-row:is(:hover, :focus-within) .task-row-actions { visibility: visible; opacity: 1; }
+.monitoring-listing-row:is(:hover, :focus-within) .task-row-suggestion { visibility: hidden; }
+.task-row-actions .finding-action-buttons { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 4px; padding: 0; }
+.task-row-actions button { min-height: 30px; height: auto; padding: 5px 8px; border: 1px solid #e7e5e4; border-radius: 5px; color: #44403c; background: #fff; font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap; }
+.task-row-actions button:hover { background: #f5f5f4; }
+.task-row-actions button:disabled { opacity: .5; cursor: default; }
+.task-row-actions .recommended-action { animation: none; box-shadow: none; background: #292524; border-color: #292524; color: #fff; }
+.task-row-actions .recommended-action:hover { background: #44403c; }
+.task-row-actions .recommended-action::before { display: none; }
+.task-row-actions .finding-action-popover > button { gap: 3px; }
+.task-row-actions .finding-action-popover[data-more-actions] > button { padding-inline: 5px; }
+.task-row-actions .finding-action-popover[data-more-actions] > button > span { display: none; }
+.task-row-actions .finding-action-options { top: calc(100% + 6px); bottom: auto; right: 0; left: auto; z-index: 45; width: 230px; text-align: left; border-radius: 7px; }
+.task-row-actions .finding-action-options button { display: flex; width: 100%; justify-content: flex-start; border: 0; white-space: normal; }
+.task-row-actions .finding-action-options button > span { align-items: flex-start; }
+.task-row-action-error { position: relative; z-index: 1; max-width: 260px; padding: 6px; background: #fff; color: #b91c1c; font-size: 11px; }
+.task-row-action-error button { margin-left: 5px; }
+@media (hover: none), (max-width: 640px) {
+  .task-row-actions { position: static; visibility: visible; opacity: 1; }
+  .task-row-suggestion { display: none; }
+  .task-row-actions .finding-action-buttons { flex-wrap: wrap; }
+}
+@media (pointer: coarse) {
+  .task-row-actions button { min-height: 44px; }
+}
+@media (max-width: 480px) {
+  .monitoring-task-page .task-queue-workspace .monitoring-listing-row .monitoring-listing-assessment { grid-column: 1 / -1; margin-left: 0; padding-top: 6px; }
+  .task-row-actions .finding-action-options { top: auto; bottom: calc(100% + 6px); }
+}
