@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import Nav from "../components/Nav";
+import { FAQ_GROUPS } from "./landingFaq";
 import { PLATFORMS } from "./landingPlatforms";
 
 /* ---------- Scroll-triggered section reveal ---------- */
@@ -341,8 +342,36 @@ export default function Landing() {
         </div>
       </Reveal>
 
+      {/* ================= FAQ ================= */}
+      <Reveal id="faq" className="relative bg-cream scroll-mt-16 overflow-hidden rounded-t-[2.5rem]">
+        <div className="relative max-w-3xl mx-auto px-6 py-20">
+          <h2 className="text-center mb-12 text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+            Frequently asked <span className="text-gradient-red">questions</span>
+          </h2>
+          <div className="space-y-10">
+            {FAQ_GROUPS.map((group, gi) => (
+              <div key={group.title}>
+                <h3 className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-400">
+                  {group.title}
+                </h3>
+                <div className="space-y-3">
+                  {group.entries.map((entry, ei) => (
+                    <FaqItem
+                      key={entry.question}
+                      question={entry.question}
+                      answer={entry.answer}
+                      defaultOpen={gi === 0 && ei === 0}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Reveal>
+
       {/* ================= Who it's for ================= */}
-      <Reveal className="relative bg-cream overflow-hidden rounded-t-[2.5rem]">
+      <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
         <div className="relative max-w-6xl mx-auto px-6 py-20">
           <div className="text-center mb-12">
             <Eyebrow>Who it's for</Eyebrow>
@@ -450,6 +479,35 @@ export default function Landing() {
 
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} />}
     </div>
+  );
+}
+
+/* ---------- FAQ accordion item ---------- */
+function FaqItem({
+  question,
+  answer,
+  defaultOpen,
+}: {
+  question: string;
+  answer: string;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className="group bg-white rounded-2xl border border-stone-200/80 card-elevated"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 sm:px-6 py-4 sm:py-5 text-left text-[15px] sm:text-base font-bold text-stone-900 [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 rounded-2xl">
+        <span>{question}</span>
+        <ChevronDown
+          className="h-5 w-5 shrink-0 text-stone-400 transition-transform duration-300 group-open:rotate-180 group-open:text-red-600"
+          aria-hidden
+        />
+      </summary>
+      <p className="px-5 sm:px-6 pb-5 sm:pb-6 -mt-1 text-sm sm:text-[15px] text-stone-500 leading-relaxed">
+        {answer}
+      </p>
+    </details>
   );
 }
 

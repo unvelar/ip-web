@@ -10,7 +10,7 @@ Core structural fact: Unvelar is a pure software product. No analyst labor is ba
 
 ## The two products
 
-**Monitoring** — Continuous scanning of marketplaces, social platforms, and the open web for counterfeits and unauthorized use of a brand's registered IP. Every match is scored and returned as a reviewed case (match, source, evidence) for a human on the client's team to review. Unvelar prepares takedown-ready notices with evidence attached, but does not send them; the brand or its law firm sends the actual request. This is a deliberate liability containment decision, never describe it as end-to-end takedown handling.
+**Monitoring** — Continuous scanning of marketplaces, social platforms, and the open web for counterfeits and unauthorized use of a brand's registered IP. Every match is scored and returned as a reviewed case (match, source, evidence) for a human on the client's team to review. Unvelar prepares takedown notices with evidence attached, and once the client's team approves one, the platform submits it and tracks the case to resolution. The client's team always decides what gets taken down; never describe it as automatic or end-to-end takedown handling without that human approval.
 
 **Clearance Review** — The same detection engine run in reverse: before a brand ships a new design, product, or creative work, it's checked against Unvelar's library of 200,000+ protected references. Returns a risk verdict with reasoning, not just a similarity score. Applies broadly (fashion, consumer goods, packaging, campaign assets), not just entertainment/media. Avoid framing around "characters" or "key art" as primary examples, that undersells the larger fashion/consumer brand market.
 
@@ -30,7 +30,7 @@ Never claim: a blanket "cheaper than every competitor" or "fraction of the cost 
 
 ## Copy language rules
 
-- Never say "one-click takedown" or imply Unvelar sends takedown notices itself.
+- Never say "one-click takedown" or imply Unvelar sends takedown notices without the client's team approving them first.
 - Avoid "infinite sources" / unlimited-coverage language; "no real cap" is the accurate framing.
 - Don't overstate CAPTCHA handling, marketplace coverage, or scraping sophistication.
 - Don't imply endorsement from, partnership with, or use by companies that aren't real customers (especially risky for a brand-protection company to get caught doing).
