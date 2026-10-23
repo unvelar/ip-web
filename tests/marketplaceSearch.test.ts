@@ -32,3 +32,13 @@ test('manual grouping preserves product-detail predicates and native selectors',
  const values=groupingSearchValues(new URLSearchParams({semantic,platform:'market.test',source:'search:google',seller:'Shop',from:'2026-10-01',to:'2026-10-23',selector:'suggestion',value:'takedown'}));
  expect(values).toMatchObject({semantic,website:'market.test',source:'search:google',seller_name:'Shop',candidate_outcome:'takedown',from:'2026-10-01',to:'2026-10-23'});
 });
+
+test('AI workflow groupings round trip with readable labels and cannot invent reopened history',()=>{
+ for(const dimension of ['assignee','evidence','suggested_action','dismissal_reason']){
+  const change=parseQueueViewChange({group_by:'none',grouping:{dimensions:[dimension,'marketplace'],metric:'articles'}});
+  const view=mergeQueueView({sort:'priority',group_by:'none'},change);
+  expect(queueViewFromParams(queueViewParams(new URLSearchParams(),view))).toEqual(view);
+  expect(queueViewSummary(change)).not.toContain('_');
+ }
+ expect(()=>parseQueueViewChange({group_by:'none',grouping:{dimensions:['reopened'],metric:'articles'}})).toThrow();
+});

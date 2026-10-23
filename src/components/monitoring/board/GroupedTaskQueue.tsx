@@ -1,7 +1,7 @@
 import {Fragment,useEffect,useState,type ReactNode} from 'react';
 import {taskGroups,taskGroupListings,type GroupPage,type GroupListings} from '../../../api/taskGroups';
 import type {TaskSummary} from '../../../api/taskQueue';
-import type {Grouping} from '../../../lib/taskGrouping';
+import {groupDimensionLabels,type Grouping} from '../../../lib/taskGrouping';
 import {ChevronRight} from 'lucide-react';
 const money=(value:string|null)=>value===null?'Unavailable':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(value));
 export function GroupedTaskQueue({searchId,grouping,sort,revision,renderRow}:{searchId:string;grouping:Grouping;sort:'priority'|'newest';revision:string;renderRow:(row:TaskSummary)=>ReactNode}){
@@ -20,11 +20,11 @@ function GroupLevel({searchId,grouping,sort,revision,renderRow,path}:{searchId:s
  if(error)return <p role="alert" className="task-queue-notice">{error} <button onClick={()=>setRetry(v=>v+1)}>Retry</button></p>;
  if(!page)return <p role="status" className="task-queue-notice">Loading groups…</p>;
  if(page.partial)return <p role="status" className="task-queue-notice">Groups will appear when the complete search is ready.</p>;
- const dimension=grouping.dimensions[path.length];
+ const dimension=grouping.dimensions[path.length],dimensionLabel=groupDimensionLabels[dimension];
  return <div className="monitoring-results-queue">
-  <div className="monitoring-results-summary">{(path.length?grouping.subgroup_limit:grouping.group_limit)?`Top ${Math.min((path.length?grouping.subgroup_limit:grouping.group_limit)!,page.total_groups??0)} of `:''}{page.total_groups} {dimension} groups · Totals cover all matching listings</div>
+  <div className="monitoring-results-summary">{(path.length?grouping.subgroup_limit:grouping.group_limit)?`Top ${Math.min((path.length?grouping.subgroup_limit:grouping.group_limit)!,page.total_groups??0)} of `:''}{page.total_groups} {dimensionLabel.toLowerCase()} groups · Totals cover all matching listings</div>
   <table className="monitoring-result-list" aria-label={`Listings grouped by ${dimension}`}>
-   <thead><tr><th colSpan={5}><div className="monitoring-seller-columns"><span>{dimension==='marketplace'?'Marketplace':dimension} / listings</span><span>{grouping.metric==='articles'?'Listings':grouping.metric==='total_price'?'Total listing price (USD)':'Exposure (USD)'}</span></div></th></tr></thead>
+   <thead><tr><th colSpan={5}><div className="monitoring-seller-columns"><span>{dimensionLabel} / listings</span><span>{grouping.metric==='articles'?'Listings':grouping.metric==='total_price'?'Total listing price (USD)':'Exposure (USD)'}</span></div></th></tr></thead>
    {page.groups.map(group=>{const key=JSON.stringify(group.key),open=expanded.has(key),nextPath=[...path,group.key];return <Fragment key={key}>
     <tbody><tr className="monitoring-group-heading"><th colSpan={5} scope="rowgroup"><div className="monitoring-group-heading-content">
      <button className="monitoring-group-toggle" type="button" aria-label={`${open?'Collapse':'Expand'} ${group.label}`} aria-expanded={open} onClick={()=>setExpanded(previous=>{const next=new Set(previous);if(next.has(key))next.delete(key);else next.add(key);return next;})}><ChevronRight size={14}/>{group.label}</button>

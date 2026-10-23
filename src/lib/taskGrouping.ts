@@ -1,6 +1,8 @@
 import {isRecord,requireResponse} from '../api/validation';
 export const groupingPolicy='task-grouping-v1';
-export const dimensions=['marketplace','country','seller','product','category'] as const;
+export const dimensions=['marketplace','country','seller','product','category','assignee','evidence','suggested_action','dismissal_reason'] as const;
+export const groupDimensionLabels={marketplace:'Marketplace',country:'Listing country',seller:'Seller',product:'Product',category:'Product category',assignee:'Assignee',evidence:'Evidence',suggested_action:'Suggested action',dismissal_reason:'Dismissal reason'};
+export const groupingLabel=(dimensions:readonly GroupDimension[])=>dimensions.map(d=>groupDimensionLabels[d]).join(' then ');
 export type GroupDimension=typeof dimensions[number];
 export type Grouping={dimensions:GroupDimension[];metric:'articles'|'total_price'|'exposure';group_limit:number|null;subgroup_limit:number|null;items_per_group:number};
 export function parseGrouping(raw:unknown):Grouping{

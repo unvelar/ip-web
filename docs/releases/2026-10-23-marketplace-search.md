@@ -22,19 +22,32 @@ This evidence supports analysis, not an autonomous investigation or enforcement 
 
 The analysis increment remains isolated in the runtime source above so ongoing discussion/tracing changes in the shared checkout are preserved. The cumulative companion patch includes it. `2026-10-23-result-analysis.patch` separately reverses just the analysis increment against the marketplace-only source. Actual model quality and authenticated Chrome validation remain pending deployment; model tests use recorded tool fixtures.
 
+
+## AI workflow grouping
+
+AI accepts four additional grouping dimensions: `assignee`, `evidence`, `suggested_action`, and `dismissal_reason`. These compose with the existing dimensions at either of two grouping levels and use the existing complete-search metrics and previews. Captions and chat confirmations use readable labels. The first grouping policy is still unreleased; this extends its offered dimension enumeration, while clients without grouping negotiation continue to omit the grouping tool arguments.
+
+Assignee keys are account identities, with Unassigned and unavailable buckets; identical display names do not merge accounts. Evidence partitions the latest projected match flags into protected terms only, images only, both, no recorded evidence, and unavailable. A broad protected-term/image filter can overlap; these group buckets are exclusive. It does not estimate evidence strength or legal proof.
+
+Suggested action mirrors the listing table's recommendation precedence, including licensed seller, allowed resale, manual do-not-pursue, review/triage and Assessment pending. It is distinct from workflow state. Dismissal reason applies only to currently dismissed items; active items form Not dismissed even when a stale reason exists. Missing dismissal reasons remain explicit. Reopened is not inferred: reopening is a mutation returning an item to triage, and there is no separate current reopened status in the queue contract. Grouping does not change scope; explicitly request dismissed items to include them, since All open excludes dismissed.
+
+The new keys and labels use the tenant-bound current task projection over canonical saved membership, and drill-down overlays the same current workflow fields onto the saved row. Reassignment changes its group without changing the canonical matching count or monetary denominator. The latest projector state may lag a source mutation; re-run the search to re-evaluate original membership after workflow changes. No worker derivation or schema change is required.
+
+Checks cover same-name assignees, reassignment after search creation, missing/malformed evidence versus false signals, recommendation precedence, pending versus dismissal reason, nested drill-down, canonical totals, analysis integration and a foreign tenant's record with the same task ID. Actual model and Chrome validation remain pending rollout. `2026-10-23-workflow-grouping.patch` preserves this increment; reverse it before reversing the earlier analysis increment. The frontend workflow increment is a separate commit on PR 54.
+
 ## Source and rollout
 
 Frontend implementation is isolated in `/private/tmp/unvelar-marketplaces-20261023/frontend` to preserve unrelated dirty work in the original checkout and the other checkout serving localhost:5173.
 
-The companion API patch `2026-10-23-marketplace-search.patch` contains only fifteen required files, relative to API revision 495 source (image `sha256:882ba9b138f63fc4e679c80e479837861e597d17adf03f75e4bcdfe249c14bbd`). Its complete buildable source is `/private/tmp/unvelar-marketplaces-20261023/api`. Narrow marketplace additions were also copied into the shared backend source without replacing ongoing discussion/tracing work. The isolated native `/tasks/capability` grouping advertisement is included in the patch; the older shared route implementation was deliberately not overwritten.
+The companion API patch `2026-10-23-marketplace-search.patch` contains only seventeen required files, relative to API revision 495 source (image `sha256:882ba9b138f63fc4e679c80e479837861e597d17adf03f75e4bcdfe249c14bbd`). Its complete buildable source is `/private/tmp/unvelar-marketplaces-20261023/api`. Narrow marketplace additions were also copied into the shared backend source without replacing ongoing discussion/tracing work. The isolated native `/tasks/capability` grouping advertisement is included in the patch; the older shared route implementation was deliberately not overwritten.
 
 Before deployment, compare the currently serving API image/source to this baseline and preserve any newer changes. Deploy API capabilities before frontend. Do not deploy either dirty shared checkout wholesale. The runtime patch includes the existing unfinished grouping service and its required routes/contracts, but excludes unrelated work.
 
 ## Verification
 
-- Frontend: 436 passing tests, 2,368 assertions; lint, TypeScript and production build passed.
-- API: 73 focused tests passed, 568 assertions; full API runtime bundle passed.
-- Isolated local PostgreSQL: six grouping/analysis/contract tests, 90 assertions passed, covering complete canonical membership, nested groups, independent preview totals, pagination and ownership.
+- Frontend: 437 passing tests, 2,381 assertions; lint, TypeScript and production build passed.
+- API: 74 focused tests passed, 580 assertions; full API runtime bundle passed.
+- Isolated local PostgreSQL: eight grouping/workflow/analysis/contract tests, 120 assertions passed, covering complete canonical membership, nested groups, independent preview totals, pagination and ownership.
 - Earlier authenticated Chrome diagnosis confirmed manual Goofish filtering returns 369 matches. The new implementation has not yet received authenticated browser validation: localhost:5173 serves another checkout and the connected API lacks the new capabilities. No console/network claim is made for the new flow.
 - Real-model evaluation was not completed. A noninteractive production-container command failed before execution with websocket URI-too-long; automatic approval review rejected a subsequent interactive production shell because that privileged access was not specifically authorized. No shell was opened and no model evaluation ran through that path. Use normal authenticated API/app validation after deployment.
 

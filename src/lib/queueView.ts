@@ -1,4 +1,4 @@
-import {parseGrouping,type Grouping} from './taskGrouping';
+import {parseGrouping,groupingLabel,type Grouping} from './taskGrouping';
 import { isRecord, requireResponse } from "../api/validation";
 import { parseMonitoringGroupBy } from "./monitoringGrouping";
 
@@ -55,7 +55,7 @@ export function queueViewParams(params:URLSearchParams,view:QueueView):URLSearch
 }
 export function queueViewSummary(change:QueueViewChange):string {
   const parts:string[]=[];
-  if(change.grouping)parts.push(`Grouped by ${change.grouping.dimensions.join(" then ")}; totals cover all matching listings.`);
+  if(change.grouping)parts.push(`Grouped by ${groupingLabel(change.grouping.dimensions).toLowerCase()}; totals cover all matching listings.`);
   else if(change.grouping===null)parts.push("Removed the grouping.");
   if(change.sort)parts.push(change.sort==="priority"?"Takedown recommendations first; other matching items remain included.":"Showing newest items first.");
   if(change.group_by&&!change.grouping)parts.push({none:"Showing individual items.",seller:"Grouped by seller.",product:"Grouped by canonical product."}[change.group_by]);

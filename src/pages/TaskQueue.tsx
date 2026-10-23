@@ -1,5 +1,5 @@
 import {GroupedTaskQueue} from '../components/monitoring/board/GroupedTaskQueue';
-import {marketplaceGrouping} from '../lib/taskGrouping';
+import {marketplaceGrouping,groupDimensionLabels} from '../lib/taskGrouping';
 import {groupingSearchValues,taskSearchRequest} from '../lib/taskSearchAssistant';
 import {startTaskSearch} from '../api/taskQueue';
 import {taskCapability} from '../api/taskQueue';
@@ -801,7 +801,7 @@ export default function TaskQueue({
                   }}
                 >
                   <option value="none">None</option>
-                  {groupedView&&(groupedView.dimensions.length>1||groupedView.dimensions[0]!=="marketplace")&&<option value="custom" disabled>{groupedView.dimensions.join(" → ")}</option>}
+                  {groupedView&&(groupedView.dimensions.length>1||groupedView.dimensions[0]!=="marketplace")&&<option value="custom" disabled>{groupedView.dimensions.map(d=>groupDimensionLabels[d]).join(" → ")}</option>}
                   <option value="seller">Seller</option>
                   <option value="product">Product</option>
                   {(groupingAvailable||groupedView)&&<option value="marketplace">Marketplace</option>}
