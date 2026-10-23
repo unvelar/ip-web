@@ -115,7 +115,13 @@ export default function Dashboard() {
   const scopedIps = selectedIp ? [selectedIp] : [];
   const scopedKpis = selectedIp ? kpisForIp(selectedIp) : EMPTY_KPIS;
   const scopedPlatforms = filterCountRows(data.platforms ?? [], activeIpId);
-  const scopedCountries = filterCountRows(data.countries ?? [], activeIpId);
+  const scopedCountries = filterCountRows(data.countries ?? [], activeIpId)
+    .sort((a,b)=>Object.values(b.counts).reduce((n,v)=>n+v,0)-Object.values(a.counts).reduce((n,v)=>n+v,0)).slice(0,10);
+  const countryCoverage = activeIpId ? data.countryCoverage?.[activeIpId] : undefined;
+  const locationNote = countryCoverage ? [
+    countryCoverage.pending > 0 ? `${countryCoverage.pending.toLocaleString()} awaiting listing details` : '',
+    countryCoverage.failed > 0 ? `${countryCoverage.failed.toLocaleString()} with incomplete processing` : '',
+  ].filter(Boolean).join(' · ') : undefined;
   const scopedMarketByCountry = filterCountRows(data.marketByCountry ?? [], activeIpId);
   const scopedSellers = activeIpId
     ? (data.sellers ?? []).filter((s) => s.ip_id === activeIpId)
@@ -192,7 +198,8 @@ export default function Dashboard() {
             />
             <StackedDimensionCard
               title="Countries"
-              subtitle="Where listings ship from, colored by IP."
+              subtitle="Listing locations, with seller location as a fallback."
+              note={locationNote}
               items={scopedCountries.map((c) => ({ label: c.country || "Unknown", counts: c.counts }))}
               ips={scopedIps}
               colors={colors}
@@ -486,12 +493,14 @@ function StackedDimensionCard({
   items,
   ips,
   colors,
+  note,
 }: {
   title: string;
   subtitle: string;
   items: Array<{ label: string; counts: Record<string, number> }>;
   ips: Ip[];
   colors: Map<string, string>;
+  note?: string;
 }) {
   const data = useMemo(
     () => items.map((it) => ({ label: it.label, ...it.counts })),
@@ -514,6 +523,7 @@ function StackedDimensionCard({
           </ResponsiveContainer>
         </div>
       )}
+      {note && <p className="mt-3 text-xs text-stone-500">{note}. These listings are excluded from the chart.</p>}
     </CardShell>
   );
 }

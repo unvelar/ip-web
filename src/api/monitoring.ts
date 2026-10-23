@@ -854,6 +854,7 @@ export interface DashboardGroups {
   timeseries: Array<{ day: string; counts: Record<string, number> }>;
   platforms: Array<{ domain: string; counts: Record<string, number> }>;
   countries: Array<{ country: string; counts: Record<string, number> }>;
+  countryCoverage?: Record<string,{known:number;unknown:number;pending:number;failed:number}>;
   // Monitored $ market (USD) per country, broken down by IP — the money twin
   // of `countries`, used by the market card's country view.
   marketByCountry: Array<{ country: string; counts: Record<string, number> }>;
