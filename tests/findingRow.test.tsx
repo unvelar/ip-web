@@ -111,17 +111,20 @@ test("mixed workflow views show lifecycle separately from suggested action", asy
   expect(ui.container.querySelector(".monitoring-listing-meta")?.textContent).toContain("Preparing");
 });
 
-test("pending assessments have no suggested action and progress disappears when a conclusion arrives", async () => {
+test("assessment status fills the action column until a supported recommendation arrives", async () => {
   const f = finding();
   const ui = await setup();
   for (const label of ["Checking saved rules", "Investigating"]) {
     await ui.render(finding({ suggested_review_outcome: "do_not_pursue", actionability: { ...f.actionability, key: "investigate", label } }));
     const action = ui.container.querySelector(".monitoring-listing-assessment");
-    expect(action?.textContent).toBe("");
-    expect(action?.getAttribute("aria-label")).toBe("No suggested action yet");
-    expect(ui.container.querySelector(".monitoring-listing-copy .monitoring-assessment-pending")?.textContent).toBe("Assessment pending");
+    expect(action?.textContent).toBe("Assessment pending");
+    expect(action?.getAttribute("aria-label")).toBe("Assessment pending");
+    expect(ui.container.querySelector(".monitoring-listing-copy .monitoring-assessment-pending")).toBeNull();
     expect(ui.container.textContent).not.toContain(label);
   }
+  await ui.render(finding({actionability:{...f.actionability,key:'investigate',label:'No infringement evidence',assessment_status:'complete'}}));
+  expect(ui.container.querySelector('.monitoring-listing-assessment')?.textContent).toBe('No supported action');
+  expect(ui.container.textContent).not.toContain('Assessment pending');
   await ui.render(finding({ actionability: { ...f.actionability, key: "do_not_pursue", label: "Do not pursue" } }));
   expect(ui.container.querySelector(".monitoring-listing-assessment")?.textContent).toBe("Do not pursue");
   expect(ui.container.querySelector(".monitoring-assessment-pending")).toBeNull();

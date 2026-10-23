@@ -16,7 +16,7 @@ import { ListingDescription } from "./ListingDescription";
 import { SellerSales } from "../../../features/sellers/SellerSales";
 import { sellerProfilePath } from "../../../lib/sellers";
 import { listingAvailabilityMeta } from "../../../lib/listingAvailability";
-import { assessmentPendingExplanation, assessmentPendingLabel, monitoringRecommendation } from "../../../lib/monitoringRecommendation";
+import { monitoringRecommendation } from "../../../lib/monitoringRecommendation";
 import {
   actionabilityMeta,
   dismissalBadge,
@@ -502,9 +502,9 @@ export function FindingComparison({
         f.protected_term_assessment?.outcome === "matched" ||
         f.offer_subject === "packaging_only" || f.authenticity_reasoning) && (
       <details className="finding-assessment" aria-label={recommendation.label ? "AI assessment" : "Assessment progress"}>
-        <summary>{recommendation.label ? `AI assessment · ${recommendation.label}` : assessmentPendingLabel}</summary>
+        <summary>{recommendation.label ? `AI assessment · ${recommendation.label}` : recommendation.assessmentLabel}</summary>
         <div className="mt-3 space-y-3">
-          {!recommendation.label && <p className="text-sm text-stone-500">{assessmentPendingExplanation}</p>}
+          {!recommendation.label && <p className="text-sm text-stone-500">{recommendation.assessmentExplanation}</p>}
       {productAuthenticityAssessment &&
         productAuthenticityAssessment.rule_assessments.length > 0 && (
         <section className="rounded-lg border border-stone-200 bg-stone-50 p-3">

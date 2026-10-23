@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { IpReviewFinding } from "../../../api";
 import { sellerProfilePath } from "../../../lib/sellers";
-import { assessmentPendingLabel, monitoringRecommendation } from "../../../lib/monitoringRecommendation";
+import { monitoringRecommendation } from "../../../lib/monitoringRecommendation";
 import { MarketplaceMark } from "../../MarketplaceMark";
 import { compactListingTitle, findingPlatformLabel, formatMoney, hasReviewAnalysis, statusBadge, tableImageUrls } from "./utils";
 
@@ -62,16 +62,15 @@ export function FindingRow({ f, active, showIp, showStatus, onEntityOpen }: { f:
             {showIp && f.ip_name && <><span aria-hidden="true"> · </span><span>{f.ip_name}</span></>}
             {showStatus && <><span aria-hidden="true"> · </span><span>{status}</span></>}
           </div>
-          {!recommendation.label && <div className="monitoring-assessment-pending" title={recommendation.reason}>{assessmentPendingLabel}</div>}
         </div>
       </div>
     </td>
     <td className="monitoring-listing-price" title={priceTooltip}>
       {hasUsdPrice ? usd.format(price) : <span aria-label="USD price unavailable">—</span>}
     </td>
-    <td className="monitoring-listing-assessment" title={recommendation.label ? recommendation.reason : undefined}
-      aria-label={recommendation.label ? undefined : "No suggested action yet"}>
-      {recommendation.label}
+    <td className="monitoring-listing-assessment" title={recommendation.reason}
+      aria-label={recommendation.label ? undefined : recommendation.assessmentLabel}>
+      {recommendation.label ?? recommendation.assessmentLabel}
     </td>
   </>;
 }

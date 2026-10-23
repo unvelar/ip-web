@@ -2,7 +2,7 @@ import { ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { IpReviewFinding, MonitoringDismissReasonCode, MonitoringReviewOutcome } from "../../../api";
 import { sellerProfilePath } from "../../../lib/sellers";
-import { assessmentPendingExplanation, assessmentPendingLabel, monitoringRecommendation } from "../../../lib/monitoringRecommendation";
+import { monitoringRecommendation } from "../../../lib/monitoringRecommendation";
 import { ActionabilityBadge } from "./ActionabilityBadge";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { FindingActions, type FindingUpdateOptions } from "./FindingActions";
@@ -132,7 +132,7 @@ export function GridFindingCard({
               iconClassName="h-3.5 w-3.5"
               iconSize={12}
             />
-          ) : <span className="text-[11px] text-stone-500" title={recommendation.reason}>{assessmentPendingLabel}</span>)}
+          ) : <span className="text-[11px] text-stone-500" title={recommendation.reason}>{recommendation.assessmentLabel}</span>)}
           {f.manual_candidate_outcome && (
             <span
               className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700"
@@ -236,11 +236,11 @@ export function GridFindingCard({
               <p className="space-y-1">
                 <span className="block">
                   <span className="font-semibold text-stone-500">{recommendation.label ? "AI recommendation: " : "Assessment: "}</span>
-                  {recommendation.label ?? assessmentPendingLabel}
+                  {recommendation.label ?? recommendation.assessmentLabel}
                 </span>
                 <span className="block">
                   <span className="font-semibold text-stone-500">{recommendation.label ? "Why recommended: " : "Progress: "}</span>
-                  {recommendation.label ? recommendation.reason : assessmentPendingExplanation}
+                  {recommendation.label ? recommendation.reason : recommendation.assessmentExplanation}
                 </span>
               </p>
             )}

@@ -154,6 +154,7 @@ export interface ProductAuthenticityAssessment {
 }
 
 export interface MonitoringActionability {
+  assessment_status?: 'pending' | 'complete' | 'inconclusive' | 'failed';
   question?: string | null;
   key: MonitoringActionabilityKey;
   label: string;

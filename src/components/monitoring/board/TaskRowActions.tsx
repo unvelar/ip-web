@@ -39,7 +39,7 @@ export function TaskRowActions({ row, ipId, active, onUpdated }: {
 
   const recommendation = monitoringRecommendation(row);
   return <div className="task-row-decision" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
-    <span className="task-row-suggestion" title={recommendation.reason}>{recommendation.label}</span>
+    <span className="task-row-suggestion" title={recommendation.reason}>{recommendation.label ?? recommendation.assessmentLabel}</span>
     <div className="task-row-actions" role="group" aria-label={`Quick decisions: ${row.listing_title ?? row.domain}`}>
       {error && <div className="task-row-action-error" role="alert">{error}<button type="button" onClick={() => { setFinding(null); setRequested(true); setRetry(value => value + 1); }}>Retry actions</button></div>}
       {!error && !finding && (load ? <span role="status">Loading actions…</span> : <button type="button" onClick={() => setRequested(true)}>Show actions</button>)}

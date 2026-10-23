@@ -36,7 +36,6 @@ import {
 } from "../api";
 import { parseFilters } from "../lib/monitoringFilters";
 import {
-  assessmentPendingLabel,
   monitoringRecommendation,
 } from "../lib/monitoringRecommendation";
 import {
@@ -599,14 +598,6 @@ export default function TaskQueue({
                 <time dateTime={row.found_at}>{date(row.found_at)}</time>
                 {query.status === "all" && ` · ${taskStateLabels[row.state]}`}
               </div>
-              {!recommendation.label && (
-                <div
-                  className="monitoring-assessment-pending"
-                  title={recommendation.reason}
-                >
-                  {assessmentPendingLabel}
-                </div>
-              )}
             </div>
           </div>
         </td>
@@ -623,7 +614,7 @@ export default function TaskQueue({
         <td
           className="monitoring-listing-assessment"
           aria-label={
-            recommendation.label ? undefined : "No suggested action yet"
+            recommendation.label ? undefined : recommendation.assessmentLabel
           }
         >
           <TaskRowActions key={`${row.result_id}:${revision}`} row={row} ipId={row.ip_id ?? ipId}
