@@ -16,6 +16,8 @@ async function setup(options:{unavailable?:boolean;selected?:boolean;invalid?:bo
     if(options.unavailable)return Response.json({error:'Not found'},{status:404});
     if(url.pathname.endsWith('/definitions'))return Response.json({version:1,definitions:[{id:'script.command',version:'1',name:'Observed script',description:'A command with recorded steps.',coverage:'Only scripts launched through the observed runner.',source_paths:['api/scripts/run-observed.ts'],steps:[{key:'command',name:'Execute command',kind:'script'},{key:'finish',name:'Record exit status',kind:'event'}]}]});
     if(url.pathname.includes('/assistant/'))return Response.json({version:1,run:{...run,input:{message:run.title},output:{answer:'Proposal ready'},children:[],truncated:false,notes:['Search execution waits for an explicit user action.'],steps:[{id:'context',parent_step_id:null,name:'Supplied instructions',kind:'model',status:'completed',attempt:1,source_path:'api/src/services/listing_discussion.ts',code_version:null,reporter:'server',created_at:run.created_at,completed_at:run.updated_at,input:{instructions:'Inspect saved evidence before making a claim.'},output:{proposal:true}},{id:'workspace',parent_step_id:'context',name:'Apply workspace results',kind:'event',status:'pending',attempt:1,source_path:null,code_version:null,reporter:'client',created_at:run.updated_at,completed_at:null,input:null,output:null}]}});
+    // Hono's mounted collection handler is strict: /api/admin/runs/ is not /api/admin/runs.
+    if(url.pathname!=='/api/admin/runs')return Response.json({error:'Not found'},{status:404});
     return Response.json({version:1,runs:options.invalid?[{...run,source:'shell'}]:[run],next_cursor:url.searchParams.has('cursor')?null:'older-page'});
   }) as typeof fetch;
   const container=document.createElement('div');document.body.replaceChildren(container);root=createRoot(container);
@@ -29,6 +31,9 @@ test('Runs shows recorded steps, instructions and browser reports without offeri
 });
 test('workflow definitions explain script coverage and the intended sequence',async()=>{
   const ui=await setup();await ui.click('Workflow definitions');expect(ui.container.textContent).toContain('Only scripts launched through the observed runner.');expect(ui.container.textContent).toContain('Execute command');expect(ui.container.textContent).toContain('Record exit status');expect(ui.calls.some(call=>call.path.endsWith('/definitions'))).toBe(true);
+});
+test('run collection uses the canonical mounted API path',async()=>{
+  const ui=await setup();expect(ui.calls.some(call=>call.path==='/api/admin/runs?q=')).toBe(true);expect(ui.container.textContent).toContain(run.title);expect(ui.container.textContent).not.toContain('Runs requires the updated API.');
 });
 test('an older API has an explicit availability message rather than fabricated activity',async()=>{
   const ui=await setup({unavailable:true});expect(ui.container.textContent).toContain('Runs requires the updated API.');expect(ui.container.textContent).not.toContain(run.title);

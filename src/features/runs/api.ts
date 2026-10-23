@@ -17,7 +17,7 @@ export function parseRun(value:unknown):RunSummary{
 }
 export async function readRuns(filters:{q:string;source:string;status:string;cursor?:string},signal:AbortSignal){
   const query=new URLSearchParams({q:filters.q,...(filters.source?{source:filters.source}:{}),...(filters.status?{status:filters.status}:{}),...(filters.cursor?{cursor:filters.cursor}:{})});
-  const value=await request<unknown>('/api/admin/runs/?'+query,{signal});requireResponse(isRecord(value)&&value.version===1&&Array.isArray(value.runs)&&value.runs.length<=50&&(value.next_cursor===null||typeof value.next_cursor==='string'&&value.next_cursor.length<=512),'run list');
+  const value=await request<unknown>('/api/admin/runs?'+query,{signal});requireResponse(isRecord(value)&&value.version===1&&Array.isArray(value.runs)&&value.runs.length<=50&&(value.next_cursor===null||typeof value.next_cursor==='string'&&value.next_cursor.length<=512),'run list');
   return {runs:value.runs.map(parseRun),next:value.next_cursor as string|null};
 }
 export async function readRun(source:RunSource,id:string,signal:AbortSignal):Promise<RunDetail>{
