@@ -15,6 +15,7 @@ export function searchChangeSummary(before:AppliedTaskSearch,after:AppliedTaskSe
   const next=taskAssistantFilters(after.values,null,after.status,after.product);
   const changed=(field:keyof typeof previous)=>JSON.stringify(previous[field])!==JSON.stringify(next[field]);
   const changes:string[]=[];
+  if((before.values.website??"")!==(after.values.website??""))changes.push(after.values.website?`Marketplace: ${after.values.website}.`:"Removed the marketplace filter.");
   if(changed("query"))changes.push(after.values.q?`Text contains “${after.values.q}”.`:"Removed the literal text filter.");
   if(changed("price")) {
     if(after.values.listing_price){const price=JSON.parse(after.values.listing_price);const operators:Record<string,string>={gt:">",gte:"≥",lt:"<",lte:"≤"};changes.push("Price: "+Object.entries(price).filter(([key])=>key!=="currency").map(([key,value])=>`${operators[key]} ${value} ${price.currency}`).join(" and ")+".");}
@@ -36,10 +37,11 @@ export function searchChangeSummary(before:AppliedTaskSearch,after:AppliedTaskSe
 
 export function conversationSearchSummary(before:AppliedTaskSearch,after:AppliedTaskSearch,labels:Record<string,string>,fresh:boolean):string {
   const details=searchChangeSummary(before,after,labels,{includeRanking:false,includeRetention:false});
+  const grouping=after.queueView?.grouping;
   const sellerView=after.queueView?.group_by==="seller"?after.queueView:undefined;
   const metric=sellerView?.group_sort==="exposure"?"estimated stock exposure":sellerView?.group_sort==="total_price"?"total known listing price (USD)":sellerView?.group_sort==="priority"?"recommendation priority":sellerView?.group_sort==="newest"?"newest matching listing":"matching listing count";
-  const opening=sellerView?`I’m finding ${sellerView.top_sellers?`up to ${sellerView.top_sellers}`:"the matching"} sellers, ordered by ${metric}, highest first.`:after.ranking?`I’m finding the ${after.ranking.limit} sellers with the most listings matching your search.`:fresh?"I’ve started a fresh search.":"I’ve updated your search.";
-  return [opening,details,sellerView?.items_per_seller?`I’ll show up to ${sellerView.items_per_seller} items per seller; ranking totals include all matches.`:"",after.ranking||sellerView?"The ranking will appear when the search finishes.":""].filter(Boolean).join(" ");
+  const opening=grouping?`I’m grouping the matching listings by ${grouping.dimensions.join(" then ")}.`:sellerView?`I’m finding ${sellerView.top_sellers?`up to ${sellerView.top_sellers}`:"the matching"} sellers, ordered by ${metric}, highest first.`:after.ranking?`I’m finding the ${after.ranking.limit} sellers with the most listings matching your search.`:fresh?"I’ve started a fresh search.":"I’ve updated your search.";
+  return [opening,details,sellerView?.items_per_seller?`I’ll show up to ${sellerView.items_per_seller} items per seller; ranking totals include all matches.`:"",grouping?`Up to ${grouping.items_per_group} items are initially shown per group; totals include all matches.`:"",after.ranking||sellerView||grouping?"The ranking will appear when the search finishes.":""].filter(Boolean).join(" ");
 }
 
 /** Conversation text is tab-local, account/tenant/brand scoped, and only

@@ -1,0 +1,25 @@
+import {afterEach,expect,test} from 'bun:test';
+import {Window} from 'happy-dom';
+import {act} from 'react';
+import {createRoot,type Root} from 'react-dom/client';
+import {GroupedTaskQueue} from '../src/components/monitoring/board/GroupedTaskQueue';
+import {marketplaceGrouping} from '../src/lib/taskGrouping';
+const original=globalThis.fetch;let root:Root|undefined;
+afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=original;});
+test('marketplace groups show full totals and lazy paginated items without counting just the loaded page',async()=>{
+ const window=new Window({url:'http://localhost:5173'});Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,IS_REACT_ACT_ENVIRONMENT:true});
+ const queries:URL[]=[];const grouping=marketplaceGrouping();
+ globalThis.fetch=(async(input)=>{const url=new URL(String(input),'http://localhost:5173');queries.push(url);const offset=Number(url.searchParams.get('offset'));const path=JSON.parse(url.searchParams.get('path')!);
+  const meta={policy_version:'task-grouping-v1',search_id:'owned',state:'completed',grouping,path,offset,partial:false};
+  return Response.json(url.pathname.endsWith('/listings')?{...meta,sort:'priority',total_listings:5,next_offset:offset?null:3,rows:Array.from({length:offset?2:3},(_,i)=>({task_id:`task-${offset+i}`,result_id:`result-${offset+i}`,domain:'market.test',listing_title:`Item ${offset+i}`}))}:{...meta,total_groups:1,matching_listings:5,next_offset:null,groups:[{key:'market.test',label:'market.test',article_count:5,priced_article_count:4,total_price_usd:'100.00',exposure_usd:null}]});
+ }) as typeof fetch;
+ const container=document.createElement('div');document.body.replaceChildren(container);root=createRoot(container);
+ await act(async()=>root!.render(<GroupedTaskQueue searchId="owned" grouping={grouping} sort="priority" revision="one" renderRow={row=><tr key={row.task_id}><td>{row.listing_title}</td></tr>}/>));
+ expect(container.textContent).toContain('5 listings');expect(queries).toHaveLength(1);expect(container.querySelector('[aria-expanded="true"]')).toBeNull();
+ await act(async()=>{(container.querySelector('[aria-label="Expand market.test"]') as HTMLButtonElement).click();});
+ expect(queries).toHaveLength(2);expect(JSON.parse(queries[1].searchParams.get('path')!)).toEqual(['market.test']);
+ expect(container.textContent).toContain('Showing 3 of 5 matching items');expect(container.textContent).toContain('Totals include all matches');
+ await act(async()=>{[...container.querySelectorAll('button')].find(button=>button.textContent==='Show more items')!.click();});
+ expect(queries[2].searchParams.get('offset')).toBe('3');expect(container.textContent).toContain('Showing 5 of 5 matching items');
+ expect([...container.querySelectorAll('td')].filter(td=>td.textContent?.startsWith('Item '))).toHaveLength(5);
+});

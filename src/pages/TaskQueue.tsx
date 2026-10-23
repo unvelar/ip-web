@@ -1,3 +1,9 @@
+import {GroupedTaskQueue} from '../components/monitoring/board/GroupedTaskQueue';
+import {marketplaceGrouping} from '../lib/taskGrouping';
+import {groupingSearchValues,taskSearchRequest} from '../lib/taskSearchAssistant';
+import {startTaskSearch} from '../api/taskQueue';
+import {taskCapability} from '../api/taskQueue';
+import {groupingPolicy} from '../lib/taskGrouping';
 import {queueViewFromParams,queueViewParams,queueViewPolicy,type QueueView} from "../lib/queueView";
 import { queueSearchParams } from "../lib/taskSearchAssistant";
 import { useCallback, useEffect, useId, useMemo, useRef, useState,type ReactNode } from "react";
@@ -274,6 +280,9 @@ export default function TaskQueue({
   const rows = searchStarting ? [] : urlSearchId
     ? (search?.rows ?? [])
     : (search?.rows ?? page?.rows ?? []);
+  const [groupingAvailable,setGroupingAvailable]=useState(false);
+  useEffect(()=>{const controller=new AbortController();void taskCapability(ipId,controller.signal).then(value=>{if(!controller.signal.aborted)setGroupingAvailable(value.grouping_policy_version===groupingPolicy);}).catch(()=>{});return()=>controller.abort();},[ipId]);
+  const groupedView=queueViewFromParams(params).grouping;
   const groupBy = parseMonitoringGroupBy(params.get("group_by"));
   const sellerSort = (["exposure", "articles", "priority", "newest", "total_price"].includes(params.get("group_sort") ?? "")
     ? params.get("group_sort") : "exposure") as SellerGroupSort;
@@ -296,11 +305,12 @@ export default function TaskQueue({
     const snapshot=viewMembership,generation=++viewGeneration.current;
     const current=()=>!signal.aborted&&generation===viewGeneration.current&&snapshot===latestViewMembership.current;
     try{
-      const result=urlSearchId?await getTaskSearch(urlSearchId,0,signal,view.sort):null;
+      const draft=!urlSearchId&&view.grouping?groupingSearchValues(params):null;
+      const result=urlSearchId?await getTaskSearch(urlSearchId,0,signal,view.sort):draft?await startTaskSearch({...taskSearchRequest(draft,ipId,query.status,query.catalog_product_id),sort:view.sort}):null;
       if(!current())return false;
       setError("");setSearch(result);setSearchAfter(0);setSearchStack([]);setSelection(new Set());closeGroup();
       setCategoryView(null);
-      setParams(queueViewParams(params,view));return true;
+      setParams(draft&&result?queueSearchParams(params,{values:draft,status:query.status,product:query.catalog_product_id,ranking:null,queueView:view},result.id):queueViewParams(params,view));return true;
     }catch(error){if(current())setError(errorText(error));return false;}
   }
   function change(values: Record<string, string | null>) {
@@ -777,9 +787,11 @@ export default function TaskQueue({
                 Group by
                 <select
                   aria-label="Group by"
-                  value={groupBy}
+                  value={groupedView?groupedView.dimensions.length===1&&groupedView.dimensions[0]==="marketplace"?"marketplace":"custom":groupBy}
                   onChange={(event) => {
+                    if(event.target.value==="marketplace"){void applyQueueView({...queueViewFromParams(params),group_by:"none",grouping:marketplaceGrouping()},new AbortController().signal);return;}
                     const next = new URLSearchParams(params);
+                    next.delete("grouping");
                     next.delete("top_sellers");
                     if (event.target.value === "none") next.delete("group_by");
                     else next.set("group_by", event.target.value);
@@ -788,8 +800,10 @@ export default function TaskQueue({
                   }}
                 >
                   <option value="none">None</option>
+                  {groupedView&&(groupedView.dimensions.length>1||groupedView.dimensions[0]!=="marketplace")&&<option value="custom" disabled>{groupedView.dimensions.join(" → ")}</option>}
                   <option value="seller">Seller</option>
                   <option value="product">Product</option>
+                  {(groupingAvailable||groupedView)&&<option value="marketplace">Marketplace</option>}
                 </select>
               </label>}
               {!categoryReport&&(groupBy === "seller" || (!search && !urlSearchId) || search?.queue_view_policy_version===queueViewPolicy) && (
@@ -839,7 +853,7 @@ export default function TaskQueue({
         </div>
         <div className={mode==="ai"?"task-ai-results":undefined} role={mode==="ai"?"region":undefined} aria-label={mode==="ai"?"Search results":undefined} hidden={mode==="ai"&&!search&&!urlSearchId&&!searchStarting}>
         {mode==="ai"&&<header className="task-ai-results-header">
-          <div className="task-ai-results-heading"><h2>{categoryReport?"Categories":groupBy==="seller"?"Sellers":"Listings"}</h2>{categoryReport?<span className="task-ai-result-count">{categoryReport.total_categories} categories</span>:searchStatus}</div>
+          <div className="task-ai-results-heading"><h2>{categoryReport?"Categories":groupedView?"Grouped listings":groupBy==="seller"?"Sellers":"Listings"}</h2>{categoryReport?<span className="task-ai-result-count">{categoryReport.total_categories} categories</span>:searchStatus}</div>
           <div className="task-ai-results-actions"><button type="button" className="task-ai-focus" aria-label={resultsFocused?"Show chat":"Focus results"} title={resultsFocused?"Show chat":"Focus results"} aria-expanded={!resultsFocused} aria-controls={conversationId} onClick={()=>{setResultsFocused(value=>!value);if(resultsFocused)requestAnimationFrame(()=>conversationRef.current?.querySelector("textarea")?.focus());}}>{resultsFocused?<><PanelLeftOpen size={15} aria-hidden="true"/>Chat</>:<PanelLeftClose size={15} aria-hidden="true"/>}</button><button type="button" disabled={searchStarting||!search?.id} onClick={openInListings}><ArrowUpRight size={14} aria-hidden="true"/>Open in Listings</button></div>
         </header>}
         {mode==="ai"&&error&&<p className="task-queue-notice" role="alert">{error} <button type="button" onClick={refresh}>Retry</button></p>}
@@ -928,6 +942,8 @@ export default function TaskQueue({
               if(trigger?.isConnected){const target=trigger.closest("[hidden]")?trigger.closest(".task-search-chat")?.querySelector<HTMLButtonElement>(".task-search-chat-toggle"):trigger;target?.focus();}
             });}} onSelectionReset={()=>setSelection(new Set())} renderRow={renderTaskRow}/>
           </div>
+        ) : groupedView&&urlSearchId ? (
+          <GroupedTaskQueue key={JSON.stringify([urlSearchId,groupedView])} searchId={urlSearchId} grouping={groupedView} sort={queueViewFromParams(params).sort} revision={`${revision}:${search?.matched}:${search?.state}`} renderRow={renderTaskRow}/>
         ) : groupBy === "seller" && !searchStarting && (!search || Boolean(search.id)) ? (
           <>
             <SellerGroupedQueue itemLimit={sellerItems} topLimit={topSellers} requireComplete={Boolean(topSellers)} key={`${JSON.stringify(sellerQuery)}:${queueReset}`}

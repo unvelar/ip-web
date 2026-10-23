@@ -70,6 +70,7 @@ export interface TaskQueueQuery {
   limit?: number;
 }
 export interface TaskCapability {
+  grouping_policy_version?:string;
   version: number;
   active: boolean;
   ready: boolean;
