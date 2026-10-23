@@ -1,3 +1,4 @@
+import {queryViewPolicy} from "../lib/queueView";
 import { queueViewPolicy,sellerValuePolicy,conversationActionsPolicy,parseQueueViewChange,type QueueView,type QueueViewChange } from "../lib/queueView";
 import {categoryRankingPolicy,parseCategoryRankingRequest,type CategoryRankingRequest} from "../lib/categoryRanking";
 import { request } from "./transport";
@@ -10,7 +11,7 @@ export interface ListingRow { sellerMatchingCount: number | null; id: string; ti
 export interface RankedSeller { sellerKey:string; name:string|null; domain:string; count:number }
 export interface ListingPage { sellers?: RankedSeller[]; rows: ListingRow[]; total: number; nextCursor: string | null; catalog: CatalogMatch | null; fx: { asOf: string; basis: string } | null }
 export type Translation = {name:"answer_question";answer:string}|{name:"rank_categories";ranking:CategoryRankingRequest}|{name:"set_queue_view";view:QueueViewChange}
-  | { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; categoryLabels?:Record<string,string>; showListings?:boolean; catalogQuery?: string | null }
+  | { name: "search_listings" | "rank_sellers"; filters: ListingFilters; ranking:SellerRanking|null; categoryLabels?:Record<string,string>; showListings?:boolean; queueView?:QueueViewChange; catalogQuery?: string | null }
   | { name: "next_listing_page" }
   | { name: "request_clarification"; reason: string; capability?: string; question?:string; options?:string[]; conflictField?:"price"|"seller_listing_count" };
 export const listingConversationPolicy = "listing-conversation-v1";
@@ -35,10 +36,12 @@ export async function listingCapability(signal: AbortSignal) {
     && Object.entries(value.country_labels).every(([key, label]) => /^[A-Z]{2}$/.test(key) && text(label)), "search capability");
   requireResponse(value.seller_count_policy_version === undefined || value.seller_count_policy_version === sellerCountPolicy, "seller-count policy");
   requireResponse(value.seller_ranking_policy_version === undefined || value.seller_ranking_policy_version === sellerRankingPolicy, "seller-ranking policy");
-  return { conversationAnswers:value.conversation_answers_policy_version===conversationAnswersPolicy, sellerValue:value.seller_value_policy_version===sellerValuePolicy,conversationActions:value.conversation_actions_policy_version===conversationActionsPolicy, categoryRanking:value.category_ranking_policy_version===categoryRankingPolicy, queueView:value.queue_view_policy_version===queueViewPolicy, conversation:value.conversation_policy_version === listingConversationPolicy, searchAgent:value.search_agent_policy_version === "listing-search-agent-v1", titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
+  return { queryView:value.query_view_policy_version===queryViewPolicy, conversationAnswers:value.conversation_answers_policy_version===conversationAnswersPolicy, sellerValue:value.seller_value_policy_version===sellerValuePolicy,conversationActions:value.conversation_actions_policy_version===conversationActionsPolicy, categoryRanking:value.category_ranking_policy_version===categoryRankingPolicy, queueView:value.queue_view_policy_version===queueViewPolicy, conversation:value.conversation_policy_version === listingConversationPolicy, searchAgent:value.search_agent_policy_version === "listing-search-agent-v1", titleSearch:value.title_search_policy_version === titleSearchPolicy, enabled: value.enabled, sellerRanking: value.seller_ranking_policy_version === sellerRankingPolicy, sellerCounts: value.seller_count_policy_version === sellerCountPolicy, countries: value.country_labels as Record<string, string> };
 }
-export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null, conversation?:SearchConversation,queueView?:QueueView,categoryRanking=false,features:{sellerValue?:boolean;categorySelection?:boolean;answers?:boolean}={}): Promise<Translation> {
-  const value = await read("translate", { message, filters,...(features.answers&&conversation?{conversation_answers:true}:{}),...(features.sellerValue?{seller_value:true}:{}),...(features.categorySelection?{conversation_actions:true}:{}), ...(ranking ? {ranking} : {}),...(conversation?{conversation}:{}),...(queueView?{queue_view:queueView}:{}),...(categoryRanking?{category_ranking:true}:{}) }, signal);
+export async function translateListingSearch(message: string, filters: ListingFilters, signal: AbortSignal, ranking: SellerRanking | null = null, conversation?:SearchConversation,queueView?:QueueView,categoryRanking=false,features:{sellerValue?:boolean;categorySelection?:boolean;answers?:boolean;queryView?:boolean}={}): Promise<Translation> {
+  const contextView=queueView?{...queueView}:undefined;
+  if(contextView&&!features.queryView)delete contextView.items_per_seller;
+  const value = await read("translate", { message, filters,...(features.queryView&&queueView?{query_view:true}:{}),...(features.answers&&conversation?{conversation_answers:true}:{}),...(features.sellerValue?{seller_value:true}:{}),...(features.categorySelection?{conversation_actions:true}:{}), ...(ranking ? {ranking} : {}),...(conversation?{conversation}:{}),...(contextView?{queue_view:contextView}:{}),...(categoryRanking?{category_ranking:true}:{}) }, signal);
   requireResponse(isRecord(value) && value.version === 1 && value.jobs_started === 0 && isRecord(value.query) && isRecord(value.query.arguments), "search translation");
   const query = value.query;
   const args = query.arguments;
@@ -49,7 +52,10 @@ export async function translateListingSearch(message: string, filters: ListingFi
     return {name:query.name,answer:args.answer.trim()};
   }
   if(query.name==="rank_categories")return {name:query.name,ranking:parseCategoryRankingRequest(args)};
-  if(query.name==="set_queue_view")return {name:query.name,view:parseQueueViewChange(args)};
+  if(query.name==="set_queue_view"){
+    requireResponse(args.items_per_seller===undefined||features.queryView,"seller item preview capability");
+    return {name:query.name,view:parseQueueViewChange(args)};
+  }
   if (query.name === "request_clarification") {
     requireResponse(args.question===undefined||typeof args.question==="string"&&args.question.trim().length>0&&args.question.length<=1000,"clarification question");
     requireResponse(args.options===undefined||Array.isArray(args.options)&&args.options.length>=2&&args.options.length<=3&&args.options.every(option=>typeof option==="string"&&option.trim().length>0&&option.length<=160),"clarification options");
@@ -59,10 +65,12 @@ export async function translateListingSearch(message: string, filters: ListingFi
   }
   if (query.name === "next_listing_page") return { name: query.name };
   requireResponse((query.name === "search_listings" || query.name === "rank_sellers") && (args.catalog_query === undefined || nullableText(args.catalog_query)), "search translation");
+  requireResponse(args.view===undefined||features.queryView&&queueView,"compound query view capability");
+  const proposedView=args.view===undefined?undefined:parseQueueViewChange(args.view);
   const next = parseListingFilters(value.filters);
   requireResponse(next.ip_id === filters.ip_id, "search scope");
   requireResponse(value.category_labels===undefined||isRecord(value.category_labels)&&Object.entries(value.category_labels).every(([key,label])=>next.semantic?.categories?.includes(key)&&typeof label==="string"&&label.trim().length>0&&label.length<=120),"translation category labels");
-  return { name: query.name, categoryLabels:value.category_labels as Record<string,string>|undefined, ...(args.show_listings===true?{showListings:true}:{}), ranking: query.name === "rank_sellers" ? parseSellerRanking(args.ranking) : null, filters: next, ...(Object.hasOwn(args, "catalog_query") ? { catalogQuery: args.catalog_query as string | null } : {}) };
+  return { name: query.name, ...(proposedView?{queueView:proposedView}:{}), categoryLabels:value.category_labels as Record<string,string>|undefined, ...(args.show_listings===true?{showListings:true}:{}), ranking: query.name === "rank_sellers" ? parseSellerRanking(args.ranking) : null, filters: next, ...(Object.hasOwn(args, "catalog_query") ? { catalogQuery: args.catalog_query as string | null } : {}) };
 }
 export async function resolveListingCatalog(query: string, ipId: string | null, signal: AbortSignal): Promise<CatalogResolution> {
   const value = await read("resolve-catalog", { query, ip_id: ipId, limit: 20 }, signal);

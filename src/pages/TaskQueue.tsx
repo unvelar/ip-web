@@ -3,18 +3,22 @@ import { queueSearchParams } from "../lib/taskSearchAssistant";
 import { useCallback, useEffect, useId, useMemo, useRef, useState,type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ImageOff,ListFilter,PanelLeftClose,PanelLeftOpen,ArrowUpRight } from "lucide-react";
+import { MarketplaceMark } from "../components/MarketplaceMark";
+import { monitoringPlatformLabel } from "../lib/platforms";
 import MonitoringToolbar from "../components/MonitoringToolbar";
 import TaskSearch from "../components/TaskSearch";
 import TaskSearchStatus from "../components/TaskSearchStatus";
 import {CategoryResultsWorkspace} from "../components/CategoryResultsWorkspace";
 import type {CategoryRanking} from "../lib/categoryRanking";
 import { TaskGroupRows } from "../components/monitoring/board/TaskGroupRows";
+import { TaskRowActions } from "../components/monitoring/board/TaskRowActions";
 import { SellerGroupedQueue } from "../components/monitoring/board/SellerGroupedQueue";
 import { MonitoringGroupDetails } from "../components/monitoring/board/MonitoringGroupDetails";
 import {
   groupMonitoringFindings,
   hasProductGrouping,
   parseMonitoringGroupBy,
+  type MonitoringListingGroup,
 } from "../lib/monitoringGrouping";
 import { useTaskProductIdentities } from "../hooks/useTaskProductIdentities";
 import { MonitoringBoard } from "../components/monitoring/MonitoringBoard";
@@ -105,6 +109,7 @@ export default function TaskQueue({
   const conversationRef=useRef<HTMLDivElement>(null);
   const conversationId=useId();
   const [resultsFocused,setResultsFocused]=useState(false);
+  const [quickActionId, setQuickActionId] = useState<string | null>(null);
   const searchPoll = useRef<AbortController | null>(null);
   const statusRef = useRef<HTMLElement>(null);
   const scrollToQueue = () =>
@@ -273,6 +278,7 @@ export default function TaskQueue({
   const sellerSort = (["exposure", "articles", "priority", "newest", "total_price"].includes(params.get("group_sort") ?? "")
     ? params.get("group_sort") : "exposure") as SellerGroupSort;
   const topSellers = /^([1-9]\d?|100)$/.test(params.get("top_sellers") ?? "") ? Number(params.get("top_sellers")) : null;
+  const sellerItems=queueViewFromParams(params).items_per_seller??null;
   const sellerQuery = { ...query, group_sort: sellerSort, ...(topSellers ? { ranking_limit:topSellers } : {}), ...(urlSearchId ? { search_id:urlSearchId } : {}) };
   const productGroups = useTaskProductIdentities(
     groupBy === "product",
@@ -281,10 +287,11 @@ export default function TaskQueue({
   );
   const groups = groupMonitoringFindings(productGroups.rows, groupBy);
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
+  const [rowGroup, setRowGroup] = useState<{ scope: string; group: MonitoringListingGroup<TaskSummary> } | null>(null);
   const activeGroup = !waitingForPage
-    ? groups.find((group) => group.key === activeGroupKey)
+    ? rowGroup?.scope === params.toString() ? rowGroup.group : groups.find((group) => group.key === activeGroupKey)
     : undefined;
-  const closeGroup = useCallback(() => setActiveGroupKey(null), []);
+  const closeGroup = useCallback(() => { setActiveGroupKey(null); setRowGroup(null); }, []);
   async function applyQueueView(view:QueueView,signal:AbortSignal):Promise<boolean> {
     const snapshot=viewMembership,generation=++viewGeneration.current;
     const current=()=>!signal.aborted&&generation===viewGeneration.current&&snapshot===latestViewMembership.current;
@@ -329,10 +336,10 @@ export default function TaskQueue({
     setQueueReset((value) => value + 1);
     scrollToQueue();
   }
-  function refreshAfterAction(options?: FindingUpdateOptions) {
-    if (options?.completed && taskId) setSelection((previous) => {
+  function refreshAfterAction(options?: FindingUpdateOptions, resultId = taskId) {
+    if (options?.completed && resultId) setSelection((previous) => {
       const next = new Set(previous);
-      next.delete(taskId);
+      next.delete(resultId);
       return next;
     });
     setRevision((value) => value + 1);
@@ -520,7 +527,7 @@ export default function TaskQueue({
     oldFilters.sort !== "score_desc" &&
     oldFilters.sort !== "found_desc" &&
     !params.has("queue_sort");
-  const renderTaskRow = (row: TaskSummary) => {
+  const renderTaskRow = (row: TaskSummary, onOpenSeller?: () => void) => {
     const recommendation = monitoringRecommendation(row);
     return (
       <tr
@@ -529,6 +536,11 @@ export default function TaskQueue({
         tabIndex={waitingForPage ? -1 : 0}
         className={`monitoring-listing-row${taskId === row.result_id ? " is-active" : ""}${selection.has(row.result_id) ? " is-selected" : ""}${row.state === "dismissed" ? " is-dismissed" : ""}`}
         aria-label={`Open task: ${row.listing_title ?? row.domain}`}
+        onPointerEnter={() => { if (!waitingForPage) setQuickActionId(row.result_id); }}
+        onPointerLeave={event => {
+          if (!event.currentTarget.contains(document.activeElement)) setQuickActionId(current => current === row.result_id ? null : current);
+        }}
+        onFocus={() => { if (!waitingForPage) setQuickActionId(row.result_id); }}
         onClick={() => {
           if (!waitingForPage) open(row.result_id);
         }}
@@ -566,11 +578,24 @@ export default function TaskQueue({
           <div className="monitoring-listing-main">
             <TaskImage key={row.image_url} url={row.image_url} />
             <div className="monitoring-listing-copy">
-              <span className="monitoring-listing-title">
+              {row.seller_key ? <button
+                type="button"
+                className="task-queue-seller task-queue-seller-link"
+                aria-label={`Open seller details: ${row.seller_name ?? "Unnamed seller"}`}
+                disabled={waitingForPage}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (onOpenSeller) { onOpenSeller(); return; }
+                  if (taskId) open(null);
+                  setActiveGroupKey(null);
+                  const group = groupMonitoringFindings([...rows.filter(item => item.result_id !== row.result_id), row], "seller").find(group => group.sellerKey === row.seller_key)!;
+                  setRowGroup({ scope: params.toString(), group: { ...group, ipId } });
+                }}
+              >{row.seller_name ?? "Unnamed seller"}</button> : <span className="task-queue-seller">{row.seller_name ?? "Unknown seller"}</span>}
+              <span className="task-queue-listing-title" title={row.listing_title ?? row.page_url}>
                 {row.listing_title ?? row.page_url}
               </span>
               <div className="monitoring-listing-meta">
-                {row.seller_name ?? "Unknown seller"} · {row.domain} ·{" "}
                 <time dateTime={row.found_at}>{date(row.found_at)}</time>
                 {query.status === "all" && ` · ${taskStateLabels[row.state]}`}
               </div>
@@ -585,6 +610,11 @@ export default function TaskQueue({
             </div>
           </div>
         </td>
+        <td className="task-queue-store-cell">
+          <span className="task-queue-store-mark" role="img" aria-label={monitoringPlatformLabel(row.domain)} title={row.domain}>
+            <MarketplaceMark source={{ domain: row.domain, name: monitoringPlatformLabel(row.domain) }} />
+          </span>
+        </td>
         <td className="monitoring-listing-price">
           {row.price_value_usd == null
             ? "Unavailable"
@@ -592,12 +622,13 @@ export default function TaskQueue({
         </td>
         <td
           className="monitoring-listing-assessment"
-          title={recommendation.label ? recommendation.reason : undefined}
           aria-label={
             recommendation.label ? undefined : "No suggested action yet"
           }
         >
-          {recommendation.label}
+          <TaskRowActions key={`${row.result_id}:${revision}`} row={row} ipId={row.ip_id ?? ipId}
+            active={!waitingForPage && quickActionId === row.result_id}
+            onUpdated={options => refreshAfterAction(options, row.result_id)} />
         </td>
       </tr>
     );
@@ -707,7 +738,7 @@ export default function TaskQueue({
           params={params}
           members={members}
           status={query.status}
-          ranking={topSellers&&sellerSort!=="total_price" ? {limit:topSellers} : null}
+          ranking={topSellers&&sellerSort==="articles" ? {limit:topSellers} : null}
           onShowCategoryReport={report=>{
             if(report.state!=="completed"||report.search_id!==urlSearchId)return;
             categoryReturnFocus.current=document.activeElement instanceof HTMLElement?document.activeElement:null;
@@ -740,6 +771,7 @@ export default function TaskQueue({
                   Clear product
                 </button>
               )}
+              {sellerItems && <span className="task-search-chip"><span>Up to {sellerItems} items per seller</span><button type="button" aria-label="Remove per-seller item limit" onClick={()=>{const next=new URLSearchParams(params);next.delete("items_per_seller");setParams(next);}}>×</button></span>}
               {topSellers && <span className="task-search-chip"><span>Top {topSellers} sellers</span><button type="button" aria-label="Remove top seller limit" onClick={()=>{const next=new URLSearchParams(params);next.delete("top_sellers");setParams(next);}}>×</button></span>}
               {!categoryReport&&<label>
                 Group by
@@ -898,9 +930,9 @@ export default function TaskQueue({
           </div>
         ) : groupBy === "seller" && !searchStarting && (!search || Boolean(search.id)) ? (
           <>
-            <SellerGroupedQueue topLimit={topSellers} requireComplete={Boolean(topSellers)} key={`${JSON.stringify(sellerQuery)}:${queueReset}`}
+            <SellerGroupedQueue itemLimit={sellerItems} topLimit={topSellers} requireComplete={Boolean(topSellers)} key={`${JSON.stringify(sellerQuery)}:${queueReset}`}
               query={sellerQuery} revision={`${revision}:${search?.matched}:${search?.state}`} selection={selection} renderRow={renderTaskRow} activeFindingId={taskId}
-              onUngroup={() => { const next = new URLSearchParams(params); next.delete("group_by"); next.delete("top_sellers"); setParams(next); }}
+              onUngroup={() => { const next = new URLSearchParams(params); next.delete("group_by"); next.delete("top_sellers"); next.delete("items_per_seller"); setParams(next); }}
               onOpenGroup={() => { closeGroup(); if (taskId) open(null); }}
               onSelect={(ids, selected) => setSelection(previous => { const next = new Set(previous); for (const id of ids) { if (selected) next.add(id); else next.delete(id); } return next; })} />
           </>
@@ -962,6 +994,7 @@ export default function TaskQueue({
                 <colgroup>
                   <col className="monitoring-checkbox-column" />
                   <col />
+                  <col className="task-queue-store-column" />
                   <col className="monitoring-price-column" />
                   <col className="monitoring-assessment-column" />
                 </colgroup>
@@ -996,8 +1029,9 @@ export default function TaskQueue({
                       />
                     </th>
                     <th scope="col" className="monitoring-listing-heading">
-                      Listing / seller / first detected
+                      Seller / listing / first detected
                     </th>
+                    <th scope="col" className="task-queue-store-heading">Store</th>
                     <th scope="col" className="monitoring-price-heading">
                       Price (USD)
                     </th>
@@ -1023,12 +1057,13 @@ export default function TaskQueue({
                     }
                     onOpen={(group) => {
                       if (taskId) open(null);
+                      setRowGroup(null);
                       setActiveGroupKey(group.key);
                     }}
                     renderRow={renderTaskRow}
                   />
                 ) : (
-                  <tbody>{rows.map(renderTaskRow)}</tbody>
+                  <tbody>{rows.map(row => renderTaskRow(row))}</tbody>
                 )}
               </table>
               {!waitingForPage && !error && !rows.length && (

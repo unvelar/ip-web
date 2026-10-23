@@ -12,7 +12,7 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{answers?:boolean;categoryLabels?:Record<string,string>;actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
+async function setup(options:{queryView?:boolean;answers?:boolean;categoryLabels?:Record<string,string>;actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
@@ -29,7 +29,7 @@ async function setup(options:{answers?:boolean;categoryLabels?:Record<string,str
   const translated=()=>Response.json({version:1,jobs_started:0,filters,...(options.categoryLabels?{category_labels:options.categoryLabels}:{}),query:options.clarify?{name:"request_clarification",arguments:{reason:"unsupported_capability",capability:"shipping"}}:{name:options.title?"search_listings":"rank_sellers",arguments:{ranking:{limit:10}}}});
   globalThis.fetch=(async(input,init)=>{
     const url=new URL(String(input),"http://localhost:5174");
-    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,...(options.answers?{conversation_answers_policy_version:"listing-conversation-answers-v1"}:{}),...(options.actionFeatures?{seller_value_policy_version:"task-seller-value-v1",conversation_actions_policy_version:"listing-conversation-actions-v1"}:{}),country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
+    if(url.pathname.endsWith("translation-capability"))return Response.json({version:1,enabled:true,...(options.queryView?{query_view_policy_version:"listing-query-view-v1"}:{}),...(options.answers?{conversation_answers_policy_version:"listing-conversation-answers-v1"}:{}),...(options.actionFeatures?{seller_value_policy_version:"task-seller-value-v1",conversation_actions_policy_version:"listing-conversation-actions-v1"}:{}),country_labels:{CN:"China",FR:"France"},...(options.agent?{search_agent_policy_version:"listing-search-agent-v1"}:{}),...(options.conversation?{conversation_policy_version:"listing-conversation-v1"}:{}),...(options.queueView?{queue_view_policy_version:"task-queue-view-v1"}:{}),...(options.categoryRanking?{category_ranking_policy_version:categoryRankingPolicy}:{})});
     if(url.pathname.endsWith("/tasks/capability"))return Response.json({active:true,ready:true,...(options.titleSupported===false?{}:{title_search_policy_version:"literal-title-substring-v1"}),...(options.extended===false?{}:{listing_search_policy_version:"task-listing-search-v1"})});
     if(url.pathname.endsWith("/semantic-taxonomy"))return options.taxonomyUnavailable?Response.json({error:"Unavailable"},{status:503}):Response.json({categories:[{key:"miniature",label:"Miniature"},{key:"ae_2_2_8",label:"Scale Models"}]});
     if(url.pathname.includes("/agent/runs")){
@@ -57,7 +57,7 @@ async function setup(options:{answers?:boolean;categoryLabels?:Record<string,str
   if(options.viewRanked){params.set("group_by","seller");params.set("group_sort","articles");params.set("top_sellers","10");}
   root=createRoot(container);
   const shownReports:unknown[]=[];
-  const render=()=>root!.render(<TaskSearch onShowCategoryReport={options.categoryTable?report=>shownReports.push(report):undefined} ranking={options.viewRanked&&params.has("top_sellers")&&params.get("group_sort")!=="total_price"?{limit:Number(params.get("top_sellers"))}:null} onViewChange={options.queueView?async view=>{viewChanges.push(view);params=queueViewParams(params,view);render();return true;}:undefined} conversationOwner={options.conversation?"test-account":undefined} ipId={ip} status={(params.get("status")??"pending") as TaskQueueQuery["status"]} params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
+  const render=()=>root!.render(<TaskSearch onShowCategoryReport={options.categoryTable?report=>shownReports.push(report):undefined} ranking={(options.viewRanked||options.queryView)&&params.has("top_sellers")&&params.get("group_sort")==="articles"?{limit:Number(params.get("top_sellers"))}:null} onViewChange={options.queueView?async view=>{viewChanges.push(view);params=queueViewParams(params,view);render();return true;}:undefined} conversationOwner={options.conversation?"test-account":undefined} ipId={ip} status={(params.get("status")??"pending") as TaskQueueQuery["status"]} params={params} members={[]} onStart={(result,next)=>{applied.push(next);params=queueSearchParams(params,next,result.id);render();}} onError={error=>{if(error)errors.push(error);}}/>);
   await act(async()=>render());
   const button=(name:string)=>[...container.querySelectorAll<HTMLButtonElement>("button")].find(el=>el.getAttribute("aria-label")===name||el.textContent?.trim()===name)!;
   const click=async(name:string)=>{await act(async()=>button(name).click());};
@@ -438,4 +438,46 @@ test('read-only answer responses cannot change filters or run on an older API co
   if(mode==='old_api')expect(ui.requests[0].body).not.toHaveProperty('conversation_answers');
   await act(async()=>root!.unmount());root=undefined;
  }
+});
+
+test("Italy top 25 and three items each commit one fresh query with separate ranking and display limits",async()=>{
+ const ui=await setup({conversation:true,queueView:true,queryView:true,translation:body=>{
+  expect(body.query_view).toBe(true);
+  return Response.json({version:1,jobs_started:0,filters:{...body.filters as object,countries:['IT']},query:{name:'search_listings',arguments:{changes:{countries:['IT']},view:{group_by:'seller',group_sort:'articles',top_sellers:25,items_per_seller:3}}}});
+ }});
+ await ui.click('Ask');await ui.click('New chat');await ui.fill('Ask about listings','Give me the sellers in italy by volume (top 25) and max 3 items each');await ui.send();
+ expect(ui.applied).toHaveLength(1);expect(ui.params().get('group_sort')).toBe('articles');expect(ui.params().get('top_sellers')).toBe('25');expect(ui.params().get('items_per_seller')).toBe('3');
+ const create=ui.requests.find(item=>item.path==='/api/monitoring/tasks/searches')!;
+ expect(create.body.listing_constraints).toMatchObject({countries:['IT']});expect((create.body.listing_constraints as Record<string,unknown>).seller_listing_count).toBeNull();
+ expect(create.body).not.toHaveProperty('items_per_seller');expect(create.body).not.toHaveProperty('country');
+ expect(ui.requests.filter(item=>item.path==='/api/monitoring/tasks/searches')).toHaveLength(1);
+ expect(ui.applied[0].ranking).toEqual({limit:25});
+});
+test("a per-seller display cap is a reversible view change without starting a search",async()=>{
+ const ui=await setup({conversation:true,queueView:true,queryView:true,viewRanked:true,translation:()=>Response.json({version:1,jobs_started:0,query:{name:'set_queue_view',arguments:{group_by:'seller',items_per_seller:3}}})});
+ await ui.click('Ask');await ui.fill('Ask about listings','Show max 3 items each');await ui.send();
+ expect(ui.params().get('items_per_seller')).toBe('3');expect(ui.params().get('top_sellers')).toBe('10');expect(ui.params().get('task_search')).toBe('existing-search');expect(ui.applied).toHaveLength(0);
+ await ui.click('Undo last change');expect(ui.params().has('items_per_seller')).toBe(false);expect(ui.params().get('top_sellers')).toBe('10');expect(ui.requests).toHaveLength(1);
+});
+test("a failed compound search and an unnegotiated view never commit a partial display change",async()=>{
+ for(const negotiated of [true,false]){
+ const ui=await setup({conversation:true,queueView:true,queryView:negotiated,fail:true,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:'search_listings',arguments:{view:{group_by:'seller',group_sort:'exposure',top_sellers:25,items_per_seller:3}}}})});
+ await ui.click('Ask');await ui.click('New chat');await ui.fill('Ask about listings','Italy top sellers by exposure and 3 items each');await ui.send();
+ expect(ui.applied).toHaveLength(0);expect(ui.params().has('items_per_seller')).toBe(false);expect(ui.params().has('top_sellers')).toBe(false);expect(ui.params().get('task_search')).toBe('existing-search');
+ await act(async()=>root!.unmount());root=undefined;
+ }
+});
+test("a fresh seller preview creates membership before applying its display settings",async()=>{
+ const ui=await setup({conversation:true,queueView:true,queryView:true,viewRanked:true,translation:()=>Response.json({version:1,jobs_started:0,query:{name:'set_queue_view',arguments:{group_by:'seller',group_sort:'exposure',top_sellers:25,items_per_seller:3}}})});
+ await ui.click('Ask');await ui.click('New chat');await ui.fill('Ask about listings','Top 25 sellers by exposure, show 3 items each');await ui.send();
+ expect(ui.applied).toHaveLength(1);expect(ui.applied[0].ranking).toBeNull();expect(ui.params().get('group_sort')).toBe('exposure');expect(ui.params().get('top_sellers')).toBe('25');expect(ui.params().get('items_per_seller')).toBe('3');
+ const create=ui.requests.find(item=>item.path==='/api/monitoring/tasks/searches')!;expect(create.body).not.toHaveProperty('q');expect(create.body).not.toHaveProperty('country');expect(create.body).not.toHaveProperty('listing_constraints');
+});
+
+
+test("query-shaped view refinements reuse saved membership and Undo without creating a replacement search",async()=>{
+ const ui=await setup({conversation:true,queueView:true,queryView:true,viewRanked:true,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"search_listings",arguments:{view:{group_by:"seller",group_sort:"exposure",top_sellers:25,items_per_seller:3}}}})});
+ await ui.click("Ask");await ui.fill("Ask about listings","I want them order by total volume (exposure)");await ui.send();
+ expect(ui.applied).toHaveLength(0);expect(ui.viewChanges).toHaveLength(1);expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.params().get("q")).toBe("old");expect(ui.params().get("country")).toBe("Spain");expect(ui.params().get("group_sort")).toBe("exposure");expect(ui.params().get("items_per_seller")).toBe("3");
+ await ui.click("Undo last change");expect(ui.params().get("task_search")).toBe("existing-search");expect(ui.params().get("group_sort")).toBe("articles");expect(ui.params().get("top_sellers")).toBe("10");expect(ui.params().has("items_per_seller")).toBe(false);expect(ui.requests).toHaveLength(1);
 });

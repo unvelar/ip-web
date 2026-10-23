@@ -1,13 +1,13 @@
 import {CategoryRankingResult} from "./CategoryRankingResult";
 import type {CategoryRanking,CategoryRankingRequest} from "../lib/categoryRanking";
-import { mergeQueueView,queueViewSummary,type QueueView } from "../lib/queueView";
+import { mergeQueueView,queueViewSummary,queueViewKey,type QueueView,type QueueViewChange } from "../lib/queueView";
 import { useContext,useEffect, useId, useRef, useState } from "react";
 import {AiSearchHistoryContext} from "../context/AiSearchHistoryContext";
 import { Search, Sparkles, ArrowUp, X, SquarePen, ChevronDown, ChevronUp, History } from "lucide-react";
 import { listingCapability, resolveListingCatalog, translateListingSearch } from "../api/listingSearch";
 import { taskCapability, type TaskQueueQuery } from "../api/taskQueue";
 import { taskAssistantFilters, applyTaskAssistantFilters, taskListingSearchPolicy, type AppliedTaskSearch, type TaskSearchValues } from "../lib/taskSearchAssistant";
-import { titleSearchPolicy, type SellerRanking } from "../lib/listingSearch";
+import { titleSearchPolicy, listingFilterKey, type SellerRanking } from "../lib/listingSearch";
 import { startListingAgent, getListingAgent, followListingAgent, cancelListingAgent } from "../api/listingAgent";
 import type { TaskSearchResult } from "../api/taskQueue";
 import { getActingTenant, isApiError } from "../api/transport";
@@ -42,10 +42,10 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
   const [question,setQuestion] = useState<SearchQuestion|null>(savedConversation.question);
   const [undo,setUndo] = useState<({kind:"search";search:AppliedTaskSearch;scope:string}|{kind:"view";previous:QueueView;target:string;scope:string})|null>(null);
   const [viewAvailable,setViewAvailable]=useState(false);
-  const [actionFeatures,setActionFeatures]=useState({sellerValue:false,categorySelection:false,answers:false});
+  const [actionFeatures,setActionFeatures]=useState({sellerValue:false,categorySelection:false,answers:false,queryView:false});
   const [categoriesAvailable,setCategoriesAvailable]=useState(false);
   const [activity,setActivity]=useState("");
-  const viewKey=JSON.stringify(view);
+  const viewKey=queueViewKey(view);
   const previousView=useRef(viewKey);
   const {labels:categoryLabels}=useProductSemanticTaxonomy(ipId,readSemanticFilters(values.semantic)?.categories);
   const currentCategoryLabels=useRef(categoryLabels);currentCategoryLabels.current=categoryLabels;
@@ -88,7 +88,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if (controller.signal.aborted) return;
       setAvailable(listing.enabled);
       setConversationAvailable(listing.conversation);
-      setActionFeatures({sellerValue:listing.sellerValue,categorySelection:listing.conversationActions,answers:listing.conversationAnswers});
+      setActionFeatures({sellerValue:listing.sellerValue,categorySelection:listing.conversationActions,answers:listing.conversationAnswers,queryView:listing.queryView});
       setViewAvailable(listing.queueView);setCategoriesAvailable(listing.categoryRanking);
       const supported=task.listing_search_policy_version === taskListingSearchPolicy;
       setAgentAvailable(listing.searchAgent&&supported&&task.active&&task.ready);
@@ -166,9 +166,11 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if(!extended&&(nextRanking||["listing_countries","listing_price","seller_listing_count","catalog_selection"].some(field=>nextValues[field])))throw new Error("That search is not available in this queue yet. Your filters were kept.");
       return {values:nextValues,status:filters.status,product:filters.catalog_product_id??undefined,ranking:nextRanking};
     };
-    const apply = async (filters:ReturnType<typeof taskAssistantFilters>, nextRanking:SellerRanking|null,showListings=false)=>{
+    const apply = async (filters:ReturnType<typeof taskAssistantFilters>, nextRanking:SellerRanking|null,showListings=false,queueViewChange?:QueueViewChange)=>{
       if(!current()) return;
-      const target={...prepare(filters,nextRanking),...(showListings?{showListings:true}:{})};
+      const nextView=queueViewChange?mergeQueueView(intent==="new"?{sort:"priority",group_by:"none"}:view??{sort:"priority",group_by:"none"},queueViewChange):undefined;
+      const ranked=nextView?nextView.group_by==="seller"&&nextView.group_sort==="articles"&&nextView.top_sellers?{limit:nextView.top_sellers}:null:nextRanking;
+      const target={...prepare(filters,ranked),...(showListings?{showListings:true}:{}),...(nextView?{queueView:nextView}:{})};
       if(await onApply(target,controller.signal)) {
         // onApply commits the new scope, so a successful acknowledgement is the
         // final receipt. A stale acknowledgement returns false in TaskSearch.
@@ -194,7 +196,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if(conversationalTranslation?.name==="answer_question"){
         say(conversationalTranslation.answer);setQuestion(priorQuestion);return;
       }
-      if(agentAvailable&&agentMode){
+      if(agentAvailable&&agentMode&&!(conversationalTranslation&&"queueView" in conversationalTranslation&&conversationalTranslation.queueView)){
         onAgentSearching(true);
         const continuing=saved?.scope===scope&&saved.message===message;
         if(!continuing&&saved?.id)await cancelListingAgent(saved.id);
@@ -224,7 +226,13 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
         else say(result.message||"Search stopped. Your previous results were kept.");
         return;
       }
-      const translation=conversationalTranslation??await translate();
+      let translation=conversationalTranslation??await translate();
+      // A model may wrap a display-only reply in search_listings. Membership is
+      // already established; unchanged canonical predicates need only a view change.
+      if(intent==="continue"&&searchId&&(translation.name==="search_listings"||translation.name==="rank_sellers")&&translation.queueView&&!translation.catalogQuery&&!translation.showListings&&listingFilterKey(translation.filters)===listingFilterKey(filters)){
+        const display:QueueViewChange=translation.name==="rank_sellers"?{group_by:"seller",group_sort:"articles",top_sellers:translation.ranking!.limit,...translation.queueView}:translation.queueView;
+        translation={name:"set_queue_view",view:display};
+      }
       if(!current()) return;
       if(translation.name==="search_listings"||translation.name==="rank_sellers")translationLabels=translation.categoryLabels??{};
       if(translation.name==="answer_question"){
@@ -245,18 +253,18 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if(translation.name==="set_queue_view"){
         if(!view||!onViewChange||!viewAvailable){say("Queue display controls are unavailable in this client. Your filters were kept.");return;}
         if(translation.view.group_sort==="total_price"&&!actionFeatures.sellerValue){say("Seller totals by listing price are not available on this API yet. Your filters and results were kept.");return;}
-        const next=mergeQueueView(view,translation.view);
-        if(translation.view.group_sort==="total_price"&&(intent==="new"||!searchId)){
+        const next=mergeQueueView(intent==="new"?{sort:"priority",group_by:"none"}:view,translation.view);
+        if(next.group_by==="seller"&&(intent==="new"||!searchId)){
           // A fresh chat has no saved membership to aggregate. Establish it
           // once and commit the desired view with that query, never an old chat.
-          const target={...prepare(filters,null),queueView:next};
+          const target={...prepare(filters,next.group_sort==="articles"&&next.top_sellers?{limit:next.top_sellers}:null),queueView:next};
           if(!await onApply(target,controller.signal)){if(current())say("The seller search could not start. Your previous search was kept.");return;}
           setUndo({kind:"search",search:before,scope:JSON.stringify([ipId,target.product,target.status,target.values,target.ranking])});
           setIntent("continue");say(queueViewSummary(translation.view)+" Ranking will appear when the complete search is ready.");return;
         }
-        if(JSON.stringify(next)!==viewKey){
+        if(queueViewKey(next)!==viewKey){
           if(!await onViewChange(next,controller.signal)){if(current())say("The queue view could not be changed. Your search was kept.");return;}
-          setUndo({kind:"view",previous:view,target:JSON.stringify(next),scope:filterScope});
+          setUndo({kind:"view",previous:view,target:queueViewKey(next),scope:filterScope});
         }
         setIntent("continue");say(queueViewSummary(translation.view));return;
       }
@@ -279,14 +287,14 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
           setChoices(resolved.candidates.map(candidate=>({label:`${candidate.display_name} · ${candidate.scope_name}`,apply:async()=>{
             if(!current()) return;
             setBusy(true);setChoices([]);
-            try{await apply({...translation.filters,catalog_product_id:null,catalog_selection:candidate.reference},translation.ranking,translation.showListings);}
+            try{await apply({...translation.filters,catalog_product_id:null,catalog_selection:candidate.reference},translation.ranking,translation.showListings,translation.queueView);}
             catch(error){if(current()) say(error instanceof Error?error.message:"Search failed. Your filters were kept.");}
             finally{setBusy(false);}
           }})));
           return;
         }
-        await apply({...translation.filters,catalog_product_id:null,catalog_selection:resolved.candidates[0].reference},translation.ranking,translation.showListings);
-      } else await apply(translation.filters,translation.ranking,translation.showListings);
+        await apply({...translation.filters,catalog_product_id:null,catalog_selection:resolved.candidates[0].reference},translation.ranking,translation.showListings,translation.queueView);
+      } else await apply(translation.filters,translation.ranking,translation.showListings,translation.queueView);
     } catch(error) {
       if(agentAvailable&&agentMode&&(isApiError(error,404)||isApiError(error,403))){
         sessionStorage.removeItem(agentStorageKey);setResumeAvailable(false);currentAgent.current=null;

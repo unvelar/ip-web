@@ -70,7 +70,7 @@ export function queueSearchParams(params: URLSearchParams, applied: AppliedTaskS
   next.set("status",applied.status);
   if (applied.product) next.set("catalog_product_id",applied.product); else next.delete("catalog_product_id");
   if (searchId) next.set("task_search",searchId); else next.delete("task_search");
-  if(applied.showListings){next.delete("group_by");next.delete("group_sort");next.delete("top_sellers");}
+  if(applied.showListings){next.delete("group_by");next.delete("group_sort");next.delete("top_sellers");next.delete("items_per_seller");}
   if (applied.ranking) { next.set("group_by","seller"); next.set("group_sort","articles"); next.set("top_sellers",String(applied.ranking.limit)); }
   else if(applied.showListings||params.get("group_sort")!=="total_price")next.delete("top_sellers");
   return applied.queueView?queueViewParams(next,applied.queueView):next;
