@@ -12,7 +12,7 @@ const ip="10000000-0000-4000-8000-000000000001";
 const originalFetch=globalThis.fetch;
 let root:Root|undefined;
 afterEach(async()=>{if(root)await act(async()=>root?.unmount());root=undefined;globalThis.fetch=originalFetch;});
-async function setup(options:{workflows?:boolean;discussion?:boolean;discussionNoPlan?:boolean;queryView?:boolean;answers?:boolean;categoryLabels?:Record<string,string>;actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
+async function setup(options:{catalogNotFound?:boolean;catalogSelection?:ListingFilters["catalog_selection"];workflows?:boolean;discussion?:boolean;discussionNoPlan?:boolean;queryView?:boolean;answers?:boolean;categoryLabels?:Record<string,string>;actionFeatures?:boolean;extended?:boolean;clarify?:boolean;fail?:boolean;hold?:boolean;holdCreation?:boolean;title?:boolean;titleSupported?:boolean;agent?:boolean;agentWaiting?:boolean;agentReview?:boolean;categoryKey?:string;taxonomyUnavailable?:boolean;conversation?:boolean;queueView?:boolean;viewRanked?:boolean;categoryRanking?:boolean;categoryIncomplete?:boolean;categoryTable?:boolean;emptySearch?:boolean;cleanScope?:boolean;translation?:(body:Record<string,unknown>,turn:number)=>Response}={}) {
   const window=new Window({url:"http://localhost:5174"});
   Object.assign(globalThis,{window,document:window.document,navigator:window.navigator,HTMLElement:window.HTMLElement,Element:window.Element,localStorage:window.localStorage,sessionStorage:window.sessionStorage,IS_REACT_ACT_ENVIRONMENT:true});
   const container=document.createElement("div");document.body.replaceChildren(container);
@@ -59,12 +59,14 @@ async function setup(options:{workflows?:boolean;discussion?:boolean;discussionN
     }
     if(init?.method==="DELETE"){cancelled.push(url.pathname);return new Response(null,{status:204});}
     const body=JSON.parse(String(init?.body));requests.push({path:url.pathname,body});
+    if(url.pathname.endsWith("/resolve-catalog")&&options.catalogNotFound)return Response.json({version:1,jobs_started:0,status:"not_found",candidates:[],total:0,has_more:false});
     if(url.pathname.endsWith("/translate")){translationTurn++;return options.hold?await new Promise<Response>(resolve=>{release=resolve;}):options.translation?options.translation(body,translationTurn):translated();}
     if(url.pathname.endsWith("/searches"))return options.emptySearch?Response.json({id:null,state:"completed",scanned:0,matched:0}):options.holdCreation?await new Promise<Response>(resolve=>{release=resolve;}):options.fail?Response.json({error:"Search temporarily unavailable"},{status:503}):Response.json({id:"saved-search",state:"pending",scanned:0,matched:0});
     return Response.json({options:[]});
   }) as typeof fetch;
   let params=new URLSearchParams("country=Spain&source=source-one&q=old&history=on"+(options.queueView||options.categoryRanking?"&task_search=existing-search&queue_sort=newest":""));
   if(options.cleanScope){params.delete("country");params.delete("source");params.set("q","");}
+  if(options.catalogSelection)params.set("catalog_selection",JSON.stringify(options.catalogSelection));
   if(options.viewRanked){params.set("group_by","seller");params.set("group_sort","articles");params.set("top_sellers","10");}
   root=createRoot(container);
   const shownReports:unknown[]=[];
@@ -174,6 +176,60 @@ test("title-only filters cannot silently become a broad text search on older API
   expect(ui.requests).toHaveLength(1);expect(ui.applied).toHaveLength(0);expect(ui.params().get("q")).toBe("old");
   expect(ui.container.textContent).toContain("Title filtering is not available");
 });
+
+test("a missing catalog product offers an explicit title search, clearing old catalog identity and applying once",async()=>{
+  const selection={kind:"product" as const,id:"60000000-0000-4000-8000-000000000002",ip_id:ip};
+  const ui=await setup({catalogNotFound:true,catalogSelection:selection,cleanScope:true,holdCreation:true,conversation:true,queueView:true,queryView:true,translation:body=>Response.json({version:1,jobs_started:0,filters:{...(body.filters as ListingFilters),semantic:{categories:["miniature"]},countries:["CN","FR"],price:{currency:"EUR",lt:"40"},seller_listing_count:{gt:10}},query:{name:"rank_sellers",arguments:{ranking:{limit:10},catalog_query:"space marines",view:{group_by:"seller",group_sort:"articles",top_sellers:10,items_per_seller:3}}}})});
+  const confirmed=ui.params().toString();
+  await ui.click("Ask");await ui.fill("Ask about listings","space marines filtering");await ui.send();
+  expect(ui.applied).toHaveLength(0);expect(ui.params().toString()).toBe(confirmed);expect(ui.requests.filter(request=>request.path.endsWith("/searches"))).toHaveLength(0);
+  expect(ui.container.textContent).toContain("You can search for this text in listing titles, with the other requested filters");
+  const choice=[...ui.container.querySelectorAll<HTMLButtonElement>("button")].find(button=>button.textContent==='Search titles for “space marines”')!;
+  await act(async()=>{choice.click();choice.click();});
+  expect(ui.requests.filter(request=>request.path.endsWith("/searches"))).toHaveLength(1);
+  await ui.release();expect(ui.applied).toHaveLength(1);
+  const search=ui.requests.find(request=>request.path.endsWith("/searches"))!.body;
+  expect(search).toMatchObject({semantic:{categories:["miniature"]},listing_constraints:{title_contains:"space marines",catalog_selection:null,countries:["CN","FR"],price:{currency:"EUR",lt:"40"},seller_listing_count:{gt:10}}});
+  expect(search).not.toHaveProperty("catalog_product_id");expect(JSON.parse(ui.params().get("queue_filters")!).catalog_selection).toBe("");
+  expect(ui.params().get("top_sellers")).toBe("10");expect(ui.params().get("group_sort")).toBe("articles");expect(ui.params().get("items_per_seller")).toBe("3");
+  expect(ui.container.textContent).toContain("Title contains: space marines");
+});
+
+test("keeping a failed catalog search retains the confirmed query and starts no title search",async()=>{
+  const ui=await setup({catalogNotFound:true,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"search_listings",arguments:{catalog_query:"space marines"}}})});
+  const confirmed=ui.params().toString();await ui.click("Ask");await ui.fill("Ask about listings","space marines");await ui.send();
+  await ui.click("Keep current search");expect(ui.applied).toHaveLength(0);expect(ui.params().toString()).toBe(confirmed);expect(ui.requests.filter(request=>request.path.endsWith("/searches"))).toHaveLength(0);expect(ui.container.textContent).toContain("Kept the current search");
+});
+
+test("unsupported or unrepresentable catalog title fallbacks keep the confirmed search",async()=>{
+  for(const testCase of [{titleSupported:false,name:"space marines"},{titleSupported:true,name:"x".repeat(101)}]){
+    const ui=await setup({catalogNotFound:true,...testCase,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"search_listings",arguments:{catalog_query:testCase.name}}})});
+    const confirmed=ui.params().toString();await ui.click("Ask");await ui.fill("Ask about listings","Find the named product");await ui.send();
+    expect(ui.applied).toHaveLength(0);expect(ui.params().toString()).toBe(confirmed);expect(ui.container.textContent).not.toContain("Search titles for");expect(ui.container.textContent).toContain("No matching product was found");
+    await act(async()=>root!.unmount());root=undefined;
+  }
+});
+
+test("a catalog title fallback cannot overwrite an existing different title condition",async()=>{
+  const ui=await setup({catalogNotFound:true,title:true,translation:body=>Response.json({version:1,jobs_started:0,filters:{...(body.filters as ListingFilters),title_contains:"L261"},query:{name:"search_listings",arguments:{catalog_query:"space marines"}}})});
+  const confirmed=ui.params().toString();await ui.click("Ask");await ui.fill("Ask about listings","Find space marines with L261 codes");await ui.send();
+  expect(ui.applied).toHaveLength(0);expect(ui.params().toString()).toBe(confirmed);expect(ui.container.textContent).not.toContain("Search titles for");
+});
+
+test("manual edits invalidate offered catalog title fallback choices",async()=>{
+  const ui=await setup({catalogNotFound:true,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"search_listings",arguments:{catalog_query:"space marines"}}})});
+  await ui.click("Ask");await ui.fill("Ask about listings","space marines");await ui.send();
+  expect(ui.container.textContent).toContain("Search titles for “space marines”");
+  await ui.click("Search");await ui.fill("Search listings or sellers","a different literal filter");await ui.click("Ask");
+  expect(ui.container.textContent).not.toContain("Search titles for “space marines”");expect(ui.applied).toHaveLength(0);
+});
+
+test("cancelling a chosen catalog title fallback discards its late search acknowledgement",async()=>{
+  const ui=await setup({catalogNotFound:true,holdCreation:true,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"search_listings",arguments:{catalog_query:"space marines"}}})});
+  await ui.click("Ask");await ui.fill("Ask about listings","space marines");await ui.send();await ui.click("Search titles for “space marines”");
+  await ui.click("Cancel assistant request");await ui.release();
+  expect(ui.applied).toHaveLength(0);expect(ui.cancelled).toEqual(["/api/monitoring/tasks/searches/cancelled-search"]);expect(ui.params().get("q")).toBe("old");
+});
 test("the agent is opt-in and adopts its completed queue search without creating a second search",async()=>{
   const ui=await setup({agent:true});await ui.click("Ask");
   expect(ui.container.textContent).toContain("Classic Ask");await ui.click("Try search agent");
@@ -273,6 +329,52 @@ test("a free-text answer after reload retains new-search intent and the original
   expect(ui.applied).toHaveLength(1);expect(ui.requests[1].body.filters).toMatchObject({query:null,countries:[],price:null});
   expect(ui.requests[1].body.conversation).toMatchObject({mode:"new"});expect(JSON.stringify(ui.requests[1].body.conversation)).toContain("Which product type");
   expect(ui.requests[2].body).not.toHaveProperty("country");expect(ui.requests[2].body.semantic).toEqual({categories:["ae_2_2_8"]});
+});
+
+test("all of them after reload sends the offered clarification choices while keeping their display text intact",async()=>{
+  const ui=await setup({conversation:true,cleanScope:true,translation:(body,turn)=>Response.json({version:1,jobs_started:0,filters:body.filters,query:turn===1?{name:"request_clarification",arguments:{reason:"ambiguous_request",question:"Which product types?",options:["Action Figures","Scale Models","Role-Play Melee Weapons & Shields"]}}:{name:"search_listings",arguments:{changes:{}}}})});
+  await ui.click("Ask");await ui.click("New chat");await ui.fill("Ask about listings","Space marines filtering");await ui.send();
+  await ui.remount();await ui.click("Ask");await ui.fill("Ask about listings","all of them");await ui.send();
+  expect(ui.requests[1].body).toMatchObject({message:"all of them",conversation:{mode:"new",messages:[{role:"user",content:"Space marines filtering"},{role:"assistant",content:'Which product types?\nClarification options: ["Action Figures","Scale Models","Role-Play Melee Weapons & Shields"]'}]}});
+  expect(ui.container.querySelector('[aria-label="Queue search conversation"]')?.textContent).not.toContain("Clarification options:");
+  expect(ui.applied).toHaveLength(1);
+});
+
+test("a side answer retains the pending choices for a later inclusive reply",async()=>{
+  const ui=await setup({answers:true,conversation:true,cleanScope:true,translation:(body,turn)=>Response.json({version:1,jobs_started:0,filters:body.filters,query:turn===1?{name:"request_clarification",arguments:{reason:"ambiguous_request",question:"Which types?",options:["Action Figures","Scale Models"]}}:turn===2?{name:"answer_question",arguments:{answer:"These labels describe different product types."}}:{name:"search_listings",arguments:{changes:{}}}})});
+  await ui.click("Ask");await ui.click("New chat");await ui.fill("Ask about listings","Space marines");await ui.send();
+  await ui.fill("Ask about listings","What do those options mean?");await ui.send();
+  expect(ui.container.querySelector('[aria-label="Clarification answers"]')?.textContent).toContain("Scale Models");
+  await ui.fill("Ask about listings","both");await ui.send();
+  const context=(ui.requests[2].body.conversation as {messages:Array<{content:string}>}).messages;
+  expect(context[1].content).toBe('Which types?\nClarification options: ["Action Figures","Scale Models"]');
+  expect(context[3].content).toBe("These labels describe different product types.");
+  expect(ui.applied).toHaveLength(1);
+});
+
+test("repeated clarifications followed by many side turns and reload retain the original subject and choices",async()=>{
+  const ui=await setup({answers:true,conversation:true,cleanScope:true,translation:(body,turn)=>Response.json({version:1,jobs_started:0,filters:body.filters,query:turn===1?{name:"request_clarification",arguments:{reason:"ambiguous_request",question:"What exactly do you want to filter by?"}}:turn===2?{name:"request_clarification",arguments:{reason:"ambiguous_request",question:"Which types?",options:["Action Figures","Scale Models"]}}:body.message==="all of them"?{name:"search_listings",arguments:{changes:{}}}:{name:"answer_question",arguments:{answer:"These labels describe different product types."}}})});
+  await ui.click("Ask");await ui.click("New chat");await ui.fill("Ask about listings","Space marines filtering");await ui.send();
+  await ui.fill("Ask about listings","all of them");await ui.send();
+  for(let index=0;index<7;index++){await ui.fill("Ask about listings",`Side question ${index}`);await ui.send();}
+  await ui.remount();await ui.click("Ask");await ui.fill("Ask about listings","all of them");await ui.send();
+  const request=ui.requests.filter(request=>request.path.endsWith("/translate")).at(-1)!;
+  const context=(request.body.conversation as {messages:Array<{role:string;content:string}>}).messages;
+  expect(context).toHaveLength(12);expect(context[0]).toEqual({role:"user",content:"Space marines filtering"});
+  expect(context.at(-1)?.content).toContain('Pending clarification options: ["Action Figures","Scale Models"]');
+  expect(ui.applied).toHaveLength(1);
+});
+
+test("Discuss receives options from a restored legacy pending clarification",async()=>{
+  const ui=await setup({discussion:true,conversation:true,cleanScope:true,translation:body=>Response.json({version:1,jobs_started:0,filters:body.filters,query:{name:"request_clarification",arguments:{reason:"ambiguous_request",question:"Which types?",options:["Action Figures","Scale Models"]}}})});
+  await ui.click("Ask");await ui.click("New chat");await ui.fill("Ask about listings","Space marines");await ui.send();
+  const key=`queue-conversation-v1:test-account:own:${ip}`,saved=JSON.parse(sessionStorage.getItem(key)!);
+  for(const message of saved.messages)delete message.clarificationOptions;
+  sessionStorage.setItem(key,JSON.stringify(saved));
+  await ui.remount();await ui.click("Ask");await ui.click("Discuss");await ui.fill("Ask about listings","all of them");await ui.send();
+  expect(ui.requests[1].path).toEndWith("/assistant/discuss");
+  expect(ui.requests[1].body).toMatchObject({message:"all of them",conversation:{messages:[{role:"user",content:"Space marines"},{role:"assistant",content:'Which types?\nPending clarification options: ["Action Figures","Scale Models"]'}]}});
+  expect(ui.applied).toHaveLength(0);
 });
 
  test("chat keeps the composer below messages and sends multiline replies only on unmodified Enter",async()=>{

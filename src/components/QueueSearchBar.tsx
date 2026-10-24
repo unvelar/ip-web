@@ -10,11 +10,11 @@ import { Search, Sparkles, ArrowUp, X, SquarePen, ChevronDown, ChevronUp, Histor
 import { listingCapability, resolveListingCatalog, translateListingSearch } from "../api/listingSearch";
 import { taskCapability, type TaskQueueQuery } from "../api/taskQueue";
 import { taskAssistantFilters, applyTaskAssistantFilters, taskListingSearchPolicy, type AppliedTaskSearch, type TaskSearchValues } from "../lib/taskSearchAssistant";
-import { titleSearchPolicy, listingFilterKey, type SellerRanking } from "../lib/listingSearch";
+import { titleSearchPolicy, listingFilterKey,parseListingFilters, type SellerRanking,type ListingFilters } from "../lib/listingSearch";
 import { startListingAgent, getListingAgent, followListingAgent, cancelListingAgent } from "../api/listingAgent";
 import type { TaskSearchResult } from "../api/taskQueue";
 import { getActingTenant, isApiError } from "../api/transport";
-import { newSearchValues,parseSearchConversation, readSearchConversation, searchChangeSummary,conversationSearchSummary, type SearchMessage, type SearchQuestion } from "../lib/searchConversation";
+import { newSearchValues,parseSearchConversation, readSearchConversation,clarificationRequestMessage, searchConversationMessages,searchChangeSummary,conversationSearchSummary, type SearchMessage, type SearchQuestion } from "../lib/searchConversation";
 import { useProductSemanticTaxonomy } from "../hooks/useProductSemanticTaxonomy";
 import { readSemanticFilters } from "../lib/semanticFilters";
 
@@ -161,7 +161,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
     setMessages(previous=>[...previous,{role:"user",text:message}]);
     try {
       const result=await discussListings({message,filters:taskAssistantFilters(values,ipId,status,product),values,status,ranking,
-        conversation:{mode:intent,messages:messages.slice(-12).map(item=>({role:item.role,content:item.text.slice(0,2000)}))},
+        conversation:{mode:intent,messages:searchConversationMessages(messages,question)},
         view,searchId,contextKey:snapshot,draftId:[...messages].reverse().find(item=>item.plan?.contextKey===snapshot&&!item.plan.submitted)?.plan?.id,features:actionFeatures,categoryRanking:Boolean(categoriesAvailable&&onRankCategories)},controller.signal);
       if(controller.signal.aborted||latestPlanContext.current!==snapshot)return;
       setLastTrace(result.id);
@@ -236,7 +236,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       const translationMessage=resolution?priorQuestion?.requestMessage??message:message;
       const reportContext=actionFeatures.categorySelection&&runIntent==="continue"?[...messages].reverse().find(item=>item.categoryReport?.search_id===searchId)?.categoryReport:undefined;
       const translate=()=>translateListingSearch(translationMessage,filters,controller.signal,baseRanking,conversationAvailable?{
-        mode:runIntent,...(reportContext?{category_context:{metric:reportContext.metric,groups:reportContext.groups.map(({category_key,category_label})=>({category_key,category_label}))}}:{}),messages:resolution?[]:messages.slice(-12).map(item=>({role:item.role,content:item.text.slice(0,2000)})),...(resolution?{resolution}:{}),
+        mode:runIntent,...(reportContext?{category_context:{metric:reportContext.metric,groups:reportContext.groups.map(({category_key,category_label})=>({category_key,category_label}))}}:{}),messages:resolution?[]:searchConversationMessages(messages,priorQuestion),...(resolution?{resolution}:{}),
       }:undefined,viewAvailable&&onViewChange?view:undefined,Boolean(categoriesAvailable&&onRankCategories),{...actionFeatures,onTrace:id=>{setLastTrace(id);if(workflowsAvailable)associateWorkflow(controller.signal,id);}});
       // A question can be answered without starting or resuming a search agent.
       // Other agent requests still use discovery and execution as before.
@@ -321,7 +321,7 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
         setIntent("continue");say(queueViewSummary(translation.view));return;
       }
       if(translation.name==="request_clarification") {
-        if(translation.question){say(translation.question);setQuestion({options:translation.options??[],conflictField:translation.conflictField,requestMessage:translationMessage});return;}
+        if(translation.question){setMessages(previous=>[...previous,{role:"assistant",text:translation.question!.slice(0,2000),...(translation.options?{clarificationOptions:translation.options}:{})}]);setQuestion({options:translation.options??[],conflictField:translation.conflictField,requestMessage:clarificationRequestMessage(translationMessage,priorQuestion)});return;}
         const reasons:Record<string,string>={similarity:"Image similarity is not available in queue search yet.",shipping:"Shipping destinations are not available. You can filter listing locations.",live_fx:"Prices use a historical exchange-rate snapshot.",investigation:"Ask filters the queue. Use the review actions for investigations.",seller_metrics:"Seller ranking counts matching suspected listings. Other seller metrics are not available."};
         if(!conversationAvailable)setDraft(message);
         say((translation.reason==="unsupported_capability" ? reasons[translation.capability??""]??"That filter is not available yet." : "Please specify the product details or filters you want to change.")+" Your filters were kept."+(!conversationAvailable?" Revise the full request in the box, including the conditions you want to retain.":""));
@@ -333,7 +333,26 @@ export function QueueSearchBar({ipId,product,status,values,ranking,conversationO
       if(translation.catalogQuery) {
         const resolved=await resolveListingCatalog(translation.catalogQuery,ipId,controller.signal);
         if(!current()) return;
-        if(resolved.status==="not_found") {say("No matching product was found in this catalog. Your filters were kept.");return;}
+        if(resolved.status==="not_found") {
+          let titleFilters:ListingFilters|null=null;
+          const name=translation.catalogQuery.trim(),existingTitle=translation.filters.title_contains;
+          if(titleSearch&&(!existingTitle||existingTitle.toLowerCase()===name.toLowerCase())){try{titleFilters=parseListingFilters({...translation.filters,catalog_product_id:null,catalog_selection:null,title_contains:name});}catch{/* Offer only names supported by the canonical title-filter contract. */}}
+          if(!titleFilters){say("No matching product was found in this catalog. Your filters were kept.");return;}
+          const fallback=titleFilters,label=`Search titles for “${fallback.title_contains}”`;
+          let selected=false;
+          say(`I couldn’t find “${fallback.title_contains}” in the catalog. You can search for this text in listing titles, with the other requested filters.`);
+          setChoices([{label,apply:async()=>{
+            if(!current()||selected)return;
+            selected=true;setBusy(true);setChoices([]);setMessages(previous=>[...previous,{role:"user",text:label}]);
+            try{await apply(fallback,translation.ranking,translation.showListings,translation.queueView);}
+            catch(error){if(current())say(error instanceof Error?error.message:"Search failed. Your filters were kept.");}
+            finally{if(request.current===controller)setBusy(false);}
+          }},{label:"Keep current search",apply:async()=>{
+            if(!current()||selected)return;
+            selected=true;setChoices([]);setIntent("continue");setMessages(previous=>[...previous,{role:"user",text:"Keep current search"},{role:"assistant",text:"Kept the current search."}]);
+          }}]);
+          return;
+        }
         if(resolved.status==="ambiguous") {
           say("Choose the catalog match you meant:");
           setChoices(resolved.candidates.map(candidate=>({label:`${candidate.display_name} · ${candidate.scope_name}`,apply:async()=>{
