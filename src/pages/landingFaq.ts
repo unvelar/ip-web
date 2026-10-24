@@ -1,11 +1,12 @@
 // Homepage FAQ content. Edit the text here. Keep answers short and plain, no
 // dashes, and no claims about competitors or "cheapest" pricing.
 export type FaqEntry = { question: string; answer: string };
-export type FaqGroup = { title: string; entries: FaqEntry[] };
+export type FaqGroup = { title: string; tab: string; entries: FaqEntry[] };
 
 export const FAQ_GROUPS: FaqGroup[] = [
   {
     title: "Why Unvelar",
+    tab: "Why Unvelar",
     entries: [
       {
         question: "Is Unvelar a platform or a managed service?",
@@ -15,7 +16,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       {
         question: "What makes Unvelar different from other brand protection platforms?",
         answer:
-          "Unvelar is built on the latest AI and computer vision models, which run highly specialised searches and recognise copies of your products, logos and artwork. We have invested heavily in the intelligence of the platform, so it recognises patterns across listings, finds the biggest sellers across different marketplaces, and collects the evidence for takedowns and removals.",
+          "We have invested heavily in the technology behind Unvelar, and in the product itself, so in-house teams get a better experience: less work, more protection worldwide, and searches shaped around their needs. The platform is built on the latest AI and computer vision models, recognises patterns across listings, finds the biggest sellers across different marketplaces, and collects the evidence for takedowns and removals. With AI searches, your team can also run very specialised queries in their own words, such as finding all potential counterfeits of one of your products on Amazon and Etsy in China priced below $25.",
       },
       {
         question: "How much work is left for my team?",
@@ -26,6 +27,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
   },
   {
     title: "Pricing and plans",
+    tab: "Pricing",
     entries: [
       {
         question: "How much does Unvelar cost, and is there a free trial?",
@@ -41,6 +43,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
   },
   {
     title: "How it works and coverage",
+    tab: "How it works",
     entries: [
       {
         question: "Which platforms do you cover?",
@@ -70,6 +73,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
   },
   {
     title: "Takedowns and enforcement",
+    tab: "Takedowns",
     entries: [
       {
         question: "What happens when Unvelar finds a match?",
@@ -90,7 +94,13 @@ export const FAQ_GROUPS: FaqGroup[] = [
   },
   {
     title: "Getting started",
+    tab: "Getting started",
     entries: [
+      {
+        question: "What do I need to get started?",
+        answer:
+          "Our team supports you through onboarding. You can upload your IP and trademark registrations or images of your products, along with the list of authorized sellers and a few basics on where you want to monitor, such as marketplaces and geographies, to start the monitoring.",
+      },
       {
         question: "How long does onboarding take?",
         answer:

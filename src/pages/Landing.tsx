@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, ChevronDown, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import Nav from "../components/Nav";
 import { FAQ_GROUPS } from "./landingFaq";
@@ -49,6 +49,16 @@ const STATS = [
   { value: "$150M+", label: "in counterfeits and infringements identified" },
   { value: "20+", label: "brands, including listed companies and global law firms" },
   { value: "5x", label: "lower brand protection costs, on average" },
+];
+
+const INCLUDED = [
+  "Live monitoring, real-time dashboard",
+  "Computer vision and AI for precise image recognition",
+  "AI copilot to run your own searches",
+  "No cap on detections and takedowns",
+  "No cap on team members",
+  "As many automation rules as you need",
+  "Technical support by email, 24/7",
 ];
 
 const CONTRAST_ROWS: [string, string][] = [
@@ -146,7 +156,7 @@ export default function Landing() {
                 Stop waiting for your next{" "}
                 <span className="text-gradient-red">brand protection report.</span>
               </h1>
-              <p className="mt-6 text-base sm:text-lg text-stone-500 leading-relaxed max-w-lg mx-auto lg:mx-0">
+              <p className="mt-6 text-[0.95rem] sm:text-lg text-stone-500 leading-relaxed max-w-lg mx-auto lg:mx-0">
                 See every copy of your products as it appears on 250+
                 platforms. Change what you monitor whenever you want. Pay
                 monthly, from $995.
@@ -168,7 +178,7 @@ export default function Landing() {
 
       {/* ================= Stats + platforms ================= */}
       <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
-        <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-16">
+        <div className="relative max-w-6xl mx-auto px-6 pt-12 pb-12 sm:pt-16 sm:pb-16">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
             {STATS.map((s) => (
               <div key={s.value} className="text-center lg:text-left lg:border-l lg:border-stone-900/10 lg:pl-6 lg:first:border-l-0 lg:first:pl-0">
@@ -182,7 +192,7 @@ export default function Landing() {
             ))}
           </div>
 
-          <div className="mt-16 pt-12 border-t border-stone-900/10">
+          <div className="mt-10 pt-10 sm:mt-16 sm:pt-12 border-t border-stone-900/10">
             <h2 className="text-center text-lg sm:text-xl font-bold tracking-tight text-stone-900">
               250+ platforms covered. Add any site you want.
             </h2>
@@ -191,28 +201,101 @@ export default function Landing() {
         </div>
       </Reveal>
 
-      {/* ================= Contrast ================= */}
+      {/* ================= Why Unvelar ================= */}
       <Reveal className="relative bg-cream overflow-hidden rounded-t-[2.5rem]">
-        <div className="relative max-w-5xl mx-auto px-6 py-20">
-          <h2 className="text-center text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+        <div className="relative max-w-6xl mx-auto px-6 py-12 sm:py-20">
+          <div className="text-center mb-12">
+            <Eyebrow>Why Unvelar</Eyebrow>
+            <h2 className="text-[1.65rem] sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+              Less work for your team.{" "}
+              <span className="text-gradient-red">More protection, worldwide.</span>
+            </h2>
+            <p className="mt-5 text-[0.9rem] sm:text-base text-stone-500 max-w-2xl mx-auto text-balance leading-relaxed">
+              We have invested heavily in the technology behind Unvelar, and in
+              the product itself, so in-house teams get a better experience:
+              less work, more protection worldwide, and a setup customised to
+              their needs.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-4 sm:gap-5">
+            <WhyCard
+              visual={
+                <div className="flex w-full max-w-[15rem] flex-col gap-2">
+                  {["AI models", "Computer vision", "Pattern recognition"].map((t, i) => (
+                    <div
+                      key={t}
+                      className="why-pill flex items-center gap-2.5 rounded-full border border-stone-200/80 bg-white px-3.5 py-2 text-[13px] font-semibold text-stone-700 shadow-sm"
+                      style={{ marginLeft: `${i * 14}px`, "--i": i } as React.CSSProperties}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
+                      {t}
+                    </div>
+                  ))}
+                </div>
+              }
+              title="Invested in the technology"
+              description="Unvelar is built on the latest AI and computer vision models, and we have invested heavily in both the technology and the product itself."
+            />
+            <WhyCard
+              visual={
+                <div className="flex w-full max-w-[15rem] flex-col gap-2.5">
+                  {["Patterns spotted", "Sellers linked", "Evidence collected"].map((t, i) => (
+                    <div
+                      key={t}
+                      className={`why-row-${i} flex items-center gap-3 text-[13px] font-semibold text-stone-700`}
+                    >
+                      <span className="why-check flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600">
+                        <Check className="h-3 w-3 text-white" strokeWidth={3} aria-hidden />
+                      </span>
+                      {t}
+                    </div>
+                  ))}
+                </div>
+              }
+              title="Less work, more protection"
+              description="The platform recognises patterns, finds the biggest sellers across different marketplaces and collects the evidence for takedowns and removals, so your team does less work and protection reaches more markets."
+            />
+            <WhyCard
+              visual={
+                <div className="flex w-full max-w-[17rem] items-start gap-2.5 rounded-2xl border border-stone-200/80 bg-white p-3 shadow-sm">
+                  <Search className="mt-0.5 hidden h-4 w-4 shrink-0 text-stone-400 min-[360px]:block" aria-hidden />
+                  <span className="min-w-0 flex-1 text-left text-[12px] leading-snug text-stone-600">
+                    <TypedQuery text={AI_QUERY} />
+                  </span>
+                  <span className="why-ai rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
+                    AI
+                  </span>
+                </div>
+              }
+              title="AI searches"
+              description="Your team can run very specialised searches in their own words, from broad sweeps to precise queries. For example: “Find all potential counterfeits of product A on Amazon and Etsy in China priced below $25.”"
+            />
+          </div>
+        </div>
+      </Reveal>
+
+      {/* ================= Contrast ================= */}
+      <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
+        <div className="relative max-w-5xl mx-auto px-6 py-12 sm:py-20">
+          <h2 className="text-center text-[1.65rem] sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
             Most brand protection happens{" "}
             <span className="text-gradient-red">out of sight.</span>
           </h2>
 
-          <div className="mt-12 rounded-3xl bg-white border border-stone-200/80 card-elevated overflow-hidden">
+          <div className="mt-10 rounded-3xl bg-white border border-stone-200/80 card-elevated overflow-hidden">
             <div className="hidden sm:grid grid-cols-2 text-xs uppercase tracking-[0.2em] font-bold">
-              <div className="px-8 py-5 text-stone-500 bg-stone-100">Usually</div>
-              <div className="px-8 py-5 text-red-600 bg-red-50 border-l border-red-100">With Unvelar</div>
+              <div className="px-8 py-3.5 text-stone-500 bg-stone-100">Usually</div>
+              <div className="px-8 py-3.5 text-red-600 bg-red-50 border-l border-red-100">With Unvelar</div>
             </div>
             {CONTRAST_ROWS.map(([before, after]) => (
               <div key={after} className="grid sm:grid-cols-2 border-t border-stone-200/70 first:border-t-0 sm:first:border-t">
-                <div className="px-6 sm:px-8 pt-5 pb-2 sm:py-6 sm:bg-stone-50 flex items-center gap-4 text-[15px] sm:text-base text-stone-600">
+                <div className="px-6 sm:px-8 pt-4 pb-1.5 sm:py-4 sm:bg-stone-50 flex items-center gap-4 text-[15px] sm:text-[0.9rem] text-stone-600">
                   <span className="w-6 h-6 shrink-0 rounded-full bg-stone-200 flex items-center justify-center">
                     <X className="w-3.5 h-3.5 text-stone-500" strokeWidth={2.5} aria-label="Usually" />
                   </span>
                   <span>{before}</span>
                 </div>
-                <div className="px-6 sm:px-8 pt-1 pb-5 sm:py-6 sm:border-l sm:border-red-100 sm:bg-red-50/30 flex items-center gap-4 text-[15px] sm:text-base font-semibold text-stone-900">
+                <div className="px-6 sm:px-8 pt-1 pb-4 sm:py-4 sm:border-l sm:border-red-100 sm:bg-red-50/30 flex items-center gap-4 text-[15px] sm:text-[0.9rem] font-semibold text-stone-900">
                   <span className="w-6 h-6 shrink-0 rounded-full bg-red-600 flex items-center justify-center">
                     <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} aria-label="With Unvelar" />
                   </span>
@@ -225,15 +308,15 @@ export default function Landing() {
       </Reveal>
 
       {/* ================= Go after the source ================= */}
-      <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
-        <div className="relative max-w-6xl mx-auto px-6 py-20">
+      <Reveal className="relative bg-cream overflow-hidden rounded-t-[2.5rem]">
+        <div className="relative max-w-6xl mx-auto px-6 py-12 sm:py-20">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+              <h2 className="text-[1.65rem] sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
                 Stop chasing listings.{" "}
                 <span className="text-gradient-red">Find who's behind them.</span>
               </h2>
-              <p className="mt-5 text-stone-500 leading-relaxed max-w-lg">
+              <p className="mt-5 text-[0.9rem] sm:text-base text-stone-500 leading-relaxed max-w-lg">
                 Take down one listing and the same seller is back tomorrow
                 under a new name. Unvelar shows you who's really running them.
               </p>
@@ -245,10 +328,6 @@ export default function Landing() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-8 text-lg sm:text-xl font-bold tracking-tight text-stone-900 text-balance">
-                Spend your budget on the 20 sellers that matter, not the 2,000
-                listings they run.
-              </p>
             </div>
             <SellerNetworkIllustration />
           </div>
@@ -265,8 +344,8 @@ export default function Landing() {
           <div className="ambient-glow w-[500px] h-[500px] top-1/3 -right-40 bg-amber-500/10" />
         </div>
 
-        <div className="relative max-w-6xl mx-auto px-6 py-20">
-          <h2 className="text-center mb-14 text-3xl sm:text-[2.75rem] font-black tracking-[-0.03em] leading-[1.05]">
+        <div className="relative max-w-6xl mx-auto px-6 py-12 sm:py-20">
+          <h2 className="text-center mb-14 text-[1.65rem] sm:text-[2.75rem] font-black tracking-[-0.03em] leading-[1.05]">
             How it <span className="text-gradient-cream">works</span>
           </h2>
 
@@ -287,23 +366,23 @@ export default function Landing() {
 
       {/* ================= Customer quotes ================= */}
       <Reveal className="relative bg-cream overflow-hidden rounded-t-[2.5rem]">
-        <div className="relative max-w-6xl mx-auto px-6 py-20">
-          <h2 className="text-center mb-12 text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05]">
+        <div className="relative max-w-6xl mx-auto px-6 py-12 sm:py-20">
+          <h2 className="text-center mb-10 text-[1.65rem] sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05]">
             What companies <span className="text-gradient-red">say about us</span>
           </h2>
           <div className="grid sm:grid-cols-2 gap-4 sm:gap-5">
             {QUOTES.map((q) => (
               <figure
                 key={q.company}
-                className="relative flex flex-col bg-white rounded-2xl sm:rounded-3xl border border-stone-200/80 p-6 sm:p-8 card-elevated"
+                className="relative flex flex-col bg-white rounded-2xl sm:rounded-3xl border border-stone-200/80 p-5 sm:p-6 card-elevated"
               >
-                <span className="text-5xl font-black leading-none text-gradient-red select-none" aria-hidden>
+                <span className="text-4xl font-black leading-none text-gradient-red select-none" aria-hidden>
                   “
                 </span>
-                <blockquote className="mt-1 flex-1 text-[15px] sm:text-base text-stone-700 leading-relaxed">
+                <blockquote className="mt-1 flex-1 text-[15px] sm:text-[0.9rem] text-stone-700 leading-relaxed">
                   {q.quote}
                 </blockquote>
-                <figcaption className="mt-6 pt-5 border-t border-stone-100">
+                <figcaption className="mt-4 pt-3.5 border-t border-stone-100">
                   <div className="text-sm font-bold text-stone-900">{q.role}</div>
                   <div className="text-sm text-stone-500">{q.company}</div>
                 </figcaption>
@@ -315,13 +394,13 @@ export default function Landing() {
 
       {/* ================= Pricing ================= */}
       <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
-        <div className="relative max-w-4xl mx-auto px-6 py-20 text-center">
+        <div className="relative max-w-4xl mx-auto px-6 py-12 sm:py-20 text-center">
           <Eyebrow>Pricing</Eyebrow>
-          <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+          <h2 className="text-[1.65rem] sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
             Pricing <span className="text-gradient-red">you can see,</span> too.
           </h2>
 
-          <div className="mt-10 mx-auto max-w-md rounded-3xl bg-white border border-stone-200/80 card-elevated p-5 sm:p-10">
+          <div className="mt-8 mx-auto max-w-md rounded-3xl bg-white border border-stone-200/80 card-elevated p-5 sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">From</div>
             <div className="mt-2 flex items-baseline justify-center gap-1">
               <span className="text-[2.4rem] sm:text-6xl font-black tracking-[-0.04em] text-stone-900">$995</span>
@@ -330,11 +409,18 @@ export default function Landing() {
             <p className="mt-3 text-sm font-semibold text-stone-700">
               Monthly billing. No annual contract.
             </p>
-            <div className="my-7 h-px bg-stone-100" />
+            <div className="my-5 h-px bg-stone-100" />
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">What's included</div>
+            <ul className="mt-2.5 space-y-1 text-[13px] leading-snug text-stone-400">
+              {INCLUDED.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <div className="my-5 h-px bg-stone-100" />
             <p className="text-sm text-stone-500 leading-relaxed">
               Start with a free pilot on your own products. No commitment.
             </p>
-            <button type="button" onClick={openContact} className={`${BTN_PRIMARY} mt-6 w-full`}>
+            <button type="button" onClick={openContact} className={`${BTN_PRIMARY} mt-5 w-full`}>
               Start a free pilot
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </button>
@@ -342,57 +428,107 @@ export default function Landing() {
         </div>
       </Reveal>
 
-      {/* ================= FAQ ================= */}
-      <Reveal id="faq" className="relative bg-cream scroll-mt-16 overflow-hidden rounded-t-[2.5rem]">
-        <div className="relative max-w-3xl mx-auto px-6 py-20">
-          <h2 className="text-center mb-12 text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
-            Frequently asked <span className="text-gradient-red">questions</span>
-          </h2>
-          <div className="space-y-10">
-            {FAQ_GROUPS.map((group, gi) => (
-              <div key={group.title}>
-                <h3 className="mb-3.5 px-1 flex items-center gap-2 text-[14px] font-semibold uppercase tracking-[0.2em] text-stone-500">
-                  <span className="h-1.5 w-1.5 rounded-full bg-red-600" aria-hidden />
-                  {group.title}
-                </h3>
-                <div className="space-y-3">
-                  {group.entries.map((entry, ei) => (
-                    <FaqItem
-                      key={entry.question}
-                      question={entry.question}
-                      answer={entry.answer}
-                      defaultOpen={gi === 0 && ei === 0}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Reveal>
-
       {/* ================= Who it's for ================= */}
-      <Reveal className="relative bg-cream-dark overflow-hidden rounded-t-[2.5rem]">
-        <div className="relative max-w-6xl mx-auto px-6 py-20">
+      <Reveal className="relative bg-cream overflow-hidden rounded-t-[2.5rem]">
+        <div className="relative max-w-6xl mx-auto px-6 py-12 sm:py-20">
           <div className="text-center mb-12">
             <Eyebrow>Who it's for</Eyebrow>
-            <h2 className="text-3xl sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+            <h2 className="text-[1.65rem] sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
               Built for the teams{" "}
               <span className="text-gradient-red">that protect brands.</span>
             </h2>
           </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <UseCaseCard
-              icon="registry"
+          <div className="grid sm:grid-cols-2 gap-4 sm:gap-5">
+            <WhyCard
+              visual={
+                <div className="w-full max-w-[19rem] rounded-xl border border-stone-200/80 bg-white/80 p-[7px] shadow-sm">
+                  <div className="mb-[6px] flex items-center justify-between px-[2px]">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-stone-400">
+                      Portfolio
+                    </span>
+                    <div className="flex -space-x-[6px]">
+                      {TEAM.map((m, i) => (
+                        <span
+                          key={m.initial}
+                          className={`why-who-${i} flex h-[20px] w-[20px] items-center justify-center rounded-full border-2 border-white text-[9px] font-bold text-white ${m.bg}`}
+                        >
+                          {m.initial}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-[6px]">
+                    {PORTFOLIO.map((item, i) => (
+                      <div
+                        key={item}
+                        className="flex items-center gap-[6px] rounded-lg border border-stone-200/80 bg-white px-[7px] py-[5px]"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-stone-700">{item}</span>
+                        <span className="relative h-[18px] w-[60px] shrink-0">
+                          <span
+                            className={`why-st-a-${i} absolute inset-0 flex items-center justify-center gap-[4px] rounded-full bg-stone-100 text-[8.5px] font-bold text-stone-500 opacity-0`}
+                          >
+                            <span className="h-[5px] w-[5px] rounded-full bg-stone-400 motion-safe:animate-pulse" />
+                            Monitoring
+                          </span>
+                          <span
+                            className={`why-st-b-${i} absolute inset-0 flex items-center justify-center rounded-full bg-red-600 text-[8.5px] font-bold text-white`}
+                          >
+                            Takedown
+                          </span>
+                        </span>
+                        <span
+                          className={`why-av-${i} flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${TEAM[i].bg}`}
+                        >
+                          {TEAM[i].initial}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              }
               title="In-house legal, IP and brand teams"
               description="Cover your whole portfolio (trademarks, copyright and registered designs) across marketplaces, social platforms and the open web. One queue, with the evidence already gathered."
             />
-            <UseCaseCard
-              icon="megaphone"
+            <WhyCard
+              visual={
+                <div className="flex w-full max-w-[16rem] flex-col items-center">
+                  <div className="why-firm rounded-full bg-stone-900 px-4 py-1.5 text-[12px] font-semibold text-white shadow-sm">
+                    Your firm
+                  </div>
+                  <div className="h-4 w-px bg-stone-300" />
+                  <div className="h-px w-[72%] bg-stone-300" />
+                  <div className="flex w-full justify-between">
+                    {["Client A", "Client B", "Client C"].map((c, i) => (
+                      <div key={c} className="flex flex-col items-center">
+                        <div className="h-3 w-px bg-stone-300" />
+                        <div className="relative rounded-full border border-stone-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-700 shadow-sm">
+                          {c}
+                          <span
+                            className={`why-badge-${i} absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 shadow-sm`}
+                          >
+                            <Check className="h-2.5 w-2.5 text-white" strokeWidth={3.5} aria-hidden />
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              }
               title="Law firms"
               description="Protecting brands on behalf of clients? We work with firms on referral and white label partnerships."
             />
           </div>
+        </div>
+      </Reveal>
+
+      {/* ================= FAQ ================= */}
+      <Reveal id="faq" className="relative bg-cream-dark scroll-mt-16 overflow-hidden rounded-t-[2.5rem]">
+        <div className="relative max-w-3xl mx-auto px-6 py-12 sm:py-20">
+          <h2 className="text-center mb-12 text-[1.65rem] sm:text-[2.75rem] font-black text-stone-900 tracking-[-0.03em] leading-[1.05] text-balance">
+            Frequently asked <span className="text-gradient-red">questions</span>
+          </h2>
+          <FaqTabs />
         </div>
       </Reveal>
 
@@ -401,12 +537,12 @@ export default function Landing() {
         <div className="absolute inset-0 pointer-events-none" aria-hidden>
           <div className="ambient-glow w-[700px] h-[700px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-600/15" />
         </div>
-        <div className="relative max-w-4xl mx-auto px-6 py-20 text-center">
-          <h2 className="text-3xl sm:text-[2.75rem] font-black tracking-[-0.03em] leading-[1.05] text-balance">
+        <div className="relative max-w-4xl mx-auto px-6 py-12 sm:py-20 text-center">
+          <h2 className="text-[1.65rem] sm:text-[2.75rem] font-black tracking-[-0.03em] leading-[1.05] text-balance">
             See what's out there{" "}
             <span className="text-gradient-cream">on your brand.</span>
           </h2>
-          <p className="mt-5 text-white/55 max-w-lg mx-auto text-balance leading-relaxed">
+          <p className="mt-5 text-[0.9rem] sm:text-base text-white/55 max-w-lg mx-auto text-balance leading-relaxed">
             Tell us what you want protected. We'll run a free pilot and show
             you what we find.
           </p>
@@ -483,6 +619,144 @@ export default function Landing() {
   );
 }
 
+/* ---------- Typing animation for the AI searches card ---------- */
+const AI_QUERY =
+  "Find all potential counterfeits of product A on Amazon and Etsy in China priced below $25";
+
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function TypedQuery({ text }: { text: string }) {
+  const [count, setCount] = useState(() => (prefersReducedMotion() ? text.length : 0));
+
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    let typed = 0;
+    let hold = 0;
+    const id = window.setInterval(() => {
+      if (typed < text.length) {
+        typed += 1;
+        setCount(typed);
+      } else if (hold < 55) {
+        hold += 1;
+      } else {
+        typed = 0;
+        hold = 0;
+        setCount(0);
+      }
+    }, 45);
+    return () => window.clearInterval(id);
+  }, [text]);
+
+  return (
+    <span className="relative block">
+      <span className="invisible">{text}</span>
+      <span className="absolute inset-0">
+        {text.slice(0, count)}
+        <span className="ml-px inline-block h-3 w-px translate-y-0.5 bg-stone-500 motion-safe:animate-pulse" />
+      </span>
+    </span>
+  );
+}
+
+/* ---------- "Who it's for" in-house card data ---------- */
+const TEAM = [
+  { initial: "L", bg: "bg-stone-900" },
+  { initial: "I", bg: "bg-red-600" },
+  { initial: "B", bg: "bg-stone-500" },
+];
+const PORTFOLIO = ["Trademark", "Copyright", "Design"];
+
+/* ---------- Why Unvelar card ---------- */
+function WhyCard({
+  visual,
+  title,
+  description,
+}: {
+  visual: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="group relative flex flex-col overflow-hidden rounded-3xl border border-stone-200/80 bg-white p-3 card-elevated card-elevated-hover transition-all">
+      <div
+        className="relative flex h-36 sm:h-44 items-center justify-center overflow-hidden rounded-2xl border border-stone-100 bg-gradient-to-br from-stone-50 to-cream-dark px-3 sm:px-5"
+        aria-hidden
+      >
+        <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-red-100 to-orange-100 opacity-70 blur-2xl transition-opacity duration-500 group-hover:opacity-100" />
+        <div className="relative flex w-full justify-center">{visual}</div>
+      </div>
+      <div className="px-3 pb-3 pt-6">
+        <h3 className="mb-2 text-base font-bold tracking-tight text-stone-900 sm:text-lg">{title}</h3>
+        <p className="text-sm leading-relaxed text-stone-500">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- FAQ tabs ---------- */
+function FaqTabs() {
+  const [active, setActive] = useState(0);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const group = FAQ_GROUPS[active];
+
+  function onKeyDown(e: React.KeyboardEvent, i: number) {
+    const last = FAQ_GROUPS.length - 1;
+    let next = -1;
+    if (e.key === "ArrowRight") next = i === last ? 0 : i + 1;
+    else if (e.key === "ArrowLeft") next = i === 0 ? last : i - 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = last;
+    if (next >= 0) {
+      e.preventDefault();
+      setActive(next);
+      tabRefs.current[next]?.focus();
+    }
+  }
+
+  return (
+    <div>
+      <div role="tablist" aria-label="FAQ topics" className="mb-8 flex flex-wrap justify-center gap-2">
+        {FAQ_GROUPS.map((g, i) => (
+          <button
+            key={g.tab}
+            ref={(el) => {
+              tabRefs.current[i] = el;
+            }}
+            id={`faq-tab-${i}`}
+            type="button"
+            role="tab"
+            aria-selected={i === active}
+            aria-controls="faq-panel"
+            tabIndex={i === active ? 0 : -1}
+            onClick={() => setActive(i)}
+            onKeyDown={(e) => onKeyDown(e, i)}
+            className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 sm:text-sm ${
+              i === active
+                ? "border-stone-900 bg-stone-900 text-white"
+                : "border-stone-200/80 bg-white text-stone-600 hover:border-stone-300 hover:text-stone-900"
+            }`}
+          >
+            {g.tab}
+          </button>
+        ))}
+      </div>
+      <div
+        key={active}
+        id="faq-panel"
+        role="tabpanel"
+        aria-labelledby={`faq-tab-${active}`}
+        className="space-y-3 animate-fade-up"
+      >
+        {group.entries.map((entry, ei) => (
+          <FaqItem key={entry.question} question={entry.question} answer={entry.answer} defaultOpen={ei === 0} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- FAQ accordion item ---------- */
 function FaqItem({
   question,
@@ -515,7 +789,7 @@ function FaqItem({
 /* ---------- Section eyebrow pill ---------- */
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="inline-flex items-center gap-2 bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[11px] font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full mb-5">
+    <div className="inline-flex max-w-full items-center gap-2 whitespace-nowrap bg-stone-900/5 border border-stone-900/10 text-stone-600 text-[clamp(7px,calc((100vw_-_5rem_-_8px)_/_25.1),11px)] sm:text-[11px] font-semibold tracking-[0.1em] sm:tracking-[0.2em] uppercase px-3 sm:px-3.5 py-1.5 rounded-full mb-5">
       <span className="w-1 h-1 rounded-full bg-red-600 animate-pulse-dot" />
       {children}
     </div>
@@ -557,12 +831,41 @@ function PlatformMarquee() {
 /* ---------- Seller network illustration ---------- */
 // Illustrative UI only, not customer data.
 const NETWORK_ROWS = [
-  { name: "Seller A", stores: 6, listings: 412, exposure: "$384,986", share: 100 },
-  { name: "Seller B", stores: 4, listings: 268, exposure: "$250,429", share: 65 },
-  { name: "Seller C", stores: 3, listings: 141, exposure: "$131,755", share: 34 },
+  { name: "Seller A", stores: 6, listings: 412, exposure: 384986, share: 100 },
+  { name: "Seller B", stores: 4, listings: 268, exposure: 250429, share: 65 },
+  { name: "Seller C", stores: 3, listings: 141, exposure: 131755, share: 34 },
 ];
 
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+const easeOut = (x: number) => 1 - Math.pow(1 - x, 3);
+
+// Position in a repeating loop, 0 to 1. Reduced motion gets no loop.
+function useLoop(periodMs: number) {
+  const [reduced] = useState(prefersReducedMotion);
+  const [t, setT] = useState(0);
+  useEffect(() => {
+    if (reduced) return;
+    const start = performance.now();
+    const id = window.setInterval(() => setT(((performance.now() - start) % periodMs) / periodMs), 50);
+    return () => window.clearInterval(id);
+  }, [reduced, periodMs]);
+  return { t, reduced };
+}
+
+// Keeps the final text's width reserved so a counting number never changes the layout.
+function Stable({ final, right, children }: { final: string; right?: boolean; children: React.ReactNode }) {
+  return (
+    <span className="relative inline-block whitespace-nowrap">
+      <span className="invisible">{final}</span>
+      <span className={`absolute top-0 ${right ? "right-0" : "left-0"}`}>{children}</span>
+    </span>
+  );
+}
+
 function SellerNetworkIllustration() {
+  const { t, reduced } = useLoop(7000);
+  const fadeOut = reduced ? 0 : clamp01((t - 0.88) / 0.06);
+
   return (
     <div className="relative rounded-3xl bg-white border border-stone-200/80 card-elevated p-5 sm:p-6" aria-hidden>
       <div className="flex items-center justify-between">
@@ -572,26 +875,43 @@ function SellerNetworkIllustration() {
         </div>
       </div>
       <div className="mt-5 space-y-3">
-        {NETWORK_ROWS.map((r, i) => (
-          <div key={r.name} className="rounded-2xl border border-stone-100 bg-stone-50/60 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              <div className="flex items-center gap-3">
-                <span className="w-7 h-7 shrink-0 rounded-lg bg-stone-900 text-white text-xs font-bold flex items-center justify-center">
-                  {i + 1}
+        {NETWORK_ROWS.map((r, i) => {
+          const start = 0.05 + i * 0.14;
+          const appear = reduced ? 1 : clamp01((t - start) / 0.05);
+          const grow = reduced ? 1 : easeOut(clamp01((t - start - 0.03) / 0.3));
+          const opacity = appear * (1 - fadeOut);
+          return (
+            <div
+              key={r.name}
+              className="rounded-2xl border border-stone-100 bg-stone-50/60 p-4"
+              style={{ opacity, transform: `translateY(${(1 - appear) * 12}px)` }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="flex items-center gap-3">
+                  <span className="w-7 h-7 shrink-0 rounded-lg bg-stone-900 text-white text-xs font-bold flex items-center justify-center">
+                    {i + 1}
+                  </span>
+                  <span className="text-sm font-semibold text-stone-900 whitespace-nowrap">{r.name}</span>
+                </div>
+                <span className="text-sm font-bold text-stone-900 tabular-nums">
+                  <Stable final={`$${r.exposure.toLocaleString("en-US")} Exposure`} right>
+                    ${Math.round(r.exposure * grow).toLocaleString("en-US")} Exposure
+                  </Stable>
                 </span>
-                <span className="text-sm font-semibold text-stone-900 whitespace-nowrap">{r.name}</span>
               </div>
-              <span className="text-sm font-bold text-stone-900 tabular-nums">{r.exposure} Exposure</span>
+              <div className="mt-3 h-1.5 rounded-full bg-stone-200/70 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-red-500 to-red-700"
+                  style={{ width: `${r.share * grow}%` }}
+                />
+              </div>
+              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 tabular-nums">
+                <Stable final={`${r.stores} linked stores`}>{Math.round(r.stores * grow)} linked stores</Stable>
+                <Stable final={`${r.listings} listings`}>{Math.round(r.listings * grow)} listings</Stable>
+              </div>
             </div>
-            <div className="mt-3 h-1.5 rounded-full bg-stone-200/70 overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-red-500 to-red-700" style={{ width: `${r.share}%` }} />
-            </div>
-            <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500">
-              <span>{r.stores} linked stores</span>
-              <span>{r.listings} listings</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -867,40 +1187,4 @@ const ICONS: Record<string, string> = {
   scan: "M4 4h4m8 0h4v4m0 8v4h-4M8 20H4v-4M9 12h6",
   brain:
     "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z",
-  registry:
-    "M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z M8 8h8M8 12h8M8 16h5",
-  megaphone:
-    "M11 5L6 9H2v6h4l5 4V5z M15.54 8.46a5 5 0 010 7.07 M19.07 4.93a10 10 0 010 14.14",
 };
-
-/* ---------- Use case card ---------- */
-function UseCaseCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="group relative bg-white rounded-2xl border border-stone-200/80 p-6 sm:p-7 card-elevated card-elevated-hover transition-all overflow-hidden flex flex-col">
-      <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-gradient-to-br from-red-100 to-orange-100 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl" />
-      <div className="relative w-11 h-11 rounded-xl bg-gradient-to-br from-stone-100 to-stone-50 border border-stone-200/60 flex items-center justify-center mb-5 group-hover:from-red-50 group-hover:to-orange-50 group-hover:border-red-200/60 transition-colors">
-        <svg
-          className="w-5 h-5 text-stone-500 group-hover:text-red-600 transition-colors"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={1.6}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d={ICONS[icon]} />
-        </svg>
-      </div>
-      <h3 className="relative font-bold text-stone-900 text-base sm:text-lg mb-2 tracking-tight">
-        {title}
-      </h3>
-      <p className="relative text-sm text-stone-500 leading-relaxed">{description}</p>
-    </div>
-  );
-}
