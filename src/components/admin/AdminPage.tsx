@@ -13,7 +13,7 @@ const sections = [
   { id: "compute", label: "Compute", to: "/admin/compute", icon: Cpu },
   { id: "tenants", label: "Tenants", to: "/admin/tenants", icon: Building2 },
   { id: "intakes", label: "Public intakes", to: "/admin/intakes", icon: Inbox },
-  { id: "catalog", label: "IP catalog", to: "/admin/ips", icon: Library },
+  { id: "catalog", label: "Clearance", to: "/admin/ips", icon: Library },
 ] as const;
 
 export function AdminPage({ section, title, description, meta, actions, image, back, wide = false, children }: {
